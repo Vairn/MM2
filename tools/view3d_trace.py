@@ -65,6 +65,7 @@ class View3DBlit:
     frame: int
     x: int
     y: int
+    code: int
 
 
 @dataclass
@@ -235,25 +236,25 @@ def collect_blits(slots: Sequence[int]) -> List[View3DBlit]:
             x = front_x[depth]
             y = front_y[depth] + (1 if depth == 0 else 0)
             frame = depth + (0x10 if is_door else 0)
-            blits.append(View3DBlit("front", depth, frame, x, y))
+            blits.append(View3DBlit("front", depth, frame, x, y, code))
         elif kind == "left":
             if mirror:
                 base = left_base[depth]
                 frame = base + (0x10 if is_door else 0)
-                blits.append(View3DBlit("left", depth, frame, left_x2[depth], left_y2[depth]))
+                blits.append(View3DBlit("left", depth, frame, left_x2[depth], left_y2[depth], code))
             else:
                 base = depth + 4
                 frame = base + (0x10 if is_door else 0)
-                blits.append(View3DBlit("left", depth, frame, left_x1[depth], left_y1[depth]))
+                blits.append(View3DBlit("left", depth, frame, left_x1[depth], left_y1[depth], code))
         else:
             if mirror:
                 base = right_base[depth]
                 frame = base + (0x10 if is_door else 0)
-                blits.append(View3DBlit("right", depth, frame, right_x2[depth], right_y2[depth]))
+                blits.append(View3DBlit("right", depth, frame, right_x2[depth], right_y2[depth], code))
             else:
                 base = depth + 8
                 frame = base + (0x10 if is_door else 0)
-                blits.append(View3DBlit("right", depth, frame, right_x1[depth], right_y1[depth]))
+                blits.append(View3DBlit("right", depth, frame, right_x1[depth], right_y1[depth], code))
 
     s = slots
     paint("left", 4, s[S_F1D]); paint("left", 0x84, s[S_F11])

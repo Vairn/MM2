@@ -229,29 +229,40 @@ void MapSection::drawView3D() {
 
     const Sheet* floor = &floorTown_;
     const Sheet* walls = &wallTown_;
+    const Sheet* torches = &torchTown_;
     const char* wallName = "town.32";
+    const char* torchName = "townt.32";
     switch (env) {
         case Env::Cavern:
             floor = &floorCave_;
             walls = &wallCave_;
+            torches = &torchCave_;
             wallName = "cave.32";
+            torchName = "cavet.32";
             break;
         case Env::Castle:
             floor = &floorCastle_;
             walls = &wallCastle_;
+            torches = &torchCastle_;
             wallName = "castle.32";
+            torchName = "castlet.32";
             break;
         default:
             break;
     }
 
-    // Keep editor render aligned with tools/view3d_indoor.py:
-    // indoor path uses sky frame 0 and does not apply roof-bit switching.
+    // frustum_solid_edge_test @0x2BCC checks the roof bit for the current cell;
+    // returns 0 = open sky, 1 = solid ceiling. sky.32 frame 0=open, 1=ceiling.
     int skyFrame = 0;
+    if (attribLoaded_) {
+        int tile = attribRoofTileAt(camera_.x, camera_.y);
+        if (attrib_.screens[static_cast<size_t>(screen_)].roofBit(tile))
+            skyFrame = 1;
+    }
 
     static const char* kFacing[] = {"North", "East", "South", "West"};
-    ImGui::Text("Camera  (%d, %d)  facing %s", camera_.x, camera_.y,
-                kFacing[camera_.facing & 3]);
+    ImGui::Text("Camera  (%d, %d)  facing %s  |  %s", camera_.x, camera_.y,
+                kFacing[camera_.facing & 3], skyFrame ? "ceiling" : "open sky");
 
     ImGui::SetNextItemWidth(80);
     ImGui::InputInt("X##cam", &camera_.x);
@@ -300,17 +311,61 @@ void MapSection::drawView3D() {
         dl->AddImage(static_cast<ImTextureID>(sheet.tex[frame]), a, b);
     };
 
+    auto blitTorch = [&](const View3DBlit& wb) {
+        if (wb.code != static_cast<uint8_t>(WallField::Torch)) return;
+        const int depth = view3dDepthFromRow(wb.latRow);
+        if (depth < 0 || depth > 2) return;
+        int frame = -1;
+        int x = 0;
+        int y = 0;
+        if (wb.latX == 0) {
+            static constexpr int kX[3] = {105, 108, 107};
+            static constexpr int kY[3] = {44, 52, 60};
+            frame = 0x12 + depth * 3;
+            x = kX[depth];
+            y = kY[depth];
+        } else if (wb.latX == -1) {
+            static constexpr int kX[3] = {8, 43, 73};
+            static constexpr int kY[3] = {49, 55, 59};
+            frame = depth * 3;
+            x = kX[depth];
+            y = kY[depth];
+        } else if (wb.latX == 1) {
+            // ASM right-near torch X = A4-$6698 + A4-$6686 -> 196/166/142.
+            static constexpr int kX[3] = {196, 166, 142};
+            static constexpr int kY[3] = {49, 55, 59};
+            frame = 9 + depth * 3;
+            x = kX[depth];
+            y = kY[depth];
+        } else if (wb.latX == -2 && depth > 0) {
+            static constexpr int kX[3] = {8, 16, 64};
+            static constexpr int kY[3] = {44, 52, 60};
+            frame = 0x12 + depth * 3;
+            x = kX[depth];
+            y = kY[depth];
+        } else if (wb.latX == 2 && depth > 0) {
+            static constexpr int kX[3] = {202, 199, 152};
+            static constexpr int kY[3] = {44, 52, 60};
+            frame = 0x12 + depth * 3;
+            x = kX[depth];
+            y = kY[depth];
+        }
+        if (frame >= 0) blit(*torches, frame, static_cast<float>(x), static_cast<float>(y));
+    };
+
     ImVec2 canvas(W * z, H * z);
     dl->AddRectFilled(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
                       IM_COL32(0, 0, 0, 255));
 
     // 1. floor backdrop — townf.32 frame 0 at (8, 68)
     blit(*floor, 0, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DFloorY));
-    // 2. sky backdrop — fixed frame 0 to match the Python indoor viewer
+    // 2. sky/ceiling backdrop — sky.32 frame from roof bit at (8, 8)
     blit(sky_, skyFrame, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DSkyY));
     // 3. walls (town/cave/castle.32) — painted over sky/floor like view_3d_master @0x2ECE
-    for (const View3DBlit& wb : scene.blits)
+    for (const View3DBlit& wb : scene.blits) {
         blit(*walls, wb.frame, static_cast<float>(wb.x), static_cast<float>(wb.y));
+        blitTorch(wb);
+    }
 
     dl->AddRect(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
                 IM_COL32(120, 120, 120, 255));
@@ -327,6 +382,8 @@ void MapSection::drawView3D() {
 
     if (walls->tex.empty())
         ImGui::TextDisabled("(%s not found in data folder)", wallName);
+    if (torches->tex.empty())
+        ImGui::TextDisabled("(%s not found in data folder)", torchName);
     ImGui::TextDisabled("%zu wall sprite(s)  |  visual page  |  click Tiles tab to move camera",
                         scene.blits.size());
     if (ImGui::TreeNode("Wall blits (latX, row)")) {
@@ -347,8 +404,8 @@ void MapSection::drawView3D() {
             switch (v) {
                 case 0: return "open";
                 case 1: return "wall";
-                case 2: return "torch";
-                case 3: return "door";
+                case 2: return "door";
+                case 3: return "torch";
                 default: return "?";
             }
         };
@@ -583,7 +640,7 @@ void MapSection::drawMinimap() {
 }
 
 void MapSection::drawVisualDecode(uint8_t cell) {
-    static const char* kWall[] = {"open", "wall", "door", "wall"};
+    static const char* kWall[] = {"open", "wall", "door", "torch"};
     auto name = [&](int v) -> const char* {
         return (v >= 0 && v <= 3) ? kWall[v] : "?";
     };

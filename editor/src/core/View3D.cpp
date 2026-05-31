@@ -295,7 +295,7 @@ bool view3dPaintLatticeCell(std::vector<View3DBlit>& out, int latX, int latRow,
     }
 
     if (frame < 0) return false;
-    out.push_back({frame, x, y, latX, latRow});
+    out.push_back({frame, x, y, latX, latRow, static_cast<uint8_t>(field)});
     return true;
 }
 

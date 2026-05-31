@@ -78,6 +78,7 @@ struct View3DBlit {
     int y = 0;
     int latX = 0;    // lattice column -2..2
     int latRow = 0;  // lattice row -3..0
+    uint8_t code = 0;  // raw wall code (1=wall, 2=door, 3=torch)
 };
 
 struct View3DScene {

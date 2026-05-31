@@ -101,6 +101,13 @@ BIOME_BY_AREA = {
     43: "swamp.32",
     44: "swamp.32",
 }
+BIOME_SHEET_REMAP = {
+    # Runtime terrain class is offset versus our initial sheet assumption.
+    # Fix observed cycle: water->sand, sand->snow, snow->water.
+    "desert.32": "ocean.32",
+    "ocean.32": "tundra.32",
+    "tundra.32": "desert.32",
+}
 
 BUNDLES = (BUNDLE_N, BUNDLE_E, BUNDLE_S, BUNDLE_W)
 FACE = ("N", "E", "S", "W")
@@ -212,6 +219,17 @@ def _sb(bundle: Sequence[int], i: int) -> int:
     return int.from_bytes(bytes([bundle[i] & 0xFF]), "big", signed=True)
 
 
+def _facing_mask(facing: int) -> int:
+    return (0xC0, 0x30, 0x0C, 0x03)[facing & 3]
+
+
+def _remap_biome(sheet: str, *, sector_label: int | None = None) -> str:
+    # C3 is the ocean sector; keep it as water even under the global remap.
+    if sector_label == 0xC3:
+        return sheet
+    return BIOME_SHEET_REMAP.get(sheet, sheet)
+
+
 def refresh_outdoor_hood(
     grid: StitchedMap, px: int, py: int, facing: int
 ) -> List[int]:
@@ -228,8 +246,9 @@ def refresh_outdoor_hood(
             y += dy
 
     row(px, py, 0)
-    row(px + _sb(b, 3), py + _sb(b, 2), 4)
-    row(px + _sb(b, 5), py + _sb(b, 4), 8)
+    # Same lane starts as map_neighbourhood_refresh: (x+2,y+3), then (x+4,y+5).
+    row(px + _sb(b, 2), py + _sb(b, 3), 4)
+    row(px + _sb(b, 4), py + _sb(b, 5), 8)
     return hood
 
 
@@ -243,12 +262,27 @@ def refresh_outdoor_rows(
 
 def process_terrain_rows(
     rows: Tuple[List[int], List[int], List[int]],
+    *,
+    current_cell: int,
+    facing: int,
 ) -> Tuple[List[int], List[int], List[int]]:
-    """@9544: kLookup[map_byte & $1F] into -$55C6 / -$55C2 / -$55BE (no bad mask hack)."""
+    """@9544: lookup + near-lane mask fixups using -$55D6/-$55D8."""
     lookup = terrain_lookup()
     c6 = [lookup[b & 0x1F] for b in rows[0]]
     c2 = [lookup[b & 0x1F] for b in rows[1]]
     be = [lookup[b & 0x1F] for b in rows[2]]
+
+    near = c6[0]
+    if 1 <= near <= 3:
+        fwd = _facing_mask(facing)
+        left = 0x03 if fwd == 0xC0 else ((fwd << 2) & 0xFF)
+        right = 0xC0 if fwd == 0x03 else (fwd >> 2)
+        if (current_cell & left & 0x55) != 0:
+            c2[0] = near
+        if (current_cell & right & 0x55) != 0:
+            be[0] = near
+        if (current_cell & fwd & 0x55) == 0:
+            c6[0] = 0
     return c6, c2, be
 
 
@@ -279,23 +313,26 @@ def biome_for_cell(
     """Floor decor sheet for one hood cell: water ids first, then sector label."""
     tid = map_byte & 0x1F
     if tid in MAP_TERRAIN_ID_BIOME:
-        return MAP_TERRAIN_ID_BIOME[tid]
-    return sector_table.get(sector_label, OUTDOOR_FLOOR_SHEETS[0])
+        return _remap_biome(MAP_TERRAIN_ID_BIOME[tid], sector_label=sector_label)
+    return _remap_biome(
+        sector_table.get(sector_label, OUTDOOR_FLOOR_SHEETS[0]), sector_label=sector_label
+    )
 
 
 def biome_for_record(rec: AttribRecord, sector_table: dict[int, str] | None = None) -> str:
+    label = rec.raw[0x15]
     if rec.area_id in BIOME_BY_AREA:
-        return BIOME_BY_AREA[rec.area_id]
+        return _remap_biome(BIOME_BY_AREA[rec.area_id], sector_label=label)
     if sector_table is not None:
-        return sector_table.get(rec.raw[0x15], OUTDOOR_FLOOR_SHEETS[0])
+        return _remap_biome(sector_table.get(label, OUTDOOR_FLOOR_SHEETS[0]), sector_label=label)
     sf = rec.surface_flag
     if sf == 0xCC:
-        return "ocean.32"
+        return _remap_biome("ocean.32", sector_label=label)
     if sf == 0x99:
-        return "tundra.32"
+        return _remap_biome("tundra.32", sector_label=label)
     if sf == 0xBB:
-        return "swamp.32"
-    return BIOME_BY_TILESET.get(rec.tileset, OUTDOOR_FLOOR_SHEETS[0])
+        return _remap_biome("swamp.32", sector_label=label)
+    return _remap_biome(BIOME_BY_TILESET.get(rec.tileset, OUTDOOR_FLOOR_SHEETS[0]), sector_label=label)
 
 
 def column_biomes(
@@ -367,17 +404,17 @@ def _horizon_index(terrain_class: int) -> int:
 
 
 def _horizon_sprite(idx: int, frame: int, x: int, y: int) -> SpriteBlit | None:
-    if idx == 0xFF:
+    if idx == 0xFF or idx < 0 or idx >= len(HORIZON_SHEETS):
         return None
     return SpriteBlit(HORIZON_SHEETS[idx], frame, x, y)
 
 
 def _horizon_start_col(l1: Sequence[int]) -> int:
-    """@1877A: first column with valid L1 terrain, else 3."""
+    """@1877A: first column with valid L1 terrain, else 4."""
     for col in range(4):
         if l1[col] != 0xFF:
             return col
-    return 3
+    return 4
 
 
 def build_horizon_blits(
@@ -385,43 +422,91 @@ def build_horizon_blits(
     lane_l2: Sequence[int],
     lane_l3: Sequence[int],
 ) -> List[SpriteBlit]:
-    """@1877A order: L1 once, then L2/L3. lane_l2=left coords, lane_l3=right."""
+    """@1877A + @1844C/@184B8/@18620 pass logic (including overlap fixups)."""
     l1 = [_horizon_index(c6[c]) for c in range(4)]
     l2 = [_horizon_index(lane_l2[c]) for c in range(4)]
     l3 = [_horizon_index(lane_l3[c]) for c in range(4)]
     start = _horizon_start_col(l1)
+    pivot = 3 if start == 3 and l1[start] == 0xFF else start
 
     blits: List[SpriteBlit] = []
-    if l1[start] != 0xFF:
-        b = _horizon_sprite(
-            l1[start],
-            OUTDOOR_L1_FRAME[start],
-            OUTDOOR_L1_X[start],
-            OUTDOOR_L1_Y[start],
-        )
+
+    if start < 4 and l1[start] != 0xFF:
+        b = _horizon_sprite(l1[start], OUTDOOR_L1_FRAME[start], OUTDOOR_L1_X[start], OUTDOOR_L1_Y[start])
+        if b is not None:
+            blits.append(b)
+    elif start == 4:
+        pivot = 3
+
+    def pass_l2(col: int, piv: int) -> None:
+        special = col != 0 and col == piv and l1[col] != 0xFF
+        if special and l2[col - 1] != 0xFF:
+            l2[col] = 0xFF
+        if l2[col] == 0xFF:
+            return
+        frame = OUTDOOR_L2_FRAME[col]
+        x = OUTDOOR_L2_X[col]
+        y = OUTDOOR_L2_Y[col]
+        if special and l2[piv] != 0xFF:
+            frame = OUTDOOR_L2_FRAME[piv - 1]
+            x = OUTDOOR_L2_X[piv - 1]
+            y = OUTDOOR_L1_Y[piv]
+        if col == 1 and l2[0] == 0xFF:
+            x = 8
+        if col == 1 or (col == 2 and col == piv):
+            x = 8
+        b = _horizon_sprite(l2[col], frame, x, y)
         if b is not None:
             blits.append(b)
 
-    seen_l2: set[int] = set()
-    seen_l3: set[int] = set()
-    for col in range(3, -1, -1):
-        if l2[col] != 0xFF and l2[col] not in seen_l2:
-            seen_l2.add(l2[col])
-            b = _horizon_sprite(
-                l2[col], OUTDOOR_L2_FRAME[col], OUTDOOR_L2_X[col], OUTDOOR_L2_Y[col]
-            )
-            if b is not None:
-                blits.append(b)
+    def pass_l3(col: int, piv: int) -> None:
+        special = col != 0 and col == piv and l1[col] != 0xFF
+        if special and l3[col - 1] != 0xFF:
+            l3[col] = 0xFF
+        if l3[col] == 0xFF:
+            return
+        frame = OUTDOOR_L3_FRAME[col]
+        x = OUTDOOR_L3_X[col]
+        y = OUTDOOR_L3_Y[col]
+        if special and l3[piv] != 0xFF:
+            frame = OUTDOOR_L3_FRAME[piv - 1]
+            x = OUTDOOR_L3_X[piv - 1]
+            y = OUTDOOR_L1_Y[piv]
+        if col == 1 and l3[0] == 0xFF:
+            x = 0xB0 if col == piv else 0x98
+        b = _horizon_sprite(l3[col], frame, x, y)
+        if b is not None:
+            blits.append(b)
 
-    for col in range(3, -1, -1):
-        if l3[col] != 0xFF and l3[col] not in seen_l3:
-            seen_l3.add(l3[col])
-            b = _horizon_sprite(
-                l3[col], OUTDOOR_L3_FRAME[col], OUTDOOR_L3_X[col], OUTDOOR_L3_Y[col]
-            )
-            if b is not None:
-                blits.append(b)
+    for col in range(pivot, -1, -1):
+        pass_l2(col, pivot)
+    for col in range(pivot, -1, -1):
+        pass_l3(col, pivot)
 
+    def first_non_ff(*lanes: Sequence[int]) -> int:
+        for lane in lanes:
+            for v in lane:
+                if v != 0xFF:
+                    return v
+        return 0xFF
+
+    def has_sprite(sheet: str, frame: int, x: int, y: int) -> bool:
+        return any(
+            b.sheet == sheet and b.frame == frame and b.x == x and b.y == y
+            for b in blits
+        )
+
+    # Gameplay rule: dense forest and mountain silhouettes wrap both sides.
+    # Small-tree horizon does not.
+    dom = first_non_ff(l1, l2, l3)
+    if dom in (0, 2):
+        sheet = HORIZON_SHEETS[dom]
+        left = SpriteBlit(sheet, OUTDOOR_L2_FRAME[0], OUTDOOR_L2_X[0], OUTDOOR_L2_Y[0])
+        right = SpriteBlit(sheet, OUTDOOR_L3_FRAME[0], OUTDOOR_L3_X[0], OUTDOOR_L3_Y[0])
+        if not has_sprite(left.sheet, left.frame, left.x, left.y):
+            blits.append(left)
+        if not has_sprite(right.sheet, right.frame, right.x, right.y):
+            blits.append(right)
     return blits
 
 
@@ -433,9 +518,11 @@ def build_outdoor_scene(
     attrib: AttribFile,
 ) -> OutdoorScene:
     rows = refresh_outdoor_rows(grid, px, py, facing)
-    c6, lane_d0, lane_cc = process_terrain_rows(rows)
-    # ASM: -$55D0 -> L2 (left), -$55CC -> L3 (right). View mirror: swap at paint.
-    lane_l2, lane_l3 = lane_cc, lane_d0
+    c6, lane_d0, lane_cc = process_terrain_rows(
+        rows, current_cell=grid.at(px, py), facing=facing
+    )
+    # ASM lane mapping: -$55D0 feeds L2 (left), -$55CC feeds L3 (right).
+    lane_l2, lane_l3 = lane_d0, lane_cc
     sector_table = build_sector_label_biomes(attrib)
     col_bio = column_biomes(grid, px, py, facing, attrib, sector_table)
     scene = OutdoorScene(

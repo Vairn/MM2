@@ -75,6 +75,7 @@ K_CARTO_TILE = (
 class SheetSet:
     walls: str
     floor: str
+    torch: str
     sky: str = "sky.32"
 
 
@@ -211,10 +212,10 @@ def build_scene(grid: StitchedVisual, x: int, y: int, facing: int) -> View3DScen
 def select_sheets(attrib: AttribFile, screen: int) -> SheetSet:
     env = attrib.records[screen].env_name
     if env == "cavern":
-        return SheetSet("cave.32", "cavef.32")
+        return SheetSet("cave.32", "cavef.32", "cavet.32")
     if env == "castle":
-        return SheetSet("castle.32", "castlef.32")
-    return SheetSet("town.32", "townf.32")
+        return SheetSet("castle.32", "castlef.32", "castlet.32")
+    return SheetSet("town.32", "townf.32", "townt.32")
 
 
 def carto_frame(screen: int, visual: int, outdoor: bool) -> int:
@@ -403,6 +404,37 @@ def render_indoor_view(scene: View3DScene, sheets: SheetSet, data_dir: Path, *, 
 
     for b in draw_blits:
         blit(canvas, sprite(sheets.walls, b.frame), b.x, b.y)
+        if b.code != 3 or b.depth > 2:
+            continue
+        tf = tx = ty = None
+        if b.kind == "front":
+            tf = 0x12 + b.depth * 3
+            tx = (105, 108, 107)[b.depth]
+            ty = (44, 52, 60)[b.depth]
+        elif b.kind == "left":
+            if b.frame in (12, 14, 2, 3):
+                if b.depth == 0:
+                    continue
+                tf = 0x12 + b.depth * 3
+                tx = (8, 16, 64)[b.depth]
+                ty = (44, 52, 60)[b.depth]
+            else:
+                tf = b.depth * 3
+                tx = (8, 43, 73)[b.depth]
+                ty = (49, 55, 59)[b.depth]
+        elif b.kind == "right":
+            if b.frame in (13, 15, 2, 3):
+                if b.depth == 0:
+                    continue
+                tf = 0x12 + b.depth * 3
+                tx = (202, 199, 152)[b.depth]
+                ty = (44, 52, 60)[b.depth]
+            else:
+                tf = 9 + b.depth * 3
+                tx = (196, 166, 142)[b.depth]
+                ty = (49, 55, 59)[b.depth]
+        if tf is not None:
+            blit(canvas, sprite(sheets.torch, tf), int(tx), int(ty))
 
     if with_minimap:
         normal = render_minimap(visual, collision, x, y, facing, screen=screen, data_dir=data_dir, outdoor=False)
