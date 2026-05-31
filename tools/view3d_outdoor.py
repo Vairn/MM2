@@ -223,10 +223,7 @@ def _facing_mask(facing: int) -> int:
     return (0xC0, 0x30, 0x0C, 0x03)[facing & 3]
 
 
-def _remap_biome(sheet: str, *, sector_label: int | None = None) -> str:
-    # C3 is the ocean sector; keep it as water even under the global remap.
-    if sector_label == 0xC3:
-        return sheet
+def _remap_biome(sheet: str) -> str:
     return BIOME_SHEET_REMAP.get(sheet, sheet)
 
 
@@ -313,26 +310,23 @@ def biome_for_cell(
     """Floor decor sheet for one hood cell: water ids first, then sector label."""
     tid = map_byte & 0x1F
     if tid in MAP_TERRAIN_ID_BIOME:
-        return _remap_biome(MAP_TERRAIN_ID_BIOME[tid], sector_label=sector_label)
-    return _remap_biome(
-        sector_table.get(sector_label, OUTDOOR_FLOOR_SHEETS[0]), sector_label=sector_label
-    )
+        return _remap_biome(MAP_TERRAIN_ID_BIOME[tid])
+    return _remap_biome(sector_table.get(sector_label, OUTDOOR_FLOOR_SHEETS[0]))
 
 
 def biome_for_record(rec: AttribRecord, sector_table: dict[int, str] | None = None) -> str:
-    label = rec.raw[0x15]
     if rec.area_id in BIOME_BY_AREA:
-        return _remap_biome(BIOME_BY_AREA[rec.area_id], sector_label=label)
+        return _remap_biome(BIOME_BY_AREA[rec.area_id])
     if sector_table is not None:
-        return _remap_biome(sector_table.get(label, OUTDOOR_FLOOR_SHEETS[0]), sector_label=label)
+        return _remap_biome(sector_table.get(rec.raw[0x15], OUTDOOR_FLOOR_SHEETS[0]))
     sf = rec.surface_flag
     if sf == 0xCC:
-        return _remap_biome("ocean.32", sector_label=label)
+        return _remap_biome("ocean.32")
     if sf == 0x99:
-        return _remap_biome("tundra.32", sector_label=label)
+        return _remap_biome("tundra.32")
     if sf == 0xBB:
-        return _remap_biome("swamp.32", sector_label=label)
-    return _remap_biome(BIOME_BY_TILESET.get(rec.tileset, OUTDOOR_FLOOR_SHEETS[0]), sector_label=label)
+        return _remap_biome("swamp.32")
+    return _remap_biome(BIOME_BY_TILESET.get(rec.tileset, OUTDOOR_FLOOR_SHEETS[0]))
 
 
 def column_biomes(
@@ -482,31 +476,6 @@ def build_horizon_blits(
         pass_l2(col, pivot)
     for col in range(pivot, -1, -1):
         pass_l3(col, pivot)
-
-    def first_non_ff(*lanes: Sequence[int]) -> int:
-        for lane in lanes:
-            for v in lane:
-                if v != 0xFF:
-                    return v
-        return 0xFF
-
-    def has_sprite(sheet: str, frame: int, x: int, y: int) -> bool:
-        return any(
-            b.sheet == sheet and b.frame == frame and b.x == x and b.y == y
-            for b in blits
-        )
-
-    # Gameplay rule: dense forest and mountain silhouettes wrap both sides.
-    # Small-tree horizon does not.
-    dom = first_non_ff(l1, l2, l3)
-    if dom in (0, 2):
-        sheet = HORIZON_SHEETS[dom]
-        left = SpriteBlit(sheet, OUTDOOR_L2_FRAME[0], OUTDOOR_L2_X[0], OUTDOOR_L2_Y[0])
-        right = SpriteBlit(sheet, OUTDOOR_L3_FRAME[0], OUTDOOR_L3_X[0], OUTDOOR_L3_Y[0])
-        if not has_sprite(left.sheet, left.frame, left.x, left.y):
-            blits.append(left)
-        if not has_sprite(right.sheet, right.frame, right.x, right.y):
-            blits.append(right)
     return blits
 
 
