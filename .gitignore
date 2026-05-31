@@ -1,0 +1,38 @@
+# Keep repository focused on source/docs, not game binaries/assets.
+*
+
+# Repo metadata
+!.gitignore
+
+# Project notes
+!CLAUDE.md
+
+# Source code
+!editor/
+!editor/**
+!tools/
+!tools/**
+
+# Reverse-engineering docs/source artifacts
+!EXTRACTED/
+!EXTRACTED/*.asm
+!EXTRACTED/*.md
+!EXTRACTED/decomp/
+!EXTRACTED/decomp/**
+!EXTRACTED/docs/
+!EXTRACTED/docs/**
+
+# Ignore generated/build/output files even under included paths
+editor/build/
+editor/build/**
+build/
+build/**
+**/__pycache__/
+**/*.pyc
+**/*.exe
+**/*.ppm
+imgui.ini
+
+# Ignore bulky extracted image outputs
+EXTRACTED/docs/img/
+EXTRACTED/docs/img/**

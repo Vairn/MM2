@@ -1,0 +1,408 @@
+Did you hear about the orc who thought
+kites were made from flypaper?
+
+
+Why are there only twenty hours in an
+Orc day?  Ever see an orc with twenty-
+four fingers and toes?
+
+Why can't orcs lie on the beach?
+Cats will bury them.
+
+
+What do you call an orc with half a
+brain?  Gifted
+
+
+How can you recognize an orc pirate?
+He is the one with a patch over both
+eyes.
+
+Did you hear about the orc who went to
+the dentist to have a wisdom tooth put
+in?
+
+Why can't orcs boil water?  They
+forgot the recipe!
+
+
+What's the most dangerous job in CRON?
+Dentist to a vampire.
+
+
+Why did the doctor tell the zombie to
+get plenty of sleep?  He was dead on
+his feet.
+
+What's a ghost's favorite game?
+Hide and Shriek.
+
+
+What's a sea monster's favorite
+meal?  Fish and Ships.
+
+
+Why didn't the skeleton cross the
+road?  he didn't have the guts.
+
+
+What are the two things an orc cannot
+have for breakfast?  Lunch and dinner.
+
+
+Orc party game = Pin the horns on the
+dragon.
+
+
+Why do orc women wear high-heeled
+shoes?  To keep their knuckles from
+dragging on the ground.
+
+Did you hear about the orc ventri-
+loquist whose dummy quit to find a
+new partner?
+
+An orc bought a pet rock.  It ran away
+the next day.
+
+
+Orc inventions:  waterproof sponges.
+
+
+
+How many orcs does it take to carry
+out a kidnapping?  Ten, one to capture
+the kid and nine to write the ransom
+note.
+Did you hear about the orc who cut off
+his left arm and leg?  He wanted to be
+all right.
+
+How can you tell if an orc is an
+aristocrat?  His tattoo has no
+spelling errors.
+
+What do you get when the Mega Dragon
+walks through a vegetable garden?
+Squash.
+
+A low mumble emerges from the middle
+of the road crowd.  Amber, a sultry
+waitress asks, "Do you wish to order
+from our vast menu of drinks (y/n)?"
+The barkeep Rowena boasts, "We have
+the best brewmeister in the land!
+Interested (y/n)?"
+
+Belinthra, the bawdy proprietress,
+raises her tankard of ale in a toast
+and booms, "Would you like a sampling
+of my stuff (y/n)?"
+Raising a cup of mead, Gabrielle, the
+gorgeous barmaid winks seductively
+while softly asking "Would you like
+to use my services (y/n)?"
+Amidst bloodthirsty brawling stands
+luscious Lucindra, the barmaid.
+Bottles fly through the air as she
+asks, "Can I do ya something' (y/n)?"
+A) Feeding frenzy (all
+   you can carry
+B) Have a drink
+C) Specialties
+D) Tip the bartender
+E) Listen for rumors
+    Thank you -
+Please come again
+Sorry - you don't
+have enough gold
+You have to be well
+    to shop here
+ ++ Great Stuff! ++
+
+   You feel sick!
+
+Spoiled, You're sick!
+
+An incredible meal!
+
+ Children at 0,15
+
+  Goblets at 0,7
+
+Meal A, then C1 2,10
+
+Meal B, then C1 2,6
+
+  Time travel at
+    Pinehurst
+  Meal B, then A2
+       14,10
+   S7,1 B2 15,11
+
+Meal C, then C1 1,8
+
+'Murray's rejuvenates'
+
+Hirelings at 15,10
+
+ Cast C2,3 day 93
+    gain S9,3
+Meal C-an experience
+
+  B2, day 140-170,
+       14,4
+   C3,6 C2 11,1
+
+Lord Haart B1 5,5
+
+Meal B is a riot
+
+ Mandagaul D2 6,8
+
+The Gourmet A3 7,6
+
+  C9,2 C1 south
+
+Meal C, 7,3-Sarakin
+
+See Nordon at 10,2
+
+Donate at all
+temples
+Nordon has S2,1
+
+Meal C, then D1 2,7
+
+Hirelings at 0,14
+
+Transmutations 8,8
+the corners
+Castle Xabran holds
+all clues
+Meal A, then C4 14,8
+
+C2,3 C3 1,9
+
+Hoardall seeks items
+
+Keys add castle gold
+
+Meal B, then C3 1,9
+
+Visit Dawn's, D4 3,7
+
+Slayer seeks death
+
+S5,2 C1 1,8
+
+Meal C, then E1 2,3
+
+Tavern drinks give a
+bonus
+S3,6 7,4
+
+Meal A, then 3,11
+
+Meal B, then E4 3,10
+
+A) Orc Beer      - 
+B) Straight shot - 
+C) Id Elixir     - 
+D) Academic Ale  - 
+E) Rare Vintage  - 
+F) Mystic Brew   - 
+A) Horrors
+ d'oeuvres
+B) Soup de Ghoul
+ w/garlic toast
+C) Dragon Steak
+ Tartar
+A) Lightly salted
+ tongue of toad
+B) Puree of Gnome
+
+C) Devils Food
+ Brownie
+A) Sizzling
+ Swine Soup
+B) Red Hot Wolf
+ Nipple Chips
+C) Roast Leg of
+ Wyvern
+A) Pickled Pixie
+ Brains
+B) Deep fried
+ Troll liver
+C) Cream of
+ Kobold soup
+A) Gourmet Dinner
+ B Wyrm Chop Suey
+B) Roast Peasant
+ under glass
+C) Phantom Pudding
+ ( Very Low-cal )
+    Thank you -
+Please come again
+Sorry - backpack
+      full.
+Sorry - you don't
+have enough gold.
+Sorry - no such
+      item.
+You have to be well
+   to shop here.
+The burly blacksmith Svendegard busily
+shapes a deadly sword in the forge.
+Do you care to see his work (y/n)?
+
+The famous blacksmith Morgan
+Drewnhald asks if you wish to view
+weapons he has made available for
+sale.  View (y/n)?
+Flames leap out from the brick
+smelter as the sweaty smith says,
+"Do you wish to see my humble
+wares (y/n)?"
+A friendly smith wipes his hands on a
+worn, leather apron.  He shakes your
+hand and asks, "Care to see my wares
+(y/n)?"
+A tough old blacksmith glares at
+your party and shouts "Hey, only
+cowards browse!"  View wares (y/n)?
+
+A) Weapons
+B) Today's Specials
+C) Armor
+D) Misc Items
+E) Sell Items
+F) Identify Items
+Sheltem and his Elementals guard the
+entry to the control room.  "Although
+you may defeat me, you're too late!
+CRON and all it's VARNs are doomed!"
+CRON is off course and headed directly
+towards the sun!  A strange machine
+pulsates, "Collision imminent"
+Enter override code to abort:
+A pre-recorded message sends shudders
+of terror up your spines!  "I am
+Sheltem, ruler of the planet Terra
+of which this CRON and all of its
+VARNs has been programmed by the
+Ancients to populate.  I cannot
+allow my race to be spoiled by in-
+feriors so I have devised this
+cryptogram as a test.  Should any
+creature who is a Chosen One of CRON
+solve this, it will prove your worth
+and all will be saved.  Fail and a
+fiery death by the sun is assured!
+The clock is ticking..."
+We, the people of Terra, in order to
+form a more perfect union, establish
+justice, insure domestic tranquility,
+provide for the common defense...
+    Congratulations!
+Because of your superior
+intellect and diligence
+you have saved CRON and
+all of its VARNs.  This
+ship, created by the
+Ancients, is a grand
+experiment designed to
+populate this distant
+world.  Prepare to beam
+down in Might+Magic III.
+   Battles:       won /       lost.
+Your final score is
+This ranks you as one of the most
+accomplished game players around!
+Please register your score with the
+Ancients' Headquarters at:
+         New World Computing
+           P. O. Box 2068
+     Van Nuys, California  91404
+  P.S. Your bonus, 50,000,000 exp!!!
+Sages in multi-hued robes congregate
+in the hall.  The archmage offers
+spells for sale.  Interested (y/n)?
+The meeting shifts towards entropy as
+you step in.  A cabalist approaches
+you with a spell list.  Buy (y/n)?
+Lounging next to a roaring fire which
+burns no wood, mystics offer spells.
+Buy (y/n)?
+Magicians clad in furry robes sip
+wine and chat softly.  Listen (y/n)?
+
+Sorcerers sort phials of sands on
+the shelves.  A man barks, "Spells
+(y/n)?"
+A slim cleric in a cowled robe peers
+at you and asks in a serene voice,
+"May I aid you, travelers (y/n)?"
+An initiate tends embers of saffron
+in an ornate alterbowl.  He offers
+assistance.  Accept (y/n)?
+A drumbeat and candlelight lend the
+temple an aura of tranquility.  A
+priest offers help.  Accept (y/n)?
+Tending the smoke of the lava fire,
+a curate breaks his silent prayer.
+"May I offer you our services (y/n)?"
+Ambergris and woodcedar incense burns
+on the altar as the priest chants.
+He asks, "Do you need any help (y/n)?"
+Gold=
+G-Gather Gold
+#-Other Char
+Select (A-F)
+A) Restore Cond
+B) Restore Algn
+C) Donations
+D) Spell C
+E) Spell C
+F) Spell C
+D) Spell S
+Sorry, you must be a
+member of this guild
+ to purchase spells.
+  Your generosity is
+ greatly appreciated.
+
+Today you are blessed!
+
+       Thank you -
+   Please come again.
+
+
+You have to be well
+   to buy spells.
+
+
+   Sorry - you need
+      more gold.
+
+
+   Your condition is
+     now restored.
+
+
+   Your alignment is
+     now restored.
+
+
+  Sorry - that spell
+    is unavailable.
+
+ then C1 2,10
+
+Meal B, then C1 2,6
+
+  Time travel at
+    Pinehurst
+  Meal B, then A2
+       14,10
+   

@@ -1,0 +1,4 @@
+capstone>=5.0
+amitools>=0.10
+# optional: only needed for amitools' built-in disassembler (not used by disasm_m68k.py)
+# machine68k>=0.1

@@ -1,0 +1,297 @@
+Middlegate dump (screen 0)
+
+Visual page (map.dat page 0) raw 16x16, y=15..0 (north->south):
+y=15  E7 42 50 C3 F0 51 43 C0 70 41 44 44 44 40 40 F0
+y=14  41 00 10 03 3C 11 05 08 14 11 47 44 54 01 00 10
+y=13  05 04 10 33 41 00 C0 80 C0 00 50 C1 70 05 04 10
+y=12  CD 64 22 3E 03 00 04 08 04 00 30 05 18 45 74 11
+y=11  45 44 00 44 00 10 47 84 74 01 00 44 88 40 44 14
+y=10  43 50 11 53 03 00 40 C0 40 00 30 41 90 11 C5 54
+y=09  07 24 12 15 05 00 0C 0C 0C 00 14 07 1C 11 41 70
+y=08  43 60 12 C3 F0 31 C3 C0 F0 13 C1 40 70 21 06 34
+y=07  07 14 11 07 10 31 0F 08 3C 23 02 00 10 01 50 51
+y=06  45 40 00 50 2D 02 C0 80 C0 30 0D 04 34 09 18 1D
+y=05  E5 02 00 00 44 00 00 08 00 00 44 F0 41 90 81 50
+y=04  45 04 00 14 E1 0E 1C B3 0D 1C 79 11 09 14 05 18
+y=03  C3 D0 11 4D 0C 5C 47 04 74 43 90 11 81 40 40 90
+y=02  07 18 11 47 44 74 47 44 74 03 20 12 01 00 00 10
+y=01  41 80 00 40 48 48 58 C1 74 07 14 11 01 00 00 10
+y=00  0F 04 04 14 B5 B5 B5 15 45 CC 44 3C 0F 04 04 3C
+
+Collision page (map.dat page 1) raw 16x16, y=15..0 (north->south):
+y=15  C5 C0 50 41 50 D1 41 40 50 41 C4 44 44 40 40 D0
+y=14  41 00 10 01 14 11 05 80 14 11 45 44 D0 01 00 10
+y=13  05 04 10 11 41 00 40 80 40 00 50 41 10 05 04 10
+y=12  45 C4 80 94 01 00 04 00 04 00 10 05 80 C4 54 11
+y=11  45 44 00 44 00 10 C5 84 D4 01 00 44 80 40 C4 14
+y=10  41 50 11 51 01 00 40 40 40 00 10 41 90 11 45 D0
+y=09  05 84 90 91 05 00 04 04 04 00 14 05 14 11 41 10
+y=08  41 C0 90 01 50 11 41 40 50 11 41 40 50 81 84 10
+y=07  05 14 11 05 10 11 05 80 14 81 80 00 10 01 50 91
+y=06  45 40 00 50 85 80 40 80 40 10 05 04 14 81 94 15
+y=05  C5 80 00 00 44 00 00 80 00 00 44 50 41 50 01 50
+y=04  45 04 00 14 C1 84 14 91 85 14 D5 11 01 14 05 10
+y=03  41 50 11 41 04 54 41 84 54 41 D0 11 01 40 40 10
+y=02  05 90 11 05 44 D4 05 44 D4 01 80 10 01 80 00 10
+y=01  41 00 00 40 44 44 54 41 D4 05 14 11 01 00 00 10
+y=00  05 04 04 14 95 95 85 14 C5 44 44 14 05 04 04 14
+
+Per-tile decode (x,y: vis=0xVV N/E/S/W | coll=0xCC N/E/S/W event):
+(00,15) vis=E7 N3 E1 S2 W3 | coll=C5 N1 E1 S0 W3 ev1
+(01,15) vis=42 N2 E0 S0 W1 | coll=C0 N0 E0 S0 W3 ev1
+(02,15) vis=50 N0 E0 S1 W1 | coll=50 N0 E0 S1 W1 ev0
+(03,15) vis=C3 N3 E0 S0 W3 | coll=41 N1 E0 S0 W1 ev0
+(04,15) vis=F0 N0 E0 S3 W3 | coll=50 N0 E0 S1 W1 ev0
+(05,15) vis=51 N1 E0 S1 W1 | coll=D1 N1 E0 S1 W3 ev1
+(06,15) vis=43 N3 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(07,15) vis=C0 N0 E0 S0 W3 | coll=40 N0 E0 S0 W1 ev0
+(08,15) vis=70 N0 E0 S3 W1 | coll=50 N0 E0 S1 W1 ev0
+(09,15) vis=41 N1 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(10,15) vis=44 N0 E1 S0 W1 | coll=C4 N0 E1 S0 W3 ev1
+(11,15) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(12,15) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(13,15) vis=40 N0 E0 S0 W1 | coll=40 N0 E0 S0 W1 ev0
+(14,15) vis=40 N0 E0 S0 W1 | coll=40 N0 E0 S0 W1 ev0
+(15,15) vis=F0 N0 E0 S3 W3 | coll=D0 N0 E0 S1 W3 ev1
+(00,14) vis=41 N1 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(01,14) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(02,14) vis=10 N0 E0 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(03,14) vis=03 N3 E0 S0 W0 | coll=01 N1 E0 S0 W0 ev0
+(04,14) vis=3C N0 E3 S3 W0 | coll=14 N0 E1 S1 W0 ev0
+(05,14) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(06,14) vis=05 N1 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(07,14) vis=08 N0 E2 S0 W0 | coll=80 N0 E0 S0 W2 ev1
+(08,14) vis=14 N0 E1 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(09,14) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(10,14) vis=47 N3 E1 S0 W1 | coll=45 N1 E1 S0 W1 ev0
+(11,14) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(12,14) vis=54 N0 E1 S1 W1 | coll=D0 N0 E0 S1 W3 ev1
+(13,14) vis=01 N1 E0 S0 W0 | coll=01 N1 E0 S0 W0 ev0
+(14,14) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(15,14) vis=10 N0 E0 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(00,13) vis=05 N1 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(01,13) vis=04 N0 E1 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(02,13) vis=10 N0 E0 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(03,13) vis=33 N3 E0 S3 W0 | coll=11 N1 E0 S1 W0 ev0
+(04,13) vis=41 N1 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(05,13) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(06,13) vis=C0 N0 E0 S0 W3 | coll=40 N0 E0 S0 W1 ev0
+(07,13) vis=80 N0 E0 S0 W2 | coll=80 N0 E0 S0 W2 ev1
+(08,13) vis=C0 N0 E0 S0 W3 | coll=40 N0 E0 S0 W1 ev0
+(09,13) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(10,13) vis=50 N0 E0 S1 W1 | coll=50 N0 E0 S1 W1 ev0
+(11,13) vis=C1 N1 E0 S0 W3 | coll=41 N1 E0 S0 W1 ev0
+(12,13) vis=70 N0 E0 S3 W1 | coll=10 N0 E0 S1 W0 ev0
+(13,13) vis=05 N1 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(14,13) vis=04 N0 E1 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(15,13) vis=10 N0 E0 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(00,12) vis=CD N1 E3 S0 W3 | coll=45 N1 E1 S0 W1 ev0
+(01,12) vis=64 N0 E1 S2 W1 | coll=C4 N0 E1 S0 W3 ev1
+(02,12) vis=22 N2 E0 S2 W0 | coll=80 N0 E0 S0 W2 ev1
+(03,12) vis=3E N2 E3 S3 W0 | coll=94 N0 E1 S1 W2 ev1
+(04,12) vis=03 N3 E0 S0 W0 | coll=01 N1 E0 S0 W0 ev0
+(05,12) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(06,12) vis=04 N0 E1 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(07,12) vis=08 N0 E2 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(08,12) vis=04 N0 E1 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(09,12) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(10,12) vis=30 N0 E0 S3 W0 | coll=10 N0 E0 S1 W0 ev0
+(11,12) vis=05 N1 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(12,12) vis=18 N0 E2 S1 W0 | coll=80 N0 E0 S0 W2 ev1
+(13,12) vis=45 N1 E1 S0 W1 | coll=C4 N0 E1 S0 W3 ev1
+(14,12) vis=74 N0 E1 S3 W1 | coll=54 N0 E1 S1 W1 ev0
+(15,12) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(00,11) vis=45 N1 E1 S0 W1 | coll=45 N1 E1 S0 W1 ev0
+(01,11) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(02,11) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(03,11) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(04,11) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(05,11) vis=10 N0 E0 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(06,11) vis=47 N3 E1 S0 W1 | coll=C5 N1 E1 S0 W3 ev1
+(07,11) vis=84 N0 E1 S0 W2 | coll=84 N0 E1 S0 W2 ev1
+(08,11) vis=74 N0 E1 S3 W1 | coll=D4 N0 E1 S1 W3 ev1
+(09,11) vis=01 N1 E0 S0 W0 | coll=01 N1 E0 S0 W0 ev0
+(10,11) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(11,11) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(12,11) vis=88 N0 E2 S0 W2 | coll=80 N0 E0 S0 W2 ev1
+(13,11) vis=40 N0 E0 S0 W1 | coll=40 N0 E0 S0 W1 ev0
+(14,11) vis=44 N0 E1 S0 W1 | coll=C4 N0 E1 S0 W3 ev1
+(15,11) vis=14 N0 E1 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(00,10) vis=43 N3 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(01,10) vis=50 N0 E0 S1 W1 | coll=50 N0 E0 S1 W1 ev0
+(02,10) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(03,10) vis=53 N3 E0 S1 W1 | coll=51 N1 E0 S1 W1 ev0
+(04,10) vis=03 N3 E0 S0 W0 | coll=01 N1 E0 S0 W0 ev0
+(05,10) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(06,10) vis=40 N0 E0 S0 W1 | coll=40 N0 E0 S0 W1 ev0
+(07,10) vis=C0 N0 E0 S0 W3 | coll=40 N0 E0 S0 W1 ev0
+(08,10) vis=40 N0 E0 S0 W1 | coll=40 N0 E0 S0 W1 ev0
+(09,10) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(10,10) vis=30 N0 E0 S3 W0 | coll=10 N0 E0 S1 W0 ev0
+(11,10) vis=41 N1 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(12,10) vis=90 N0 E0 S1 W2 | coll=90 N0 E0 S1 W2 ev1
+(13,10) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(14,10) vis=C5 N1 E1 S0 W3 | coll=45 N1 E1 S0 W1 ev0
+(15,10) vis=54 N0 E1 S1 W1 | coll=D0 N0 E0 S1 W3 ev1
+(00,09) vis=07 N3 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(01,09) vis=24 N0 E1 S2 W0 | coll=84 N0 E1 S0 W2 ev1
+(02,09) vis=12 N2 E0 S1 W0 | coll=90 N0 E0 S1 W2 ev1
+(03,09) vis=15 N1 E1 S1 W0 | coll=91 N1 E0 S1 W2 ev1
+(04,09) vis=05 N1 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(05,09) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(06,09) vis=0C N0 E3 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(07,09) vis=0C N0 E3 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(08,09) vis=0C N0 E3 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(09,09) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(10,09) vis=14 N0 E1 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(11,09) vis=07 N3 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(12,09) vis=1C N0 E3 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(13,09) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(14,09) vis=41 N1 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(15,09) vis=70 N0 E0 S3 W1 | coll=10 N0 E0 S1 W0 ev0
+(00,08) vis=43 N3 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(01,08) vis=60 N0 E0 S2 W1 | coll=C0 N0 E0 S0 W3 ev1
+(02,08) vis=12 N2 E0 S1 W0 | coll=90 N0 E0 S1 W2 ev1
+(03,08) vis=C3 N3 E0 S0 W3 | coll=01 N1 E0 S0 W0 ev0
+(04,08) vis=F0 N0 E0 S3 W3 | coll=50 N0 E0 S1 W1 ev0
+(05,08) vis=31 N1 E0 S3 W0 | coll=11 N1 E0 S1 W0 ev0
+(06,08) vis=C3 N3 E0 S0 W3 | coll=41 N1 E0 S0 W1 ev0
+(07,08) vis=C0 N0 E0 S0 W3 | coll=40 N0 E0 S0 W1 ev0
+(08,08) vis=F0 N0 E0 S3 W3 | coll=50 N0 E0 S1 W1 ev0
+(09,08) vis=13 N3 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(10,08) vis=C1 N1 E0 S0 W3 | coll=41 N1 E0 S0 W1 ev0
+(11,08) vis=40 N0 E0 S0 W1 | coll=40 N0 E0 S0 W1 ev0
+(12,08) vis=70 N0 E0 S3 W1 | coll=50 N0 E0 S1 W1 ev0
+(13,08) vis=21 N1 E0 S2 W0 | coll=81 N1 E0 S0 W2 ev1
+(14,08) vis=06 N2 E1 S0 W0 | coll=84 N0 E1 S0 W2 ev1
+(15,08) vis=34 N0 E1 S3 W0 | coll=10 N0 E0 S1 W0 ev0
+(00,07) vis=07 N3 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(01,07) vis=14 N0 E1 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(02,07) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(03,07) vis=07 N3 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(04,07) vis=10 N0 E0 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(05,07) vis=31 N1 E0 S3 W0 | coll=11 N1 E0 S1 W0 ev0
+(06,07) vis=0F N3 E3 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(07,07) vis=08 N0 E2 S0 W0 | coll=80 N0 E0 S0 W2 ev1
+(08,07) vis=3C N0 E3 S3 W0 | coll=14 N0 E1 S1 W0 ev0
+(09,07) vis=23 N3 E0 S2 W0 | coll=81 N1 E0 S0 W2 ev1
+(10,07) vis=02 N2 E0 S0 W0 | coll=80 N0 E0 S0 W2 ev1
+(11,07) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(12,07) vis=10 N0 E0 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(13,07) vis=01 N1 E0 S0 W0 | coll=01 N1 E0 S0 W0 ev0
+(14,07) vis=50 N0 E0 S1 W1 | coll=50 N0 E0 S1 W1 ev0
+(15,07) vis=51 N1 E0 S1 W1 | coll=91 N1 E0 S1 W2 ev1
+(00,06) vis=45 N1 E1 S0 W1 | coll=45 N1 E1 S0 W1 ev0
+(01,06) vis=40 N0 E0 S0 W1 | coll=40 N0 E0 S0 W1 ev0
+(02,06) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(03,06) vis=50 N0 E0 S1 W1 | coll=50 N0 E0 S1 W1 ev0
+(04,06) vis=2D N1 E3 S2 W0 | coll=85 N1 E1 S0 W2 ev1
+(05,06) vis=02 N2 E0 S0 W0 | coll=80 N0 E0 S0 W2 ev1
+(06,06) vis=C0 N0 E0 S0 W3 | coll=40 N0 E0 S0 W1 ev0
+(07,06) vis=80 N0 E0 S0 W2 | coll=80 N0 E0 S0 W2 ev1
+(08,06) vis=C0 N0 E0 S0 W3 | coll=40 N0 E0 S0 W1 ev0
+(09,06) vis=30 N0 E0 S3 W0 | coll=10 N0 E0 S1 W0 ev0
+(10,06) vis=0D N1 E3 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(11,06) vis=04 N0 E1 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(12,06) vis=34 N0 E1 S3 W0 | coll=14 N0 E1 S1 W0 ev0
+(13,06) vis=09 N1 E2 S0 W0 | coll=81 N1 E0 S0 W2 ev1
+(14,06) vis=18 N0 E2 S1 W0 | coll=94 N0 E1 S1 W2 ev1
+(15,06) vis=1D N1 E3 S1 W0 | coll=15 N1 E1 S1 W0 ev0
+(00,05) vis=E5 N1 E1 S2 W3 | coll=C5 N1 E1 S0 W3 ev1
+(01,05) vis=02 N2 E0 S0 W0 | coll=80 N0 E0 S0 W2 ev1
+(02,05) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(03,05) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(04,05) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(05,05) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(06,05) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(07,05) vis=08 N0 E2 S0 W0 | coll=80 N0 E0 S0 W2 ev1
+(08,05) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(09,05) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(10,05) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(11,05) vis=F0 N0 E0 S3 W3 | coll=50 N0 E0 S1 W1 ev0
+(12,05) vis=41 N1 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(13,05) vis=90 N0 E0 S1 W2 | coll=50 N0 E0 S1 W1 ev0
+(14,05) vis=81 N1 E0 S0 W2 | coll=01 N1 E0 S0 W0 ev0
+(15,05) vis=50 N0 E0 S1 W1 | coll=50 N0 E0 S1 W1 ev0
+(00,04) vis=45 N1 E1 S0 W1 | coll=45 N1 E1 S0 W1 ev0
+(01,04) vis=04 N0 E1 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(02,04) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(03,04) vis=14 N0 E1 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(04,04) vis=E1 N1 E0 S2 W3 | coll=C1 N1 E0 S0 W3 ev1
+(05,04) vis=0E N2 E3 S0 W0 | coll=84 N0 E1 S0 W2 ev1
+(06,04) vis=1C N0 E3 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(07,04) vis=B3 N3 E0 S3 W2 | coll=91 N1 E0 S1 W2 ev1
+(08,04) vis=0D N1 E3 S0 W0 | coll=85 N1 E1 S0 W2 ev1
+(09,04) vis=1C N0 E3 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(10,04) vis=79 N1 E2 S3 W1 | coll=D5 N1 E1 S1 W3 ev1
+(11,04) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(12,04) vis=09 N1 E2 S0 W0 | coll=01 N1 E0 S0 W0 ev0
+(13,04) vis=14 N0 E1 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(14,04) vis=05 N1 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(15,04) vis=18 N0 E2 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(00,03) vis=C3 N3 E0 S0 W3 | coll=41 N1 E0 S0 W1 ev0
+(01,03) vis=D0 N0 E0 S1 W3 | coll=50 N0 E0 S1 W1 ev0
+(02,03) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(03,03) vis=4D N1 E3 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(04,03) vis=0C N0 E3 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(05,03) vis=5C N0 E3 S1 W1 | coll=54 N0 E1 S1 W1 ev0
+(06,03) vis=47 N3 E1 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(07,03) vis=04 N0 E1 S0 W0 | coll=84 N0 E1 S0 W2 ev1
+(08,03) vis=74 N0 E1 S3 W1 | coll=54 N0 E1 S1 W1 ev0
+(09,03) vis=43 N3 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(10,03) vis=90 N0 E0 S1 W2 | coll=D0 N0 E0 S1 W3 ev1
+(11,03) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(12,03) vis=81 N1 E0 S0 W2 | coll=01 N1 E0 S0 W0 ev0
+(13,03) vis=40 N0 E0 S0 W1 | coll=40 N0 E0 S0 W1 ev0
+(14,03) vis=40 N0 E0 S0 W1 | coll=40 N0 E0 S0 W1 ev0
+(15,03) vis=90 N0 E0 S1 W2 | coll=10 N0 E0 S1 W0 ev0
+(00,02) vis=07 N3 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(01,02) vis=18 N0 E2 S1 W0 | coll=90 N0 E0 S1 W2 ev1
+(02,02) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(03,02) vis=47 N3 E1 S0 W1 | coll=05 N1 E1 S0 W0 ev0
+(04,02) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(05,02) vis=74 N0 E1 S3 W1 | coll=D4 N0 E1 S1 W3 ev1
+(06,02) vis=47 N3 E1 S0 W1 | coll=05 N1 E1 S0 W0 ev0
+(07,02) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(08,02) vis=74 N0 E1 S3 W1 | coll=D4 N0 E1 S1 W3 ev1
+(09,02) vis=03 N3 E0 S0 W0 | coll=01 N1 E0 S0 W0 ev0
+(10,02) vis=20 N0 E0 S2 W0 | coll=80 N0 E0 S0 W2 ev1
+(11,02) vis=12 N2 E0 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(12,02) vis=01 N1 E0 S0 W0 | coll=01 N1 E0 S0 W0 ev0
+(13,02) vis=00 N0 E0 S0 W0 | coll=80 N0 E0 S0 W2 ev1
+(14,02) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(15,02) vis=10 N0 E0 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(00,01) vis=41 N1 E0 S0 W1 | coll=41 N1 E0 S0 W1 ev0
+(01,01) vis=80 N0 E0 S0 W2 | coll=00 N0 E0 S0 W0 ev0
+(02,01) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(03,01) vis=40 N0 E0 S0 W1 | coll=40 N0 E0 S0 W1 ev0
+(04,01) vis=48 N0 E2 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(05,01) vis=48 N0 E2 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(06,01) vis=58 N0 E2 S1 W1 | coll=54 N0 E1 S1 W1 ev0
+(07,01) vis=C1 N1 E0 S0 W3 | coll=41 N1 E0 S0 W1 ev0
+(08,01) vis=74 N0 E1 S3 W1 | coll=D4 N0 E1 S1 W3 ev1
+(09,01) vis=07 N3 E1 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(10,01) vis=14 N0 E1 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(11,01) vis=11 N1 E0 S1 W0 | coll=11 N1 E0 S1 W0 ev0
+(12,01) vis=01 N1 E0 S0 W0 | coll=01 N1 E0 S0 W0 ev0
+(13,01) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(14,01) vis=00 N0 E0 S0 W0 | coll=00 N0 E0 S0 W0 ev0
+(15,01) vis=10 N0 E0 S1 W0 | coll=10 N0 E0 S1 W0 ev0
+(00,00) vis=0F N3 E3 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(01,00) vis=04 N0 E1 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(02,00) vis=04 N0 E1 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(03,00) vis=14 N0 E1 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(04,00) vis=B5 N1 E1 S3 W2 | coll=95 N1 E1 S1 W2 ev1
+(05,00) vis=B5 N1 E1 S3 W2 | coll=95 N1 E1 S1 W2 ev1
+(06,00) vis=B5 N1 E1 S3 W2 | coll=85 N1 E1 S0 W2 ev1
+(07,00) vis=15 N1 E1 S1 W0 | coll=14 N0 E1 S1 W0 ev0
+(08,00) vis=45 N1 E1 S0 W1 | coll=C5 N1 E1 S0 W3 ev1
+(09,00) vis=CC N0 E3 S0 W3 | coll=44 N0 E1 S0 W1 ev0
+(10,00) vis=44 N0 E1 S0 W1 | coll=44 N0 E1 S0 W1 ev0
+(11,00) vis=3C N0 E3 S3 W0 | coll=14 N0 E1 S1 W0 ev0
+(12,00) vis=0F N3 E3 S0 W0 | coll=05 N1 E1 S0 W0 ev0
+(13,00) vis=04 N0 E1 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(14,00) vis=04 N0 E1 S0 W0 | coll=04 N0 E1 S0 W0 ev0
+(15,00) vis=3C N0 E3 S3 W0 | coll=14 N0 E1 S1 W0 ev0
+
+Visual side-code counts total(1024 sides): open=584 wall=273 torch=52 door=115
