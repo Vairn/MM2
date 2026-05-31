@@ -148,6 +148,76 @@ void MapSection::drawWindow() {
         "docs/15-3d-view-and-game-screen.md.");
 }
 
+void MapSection::stepCameraInDirection(int dir) {
+    static const int kDx[] = {0, 1, 0, -1};
+    static const int kDy[] = {1, 0, -1, 0};
+
+    int nx = camera_.x + kDx[dir & 3];
+    int ny = camera_.y + kDy[dir & 3];
+    int ns = screen_;
+
+    if (attribLoaded_) {
+        const AttribScreen& rec = attrib_.screens[static_cast<size_t>(screen_)];
+        if (nx < 0) {
+            int west = rec.neighbor(3);
+            if (west >= 0 && west < kMapScreens) {
+                ns = west;
+                nx = kMapGridDim - 1;
+            }
+        } else if (nx >= kMapGridDim) {
+            int east = rec.neighbor(1);
+            if (east >= 0 && east < kMapScreens) {
+                ns = east;
+                nx = 0;
+            }
+        }
+        if (ny < 0) {
+            int south = rec.neighbor(2);
+            if (south >= 0 && south < kMapScreens) {
+                ns = south;
+                ny = kMapGridDim - 1;
+            }
+        } else if (ny >= kMapGridDim) {
+            int north = rec.neighbor(0);
+            if (north >= 0 && north < kMapScreens) {
+                ns = north;
+                ny = 0;
+            }
+        }
+    }
+
+    if (nx < 0) nx = 0;
+    if (ny < 0) ny = 0;
+    if (nx >= kMapGridDim) nx = kMapGridDim - 1;
+    if (ny >= kMapGridDim) ny = kMapGridDim - 1;
+    screen_ = ns;
+    camera_.x = nx;
+    camera_.y = ny;
+}
+
+void MapSection::handleView3DKeyboardInput() {
+    if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) return;
+    if (ImGui::IsAnyItemActive()) return;
+    if (ImGui::GetIO().WantTextInput) return;
+
+    if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false) ||
+        ImGui::IsKeyPressed(ImGuiKey_A, false)) {
+        camera_.facing = (camera_.facing + 3) & 3;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, false) ||
+        ImGui::IsKeyPressed(ImGuiKey_D, false)) {
+        camera_.facing = (camera_.facing + 1) & 3;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false) ||
+        ImGui::IsKeyPressed(ImGuiKey_W, false)) {
+        stepCameraInDirection(camera_.facing);
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false) ||
+        ImGui::IsKeyPressed(ImGuiKey_S, false)) {
+        stepCameraInDirection((camera_.facing + 2) & 3);
+    }
+}
+
 void MapSection::drawView3D() {
     Env env = envOf(screen_);
     if (env == Env::Outdoor) {
@@ -175,18 +245,13 @@ void MapSection::drawView3D() {
             break;
     }
 
-    // frustum_solid_edge_test @0x2BCC checks the roof bit for the current cell;
-    // returns 0 = open sky, 1 = solid ceiling.  sky.32 frame 0=open, 1=ceiling.
+    // Keep editor render aligned with tools/view3d_indoor.py:
+    // indoor path uses sky frame 0 and does not apply roof-bit switching.
     int skyFrame = 0;
-    if (attribLoaded_) {
-        int tile = attribRoofTileAt(camera_.x, camera_.y);
-        if (attrib_.screens[static_cast<size_t>(screen_)].roofBit(tile))
-            skyFrame = 1;
-    }
 
     static const char* kFacing[] = {"North", "East", "South", "West"};
-    ImGui::Text("Camera  (%d, %d)  facing %s  |  %s", camera_.x, camera_.y,
-                kFacing[camera_.facing & 3], skyFrame ? "ceiling" : "open sky");
+    ImGui::Text("Camera  (%d, %d)  facing %s", camera_.x, camera_.y,
+                kFacing[camera_.facing & 3]);
 
     ImGui::SetNextItemWidth(80);
     ImGui::InputInt("X##cam", &camera_.x);
@@ -203,9 +268,11 @@ void MapSection::drawView3D() {
     ImGui::SameLine();
     if (ImGui::Button("Turn R")) camera_.facing = (camera_.facing + 1) & 3;
     ImGui::SameLine();
-    if (ImGui::Button("Step F")) stepForward(camera_.facing, camera_.x, camera_.y);
+    if (ImGui::Button("Step F")) stepCameraInDirection(camera_.facing);
     ImGui::SameLine();
-    if (ImGui::Button("Step B")) stepBackward(camera_.facing, camera_.x, camera_.y);
+    if (ImGui::Button("Step B")) stepCameraInDirection((camera_.facing + 2) & 3);
+
+    handleView3DKeyboardInput();
 
     ImGui::SetNextItemWidth(160);
     ImGui::SliderFloat("View zoom##3d", &viewZoom_, 1.0f, 4.0f, "%.0fx");
@@ -239,7 +306,7 @@ void MapSection::drawView3D() {
 
     // 1. floor backdrop — townf.32 frame 0 at (8, 68)
     blit(*floor, 0, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DFloorY));
-    // 2. sky/ceiling backdrop — sky.32 frame from roof bit at (8, 8)
+    // 2. sky backdrop — fixed frame 0 to match the Python indoor viewer
     blit(sky_, skyFrame, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DSkyY));
     // 3. walls (town/cave/castle.32) — painted over sky/floor like view_3d_master @0x2ECE
     for (const View3DBlit& wb : scene.blits)

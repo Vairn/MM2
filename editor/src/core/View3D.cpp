@@ -33,12 +33,31 @@ struct MapGrid {
 
     uint8_t at(int x, int y) const {
         const std::array<uint8_t, kMapPageSize>* page = &bufs.center;
-        if (x > 0x0F && x < 0x14) page = &bufs.east;
-        else if (x >= 0xFC) page = &bufs.west;
-        if (y > 0x0F && y < 0x14) page = &bufs.north;
-        else if (y >= 0xFC) page = &bufs.south;
-        if (x < 0 || y < 0 || x >= kMapGridDim || y >= kMapGridDim) return 0;
-        return (*page)[static_cast<size_t>(y * kMapGridDim + x)];
+        int lx = x;
+        int ly = y;
+        if (x > 0x0F && x < 0x14) {
+            page = &bufs.east;
+            lx = x - 0x10;
+        } else if (x < 0) {
+            page = &bufs.west;
+            lx = x + 0x10;
+        } else if (x >= 0xFC) {
+            // Preserve 8-bit wrapped coordinate handling used by ASM traces.
+            page = &bufs.west;
+            lx = x - 0xF0;
+        }
+        if (y >= kMapGridDim) {
+            page = &bufs.north;
+            ly = y - kMapGridDim;
+        } else if (y < 0) {
+            page = &bufs.south;
+            ly = y + kMapGridDim;
+        } else if (y >= 0xFC) {
+            page = &bufs.south;
+            ly = y - 0xF0;
+        }
+        if (lx < 0 || ly < 0 || lx >= kMapGridDim || ly >= kMapGridDim) return 0;
+        return (*page)[static_cast<size_t>(ly * kMapGridDim + lx)];
     }
 };
 
@@ -54,14 +73,15 @@ struct FacingCtx {
 
 FacingCtx facingContext(int facing) {
     FacingCtx f{};
-    // Label-aligned decode for page-0 bits: N@0 E@2 S@4 W@6.
-    f.shFwd = (facing & 3) * 2;
-    // d4 feeds left-side slots, d5 feeds right-side slots.
-    f.shD4 = (f.shFwd == 0) ? 6 : (f.shFwd - 2);
-    f.shD5 = (f.shFwd + 2) & 7;
-    f.d1 = static_cast<uint8_t>(0x03u << f.shFwd);
-    f.d4 = static_cast<uint8_t>(0x03u << f.shD4);
-    f.d5 = static_cast<uint8_t>(0x03u << f.shD5);
+    // Keep exactly in sync with tools/view3d_trace.py:set_facing.
+    static constexpr uint8_t kDirMask[4] = {0xC0, 0x30, 0x0C, 0x03};
+    const int i = facing & 3;
+    f.d1 = kDirMask[i];
+    f.shFwd = (f.d1 == 0x03) ? 0 : (6 - 2 * i);
+    f.shD4 = (f.shFwd + 2) & 7;
+    f.shD5 = (f.shFwd == 0) ? 6 : (f.shFwd - 2);
+    f.d5 = (f.d1 == 0x03) ? 0xC0 : static_cast<uint8_t>(f.d1 >> 2);
+    f.d4 = (f.d1 == 0xC0) ? 0x03 : static_cast<uint8_t>((f.d1 << 2) & 0xFF);
     return f;
 }
 
@@ -85,11 +105,10 @@ void refreshHood(const MapGrid& map, int px, int py, int facing,
         }
     };
 
-    // map_neighbourhood_refresh @0x19D6: row2 (px+b[3], py+b[2]) -> $55D0,
-    // row3 (px+b[5], py+b[4]) -> $55CC (not b[2]/b[3] nor b[4]/b[5]).
+    // Keep exactly in sync with tools/view3d_indoor.py:refresh_hood.
     rowSampler(px, py, H_C0);
-    rowSampler(px + b[3], py + b[2], H_C4);
-    rowSampler(px + b[5], py + b[4], H_R0);
+    rowSampler(px + b[2], py + b[3], H_C4);
+    rowSampler(px + b[4], py + b[5], H_R0);
 }
 
 void assignSlot(std::array<uint8_t, kFrustumSlots>& slots, int idx, uint8_t cell,

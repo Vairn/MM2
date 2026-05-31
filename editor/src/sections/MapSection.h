@@ -30,6 +30,8 @@ public:
     void drawWindow();
     void drawView3D();
     void drawMinimap();  // top-down minimap overlay used by drawView3D
+    void handleView3DKeyboardInput();
+    void stepCameraInDirection(int dir);
     void loadTilesets(const std::string& dataDir);
     void releaseTextures();
     // True when the screen renders with the outdoor tileset (outb.32).
