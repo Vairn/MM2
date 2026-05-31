@@ -46,6 +46,16 @@ struct GfxImage {
     size_t chunkOffset = 0;
     uint8_t palette[kGfxPaletteColors][4] = {};  // RGBA
     std::vector<GfxFrame> frames;
+
+    void clear() {
+        ok = false;
+        error.clear();
+        frameCount = 0;
+        depth = 0;
+        chunkOffset = 0;
+        frames.clear();
+        for (auto& c : palette) c[0] = c[1] = c[2] = c[3] = 0;
+    }
 };
 
 // Decode an image chunk. When isAnm is true the FF 00 marker is located first.

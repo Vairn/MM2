@@ -5,6 +5,7 @@
 #include "core/AttribFile.h"
 #include "core/Gfx.h"
 #include "core/MapFile.h"
+#include "core/Outdoor3D.h"
 #include "core/View3D.h"
 
 namespace mm2 {
@@ -16,6 +17,7 @@ public:
     bool load(const std::string& dataDir) override;
     bool save(const std::string& dataDir) override;
     void draw(App& app) override;
+    void flushPending() override;
     ~MapSection() override;
 
     // The four backdrop environments the engine selects between.
@@ -29,20 +31,28 @@ public:
     void drawCollisionDecode(uint8_t cell);
     void drawWindow();
     void drawView3D();
+    void drawOutdoorView3D();
     void drawMinimap();  // top-down minimap overlay used by drawView3D
     void handleView3DKeyboardInput();
     void stepCameraInDirection(int dir);
     void loadTilesets(const std::string& dataDir);
-    void releaseTextures();
+    void ensureOutdoorGfxLoaded();
+    void releaseOutdoorGfx(std::vector<unsigned int>* deferGl = nullptr);
+    void releaseTextures(bool deferGl = false);
+    void flushPendingTextures();
     // True when the screen renders with the outdoor tileset (outb.32).
     bool isOutdoor(int screen) const;
     Env envOf(int screen) const;
 
-    // One decoded sheet plus its uploaded GL textures (one per frame).
+    // One uploaded GL texture per frame; decoded RGBA is not retained after upload.
     struct Sheet {
-        GfxImage img;
+        bool ok = false;
+        std::vector<int> frameW;
+        std::vector<int> frameH;
         std::vector<unsigned int> tex;
-        void release();
+
+        void release(std::vector<unsigned int>* deferGl = nullptr);
+        void loadFile(const std::string& path);
     };
 
     MapFile file_;
@@ -55,6 +65,15 @@ public:
     Sheet floorTown_, floorCave_, floorCastle_, floorOut_;   // per-env floor
     Sheet wallTown_, wallCave_, wallCastle_;                  // per-env walls
     Sheet torchTown_, torchCave_, torchCastle_;               // per-env torches
+    Sheet horizon1_, horizon2_, horizon3_;                // outdoor1/2/3.32
+    Sheet biomeDesert_, biomeOcean_, biomeTundra_, biomeSwamp_;
+
+    const Sheet* biomeSheet(OutdoorBiome biome) const;
+    const Sheet* horizonSheet(OutdoorHorizonSheet sheet) const;
+
+    std::string dataDir_;
+    bool outdoorGfxLoaded_ = false;
+    std::vector<unsigned int> pendingFreeTextures_;
 
     int screen_ = 0;
     View3DCamera camera_{8, 8, 0};

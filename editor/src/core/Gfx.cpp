@@ -180,7 +180,7 @@ GfxImage gfxDecode(const Bytes& bytes, bool isAnm) {
 bool gfxLoad(const std::string& path, bool isAnm, GfxImage& out) {
     Bytes b;
     if (!readFile(path, b)) {
-        out = GfxImage{};
+        out.clear();
         out.error = "read failed";
         return false;
     }

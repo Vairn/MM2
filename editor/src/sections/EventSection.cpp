@@ -15,6 +15,58 @@
 
 namespace mm2 {
 
+namespace {
+
+struct NodeColors {
+    ImU32 title;
+    ImU32 bg;
+    ImU32 outline;
+};
+
+void pushNodeStyle(const NodeColors& c) {
+    ImNodes::PushColorStyle(ImNodesCol_TitleBar, c.title);
+    ImNodes::PushColorStyle(ImNodesCol_NodeBackground, c.bg);
+    ImNodes::PushColorStyle(ImNodesCol_NodeOutline, c.outline);
+}
+
+void popNodeStyle() {
+    ImNodes::PopColorStyle();
+    ImNodes::PopColorStyle();
+    ImNodes::PopColorStyle();
+}
+
+constexpr NodeColors kTrigColors{
+    IM_COL32(220, 160, 64, 255), IM_COL32(52, 42, 28, 255), IM_COL32(190, 130, 50, 255)};
+constexpr NodeColors kScriptColors{
+    IM_COL32(80, 150, 220, 255), IM_COL32(28, 40, 56, 255), IM_COL32(60, 120, 190, 255)};
+constexpr NodeColors kTextScriptColors{
+    IM_COL32(170, 120, 220, 255), IM_COL32(40, 32, 52, 255), IM_COL32(140, 90, 190, 255)};
+constexpr NodeColors kEmptyScriptColors{
+    IM_COL32(120, 120, 120, 255), IM_COL32(36, 36, 36, 255), IM_COL32(90, 90, 90, 255)};
+constexpr NodeColors kStringColors{
+    IM_COL32(80, 190, 120, 255), IM_COL32(28, 48, 36, 255), IM_COL32(60, 160, 100, 255)};
+
+enum class ScriptKind { Missing, Empty, Text, Bytecode };
+
+ScriptKind scriptKind(int evt, const EventLocation& loc) {
+    if (evt >= static_cast<int>(loc.segments.size())) return ScriptKind::Missing;
+    const EventSegment& seg = loc.segments[evt];
+    if (seg.isText) return ScriptKind::Text;
+    if (seg.ops.empty()) return ScriptKind::Empty;
+    return ScriptKind::Bytecode;
+}
+
+const NodeColors& scriptColors(ScriptKind kind) {
+    switch (kind) {
+        case ScriptKind::Text: return kTextScriptColors;
+        case ScriptKind::Empty:
+        case ScriptKind::Missing: return kEmptyScriptColors;
+        default: return kScriptColors;
+    }
+}
+
+}  // namespace
+
 // ---- unique id spaces (node / pin / static attribute) ----------------------
 static inline int kTrigNode(int e)   { return 0x10000 + e; }
 static inline int kEvtNode(int e)    { return 0x20000 + e; }
@@ -95,6 +147,35 @@ void EventSection::draw(App& app) {
     ImGui::TextDisabled(
         "Drag nodes to arrange. Edit the hex byte fields to patch opcode "
         "arguments / trigger flags in place; File > Save writes event.dat.");
+    ImGui::TextDisabled("Colors:");
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Text, kTrigColors.title);
+    ImGui::TextUnformatted("triggers");
+    ImGui::PopStyleColor();
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Text, kScriptColors.title);
+    ImGui::TextUnformatted("bytecode");
+    ImGui::PopStyleColor();
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Text, kTextScriptColors.title);
+    ImGui::TextUnformatted("text");
+    ImGui::PopStyleColor();
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Text, kEmptyScriptColors.title);
+    ImGui::TextUnformatted("empty");
+    ImGui::PopStyleColor();
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Text, kStringColors.title);
+    ImGui::TextUnformatted("strings");
+    ImGui::PopStyleColor();
     ImGui::Separator();
 
     drawGraph(app, loc);
@@ -103,11 +184,34 @@ void EventSection::draw(App& app) {
 void EventSection::drawGraph(App& app, EventLocation& loc) {
     const bool doLayout = (layoutForLoc_ != selectedLoc_);
 
+    constexpr float kMargin = 32.0f;
+    constexpr float kColGap = 96.0f;
+    constexpr float kRowPad = 72.0f;
+    constexpr float kStrGap = 36.0f;
+
     auto strAt = [&](int idx) -> std::string {
         if (idx >= 0 && idx < static_cast<int>(loc.strings.size())) return loc.strings[idx];
         return std::string();
     };
     auto itemAt = [&](int id) -> std::string { return app.itemName(id); };
+
+    auto drawStringNode = [&](int s) {
+        pushNodeStyle(kStringColors);
+        ImNodes::BeginNode(kStrNode(s));
+        ImNodes::BeginNodeTitleBar();
+        ImGui::Text("str[%d]", s);
+        ImNodes::EndNodeTitleBar();
+        ImNodes::BeginInputAttribute(kStrIn(s));
+        std::string preview = loc.strings[s];
+        std::replace(preview.begin(), preview.end(), '\n', ' ');
+        if (preview.empty()) preview = "<empty>";
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 300.0f);
+        ImGui::TextWrapped("%s", preview.c_str());
+        ImGui::PopTextWrapPos();
+        ImNodes::EndInputAttribute();
+        ImNodes::EndNode();
+        popNodeStyle();
+    };
 
     // Group triggers by event id (matches decode_event dump_decompiled order).
     std::map<int, std::vector<const EventTriplet*>> byEvt;
@@ -117,15 +221,18 @@ void EventSection::drawGraph(App& app, EventLocation& loc) {
 
     struct StrLink { int outPin; int strIdx; };
     std::vector<StrLink> stringLinks;
-    std::set<int> usedStrings;
+    std::set<int> placedStrings;
 
-    float yCursor = 16.0f;
+    float yCursor = kMargin;
 
     for (auto& [evt, tiles] : byEvt) {
         const float rowY = yCursor;
+        std::vector<int> rowStrings;
+        const ScriptKind kind = scriptKind(evt, loc);
 
         // ---- trigger node -------------------------------------------------
-        if (doLayout) ImNodes::SetNodeGridSpacePos(kTrigNode(evt), ImVec2(16, rowY));
+        if (doLayout) ImNodes::SetNodeGridSpacePos(kTrigNode(evt), ImVec2(kMargin, rowY));
+        pushNodeStyle(kTrigColors);
         ImNodes::BeginNode(kTrigNode(evt));
         ImNodes::BeginNodeTitleBar();
         ImGui::Text("Triggers -> EVT %02d", evt);
@@ -158,9 +265,14 @@ void EventSection::drawGraph(App& app, EventLocation& loc) {
         ImGui::TextDisabled("fires");
         ImNodes::EndOutputAttribute();
         ImNodes::EndNode();
+        popNodeStyle();
+        const ImVec2 trigDim =
+            doLayout ? ImNodes::GetNodeDimensions(kTrigNode(evt)) : ImVec2(0, 0);
 
         // ---- event-script node -------------------------------------------
-        if (doLayout) ImNodes::SetNodeGridSpacePos(kEvtNode(evt), ImVec2(340, rowY));
+        const float xScript = doLayout ? (kMargin + trigDim.x + kColGap) : 0.0f;
+        if (doLayout) ImNodes::SetNodeGridSpacePos(kEvtNode(evt), ImVec2(xScript, rowY));
+        pushNodeStyle(scriptColors(kind));
         ImNodes::BeginNode(kEvtNode(evt));
         ImNodes::BeginNodeTitleBar();
         ImGui::Text("EVT %02d  script", evt);
@@ -170,14 +282,13 @@ void EventSection::drawGraph(App& app, EventLocation& loc) {
         ImGui::TextDisabled("trigger");
         ImNodes::EndInputAttribute();
 
-        int opCount = 0;
         if (evt >= static_cast<int>(loc.segments.size())) {
             ImNodes::BeginStaticAttribute(kStaticAttr(evt, 0));
             ImGui::TextDisabled("<missing script segment>");
             ImNodes::EndStaticAttribute();
         } else {
             EventSegment& seg = loc.segments[evt];
-            if (seg.isText) {
+            if (kind == ScriptKind::Text) {
                 ImNodes::BeginStaticAttribute(kStaticAttr(evt, 0));
                 ImGui::TextDisabled("(plain-text record)");
                 std::string preview = seg.text;
@@ -186,12 +297,12 @@ void EventSection::drawGraph(App& app, EventLocation& loc) {
                 ImGui::TextWrapped("\"%s\"", preview.c_str());
                 ImGui::PopTextWrapPos();
                 ImNodes::EndStaticAttribute();
-            } else if (seg.ops.empty()) {
+            } else if (kind == ScriptKind::Empty) {
                 ImNodes::BeginStaticAttribute(kStaticAttr(evt, 0));
                 ImGui::TextDisabled("(empty)");
                 ImNodes::EndStaticAttribute();
             } else {
-                opCount = static_cast<int>(seg.ops.size());
+                const int opCount = static_cast<int>(seg.ops.size());
                 for (int oi = 0; oi < opCount; ++oi) {
                     EventOp& op = seg.ops[oi];
 
@@ -211,7 +322,9 @@ void EventSection::drawGraph(App& app, EventLocation& loc) {
 
                     ImGui::PushID(oi);
                     std::string desc = describeOp(op.op, live, strAt, itemAt);
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 420.0f);
                     ImGui::Text("%02d: %s", oi, desc.c_str());
+                    ImGui::PopTextWrapPos();
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip("opcode 0x%02X @ file 0x%06zX%s%s", op.op,
                                           op.absOff, op.variable ? "  (token-skip)" : "",
@@ -234,7 +347,9 @@ void EventSection::drawGraph(App& app, EventLocation& loc) {
 
                     if (linksString) {
                         stringLinks.push_back({kOpOut(evt, oi), strIdx});
-                        usedStrings.insert(strIdx);
+                        if (!placedStrings.count(strIdx) &&
+                            std::find(rowStrings.begin(), rowStrings.end(), strIdx) == rowStrings.end())
+                            rowStrings.push_back(strIdx);
                         ImNodes::EndOutputAttribute();
                     } else {
                         ImNodes::EndStaticAttribute();
@@ -243,29 +358,44 @@ void EventSection::drawGraph(App& app, EventLocation& loc) {
             }
         }
         ImNodes::EndNode();
+        popNodeStyle();
+        const ImVec2 scriptDim =
+            doLayout ? ImNodes::GetNodeDimensions(kEvtNode(evt)) : ImVec2(0, 0);
 
-        // Vertical spacing roughly proportional to script size.
-        float h = 90.0f + static_cast<float>(std::max<int>(opCount, static_cast<int>(tiles.size()))) * 24.0f;
-        yCursor += std::min(h, 340.0f) + 24.0f;
+        // ---- string nodes for this row (first use only) -------------------
+        const float xString = doLayout ? (xScript + scriptDim.x + kColGap) : 0.0f;
+        float strBandH = 0.0f;
+        if (showStrings_ && !rowStrings.empty()) {
+            float strY = rowY;
+            for (int s : rowStrings) {
+                if (doLayout)
+                    ImNodes::SetNodeGridSpacePos(kStrNode(s), ImVec2(xString, strY));
+                drawStringNode(s);
+                placedStrings.insert(s);
+                if (doLayout) {
+                    strY += ImNodes::GetNodeDimensions(kStrNode(s)).y + kStrGap;
+                    strBandH = strY - rowY;
+                }
+            }
+        }
+
+        if (doLayout) {
+            const float rowH =
+                std::max(trigDim.y, std::max(scriptDim.y, strBandH)) + kRowPad;
+            yCursor += rowH;
+        }
     }
 
-    // ---- string nodes -----------------------------------------------------
+    // Render string nodes referenced only after the last event row (rare).
     if (showStrings_) {
-        for (int s : usedStrings) {
-            if (doLayout) ImNodes::SetNodeGridSpacePos(kStrNode(s), ImVec2(760, 16 + s * 78.0f));
-            ImNodes::BeginNode(kStrNode(s));
-            ImNodes::BeginNodeTitleBar();
-            ImGui::Text("str[%d]", s);
-            ImNodes::EndNodeTitleBar();
-            ImNodes::BeginInputAttribute(kStrIn(s));
-            std::string preview = loc.strings[s];
-            std::replace(preview.begin(), preview.end(), '\n', ' ');
-            if (preview.empty()) preview = "<empty>";
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260);
-            ImGui::TextWrapped("%s", preview.c_str());
-            ImGui::PopTextWrapPos();
-            ImNodes::EndInputAttribute();
-            ImNodes::EndNode();
+        for (const auto& l : stringLinks) {
+            if (placedStrings.count(l.strIdx)) continue;
+            if (doLayout)
+                ImNodes::SetNodeGridSpacePos(kStrNode(l.strIdx), ImVec2(kMargin, yCursor));
+            drawStringNode(l.strIdx);
+            placedStrings.insert(l.strIdx);
+            if (doLayout)
+                yCursor += ImNodes::GetNodeDimensions(kStrNode(l.strIdx)).y + kRowPad;
         }
     }
 

@@ -26,6 +26,9 @@ public:
     // Render the section's main panel content (inside an existing window).
     virtual void draw(App& app) = 0;
 
+    // Release GPU resources queued for end-of-frame deletion (no-op by default).
+    virtual void flushPending() {}
+
     bool loaded = false;
     bool dirty = false;
 };

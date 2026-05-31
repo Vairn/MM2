@@ -45,6 +45,11 @@ std::string App::itemName(int id) const {
 }
 
 void App::openDataFolder(const std::string& dir) {
+    pendingDataDir_ = dir;
+    pendingOpen_ = true;
+}
+
+void App::openDataFolderNow(const std::string& dir) {
     state_.dataDir = dir;
     int ok = 0, total = 0;
     for (auto& s : sections_) {
@@ -141,6 +146,8 @@ void App::drawActivePanel() {
 }
 
 void App::frame() {
+    for (auto& s : sections_) s->flushPending();
+
     // Fullscreen dockspace host.
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
@@ -186,6 +193,11 @@ void App::frame() {
         }
     }
     ImGui::End();
+
+    if (pendingOpen_) {
+        openDataFolderNow(pendingDataDir_);
+        pendingOpen_ = false;
+    }
 }
 
 }  // namespace mm2

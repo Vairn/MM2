@@ -10,53 +10,117 @@
 
 namespace mm2 {
 
-MapSection::~MapSection() { releaseTextures(); }
-
-void MapSection::Sheet::release() {
-    for (unsigned int t : tex) freeTexture(t);
-    tex.clear();
-    img = GfxImage{};
+MapSection::~MapSection() {
+    releaseTextures(/*deferGl=*/false);
+    flushPendingTextures();
 }
 
-void MapSection::releaseTextures() {
-    outb_.release();
-    townb_.release();
-    sky_.release();
-    floorTown_.release();
-    floorCave_.release();
-    floorCastle_.release();
-    floorOut_.release();
-    wallTown_.release();
-    wallCave_.release();
-    wallCastle_.release();
+void MapSection::Sheet::release(std::vector<unsigned int>* deferGl) {
+    ok = false;
+    frameW.clear();
+    frameH.clear();
+    if (deferGl) {
+        for (unsigned int t : tex)
+            if (t) deferGl->push_back(t);
+    } else {
+        for (unsigned int t : tex) freeTexture(t);
+    }
+    tex.clear();
+}
+
+void MapSection::Sheet::loadFile(const std::string& path) {
+    GfxImage tmp;
+    if (!gfxLoad(path, false, tmp)) return;
+    ok = tmp.ok;
+    frameW.clear();
+    frameH.clear();
+    tex.clear();
+    frameW.reserve(tmp.frames.size());
+    frameH.reserve(tmp.frames.size());
+    tex.reserve(tmp.frames.size());
+    for (const GfxFrame& fr : tmp.frames) {
+        frameW.push_back(fr.width);
+        frameH.push_back(fr.height);
+        tex.push_back(makeTextureRGBA(fr.rgba.data(), fr.width, fr.height));
+    }
+}
+
+void MapSection::flushPending() { flushPendingTextures(); }
+
+void MapSection::flushPendingTextures() {
+    for (unsigned int t : pendingFreeTextures_) freeTexture(t);
+    pendingFreeTextures_.clear();
+}
+
+void MapSection::releaseOutdoorGfx(std::vector<unsigned int>* deferGl) {
+    if (!outdoorGfxLoaded_) return;
+    horizon1_.release(deferGl);
+    horizon2_.release(deferGl);
+    horizon3_.release(deferGl);
+    biomeDesert_.release(deferGl);
+    biomeOcean_.release(deferGl);
+    biomeTundra_.release(deferGl);
+    biomeSwamp_.release(deferGl);
+    outdoorGfxLoaded_ = false;
+}
+
+void MapSection::releaseTextures(bool deferGl) {
+    std::vector<unsigned int>* defer = deferGl ? &pendingFreeTextures_ : nullptr;
+    outb_.release(defer);
+    townb_.release(defer);
+    sky_.release(defer);
+    floorTown_.release(defer);
+    floorCave_.release(defer);
+    floorCastle_.release(defer);
+    floorOut_.release(defer);
+    wallTown_.release(defer);
+    wallCave_.release(defer);
+    wallCastle_.release(defer);
+    torchTown_.release(defer);
+    torchCave_.release(defer);
+    torchCastle_.release(defer);
+    if (deferGl) {
+        releaseOutdoorGfx(defer);
+    } else {
+        releaseOutdoorGfx(/*deferGl=*/nullptr);
+    }
+}
+
+void MapSection::ensureOutdoorGfxLoaded() {
+    if (outdoorGfxLoaded_ || dataDir_.empty()) return;
+    horizon1_.loadFile(dataDir_ + "/outdoor1.32");
+    horizon2_.loadFile(dataDir_ + "/outdoor2.32");
+    horizon3_.loadFile(dataDir_ + "/outdoor3.32");
+    biomeDesert_.loadFile(dataDir_ + "/desert.32");
+    biomeOcean_.loadFile(dataDir_ + "/ocean.32");
+    biomeTundra_.loadFile(dataDir_ + "/tundra.32");
+    biomeSwamp_.loadFile(dataDir_ + "/swamp.32");
+    outdoorGfxLoaded_ = true;
 }
 
 void MapSection::loadTilesets(const std::string& dataDir) {
-    releaseTextures();
-    auto loadSheet = [&](const std::string& name, Sheet& s) {
-        if (!gfxLoad(dataDir + "/" + name, false, s.img)) return;
-        for (const GfxFrame& fr : s.img.frames)
-            s.tex.push_back(makeTextureRGBA(fr.rgba.data(), fr.width, fr.height));
-    };
-    loadSheet("outb.32", outb_);
-    loadSheet("townb.32", townb_);
-    loadSheet("sky.32", sky_);
-    loadSheet("townf.32", floorTown_);
-    loadSheet("cavef.32", floorCave_);
-    loadSheet("castlef.32", floorCastle_);
-    loadSheet("outf.32", floorOut_);
-    loadSheet("town.32", wallTown_);
-    loadSheet("cave.32", wallCave_);
-    loadSheet("castle.32", wallCastle_);
-    loadSheet("townt.32", torchTown_);
-    loadSheet("cavet.32", torchCave_);
-    loadSheet("castlet.32", torchCastle_);
+    dataDir_ = dataDir;
+    releaseTextures(/*deferGl=*/true);
+    outb_.loadFile(dataDir + "/outb.32");
+    townb_.loadFile(dataDir + "/townb.32");
+    sky_.loadFile(dataDir + "/sky.32");
+    floorTown_.loadFile(dataDir + "/townf.32");
+    floorCave_.loadFile(dataDir + "/cavef.32");
+    floorCastle_.loadFile(dataDir + "/castlef.32");
+    floorOut_.loadFile(dataDir + "/outf.32");
+    wallTown_.loadFile(dataDir + "/town.32");
+    wallCave_.loadFile(dataDir + "/cave.32");
+    wallCastle_.loadFile(dataDir + "/castle.32");
+    torchTown_.loadFile(dataDir + "/townt.32");
+    torchCave_.loadFile(dataDir + "/cavet.32");
+    torchCastle_.loadFile(dataDir + "/castlet.32");
 }
 
 bool MapSection::load(const std::string& dataDir) {
     loaded = file_.load(dataDir + "/" + fileName());
     attribLoaded_ = attrib_.load(dataDir + "/attrib.dat");
     loadTilesets(dataDir);
+    initOutdoorTerrainLookup(dataDir + "/EXTRACTED/ghidra/mm2_data_00.bin");
     dirty = false;
     return loaded;
 }
@@ -91,6 +155,23 @@ MapSection::Env MapSection::envOf(int screen) const {
     return Env::Town;
 }
 
+const MapSection::Sheet* MapSection::biomeSheet(OutdoorBiome biome) const {
+    switch (biome) {
+        case OutdoorBiome::Ocean:  return &biomeOcean_;
+        case OutdoorBiome::Tundra: return &biomeTundra_;
+        case OutdoorBiome::Swamp:  return &biomeSwamp_;
+        default:                    return &biomeDesert_;
+    }
+}
+
+const MapSection::Sheet* MapSection::horizonSheet(OutdoorHorizonSheet sheet) const {
+    switch (sheet) {
+        case OutdoorHorizonSheet::Outdoor2: return &horizon2_;
+        case OutdoorHorizonSheet::Outdoor3: return &horizon3_;
+        default:                            return &horizon1_;
+    }
+}
+
 void MapSection::drawWindow() {
     Env env = envOf(screen_);
     const Sheet* floor = &floorTown_;
@@ -123,11 +204,13 @@ void MapSection::drawWindow() {
     ImVec2 origin = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     auto blit = [&](const Sheet& s, int frame, float x, float y) {
-        if (frame < 0 || frame >= static_cast<int>(s.tex.size())) return;
-        const GfxFrame& fr = s.img.frames[frame];
+        if (!s.ok || frame < 0 || frame >= static_cast<int>(s.tex.size())) return;
+        if (s.tex[static_cast<size_t>(frame)] == 0) return;
+        const float fw = static_cast<float>(s.frameW[static_cast<size_t>(frame)]);
+        const float fh = static_cast<float>(s.frameH[static_cast<size_t>(frame)]);
         ImVec2 a(origin.x + x * z, origin.y + y * z);
-        ImVec2 b(a.x + fr.width * z, a.y + fr.height * z);
-        dl->AddImage(static_cast<ImTextureID>(s.tex[frame]), a, b);
+        ImVec2 b(a.x + fw * z, a.y + fh * z);
+        dl->AddImage(static_cast<ImTextureID>(s.tex[static_cast<size_t>(frame)]), a, b);
     };
 
     // Reserve the canvas and draw a border, then the two backdrop halves.
@@ -218,12 +301,122 @@ void MapSection::handleView3DKeyboardInput() {
     }
 }
 
+void MapSection::drawOutdoorView3D() {
+    ensureOutdoorGfxLoaded();
+
+    static const char* kFacing[] = {"North", "East", "South", "West"};
+    ImGui::Text("Camera  (%d, %d)  facing %s  |  outdoor", camera_.x, camera_.y,
+                kFacing[camera_.facing & 3]);
+
+    ImGui::SetNextItemWidth(80);
+    ImGui::InputInt("X##cam", &camera_.x);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(80);
+    ImGui::InputInt("Y##cam", &camera_.y);
+    if (camera_.x < 0) camera_.x = 0;
+    if (camera_.y < 0) camera_.y = 0;
+    if (camera_.x >= kMapGridDim) camera_.x = kMapGridDim - 1;
+    if (camera_.y >= kMapGridDim) camera_.y = kMapGridDim - 1;
+
+    ImGui::SameLine();
+    if (ImGui::Button("Turn L")) camera_.facing = (camera_.facing + 3) & 3;
+    ImGui::SameLine();
+    if (ImGui::Button("Turn R")) camera_.facing = (camera_.facing + 1) & 3;
+    ImGui::SameLine();
+    if (ImGui::Button("Step F")) stepCameraInDirection(camera_.facing);
+    ImGui::SameLine();
+    if (ImGui::Button("Step B")) stepCameraInDirection((camera_.facing + 2) & 3);
+
+    handleView3DKeyboardInput();
+
+    ImGui::SetNextItemWidth(160);
+    ImGui::SliderFloat("View zoom##3d", &viewZoom_, 1.0f, 4.0f, "%.0fx");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(160);
+    ImGui::SliderFloat("Map zoom##mini", &zoom_, 1.0f, 4.0f, "%.0fx");
+
+    OutdoorMapGrid grid(file_, attrib_, screen_);
+    OutdoorScene scene =
+        buildOutdoorScene(grid, camera_.x, camera_.y, camera_.facing, attrib_);
+
+    const float W = static_cast<float>(kView3DViewportW);
+    const float H = static_cast<float>(kView3DFloorY + 60 - kView3DSkyY);
+    const float z = viewZoom_;
+
+    ImGui::BeginGroup();
+    ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    auto blit = [&](const Sheet& sheet, int frame, float x, float y) {
+        if (!sheet.ok || frame < 0 || frame >= static_cast<int>(sheet.tex.size())) return;
+        if (sheet.tex[static_cast<size_t>(frame)] == 0) return;
+        const float fw = static_cast<float>(sheet.frameW[static_cast<size_t>(frame)]);
+        const float fh = static_cast<float>(sheet.frameH[static_cast<size_t>(frame)]);
+        ImVec2 a(origin.x + x * z, origin.y + y * z);
+        ImVec2 b(a.x + fw * z, a.y + fh * z);
+        dl->AddImage(static_cast<ImTextureID>(sheet.tex[static_cast<size_t>(frame)]), a, b);
+    };
+
+    ImVec2 canvas(W * z, H * z);
+    dl->AddRectFilled(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
+                      IM_COL32(0, 0, 0, 255));
+
+    blit(floorOut_, 0, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DFloorY));
+    blit(sky_, 0, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DSkyY));
+
+    for (const OutdoorSpriteBlit& b : scene.decor) {
+        const Sheet* sheet = biomeSheet(b.biome);
+        if (sheet) blit(*sheet, b.frame, static_cast<float>(b.x), static_cast<float>(b.y));
+    }
+    for (const OutdoorSpriteBlit& b : scene.horizon) {
+        const Sheet* sheet = horizonSheet(b.horizon);
+        if (sheet) blit(*sheet, b.frame, static_cast<float>(b.x), static_cast<float>(b.y));
+    }
+
+    dl->AddRect(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
+                IM_COL32(120, 120, 120, 255));
+    ImGui::Dummy(canvas);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0.0f, 14.0f);
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("Minimap");
+    ImGui::Spacing();
+    drawMinimap();
+    ImGui::EndGroup();
+
+    if (floorOut_.tex.empty())
+        ImGui::TextDisabled("(outf.32 not found in data folder)");
+    if (horizon1_.tex.empty())
+        ImGui::TextDisabled("(outdoor1/2/3.32 not found in data folder)");
+    ImGui::TextDisabled("%zu decor + %zu horizon sprite(s)  |  WASD / arrows to move",
+                        scene.decor.size(), scene.horizon.size());
+
+    if (ImGui::TreeNode("Decor blits")) {
+        for (const OutdoorSpriteBlit& b : scene.decor)
+            ImGui::Text("%s  f%d @ (%d,%d)", outdoorBiomeFilename(b.biome), b.frame, b.x, b.y);
+        ImGui::TreePop();
+    }
+    if (ImGui::TreeNode("Horizon blits")) {
+        for (const OutdoorSpriteBlit& b : scene.horizon)
+            ImGui::Text("%s  f%d @ (%d,%d)", outdoorHorizonFilename(b.horizon), b.frame, b.x,
+                        b.y);
+        ImGui::TreePop();
+    }
+    if (ImGui::TreeNode("Terrain lanes")) {
+        ImGui::Text("C6:");
+        for (int i = 0; i < kOutdoorLaneCols; ++i) ImGui::SameLine(), ImGui::Text("%u", scene.laneC6[i]);
+        ImGui::Text("C2:");
+        for (int i = 0; i < kOutdoorLaneCols; ++i) ImGui::SameLine(), ImGui::Text("%u", scene.laneC2[i]);
+        ImGui::Text("BE:");
+        for (int i = 0; i < kOutdoorLaneCols; ++i) ImGui::SameLine(), ImGui::Text("%u", scene.laneBe[i]);
+        ImGui::TreePop();
+    }
+}
+
 void MapSection::drawView3D() {
     Env env = envOf(screen_);
     if (env == Env::Outdoor) {
-        ImGui::TextDisabled("Outdoor areas use layered horizon tiles (outdoor1-3.32); "
-                            "interior 3D view applies to town/cavern/castle maps.");
-        drawWindow();
+        drawOutdoorView3D();
         return;
     }
 
@@ -304,11 +497,13 @@ void MapSection::drawView3D() {
     ImVec2 origin = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     auto blit = [&](const Sheet& sheet, int frame, float x, float y) {
-        if (frame < 0 || frame >= static_cast<int>(sheet.tex.size())) return;
-        const GfxFrame& fr = sheet.img.frames[frame];
+        if (!sheet.ok || frame < 0 || frame >= static_cast<int>(sheet.tex.size())) return;
+        if (sheet.tex[static_cast<size_t>(frame)] == 0) return;
+        const float fw = static_cast<float>(sheet.frameW[static_cast<size_t>(frame)]);
+        const float fh = static_cast<float>(sheet.frameH[static_cast<size_t>(frame)]);
         ImVec2 a(origin.x + x * z, origin.y + y * z);
-        ImVec2 b(a.x + fr.width * z, a.y + fr.height * z);
-        dl->AddImage(static_cast<ImTextureID>(sheet.tex[frame]), a, b);
+        ImVec2 b(a.x + fw * z, a.y + fh * z);
+        dl->AddImage(static_cast<ImTextureID>(sheet.tex[static_cast<size_t>(frame)]), a, b);
     };
 
     auto blitTorch = [&](const View3DBlit& wb) {

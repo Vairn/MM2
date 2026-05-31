@@ -34,12 +34,15 @@ private:
     void drawMenuBar();
     void drawBrowser();
     void drawActivePanel();
+    void openDataFolderNow(const std::string& dir);
     void setStatus(const std::string& s) { state_.status = s; }
 
     AppState state_;
     std::vector<std::unique_ptr<Section>> sections_;
     int active_ = 0;
     ItemsSection* items_ = nullptr;  // non-owning; for cross-references
+    std::string pendingDataDir_;
+    bool pendingOpen_ = false;
 };
 
 }  // namespace mm2
