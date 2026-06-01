@@ -1,5 +1,6 @@
 #include "app/App.h"
 
+#include <algorithm>
 #include <cstdio>
 
 #include "imgui.h"
@@ -173,7 +174,9 @@ void App::frame() {
         ImGui::DockBuilderAddNode(dockId, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodeSize(dockId, vp->WorkSize);
         ImGuiID left, right;
-        left = ImGui::DockBuilderSplitNode(dockId, ImGuiDir_Left, 0.18f, nullptr, &right);
+        const float fontScale = std::max(1.0f, ImGui::GetFontSize() / 16.0f);
+        const float leftRatio = std::clamp(0.18f + (fontScale - 1.0f) * 0.08f, 0.18f, 0.33f);
+        left = ImGui::DockBuilderSplitNode(dockId, ImGuiDir_Left, leftRatio, nullptr, &right);
         ImGui::DockBuilderDockWindow("Data Files", left);
         ImGui::DockBuilderDockWindow("Editor", right);
         ImGui::DockBuilderFinish(dockId);

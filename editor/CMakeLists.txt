@@ -35,6 +35,13 @@ FetchContent_Declare(
   GIT_TAG        main
 )
 
+FetchContent_Declare(
+  stb
+  GIT_REPOSITORY https://github.com/nothings/stb.git
+  GIT_TAG        master
+  SOURCE_SUBDIR  not-a-real-subdir
+)
+
 # imnodes (node graph UI for the event editor). It ships its own CMakeLists
 # that hard-fails without IMGUI_DIR, so we point SOURCE_SUBDIR at a path with
 # no CMakeLists to download the sources only and compile them ourselves below.
@@ -45,7 +52,7 @@ FetchContent_Declare(
   SOURCE_SUBDIR  not-a-real-subdir
 )
 
-FetchContent_MakeAvailable(glfw imgui portable_file_dialogs imnodes)
+FetchContent_MakeAvailable(glfw imgui portable_file_dialogs imnodes stb)
 
 find_package(OpenGL REQUIRED)
 
@@ -89,6 +96,7 @@ add_executable(MM2ED ${MM2ED_SRC})
 target_include_directories(MM2ED PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${portable_file_dialogs_SOURCE_DIR}
+  ${stb_SOURCE_DIR}
 )
 
 target_link_libraries(MM2ED PRIVATE imgui imnodes glfw OpenGL::GL)

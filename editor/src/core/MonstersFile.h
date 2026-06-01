@@ -2,10 +2,10 @@
 // monsters.dat - record geometry confirmed (256 * 26 = 6656 bytes).
 //   accessor at asm 0x99C8 uses index * 0x1A.
 //
-// Field map below comes from b3dmm2 (proto.bb / mm2ed.bb). Names are decoded
-// as Chr(byte - 128) in the legacy tools; HP/XP are piecewise-coded. We keep
-// the full record as raw bytes plus named accessors so unknown bytes are never
-// lost on round-trip.
+// Field map originally came from b3dmm2 (proto.bb / mm2ed.bb), then was
+// validated against the MM2 68k unpacker at asm 0x4C8E. Names are decoded as
+// Chr(byte - 128) in the legacy tools. We keep the full record as raw bytes
+// plus named accessors so unknown bytes are never lost on round-trip.
 //
 //   0x00-0x0D name (14 bytes, each byte = char + 128)
 //   0x0E      hp code
@@ -71,6 +71,12 @@ struct MonsterRecord {
     uint8_t& byteAt(int off) { return raw[off]; }
     uint8_t hpCode() const { return raw[0x0E]; }
     uint8_t xpCode() const { return raw[0x0F]; }
+    uint32_t hpValue() const;
+    uint32_t xpValue() const;
+    uint8_t treasureCode() const { return raw[0x10]; }
+    uint8_t itemDropLevel() const { return raw[0x10] & 0x03; }      // bits 0..1
+    bool dropsGems() const { return (raw[0x10] & 0x04) != 0; }      // bit 2
+    uint8_t goldTier() const { return (raw[0x10] >> 3) & 0x03; }    // bits 3..4
     uint8_t pabil() const { return raw[0x11]; }
     uint8_t sabil() const { return raw[0x12]; }
     uint8_t oabil() const { return raw[0x13]; }

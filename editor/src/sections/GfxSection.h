@@ -77,6 +77,7 @@ private:
     int titleAsmX_ = 8;
     int titleAsmYTop_ = 8;
     int titleAsmYBottom_ = 216;
+    bool titleAsmCanvasPrimed_ = false;
 
     GfxImage image_;
     std::vector<unsigned int> textures_;

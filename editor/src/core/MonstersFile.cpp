@@ -4,6 +4,10 @@
 
 namespace mm2 {
 
+namespace {
+constexpr uint16_t kMonHpXpMul[4] = {1, 10, 100, 1000};
+}
+
 // Effect names, index 0..31, transcribed from b3d adesc.log. Used by both the
 // single-target (Sabil) and party-wide (Pabil) attack effect fields.
 const char* const kAbilityNames[kAbilityCount] = {
@@ -104,6 +108,24 @@ void MonsterRecord::setName(const std::string& s) {
         char c = (i < static_cast<int>(s.size())) ? s[i] : ' ';
         raw[i] = static_cast<uint8_t>((static_cast<uint8_t>(c) + 128) & 0xFF);
     }
+}
+
+uint32_t MonsterRecord::hpValue() const {
+    // ASM unpacker 0x4C8E:
+    // hp = ((code & 0x3F) + 1) * hpmul[(code >> 6) & 3]
+    const uint8_t c = hpCode();
+    const uint32_t base = static_cast<uint32_t>(c & 0x3F) + 1u;
+    return base * static_cast<uint32_t>(kMonHpXpMul[(c >> 6) & 0x03]);
+}
+
+uint32_t MonsterRecord::xpValue() const {
+    // ASM unpacker 0x4C8E:
+    // xp = ((code & 0x1F) + 1) * xpmul[(code & 0x60) >> 5], then *1000 if bit7.
+    const uint8_t c = xpCode();
+    const uint32_t base = static_cast<uint32_t>(c & 0x1F) + 1u;
+    uint32_t xp = base * static_cast<uint32_t>(kMonHpXpMul[(c >> 5) & 0x03]);
+    if ((c & 0x80) != 0) xp *= 1000u;
+    return xp;
 }
 
 bool MonstersFile::decode(const Bytes& bytes) {

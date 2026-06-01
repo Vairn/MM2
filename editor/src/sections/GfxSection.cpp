@@ -73,6 +73,20 @@ void blitOpaque(const GfxFrame& fr, int dstX, int dstY, int canvasW, int canvasH
     }
 }
 
+void clearRectRgba(int dstX, int dstY, int rectW, int rectH, int canvasW, int canvasH, std::vector<uint8_t>& rgba) {
+    if (rectW <= 0 || rectH <= 0) return;
+    for (int y = 0; y < rectH; ++y) {
+        const int oy = dstY + y;
+        if (oy < 0 || oy >= canvasH) continue;
+        for (int x = 0; x < rectW; ++x) {
+            const int ox = dstX + x;
+            if (ox < 0 || ox >= canvasW) continue;
+            uint8_t* dst = &rgba[(static_cast<size_t>(oy) * canvasW + ox) * 4];
+            dst[0] = dst[1] = dst[2] = dst[3] = 0;
+        }
+    }
+}
+
 void computeAnmCompositeCanvas(const GfxImage& img, int& outMinX, int& outMinY, int& outW, int& outH) {
     outMinX = 0;
     outMinY = 0;
@@ -161,7 +175,7 @@ bool GfxSection::load(const std::string& dataDir) {
     files_.clear();
     selectedFile_ = -1;
     selectedFrame_ = 0;
-    useAnmPreludePlacement_ = false;
+    useAnmPreludePlacement_ = true;
     compositeCanvasW_ = compositeCanvasH_ = 0;
     compositeCanvasMinX_ = compositeCanvasMinY_ = 0;
     titleReady_ = false;
@@ -182,6 +196,7 @@ bool GfxSection::load(const std::string& dataDir) {
     titleAsmX_ = 8;
     titleAsmYTop_ = 8;
     titleAsmYBottom_ = 216;
+    titleAsmCanvasPrimed_ = false;
     releaseTextures();
     image_.clear();
 
@@ -211,7 +226,7 @@ void GfxSection::selectFile(int idx) {
     selectedFrame_ = 0;
     selectedSequence_ = 0;
     sequenceStep_ = 0;
-    useAnmPreludePlacement_ = false;
+    useAnmPreludePlacement_ = true;
     compositeCanvasW_ = compositeCanvasH_ = 0;
     compositeCanvasMinX_ = compositeCanvasMinY_ = 0;
     elapsed_ = 0.0f;
@@ -248,6 +263,7 @@ bool GfxSection::initTitlePreviewAssets() {
     titleLastTick_ = ImGui::GetTime();
     titleAsmTickCounter_ = 0;
     titleAsmFrame_ = 0;
+    titleAsmCanvasPrimed_ = false;
 
     std::string introName;
     std::string clipsName;
@@ -365,15 +381,16 @@ void GfxSection::drawTitleTab() {
     ImGui::SameLine();
     ImGui::Checkbox("Loop title", &titleLoop_);
     ImGui::SameLine();
-    ImGui::Checkbox("Animate intro base", &titleAnimateBase_);
+    if (ImGui::Checkbox("Animate intro base", &titleAnimateBase_)) titleAsmCanvasPrimed_ = false;
     ImGui::SameLine();
-    ImGui::Checkbox("ASM replay", &titleAsmReplay_);
+    if (ImGui::Checkbox("ASM replay", &titleAsmReplay_)) titleAsmCanvasPrimed_ = false;
     ImGui::SliderFloat("Title speed", &titleSpeed_, 0.1f, 4.0f, "%.2fx");
     ImGui::SliderInt("Title frame", &titleFrame_, 0, total > 0 ? total - 1 : 0);
     if (titleAsmReplay_) {
-        ImGui::SliderInt("ASM X", &titleAsmX_, -64, titleCanvasW_);
-        ImGui::SliderInt("ASM Y top", &titleAsmYTop_, -64, titleCanvasH_ + 64);
-        ImGui::SliderInt("ASM Y bottom", &titleAsmYBottom_, -64, titleCanvasH_ + 64);
+        if (ImGui::SliderInt("ASM X", &titleAsmX_, -64, titleCanvasW_)) titleAsmCanvasPrimed_ = false;
+        if (ImGui::SliderInt("ASM Y top", &titleAsmYTop_, -64, titleCanvasH_ + 64)) titleAsmCanvasPrimed_ = false;
+        if (ImGui::SliderInt("ASM Y bottom", &titleAsmYBottom_, -64, titleCanvasH_ + 64))
+            titleAsmCanvasPrimed_ = false;
     }
 
     const int introIdx = titleAnimateBase_ ? (titleFrame_ % introN) : 0;
@@ -381,9 +398,14 @@ void GfxSection::drawTitleTab() {
     const GfxFrame& base = titleIntro_.frames[introIdx];
     const GfxFrame& over = titleClips_.frames[clipsIdx];
 
-    clearRgba(titleRgba_);
-    blitOpaque(base, 0, 0, titleCanvasW_, titleCanvasH_, titleRgba_);
     if (titleAsmReplay_) {
+        // ASM-like sprite loop: clear destination rect(s) from background first,
+        // then draw only the current frame into those rects.
+        if (!titleAsmCanvasPrimed_ || titleAnimateBase_) {
+            clearRgba(titleRgba_);
+            blitOpaque(base, 0, 0, titleCanvasW_, titleCanvasH_, titleRgba_);
+            titleAsmCanvasPrimed_ = true;
+        }
         int asmIdx = titleAsmFrame_;
         if (clipsN > 0) {
             int mod = (clipsN < 5) ? clipsN : 5;
@@ -393,11 +415,17 @@ void GfxSection::drawTitleTab() {
             asmIdx = 0;
         }
         const GfxFrame& asmFr = titleClips_.frames[asmIdx];
+        clearRectRgba(titleAsmX_, titleAsmYTop_, asmFr.width, asmFr.height, titleCanvasW_, titleCanvasH_, titleRgba_);
+        clearRectRgba(titleAsmX_, titleAsmYBottom_, asmFr.width, asmFr.height, titleCanvasW_, titleCanvasH_,
+                      titleRgba_);
         blitOpaque(asmFr, titleAsmX_, titleAsmYTop_, titleCanvasW_, titleCanvasH_, titleRgba_);
         blitOpaque(asmFr, titleAsmX_, titleAsmYBottom_, titleCanvasW_, titleCanvasH_, titleRgba_);
         ImGui::TextDisabled("ASM gate=%d frame=%d (mod 5)", titleAsmTickCounter_, asmIdx);
     } else {
+        clearRgba(titleRgba_);
+        blitOpaque(base, 0, 0, titleCanvasW_, titleCanvasH_, titleRgba_);
         blitOpaque(over, 0, 0, titleCanvasW_, titleCanvasH_, titleRgba_);
+        titleAsmCanvasPrimed_ = false;
     }
     uploadTextureRGBA(titleTexture_, titleRgba_.data(), titleCanvasW_, titleCanvasH_);
 
@@ -442,15 +470,9 @@ void GfxSection::draw(App& app) {
     ImGui::Checkbox("Loop", &loop_);
     ImGui::SliderFloat("Speed", &speed_, 0.1f, 4.0f, "%.2fx");
     if (isAnm_) {
-        bool canPlace =
+        const bool canPlace =
             compositeCanvasW_ > 0 && compositeCanvasH_ > 0 && !image_.preludeEntries.empty() && !textures_.empty();
-        if (!canPlace) useAnmPreludePlacement_ = false;
-        if (!canPlace) ImGui::BeginDisabled();
-        if (ImGui::Checkbox("Use prelude placement (exp)", &useAnmPreludePlacement_)) {
-            compositeTextureValid_ = false;
-            compositeTextureFrame_ = -1;
-        }
-        if (!canPlace) ImGui::EndDisabled();
+        useAnmPreludePlacement_ = canPlace;
     }
 
     const int n = static_cast<int>(image_.frames.size());
@@ -579,6 +601,9 @@ void GfxSection::draw(App& app) {
                                 if (pe.width > 0 && pe.width < copyW) copyW = pe.width;
                                 if (pe.height > 0 && pe.height < copyH) copyH = pe.height;
                             }
+                            // Runtime behavior: clear target rect before blit so
+                            // transparent pixels in the new frame erase old data.
+                            clearRectRgba(x, y, copyW, copyH, compositeCanvasW_, compositeCanvasH_, compositeRgba_);
                             blitFrameToCanvas(fr, x, y, copyW, copyH, compositeCanvasW_, compositeCanvasH_,
                                               compositeRgba_);
                         }

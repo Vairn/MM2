@@ -23,6 +23,7 @@ private:
     // textures. NN = picture & 0x7F (the 0x80 bit is a separate flag).
     void loadSprite(uint8_t picture);
     void releaseTextures();
+    void rebuildSpriteCompositeForFrame();
 
     MonstersFile file_;
     int selected_ = 0;
@@ -43,6 +44,13 @@ private:
     GfxImage sprite_;
     std::string spriteFile_;
     std::vector<unsigned int> textures_;
+    int spriteCanvasW_ = 0;
+    int spriteCanvasH_ = 0;
+    int spriteCanvasMinX_ = 0;
+    int spriteCanvasMinY_ = 0;
+    unsigned int spriteCompositeTex_ = 0;
+    int spriteCompositeFrame_ = -1;
+    std::vector<uint8_t> spriteCompositeRgba_;
 };
 
 }  // namespace mm2

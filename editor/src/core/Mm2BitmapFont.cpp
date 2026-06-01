@@ -1,234 +1,200 @@
 #include "core/Mm2BitmapFont.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <string>
-#include <utility>
 #include <vector>
+
+#include "stb_image.h"
 
 namespace mm2 {
 namespace {
 
-constexpr uint32_t kHunkHeader = 1011;     // HUNK_HEADER
-constexpr uint32_t kHunkCode = 1001;       // HUNK_CODE
-constexpr int kFirstPrintable = 0x20;
-constexpr int kLastPrintable = 0x7e;
+constexpr int kGlyphColumns = 16;
+constexpr int kGlyphCount = 128;
+std::string g_fontDebugStatus = "MM2 font: not initialized";
 
-struct Mm2TextFont {
-    uint16_t ySize = 0;
-    uint8_t style = 0;
-    uint8_t flags = 0;
-    uint16_t xSize = 0;
-    uint16_t baseline = 0;
-    uint16_t boldSmear = 0;
-    uint16_t accessors = 0;
-    uint8_t loChar = 0;
-    uint8_t hiChar = 0;
-    uint32_t charData = 0;
-    uint16_t modulo = 0;
-    uint32_t charLoc = 0;
-    uint32_t charSpace = 0;
-    uint32_t charKern = 0;
+struct GlyphRect {
+    int codepoint = 0;
+    ImFontAtlasRectId rectId = ImFontAtlasRectId_Invalid;
 };
 
-struct GlyphBitmap {
-    ImWchar codepoint = 0;
-    int width = 0;
-    int height = 0;
-    std::vector<uint8_t> alpha;
-};
-
-uint16_t readBE16(const std::vector<uint8_t>& data, size_t off) {
-    return static_cast<uint16_t>((static_cast<uint16_t>(data[off]) << 8) |
-                                 static_cast<uint16_t>(data[off + 1]));
-}
-
-uint32_t readBE32(const std::vector<uint8_t>& data, size_t off) {
-    return (static_cast<uint32_t>(data[off]) << 24) |
-           (static_cast<uint32_t>(data[off + 1]) << 16) |
-           (static_cast<uint32_t>(data[off + 2]) << 8) |
-           static_cast<uint32_t>(data[off + 3]);
-}
-
-bool readFile(const std::filesystem::path& path, std::vector<uint8_t>* out) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return false;
-    in.seekg(0, std::ios::end);
-    const std::streamoff size = in.tellg();
-    if (size <= 0) return false;
-    in.seekg(0, std::ios::beg);
-    out->resize(static_cast<size_t>(size));
-    in.read(reinterpret_cast<char*>(out->data()), size);
-    return in.good();
-}
-
-bool extractFirstCodeHunk(const std::vector<uint8_t>& fileData, std::vector<uint8_t>* code) {
-    if (fileData.size() < 8) return false;
-    if (readBE32(fileData, 0) != kHunkHeader) return false;
-
-    for (size_t off = 0; off + 8 <= fileData.size(); off += 4) {
-        if (readBE32(fileData, off) != kHunkCode) continue;
-        const uint32_t longWords = readBE32(fileData, off + 4);
-        const size_t byteLen = static_cast<size_t>(longWords) * 4u;
-        const size_t dataOff = off + 8;
-        if (dataOff + byteLen > fileData.size()) continue;
-        code->assign(fileData.begin() + static_cast<std::ptrdiff_t>(dataOff),
-                     fileData.begin() + static_cast<std::ptrdiff_t>(dataOff + byteLen));
-        return true;
-    }
-    return false;
-}
-
-bool parseTextFontAt(const std::vector<uint8_t>& code, size_t off, Mm2TextFont* tf) {
-    if (off + 32 > code.size()) return false;
-
-    Mm2TextFont candidate;
-    candidate.ySize = readBE16(code, off + 0);
-    candidate.style = code[off + 2];
-    candidate.flags = code[off + 3];
-    candidate.xSize = readBE16(code, off + 4);
-    candidate.baseline = readBE16(code, off + 6);
-    candidate.boldSmear = readBE16(code, off + 8);
-    candidate.accessors = readBE16(code, off + 10);
-    candidate.loChar = code[off + 12];
-    candidate.hiChar = code[off + 13];
-    candidate.charData = readBE32(code, off + 14);
-    candidate.modulo = readBE16(code, off + 18);
-    candidate.charLoc = readBE32(code, off + 20);
-    candidate.charSpace = readBE32(code, off + 24);
-    candidate.charKern = readBE32(code, off + 28);
-
-    if (candidate.ySize == 0 || candidate.ySize > 64) return false;
-    if (candidate.xSize == 0 || candidate.xSize > 64) return false;
-    if (candidate.baseline >= candidate.ySize + 8) return false;
-    if (candidate.hiChar < candidate.loChar) return false;
-    if (candidate.modulo == 0 || candidate.modulo > 1024) return false;
-    if (candidate.charData >= code.size() || candidate.charLoc >= code.size()) return false;
-    if (candidate.charData >= candidate.charLoc) return false;
-
-    const size_t charCount = static_cast<size_t>(candidate.hiChar - candidate.loChar + 1);
-    if (candidate.charLoc + charCount * 4u > code.size()) return false;
-    if (candidate.charData + static_cast<size_t>(candidate.modulo) * candidate.ySize > code.size()) return false;
-
-    *tf = candidate;
-    return true;
-}
-
-bool findMm2TextFont(const std::vector<uint8_t>& code, Mm2TextFont* tf) {
-    // The MM2 Amiga font strike has one 8px TextFont. We scan for a structurally
-    // valid record and strongly prefer ySize=8.
-    Mm2TextFont fallback;
-    bool haveFallback = false;
-    for (size_t off = 0; off + 32 <= code.size(); ++off) {
-        Mm2TextFont candidate;
-        if (!parseTextFontAt(code, off, &candidate)) continue;
-        if (candidate.ySize == 8) {
-            *tf = candidate;
-            return true;
-        }
-        if (!haveFallback) {
-            fallback = candidate;
-            haveFallback = true;
-        }
-    }
-    if (!haveFallback) return false;
-    *tf = fallback;
-    return true;
-}
-
-bool readBit(const std::vector<uint8_t>& code, size_t rowStart, uint32_t bitIndex) {
-    const size_t byteOff = rowStart + static_cast<size_t>(bitIndex >> 3);
-    if (byteOff >= code.size()) return false;
-    const uint8_t mask = static_cast<uint8_t>(0x80u >> (bitIndex & 7u));
-    return (code[byteOff] & mask) != 0;
-}
-
-std::vector<GlyphBitmap> decodePrintableGlyphs(const std::vector<uint8_t>& code, const Mm2TextFont& tf) {
-    std::vector<GlyphBitmap> out;
-    const int lo = std::max<int>(tf.loChar, kFirstPrintable);
-    const int hi = std::min<int>(tf.hiChar, kLastPrintable);
-    if (hi < lo) return out;
-
-    out.reserve(static_cast<size_t>(hi - lo + 1));
-    for (int cp = lo; cp <= hi; ++cp) {
-        const size_t idx = static_cast<size_t>(cp - tf.loChar);
-        const uint32_t loc = readBE32(code, static_cast<size_t>(tf.charLoc) + idx * 4u);
-        const uint16_t bitOffset = static_cast<uint16_t>(loc >> 16);
-        const uint16_t width = static_cast<uint16_t>(loc & 0xffffu);
-        if (width == 0 || width > 32) continue;
-
-        GlyphBitmap glyph;
-        glyph.codepoint = static_cast<ImWchar>(cp);
-        glyph.width = static_cast<int>(width);
-        glyph.height = static_cast<int>(tf.ySize);
-        glyph.alpha.resize(static_cast<size_t>(glyph.width * glyph.height), 0);
-
-        for (int y = 0; y < glyph.height; ++y) {
-            const size_t rowStart = static_cast<size_t>(tf.charData) + static_cast<size_t>(y) * tf.modulo;
-            for (int x = 0; x < glyph.width; ++x) {
-                const bool on = readBit(code, rowStart, static_cast<uint32_t>(bitOffset + x));
-                glyph.alpha[static_cast<size_t>(y * glyph.width + x)] = on ? 0xff : 0x00;
-            }
-        }
-        out.push_back(std::move(glyph));
-    }
-    return out;
-}
-
-std::filesystem::path findMm2FontPath() {
-    static constexpr const char* kCandidates[] = {
-        "EXTRACTED/fonts/mm2/8",
-        "../EXTRACTED/fonts/mm2/8",
-        "../../EXTRACTED/fonts/mm2/8",
+std::filesystem::path findPngPath(int fontPx) {
+    const std::string filename = "mm2_" + std::to_string(fontPx) + ".png";
+    const std::string fallback = "mm2_16.png";
+    const std::vector<std::filesystem::path> candidates = {
+        std::filesystem::path("editor/assets/fonts") / filename,
+        std::filesystem::path("assets/fonts") / filename,
+        std::filesystem::path("../assets/fonts") / filename,
+        std::filesystem::path("../editor/assets/fonts") / filename,
+        std::filesystem::path("../../editor/assets/fonts") / filename,
+        std::filesystem::path("editor/assets/fonts") / fallback,
+        std::filesystem::path("assets/fonts") / fallback,
+        std::filesystem::path("../assets/fonts") / fallback,
+        std::filesystem::path("../editor/assets/fonts") / fallback,
+        std::filesystem::path("../../editor/assets/fonts") / fallback,
     };
-    for (const char* candidate : kCandidates) {
-        std::filesystem::path p(candidate);
+    for (const auto& p : candidates) {
         if (std::filesystem::exists(p)) return p;
     }
     return {};
 }
 
+bool loadRgbaPng(const std::filesystem::path& path, int* w, int* h, std::vector<uint8_t>* rgba) {
+    int n = 0;
+    stbi_uc* p = stbi_load(path.string().c_str(), w, h, &n, 4);
+    if (!p || !w || !h || *w <= 0 || *h <= 0) return false;
+    const size_t sz = static_cast<size_t>(*w) * static_cast<size_t>(*h) * 4u;
+    rgba->assign(p, p + sz);
+    stbi_image_free(p);
+    return true;
+}
+
+bool blitCellToAtlas(const std::vector<uint8_t>& src, int srcW, int srcH, int srcX, int srcY,
+                     uint8_t* dst, int dstW, int dstH, int dstX, int dstY, int copyW, int copyH) {
+    if (!dst) return false;
+    if (srcX < 0 || srcY < 0 || dstX < 0 || dstY < 0) return false;
+    if (srcX + copyW > srcW || srcY + copyH > srcH) return false;
+    if (dstX + copyW > dstW || dstY + copyH > dstH) return false;
+    for (int y = 0; y < copyH; ++y) {
+        for (int x = 0; x < copyW; ++x) {
+            const size_t so = static_cast<size_t>(((srcY + y) * srcW + (srcX + x)) * 4);
+            const size_t doff = static_cast<size_t>(((dstY + y) * dstW + (dstX + x)) * 4);
+            dst[doff + 0] = src[so + 0];
+            dst[doff + 1] = src[so + 1];
+            dst[doff + 2] = src[so + 2];
+            dst[doff + 3] = src[so + 3];
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
-ImFont* installMm2BitmapFont(ImGuiIO& io) {
-    const std::filesystem::path fontPath = findMm2FontPath();
-    if (fontPath.empty()) return nullptr;
+ImFont* installMm2BitmapFont(ImGuiIO& io, float sizePixels) {
+    const int requestedPx = std::max(1, static_cast<int>(std::lround(sizePixels)));
+    const std::filesystem::path pngPath = findPngPath(requestedPx);
+    if (pngPath.empty()) {
+        std::fprintf(stderr, "[mm2-font] failed: no png found for requested size %d\n", requestedPx);
+        g_fontDebugStatus = "MM2 font: FAILED (png not found)";
+        return nullptr;
+    }
+    std::fprintf(stderr, "[mm2-font] using png: %s\n", pngPath.string().c_str());
+    g_fontDebugStatus = "MM2 font: loading " + pngPath.string();
 
-    std::vector<uint8_t> fileData;
-    if (!readFile(fontPath, &fileData)) return nullptr;
+    int srcW = 0;
+    int srcH = 0;
+    std::vector<uint8_t> srcRgba;
+    if (!loadRgbaPng(pngPath, &srcW, &srcH, &srcRgba)) {
+        std::fprintf(stderr, "[mm2-font] failed: stbi_load failed\n");
+        g_fontDebugStatus = "MM2 font: FAILED (stbi_load)";
+        return nullptr;
+    }
+    if (srcW <= 0 || srcH <= 0 || srcW % kGlyphColumns != 0) {
+        std::fprintf(stderr, "[mm2-font] failed: invalid atlas size %dx%d\n", srcW, srcH);
+        g_fontDebugStatus = "MM2 font: FAILED (invalid atlas size)";
+        return nullptr;
+    }
 
-    std::vector<uint8_t> code;
-    if (!extractFirstCodeHunk(fileData, &code)) return nullptr;
-
-    Mm2TextFont tf;
-    if (!findMm2TextFont(code, &tf)) return nullptr;
-
-    std::vector<GlyphBitmap> glyphs = decodePrintableGlyphs(code, tf);
-    if (glyphs.empty()) return nullptr;
+    const int cellW = srcW / kGlyphColumns;
+    if (cellW <= 0) {
+        std::fprintf(stderr, "[mm2-font] failed: invalid cell width %d\n", cellW);
+        g_fontDebugStatus = "MM2 font: FAILED (invalid cell width)";
+        return nullptr;
+    }
+    const int rows = srcH / cellW;
+    if (rows <= 0 || rows * kGlyphColumns < kGlyphCount) {
+        std::fprintf(stderr, "[mm2-font] failed: invalid rows=%d for glyph count\n", rows);
+        g_fontDebugStatus = "MM2 font: FAILED (invalid row count)";
+        return nullptr;
+    }
+    const int cellH = srcH / rows;
+    if (cellH <= 0) {
+        std::fprintf(stderr, "[mm2-font] failed: invalid cell height %d\n", cellH);
+        g_fontDebugStatus = "MM2 font: FAILED (invalid cell height)";
+        return nullptr;
+    }
 
     ImFontAtlas* atlas = io.Fonts;
-    static const ImWchar kNoPrintableRanges[] = {0x0001, 0x001f, 0};
+    static const ImWchar kDummyRange[] = {0xE000, 0xE000, 0};
     ImFontConfig cfg;
-    cfg.SizePixels = static_cast<float>(tf.ySize);
+    cfg.SizePixels = static_cast<float>(cellH);
     cfg.OversampleH = 1;
     cfg.OversampleV = 1;
     cfg.PixelSnapH = true;
-    cfg.GlyphRanges = kNoPrintableRanges;
+    cfg.GlyphRanges = kDummyRange;
     cfg.Name[0] = '\0';
 
     ImFont* font = atlas->AddFontDefault(&cfg);
-    if (!font) return nullptr;
+    if (!font) {
+        std::fprintf(stderr, "[mm2-font] failed: AddFontDefault returned null\n");
+        g_fontDebugStatus = "MM2 font: FAILED (AddFontDefault)";
+        return nullptr;
+    }
 
-    // NOTE: Newer docking ImGui backends using ImGuiBackendFlags_RendererHasTextures
-    // assert if client code calls ImFontAtlas::Build() directly.
-    // Keep MM2 font discovery in place, but avoid explicit atlas building/pixel patching
-    // here. The backend-owned atlas build path will run during NewFrame safely.
-    (void)glyphs;
+    std::vector<GlyphRect> rects;
+    rects.reserve(kGlyphCount);
+    const float scaledSize = static_cast<float>(requestedPx) *
+                             std::max(1.0f, io.DisplayFramebufferScale.y);
+    for (int cp = 0; cp < kGlyphCount; ++cp) {
+        ImFontAtlasRectId rectId = atlas->AddCustomRectFontGlyphForSize(
+            font, static_cast<float>(cellH), static_cast<ImWchar>(cp), cellW, cellH,
+            static_cast<float>(cellW));
+        if (rectId == ImFontAtlasRectId_Invalid) {
+            // Compatibility fallback for builds where per-size API doesn't populate.
+            rectId = atlas->AddCustomRectFontGlyph(
+                font, static_cast<ImWchar>(cp), cellW, cellH, static_cast<float>(cellW));
+        }
+        if (rectId == ImFontAtlasRectId_Invalid && std::fabs(scaledSize - static_cast<float>(cellH)) > 0.5f) {
+            // Add glyphs for a likely DPI-scaled baked size.
+            rectId = atlas->AddCustomRectFontGlyphForSize(
+                font, scaledSize, static_cast<ImWchar>(cp), cellW, cellH, static_cast<float>(cellW));
+        }
+        if (rectId == ImFontAtlasRectId_Invalid) continue;
+        rects.push_back({cp, rectId});
+    }
+
+    // OpenGL backend in this workspace expects RGBA32 texture format.
+    atlas->TexDesiredFormat = ImTextureFormat_RGBA32;
+    unsigned char* pixels = nullptr;
+    int texW = 0;
+    int texH = 0;
+    int bytesPerPixel = 0;
+    atlas->GetTexDataAsRGBA32(&pixels, &texW, &texH, &bytesPerPixel);
+    if (bytesPerPixel != 4) {
+        std::fprintf(stderr, "[mm2-font] failed: bytesPerPixel=%d (expected 4)\n", bytesPerPixel);
+        g_fontDebugStatus = "MM2 font: FAILED (atlas bpp != 4)";
+        return nullptr;
+    }
+    if (!pixels || texW <= 0 || texH <= 0) {
+        std::fprintf(stderr, "[mm2-font] failed: atlas pixel buffer unavailable\n");
+        g_fontDebugStatus = "MM2 font: FAILED (atlas pixels unavailable)";
+        return nullptr;
+    }
+
+    for (size_t i = 0; i < rects.size(); ++i) {
+        const int cp = rects[i].codepoint;
+        const int sx = (cp % kGlyphColumns) * cellW;
+        const int sy = (cp / kGlyphColumns) * cellH;
+        ImFontAtlasRect rect;
+        if (!atlas->GetCustomRect(rects[i].rectId, &rect)) continue;
+        const int copyW = std::min<int>(cellW, rect.w);
+        const int copyH = std::min<int>(cellH, rect.h);
+        blitCellToAtlas(srcRgba, srcW, srcH, sx, sy, pixels, texW, texH, rect.x, rect.y, copyW, copyH);
+    }
 
     io.FontDefault = font;
+    std::fprintf(stderr, "[mm2-font] loaded: atlas=%dx%d cell=%dx%d glyphs=%d\n",
+                 srcW, srcH, cellW, cellH, static_cast<int>(rects.size()));
+    g_fontDebugStatus = "MM2 font: LOADED (" + pngPath.string() + ")";
     return font;
+}
+
+const char* mm2BitmapFontDebugStatus() {
+    return g_fontDebugStatus.c_str();
 }
 
 }  // namespace mm2

@@ -14,6 +14,9 @@
 namespace mm2 {
 
 constexpr int kRosterCount = 64;
+constexpr int kRosterCharacterCount = 48;  // Ends at "Mr. Wizard" (slot 47).
+constexpr int kRosterGlobalStart = kRosterCharacterCount;
+constexpr int kRosterGlobalCount = kRosterCount - kRosterGlobalStart;
 constexpr int kRosterRecordSize = 0x82;
 constexpr int kRosterNameSize = 11;
 constexpr int kRosterFileSize = kRosterCount * kRosterRecordSize;
@@ -66,6 +69,7 @@ constexpr int kLevel = 0x71;
 constexpr int kSpellLevel = 0x72;
 constexpr int kEnduranceBase = 0x73;
 constexpr int kHpCur = 0x74;         // u16 LE
+constexpr int kClassQuestFlags = 0x79;  // bit7 renders in-game class '+'
 }  // namespace roster_off
 
 struct RosterRecord {

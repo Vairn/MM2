@@ -13,9 +13,11 @@ public:
     void draw(App& app) override;
 
 private:
+    void drawCharacterSheet(RosterRecord& r);
     void drawStats(RosterRecord& r);
     void drawEquipment(App& app, RosterRecord& r);
     void drawSpells(RosterRecord& r);
+    void drawGlobalOverlay();
 
     RosterFile file_;
     int selected_ = 0;
