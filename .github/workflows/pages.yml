@@ -41,6 +41,8 @@ jobs:
           mkdir -p _site/maze-walker
           cp -r wiki/maze-walker/. _site/maze-walker/
 
+      # Requires one-time enable: repo Settings → Pages → Source: GitHub Actions.
+      # Until then GET /repos/{owner}/{repo}/pages returns 404 (see Pages REST API).
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3

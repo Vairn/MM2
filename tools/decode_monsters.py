@@ -27,6 +27,82 @@ OFF_PABIL, OFF_SABIL, OFF_OABIL = 0x11, 0x12, 0x13
 OFF_SPEED, OFF_PICTURE, OFF_AC = 0x14, 0x15, 0x16
 OFF_DAMAGE, OFF_SPEED2, OFF_MRES = 0x17, 0x18, 0x19
 
+HP_XP_MUL = (1, 10, 100, 1000)
+
+
+def decode_hp(hp_code: int) -> int:
+    """ASM 0x4C8E: ((code & 0x3F)+1) * mul[(code>>6)&3]."""
+    return ((hp_code & 0x3F) + 1) * HP_XP_MUL[(hp_code >> 6) & 0x03]
+
+
+def decode_xp(xp_code: int) -> int:
+    """ASM 0x4C8E: ((code & 0x1F)+1) * mul[(code>>5)&3], x1000 if bit7."""
+    xp = ((xp_code & 0x1F) + 1) * HP_XP_MUL[(xp_code >> 5) & 0x03]
+    if xp_code & 0x80:
+        xp *= 1000
+    return xp
+
+
+def decode_ac(ac: int) -> int:
+    """Byte 0x16: low5+1, x10 if bit5."""
+    val = (ac & 0x1F) + 1
+    if ac & 0x20:
+        val *= 10
+    return val
+
+
+def decode_damage(damage: int) -> int:
+    """Byte 0x17: low5+1, x10 if bit5, capped 250."""
+    val = (damage & 0x1F) + 1
+    if damage & 0x20:
+        val *= 10
+    return min(val, 250)
+
+
+def decode_speed2(speed2: int) -> int:
+    """Byte 0x18 (combat initiative): low5+1, x10 if bit5, capped 250."""
+    val = (speed2 & 0x1F) + 1
+    if speed2 & 0x20:
+        val *= 10
+    return min(val, 250)
+
+
+def decode_speed_nibbles(speed: int) -> tuple[int, int]:
+    """Byte 0x14: low nibble+1, high nibble+1."""
+    return (speed & 0x0F) + 1, ((speed >> 4) & 0x0F) + 1
+
+
+def decode_treasure(treasure: int) -> dict[str, int | bool]:
+    """Byte 0x10 reward pack (ASM 0x10B74): item level, gems flag, gold tier."""
+    return {
+        "item_drop_level": treasure & 0x03,
+        "drops_gems": bool(treasure & 0x04),
+        "gold_tier": (treasure >> 3) & 0x03,
+    }
+
+
+def enrich_decoded_stats(d: dict) -> dict:
+    """Add ASM-decoded combat stats to a decode_record() dict."""
+    spd_lo, spd_hi = decode_speed_nibbles(d["speed"])
+    tres = decode_treasure(d["treasure"])
+    ac_flags: list[str] = []
+    if d["ac"] & 0x40:
+        ac_flags.append("flag bit6")
+    if d["ac"] & 0x80:
+        ac_flags.append("flag bit7")
+    return {
+        **d,
+        "hp": decode_hp(d["hp_code"]),
+        "xp": decode_xp(d["xp_code"]),
+        "ac_val": decode_ac(d["ac"]),
+        "ac_flags": ac_flags,
+        "damage_val": decode_damage(d["damage"]),
+        "speed_lo": spd_lo,
+        "speed_hi": spd_hi,
+        "initiative": decode_speed2(d["speed2"]),
+        **tres,
+    }
+
 # Sabil low-5 -> single-target status effect (victim-message table, asm ~0xFA1A).
 SINGLE_EFFECT_NAMES = [
     "nothing", "loose gold", "loose gems", "Poison", "Disease", "Sleep",

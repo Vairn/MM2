@@ -92,8 +92,18 @@ python -m http.server 8080
 # http://localhost:8080/
 ```
 
-Enable **Settings → Pages → Build and deployment → GitHub Actions** once so
-`.github/workflows/pages.yml` can publish.
+**One-time GitHub Pages setup** (required before the first deploy):
+
+1. Open [MM2 → Settings → Pages](https://github.com/Vairn/MM2/settings/pages).
+2. Under **Build and deployment**, set **Source** to **GitHub Actions** (not
+   “Deploy from a branch”).
+3. Re-run the failed workflow: **Actions → Deploy Map Walker → Re-run all jobs**.
+
+Until step 2 is done, `GET /repos/Vairn/MM2/pages` returns **404** and
+`actions/configure-pages` fails with “Get Pages site failed”. The default
+`GITHUB_TOKEN` cannot create the site via the REST API — a repo admin must
+enable Pages in Settings (or use a PAT with `administration:write` +
+`pages:write` and `enablement: true` on `configure-pages`).
 
 ---
 
