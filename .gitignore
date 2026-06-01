@@ -6,6 +6,8 @@
 
 # Project notes
 !CLAUDE.md
+!.github/
+!.github/**
 
 # Source code
 !editor/
@@ -35,8 +37,10 @@ wiki/.vitepress/cache/
 wiki/.vitepress/cache/**
 wiki/docs/
 wiki/docs/**
-wiki/public/fonts/
-wiki/public/fonts/**
+wiki/gh-wiki/
+wiki/gh-wiki/**
+wiki/public/
+wiki/public/**
 build/
 build/**
 **/__pycache__/

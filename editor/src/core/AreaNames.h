@@ -21,11 +21,12 @@
 //   57 Pinehurst -> 49/50, 58 Luxus    -> 51/52.
 //
 // Environment-type decode (also from mm2ed.bb):
-//   attrib +0x04 > 0            -> outside area (name "Outside Area: XX" via +0x15)
+//   attrib +0x04 > 0            -> outside area (sector label A1..E4 via +0x15)
 //   else attrib +0x03 == 17     -> town
 //                       == 18     -> cavern
 //                       == 19/20  -> castle
-//   areas 41..44 are forced outside (the elemental planes).
+//   areas 41..44 are forced outside for some runtime paths; auto-map still uses
+//   townb.32 with fixed frames 8/4/4/5 in the -$79E2==0 branch (@0x21EA).
 
 #include <cstdint>
 #include <cstdio>
@@ -81,10 +82,38 @@ inline const char* areaNameRaw(int area) {
     }
 }
 
-// Display label: real name when known, else "Area NN".
+// Overland sector name for screens 5–16 and 33–40 (attrib.dat +0x15).
+inline const char* outdoorSectorName(int area) {
+    switch (area) {
+        case 5:  return "A1";
+        case 6:  return "B1";
+        case 7:  return "C1";
+        case 8:  return "D1";
+        case 9:  return "A2";
+        case 10: return "B2";
+        case 11: return "C2";
+        case 12: return "A3";
+        case 13: return "B3";
+        case 14: return "C3";
+        case 15: return "A4";
+        case 16: return "B4";
+        case 33: return "E1";
+        case 34: return "D2";
+        case 35: return "E2";
+        case 36: return "D3";
+        case 37: return "E3";
+        case 38: return "C4";
+        case 39: return "D4";
+        case 40: return "E4";
+        default: return nullptr;
+    }
+}
+
+// Display label: canonical name, else overland sector (A1..E4), else "Area NN".
 inline std::string areaLabel(int area) {
     const char* n = areaNameRaw(area);
     if (n[0]) return std::string(n);
+    if (const char* sec = outdoorSectorName(area)) return std::string(sec);
     char buf[16];
     snprintf(buf, sizeof(buf), "Area %d", area);
     return buf;

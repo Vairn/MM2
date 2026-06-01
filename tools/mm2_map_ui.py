@@ -48,6 +48,30 @@ AREA_NAMES: Dict[int, str] = {
     59: "Castle Xabran",
 }
 
+# Overland screens 5–16 and 33–40 (attrib.dat +0x15 sector label).
+OUTDOOR_SECTOR_BY_SCREEN: Dict[int, str] = {
+    5: "A1",
+    6: "B1",
+    7: "C1",
+    8: "D1",
+    9: "A2",
+    10: "B2",
+    11: "C2",
+    12: "A3",
+    13: "B3",
+    14: "C3",
+    15: "A4",
+    16: "B4",
+    33: "E1",
+    34: "D2",
+    35: "E2",
+    36: "D3",
+    37: "E3",
+    38: "C4",
+    39: "D4",
+    40: "E4",
+}
+
 
 def tile_notation(x: int, y: int) -> str:
     """16×16 cell as column letter + 1-based row (e.g. 0,0 → a1; 2,2 → c3)."""
@@ -63,7 +87,11 @@ def outdoor_sector(surface_label_byte: int) -> str:
 
 
 def area_name(screen: int) -> str:
-    return AREA_NAMES.get(screen, f"Area {screen}")
+    if screen in AREA_NAMES:
+        return AREA_NAMES[screen]
+    if screen in OUTDOOR_SECTOR_BY_SCREEN:
+        return OUTDOOR_SECTOR_BY_SCREEN[screen]
+    return f"Area {screen}"
 
 
 def location_label(

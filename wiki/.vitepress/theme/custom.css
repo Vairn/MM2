@@ -122,6 +122,19 @@ body {
   color: var(--mm2-accent-hover);
 }
 
+.VPHero .image-src {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  height: 122px;
+  width: auto;
+  filter: drop-shadow(0 0 14px rgba(235, 56, 56, 0.4));
+}
+
+.VPNavBarTitle .logo {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
 .VPButton.brand {
   border: 1px solid var(--mm2-border);
 }
@@ -171,6 +184,24 @@ body {
 .vp-doc blockquote {
   border-left: 3px solid var(--mm2-accent);
   background: rgba(107, 15, 15, 0.25);
+}
+
+/* Gallery — keep pixel art crisp */
+.vp-doc img,
+.VPImage img {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.vp-doc table img {
+  max-height: 64px;
+  width: auto;
+}
+
+.vp-doc h3 + p > img,
+.vp-doc h2 + p > img {
+  max-width: 100%;
+  height: auto;
 }
 
 .VPDoc .content-container {

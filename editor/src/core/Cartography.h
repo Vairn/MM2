@@ -18,10 +18,12 @@
 //     town/cavern/castle   -> townb.32  (entries 12/16/20, all townb.32)
 // Both tilesets are 36 frames of 14x11 px.
 //
+// Elemental planes (screens 41..44): uniform map bytes 0x28/0x25/0x27/0x26
+// encode outb.32 terrain ids 8/5/7/6 (air / fire-lava / earth / water). The
+// interior branch @0x21EA also has townb overrides (8/4/4/5) when -$79E2==0;
+// editor + wiki use outb + (visual & 0x1F) to match the authored terrain art.
+//
 // Extra ASM behaviour folded in here:
-//   - Elemental planes 41..44 override every cell to a fixed frame (8/4/4/5)
-//     in the -$79E2==0 branch; their map bytes are uniform (0x28/0x25/0x27/0x26)
-//     so they render as a single terrain tile regardless.
 //   - Wall-edge overlay uses (visual & 3) -> kCartoEdge (frames 27/28/27); the
 //     overlay is alpha-composited in-engine and is not applied here.
 //   - Direction-arrow frames (party marker) are 0x20..0x23 (N/S/E/W).
@@ -46,19 +48,18 @@ inline constexpr uint8_t kCartoTile[64] = {
 // Wall-edge overlay tiles, indexed by (visual & 3) - 1. Data hunk offset 0xA30.
 inline constexpr uint8_t kCartoEdge[3] = {0x1B, 0x1C, 0x1B};
 
+// True when auto-map should blit from outb.32 (surface sectors + elemental planes).
+inline bool cartoUsesOutb(int screen, bool outdoorSurface) {
+    if (screen >= 41 && screen <= 44) return true;
+    return outdoorSurface;
+}
+
 // Cartography frame index for a map cell on a given screen (0..59).
-// `outdoor` selects the engine's view-mode branch (-$79E2): outdoor/surface
-// screens index outb.32 with the raw terrain id, interiors use the wall-decode.
-inline int cartoFrame(int screen, uint8_t visual, bool outdoor) {
-    switch (screen) {  // elemental planes force a single terrain tile (@0x21EA)
-        case 41: return 8;
-        case 42: return 4;
-        case 43: return 4;
-        case 44: return 5;
-        default: break;
-    }
-    if (outdoor) return visual & 0x1F;  // overland surface: raw terrain id
-    return kCartoTile[(visual >> 2) & 0x3F];  // interior dungeon wall decode
+// `outdoorSurface` = engine outdoor branch (-$79E2 != 0) or plane screens.
+inline int cartoFrame(int screen, uint8_t visual, bool outdoorSurface) {
+    if (screen >= 41 && screen <= 44) return visual & 0x1F;
+    if (outdoorSurface) return visual & 0x1F;
+    return kCartoTile[(visual >> 2) & 0x3F];
 }
 
 }  // namespace mm2

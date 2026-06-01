@@ -8,9 +8,11 @@ export default defineConfig({
   cleanUrls: true,
   lastUpdated: true,
   themeConfig: {
+    logo: '/book-f00.png',
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Overview', link: '/docs/reverse-engineering/00-overview' },
+      { text: 'Gallery', link: '/docs/gallery/' },
       { text: 'Data Formats', link: '/docs/reverse-engineering/07-dat-files-and-formats' },
       { text: 'Editor', link: '/docs/editor/mm2ed' },
       { text: 'Tools', link: '/docs/tools/re-tools' },
@@ -69,6 +71,17 @@ export default defineConfig({
           ],
         },
         {
+          text: 'Sprite Gallery',
+          collapsed: false,
+          items: [
+            { text: 'Gallery Home', link: '/docs/gallery/' },
+            { text: 'Monsters', link: '/docs/gallery/monsters' },
+            { text: 'Tilesets (.32)', link: '/docs/gallery/tilesets' },
+            { text: 'Map Cartography', link: '/docs/gallery/maps' },
+            { text: '3D View Graphics', link: '/docs/gallery/views' },
+          ],
+        },
+        {
           text: 'Tools & Code',
           items: [
             { text: 'RE Tools (Python/C)', link: '/docs/tools/re-tools' },
@@ -85,4 +98,7 @@ export default defineConfig({
       copyright: 'Research documentation — not affiliated with New World Computing',
     },
   },
+  head: [
+    ['link', { rel: 'icon', href: '/book-f00.png', type: 'image/png' }],
+  ],
 });

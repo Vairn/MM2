@@ -132,13 +132,15 @@ bool MapSection::save(const std::string& dataDir) {
 }
 
 bool MapSection::isOutdoor(int screen) const {
-    // Elemental planes (41..44) always render with the outdoor tileset.
-    if (screen >= 41 && screen <= 44) return true;
     if (attribLoaded_) return attrib_.screens[screen].isOutside();
     // Without attrib data, fall back to the named interior areas (towns,
     // caverns, castles and dungeons all carry real names); unnamed indices are
     // overland surface tiles.
     return areaNameRaw(screen)[0] == '\0';
+}
+
+bool MapSection::usesOutbCarto(int screen) const {
+    return mm2::cartoUsesOutb(screen, isOutdoor(screen));
 }
 
 MapSection::Env MapSection::envOf(int screen) const {
@@ -672,7 +674,7 @@ void MapSection::drawGrid(const char* id, std::array<uint8_t, kMapPageSize>& pag
 
 void MapSection::drawCartoGrid(const char* id, std::array<uint8_t, kMapPageSize>& page,
                                int& selTile, bool forceTownb, bool markEvents) {
-    bool useTownb = forceTownb || !isOutdoor(screen_);
+    bool useTownb = forceTownb || !usesOutbCarto(screen_);
     const std::vector<unsigned int>& tex = useTownb ? townb_.tex : outb_.tex;
     if (tex.empty()) {  // tileset missing -> fall back to the hex grid
         drawGrid(id, page, selTile, markEvents);
@@ -695,7 +697,7 @@ void MapSection::drawCartoGrid(const char* id, std::array<uint8_t, kMapPageSize>
             int idx = (kMapGridDim - 1 - y) * kMapGridDim + x;
             // Mask the event flag so the auto-map tile reflects walls only.
             uint8_t cellByte = markEvents ? (page[idx] & kCollisionWallMask) : page[idx];
-            int frame = cartoFrame(screen_, cellByte, !useTownb);
+            int frame = cartoFrame(screen_, cellByte, usesOutbCarto(screen_));
             if (frame < 0 || frame >= frameCount) frame = 0;
             unsigned int t = tex[frame];
             ImGui::PushID(idx);
@@ -721,7 +723,7 @@ void MapSection::drawCartoGrid(const char* id, std::array<uint8_t, kMapPageSize>
 
     uint8_t v = page[selTile];
     ImGui::Text("Selected tile (%d,%d) = 0x%02X -> frame %d", selTile % kMapGridDim,
-                selTile / kMapGridDim, v, cartoFrame(screen_, v, !useTownb));
+                selTile / kMapGridDim, v, cartoFrame(screen_, v, usesOutbCarto(screen_)));
     int iv = v;
     ImGui::SetNextItemWidth(120);
     ImGui::PushID(id);
@@ -736,8 +738,8 @@ void MapSection::drawCartoGrid(const char* id, std::array<uint8_t, kMapPageSize>
 void MapSection::drawMinimap() {
     // Auto-map uses page 0 (visual tiles) — same path as drawCartoGrid on the
     // Visual tab.  Event dots still come from page 1 (collision 0x80 flag).
-    const bool  outdoor    = isOutdoor(screen_);
-    const bool  useTownb   = !outdoor;
+    const bool  useOutb    = usesOutbCarto(screen_);
+    const bool  useTownb   = !useOutb;
     const std::vector<unsigned int>& tex = useTownb ? townb_.tex : outb_.tex;
     const int   dim        = kMapGridDim;
     const float tw         = 14.0f * zoom_;
@@ -766,7 +768,7 @@ void MapSection::drawMinimap() {
             float   py    = origin.y + cy * th;
 
             if (useTiles) {
-                int frame = cartoFrame(screen_, v, outdoor);
+                int frame = cartoFrame(screen_, v, useOutb);
                 if (frame >= 0 && frame < frameCount)
                     dl->AddImage(static_cast<ImTextureID>(tex[frame]),
                                  ImVec2(px, py), ImVec2(px + tw, py + th));

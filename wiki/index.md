@@ -5,6 +5,9 @@ hero:
   name: Might & Magic II
   text: Amiga reverse-engineering wiki
   tagline: Data formats, 68k runtime traces, combat, events, graphics codecs, and the MM2ED editor — assembled from EXTRACTED/docs and tooling in this repo.
+  image:
+    src: /book-f00.png
+    alt: Spellbook icon (book.32 frame 0)
   actions:
     - theme: brand
       text: Start Reading
@@ -25,6 +28,9 @@ features:
   - icon: 🛠️
     title: Tools & editor
     details: Python disassemblers and decoders, C lift scaffold, and MM2ED — an ImGui editor for every major data file.
+  - icon: 🐉
+    title: Sprite gallery
+    details: Monster .anm composites, all .32 tilesets, 60-screen auto-map cartography, and first-person 3D view layouts — decoded from game assets.
   - icon: 🗺️
     title: Living documentation
     details: Pages sync from EXTRACTED/docs on each dev/build run — edit markdown in the repo, refresh the wiki.
@@ -40,6 +46,7 @@ features:
 | Combat engine | [17-combat-system](/docs/reverse-engineering/17-combat-system) |
 | Event opcodes | [07-event-script-opcodes](/docs/reverse-engineering/07-event-script-opcodes) |
 | RE tooling | [re-tools](/docs/tools/re-tools) |
+| Sprite gallery | [gallery](/docs/gallery/) |
 
 ## Endianness reminder
 

@@ -2,3 +2,5 @@ node_modules/
 .vitepress/dist/
 .vitepress/cache/
 docs/
+public/gallery/
+public/fonts/

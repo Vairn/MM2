@@ -1,10 +1,12 @@
 #pragma once
 // Decoder for the MM2 planar image-chunk format shared by:
-//   - .32 tileset/sprite files (image chunk begins at offset 0; globe.32 /
-//     disk.32 are XOR-obfuscated on disk — see tryDecryptXor32 in Gfx.cpp)
+//   - .32 tileset/sprite files (image chunk begins at offset 0)
 //   - .anm "TV" animations    (image chunk located after the prelude/sequence
 //                               via an FF 00 marker)
 //
+// Note: `globe.32` and `disk.32` share the `.32` extension in the resource table
+// but are XOR string/data blobs, not image chunks — see decode_globe_amiga.py.
+// Gfx.cpp tryDecryptXor32 is a legacy heuristic and must not be treated as gfx.
 // Image chunk layout (big-endian words), see EXTRACTED/docs/07-anm-tv-format.md
 // and tools/decode_anm.py:
 //   u16 frame_count

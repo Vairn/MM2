@@ -42,6 +42,7 @@ public:
     void flushPendingTextures();
     // True when the screen renders with the outdoor tileset (outb.32).
     bool isOutdoor(int screen) const;
+    bool usesOutbCarto(int screen) const;
     Env envOf(int screen) const;
 
     // One uploaded GL texture per frame; decoded RGBA is not retained after upload.

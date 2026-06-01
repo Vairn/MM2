@@ -111,12 +111,33 @@ Observed content:
 
 - Contains many in-game text strings (jokes, prompts, shop/guild text, menu/help text).
 
+## `map.dat` (confirmed)
+
+Cross-validated with:
+
+- MM2 executable ASM (flat load into `A4-$EEF4`, 3D hood reads page 0 @ `0x2900`)
+- `editor/src/core/MapFile.{h,cpp}` — 60 screens × 512 bytes
+- Collision `0x80` event alignment vs `event.dat` triplets
+
+Layout:
+
+- 60 map screens
+- 512 bytes per screen (`0x200`)
+- Per screen:
+  - `0x000..0x0FF` — **page 0 (visual)**: 16×16 grid; four 2-bit wall fields per cell (N/E/S/W)
+  - `0x100..0x1FF` — **page 1 (collision)**: same geometry; `(dark<<1)|wall` per direction; bit `0x80` = event flag
+
+Notes:
+
+- `30720 = 60 × 512`, which matches the editor loader/saver loops.
+- Row 0 on disk = south; MM2ED and wiki grids draw north-up.
+- Full field decode: [map.dat format](21-map-dat-format.md).
+
 ## Partially Characterized / TODO
 
 These files are inventoried and size-confirmed, but structure still needs field-level confirmation against ASM call sites:
 
 - `event.dat` (95687 bytes)
-- `map.dat` (30720 bytes)
 - `spells.dat` (256 bytes)
 - `attrib.dat` (3840 bytes)
 

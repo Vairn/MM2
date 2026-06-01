@@ -220,8 +220,8 @@ planar image-chunk codec: u16 `frame_count`, u16 `depth_or_mode`, per-frame
 stream of 5 concatenated bitplanes per frame (`rassize = h*(((w+15)>>3)&0xFFFE)`).
 `.32` starts the chunk at offset 0 (depth may be 0); `.anm` finds it after the
 "TV" prelude via an `FF 00` marker. `depth` is a mode value — plane count is
-always 5 (32 colors). `globe.32` is the same chunk (1 frame, 64×74, depth 0)
-but XOR-obfuscated on disk; the decoder unwraps it automatically. Decoder
-validated against real files with `editor/tests/gfx_dump.cpp` (renders correct
-castle/cave wall tiles). The 60 map/area names live in `core/AreaNames.h`
-(transcribed from `b3dmm2/mm2ed.bb`).
+always 5 (32 colors). **`globe.32` / `disk.32` are not image chunks** — they are
+XOR-obfuscated data blobs in the resource table (`globe.32` = copy-protection
+string tables, `tools/decode_globe_amiga.py`). Decoder validated against real
+tile sheets with `editor/tests/gfx_dump.cpp` (castle/cave wall tiles). The 60
+map/area names live in `core/AreaNames.h` (transcribed from `b3dmm2/mm2ed.bb`).

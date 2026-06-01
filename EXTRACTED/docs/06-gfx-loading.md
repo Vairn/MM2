@@ -49,6 +49,11 @@ In DATA hunk 0, offset `0x07B0..0x0838` is a contiguous array of relocated longw
 
 The `.dat` files are in the same table, so this appears to be a unified asset/resource list, not a graphics-only list.
 
+**Not planar graphics:** `globe.32` is an XOR-obfuscated blob of copy-protection / title
+string tables (decoded by `tools/decode_globe_amiga.py`; UI prompts documented in
+`20-copy-protection-table.md`). `disk.32` is a similar XOR blob. Both share the `.32`
+extension and loader path but are **not** Amiga image-chunk tilesets.
+
 ## Loader Mechanics
 
 - `0x25222` validates an index against a 6-byte-per-entry resource table (`-0x34E(A4)` base, count at `-0x5E6E(A4)`), then dispatches via `0x25528`.

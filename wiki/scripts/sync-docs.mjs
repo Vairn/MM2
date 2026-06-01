@@ -5,6 +5,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -96,6 +97,21 @@ if (fs.existsSync(fontSrc)) {
   fs.copyFileSync(fontSrc, fontDest);
 } else {
   console.warn(`skip (missing): ${fontSrc}`);
+}
+
+// book.32 frame 0 — spellbook UI sprite used as site logo.
+const bookLogoScript = path.join(wikiRoot, 'scripts', 'export-book-logo.py');
+const py = process.platform === 'win32' ? 'python' : 'python3';
+const bookResult = spawnSync(py, [bookLogoScript], { stdio: 'inherit', cwd: repoRoot });
+if (bookResult.status !== 0 && bookResult.status !== null) {
+  console.warn('book logo export failed (book.32 missing or pillow not installed?)');
+}
+
+// Sprite gallery: monsters, tilesets, cartography, 3D views.
+const galleryScript = path.join(wikiRoot, 'scripts', 'export-gfx-gallery.py');
+const galleryResult = spawnSync(py, [galleryScript], { stdio: 'inherit', cwd: repoRoot });
+if (galleryResult.status !== 0 && galleryResult.status !== null) {
+  console.warn('gallery export failed (missing assets or pillow?)');
 }
 
 console.log('Synced docs -> wiki/docs/');

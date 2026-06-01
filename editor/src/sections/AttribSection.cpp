@@ -47,7 +47,7 @@ void AttribSection::draw(App& app) {
     ImGui::Text("Area: %s", areaLabel(screen_).c_str());
     ImGui::SameLine();
     if (outside)
-        ImGui::TextDisabled("[Outside Area: %02X]", s.raw[attrib_off::kOutsideLabel]);
+        ImGui::TextDisabled("[overland +0x15 = 0x%02X]", s.raw[attrib_off::kOutsideLabel]);
     else
         ImGui::TextDisabled("[%s  level %d  complex %04X]", envTypeName(s.envType()), s.level(),
                             s.complexId());
