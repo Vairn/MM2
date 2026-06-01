@@ -68,8 +68,11 @@ offset 0; `.anm` animations carry a "TV" prelude and the chunk is located via
 an `FF 00` marker. The **Graphics (.32)** and **Animations (.anm)** sections
 scan the data folder, decode the selected file, and preview frames (single +
 contact sheet), the palette, and per-frame metadata. Decoding is verified
-against real files via `tests/gfx_dump.cpp`. `globe.32` uses a different
-(unhandled) layout and reports a graceful decode error.
+against real files via `tests/gfx_dump.cpp`. `globe.32` is XOR-obfuscated on
+disk but decodes to the same 1-frame planar chunk (64×74 spinner sheet). The
+`.anm` viewer also includes an **experimental** "Use prelude placement" toggle
+that draws each selected frame at its prelude `(x,y)` on a shared canvas for
+layout sanity checks without forcing a hard format interpretation.
 
 ## Adding a new section
 

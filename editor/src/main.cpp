@@ -11,6 +11,7 @@
 #include <GLFW/glfw3.h>
 
 #include "app/App.h"
+#include "core/Mm2BitmapFont.h"
 
 static void glfwErrorCallback(int error, const char* desc) {
     std::fprintf(stderr, "GLFW error %d: %s\n", error, desc);
@@ -78,6 +79,9 @@ int main(int, char**) {
     ImNodes::CreateContext();
     ImNodes::StyleColorsDark();
     scaleImNodesStyle(mainScale);
+
+    // Prefer the original 8px MM2 bitmap strike if available.
+    mm2::installMm2BitmapFont(io);
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glslVersion);

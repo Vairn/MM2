@@ -227,8 +227,8 @@ mm2_anm_error mm2_anm_load_file(const char *path, mm2_anm_file *out) {
             continue;
         }
         anm.prelude[i].is_used = 1;
-        anm.prelude[i].a = buf[p];
-        anm.prelude[i].b = buf[p + 1];
+        anm.prelude[i].x_offset = buf[p];
+        anm.prelude[i].y_offset = buf[p + 1];
         anm.prelude[i].w = buf[p + 2];
         anm.prelude[i].h = buf[p + 3];
     }
@@ -311,8 +311,8 @@ mm2_anm_error mm2_anm_save_file(const char *path, const mm2_anm_file *anm) {
     for (i = 0; i < MM2_ANM_PRELUDE_SLOTS; i++) {
         if (anm->prelude[i].is_used) {
             uint8_t e[4];
-            e[0] = anm->prelude[i].a;
-            e[1] = anm->prelude[i].b;
+            e[0] = anm->prelude[i].x_offset;
+            e[1] = anm->prelude[i].y_offset;
             e[2] = anm->prelude[i].w;
             e[3] = anm->prelude[i].h;
             fwrite(e, 1, 4, fp);

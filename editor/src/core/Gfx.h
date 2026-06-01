@@ -1,6 +1,7 @@
 #pragma once
 // Decoder for the MM2 planar image-chunk format shared by:
-//   - .32 tileset/sprite files (image chunk begins at offset 0)
+//   - .32 tileset/sprite files (image chunk begins at offset 0; globe.32 /
+//     disk.32 are XOR-obfuscated on disk — see tryDecryptXor32 in Gfx.cpp)
 //   - .anm "TV" animations    (image chunk located after the prelude/sequence
 //                               via an FF 00 marker)
 //
@@ -38,12 +39,26 @@ struct GfxFrame {
     std::vector<uint8_t> rgba;  // width*height*4, RGBA8
 };
 
+struct GfxAnimPreludeEntry {
+    int xOffset = 0;
+    int yOffset = 0;
+    int width = 0;
+    int height = 0;
+    bool used = false;
+};
+
 struct GfxImage {
     bool ok = false;
     std::string error;
     int frameCount = 0;
     int depth = 0;
     size_t chunkOffset = 0;
+    // .anm sequence header bytes at 0x30..0x32 (unused for .32).
+    int seqHeaderA = 0;
+    int seqHeaderB = 0;
+    int seqHeaderC = 0;
+    std::vector<GfxAnimPreludeEntry> preludeEntries;  // fixed 11 slots for .anm
+    std::vector<std::vector<uint8_t>> sequences;      // raw bytes per sequence
     uint8_t palette[kGfxPaletteColors][4] = {};  // RGBA
     std::vector<GfxFrame> frames;
 
@@ -53,6 +68,9 @@ struct GfxImage {
         frameCount = 0;
         depth = 0;
         chunkOffset = 0;
+        seqHeaderA = seqHeaderB = seqHeaderC = 0;
+        preludeEntries.clear();
+        sequences.clear();
         frames.clear();
         for (auto& c : palette) c[0] = c[1] = c[2] = c[3] = 0;
     }

@@ -10,6 +10,40 @@
 #include "widgets/UiLayout.h"
 
 namespace mm2 {
+namespace {
+
+int sequenceFrameAt(const GfxImage& img, int seqIndex, int step) {
+    if (seqIndex < 0 || seqIndex >= static_cast<int>(img.sequences.size())) return -1;
+    const auto& seq = img.sequences[seqIndex];
+    if (seq.size() < 2) return -1;
+    const int pairCount = static_cast<int>(seq.size() / 2);
+    if (pairCount <= 0) return -1;
+    if (step < 0) step = 0;
+    if (step >= pairCount) step = pairCount - 1;
+    return static_cast<int>(seq[static_cast<size_t>(step) * 2]);
+}
+
+float sequenceStepDurationSec(const GfxImage& img, int seqIndex, int step, float speed) {
+    if (seqIndex < 0 || seqIndex >= static_cast<int>(img.sequences.size()) || speed <= 0.0f) return 0.10f;
+    const auto& seq = img.sequences[seqIndex];
+    if (seq.size() < 2) return 0.10f;
+    const int pairCount = static_cast<int>(seq.size() / 2);
+    if (pairCount <= 0) return 0.10f;
+    if (step < 0) step = 0;
+    if (step >= pairCount) step = pairCount - 1;
+    const int delayTicks = static_cast<int>(seq[static_cast<size_t>(step) * 2 + 1]);
+    const float base = static_cast<float>(delayTicks > 0 ? delayTicks : 1) / 60.0f;
+    return base / speed;
+}
+
+bool hasSequencePlayback(const GfxImage& img) {
+    for (const auto& seq : img.sequences) {
+        if (seq.size() >= 2) return true;
+    }
+    return false;
+}
+
+}  // namespace
 
 MonstersSection::~MonstersSection() { releaseTextures(); }
 
@@ -39,6 +73,10 @@ void MonstersSection::loadSprite(uint8_t picture) {
     sprite_ = GfxImage{};
     spriteFrame_ = 0;
     spritePic_ = picture;
+    spriteSequence_ = 0;
+    spriteSequenceStep_ = 0;
+    spriteElapsed_ = 0.0f;
+    spriteLastTick_ = ImGui::GetTime();
 
     int idx = picture & 0x7F;
     char name[16];
@@ -54,6 +92,10 @@ void MonstersSection::loadSprite(uint8_t picture) {
         textures_.reserve(sprite_.frames.size());
         for (auto& fr : sprite_.frames)
             textures_.push_back(makeTextureRGBA(fr.rgba.data(), fr.width, fr.height));
+        if (hasSequencePlayback(sprite_)) {
+            int frame = sequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+            if (frame >= 0) spriteFrame_ = frame;
+        }
     }
 }
 
@@ -109,10 +151,100 @@ void MonstersSection::draw(App& app) {
         if (sprite_.ok || !sprite_.frames.empty()) {
             int n = static_cast<int>(sprite_.frames.size());
             ImGui::TextDisabled("%d frames  depth=%d", n, sprite_.depth);
+            ImGui::Checkbox("Play##sprite", &spritePlaying_);
+            ImGui::SameLine();
+            ImGui::Checkbox("Loop##sprite", &spriteLoop_);
+            ui::SetFieldShort();
+            ImGui::SliderFloat("Speed##sprite", &spriteSpeed_, 0.1f, 4.0f, "%.2fx");
             ui::SetFieldMed();
             ImGui::SliderInt("Frame##sprite", &spriteFrame_, 0, n > 0 ? n - 1 : 0);
-            ui::SetFieldShort();
             ImGui::SliderFloat("Zoom##sprite", &spriteZoom_, 1.0f, 6.0f, "%.0fx");
+
+            if (spritePlaying_ && n > 1) {
+                const double now = ImGui::GetTime();
+                const float dt = static_cast<float>((spriteLastTick_ > 0.0) ? (now - spriteLastTick_) : 0.0);
+                spriteLastTick_ = now;
+                spriteElapsed_ += (dt > 0.0f) ? dt : 0.0f;
+
+                if (hasSequencePlayback(sprite_)) {
+                    if (spriteSequence_ < 0 || spriteSequence_ >= static_cast<int>(sprite_.sequences.size()))
+                        spriteSequence_ = 0;
+                    const auto& seq = sprite_.sequences[spriteSequence_];
+                    const int pairCount = static_cast<int>(seq.size() / 2);
+                    if (pairCount > 0) {
+                        while (spriteElapsed_ >=
+                               sequenceStepDurationSec(sprite_, spriteSequence_, spriteSequenceStep_, spriteSpeed_)) {
+                            spriteElapsed_ -= sequenceStepDurationSec(sprite_, spriteSequence_,
+                                                                      spriteSequenceStep_, spriteSpeed_);
+                            ++spriteSequenceStep_;
+                            if (spriteSequenceStep_ >= pairCount) {
+                                if (spriteLoop_)
+                                    spriteSequenceStep_ = 0;
+                                else {
+                                    spriteSequenceStep_ = pairCount - 1;
+                                    spritePlaying_ = false;
+                                    break;
+                                }
+                            }
+                            int frame = sequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+                            if (frame >= 0 && frame < n) spriteFrame_ = frame;
+                        }
+                    }
+                } else {
+                    const float frameDur = 0.125f / ((spriteSpeed_ > 0.0f) ? spriteSpeed_ : 1.0f);
+                    while (spriteElapsed_ >= frameDur) {
+                        spriteElapsed_ -= frameDur;
+                        ++spriteFrame_;
+                        if (spriteFrame_ >= n) {
+                            if (spriteLoop_)
+                                spriteFrame_ = 0;
+                            else {
+                                spriteFrame_ = n - 1;
+                                spritePlaying_ = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                spriteLastTick_ = ImGui::GetTime();
+            }
+
+            if (spriteFrame_ < 0) spriteFrame_ = 0;
+            if (spriteFrame_ >= n) spriteFrame_ = (n > 0) ? (n - 1) : 0;
+
+            if (!sprite_.sequences.empty()) {
+                if (spriteSequence_ < 0 || spriteSequence_ >= static_cast<int>(sprite_.sequences.size()))
+                    spriteSequence_ = 0;
+                std::string seqLabel = "Sequence " + std::to_string(spriteSequence_);
+                if (ImGui::BeginCombo("Sequence##sprite", seqLabel.c_str())) {
+                    for (int i = 0; i < static_cast<int>(sprite_.sequences.size()); ++i) {
+                        std::string label =
+                            "Sequence " + std::to_string(i) + " (" +
+                            std::to_string(static_cast<int>(sprite_.sequences[i].size() / 2)) + " steps)";
+                        bool sel = (i == spriteSequence_);
+                        if (ImGui::Selectable(label.c_str(), sel)) {
+                            spriteSequence_ = i;
+                            spriteSequenceStep_ = 0;
+                            spriteElapsed_ = 0.0f;
+                            int frame = sequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+                            if (frame >= 0 && frame < n) spriteFrame_ = frame;
+                        }
+                        if (sel) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                const int frame = sequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+                const int delay = (spriteSequence_ >= 0 &&
+                                   spriteSequence_ < static_cast<int>(sprite_.sequences.size()) &&
+                                   static_cast<size_t>(spriteSequenceStep_) * 2 + 1 <
+                                       sprite_.sequences[spriteSequence_].size())
+                                      ? static_cast<int>(
+                                            sprite_.sequences[spriteSequence_][static_cast<size_t>(spriteSequenceStep_) * 2 + 1])
+                                      : 0;
+                ImGui::TextDisabled("Seq step=%d frame=%d delay=%d", spriteSequenceStep_, frame, delay);
+            }
+
             if (spriteFrame_ >= 0 && spriteFrame_ < n) {
                 const GfxFrame& fr = sprite_.frames[spriteFrame_];
                 unsigned int tex = textures_[spriteFrame_];

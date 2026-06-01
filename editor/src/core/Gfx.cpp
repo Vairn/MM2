@@ -69,22 +69,119 @@ bool plausibleHeader(const Bytes& d, size_t off) {
     return w > 0 && w <= 1024 && h > 0 && h <= 1024;
 }
 
+// globe.32 / disk.32 ship XOR-obfuscated on disk (runtime decrypt @ asm 0x2613E
+// uses a 5-byte rolling key; globe round-trips with a 10-byte repeating key).
+// Recover the key by assuming a 1-frame, depth-0 chunk whose pixel payload
+// exactly fills the file, then decode normally.
+bool tryDecryptXor32(Bytes& bytes) {
+    if (bytes.size() < 74 || plausibleHeader(bytes, 0)) return false;
+    const size_t rs = (bytes.size() - 74) / kGfxPlanes;
+    if (74 + kGfxPlanes * rs != bytes.size()) return false;
+
+    int bestW = 0;
+    int bestMinDim = 0;
+    Bytes bestDec;
+
+    for (int bpr = 2; bpr <= 512; bpr += 2) {
+        if (rs % static_cast<size_t>(bpr)) continue;
+        const int h = static_cast<int>(rs / bpr);
+        if (h < 16 || h > 1024) continue;
+        for (int w = 1; w <= 1024; ++w) {
+            if (w < 16 || gfxRassize(w, h) != static_cast<int>(rs)) continue;
+
+            uint8_t plain[10];
+            writeU16BE(plain + 0, 1);
+            writeU16BE(plain + 2, 0);
+            writeU16BE(plain + 4, static_cast<uint16_t>(w));
+            writeU16BE(plain + 6, static_cast<uint16_t>(h));
+            writeU16BE(plain + 8, 0);
+
+            uint8_t key[10];
+            for (int i = 0; i < 10; ++i) key[i] = static_cast<uint8_t>(bytes[i] ^ plain[i]);
+
+            Bytes dec(bytes.size());
+            for (size_t i = 0; i < bytes.size(); ++i)
+                dec[i] = static_cast<uint8_t>(bytes[i] ^ key[i % 10]);
+            if (!plausibleHeader(dec, 0) || readU16BE(dec.data()) != 1) continue;
+            if (readU16BE(dec.data() + 4) != static_cast<uint16_t>(w) ||
+                readU16BE(dec.data() + 6) != static_cast<uint16_t>(h))
+                continue;
+
+            const int minDim = (w < h) ? w : h;
+            if (minDim > bestMinDim || (minDim == bestMinDim && w > bestW)) {
+                bestMinDim = minDim;
+                bestW = w;
+                bestDec = std::move(dec);
+            }
+        }
+    }
+
+    if (bestMinDim <= 0) return false;
+    bytes = std::move(bestDec);
+    return true;
+}
+
 }  // namespace
 
-GfxImage gfxDecode(const Bytes& bytes, bool isAnm) {
+GfxImage gfxDecode(const Bytes& bytesIn, bool isAnm) {
     GfxImage img;
+    Bytes bytes = bytesIn;
     if (bytes.size() < 12) {
         img.error = "file too small";
         return img;
     }
 
+    if (!isAnm && !plausibleHeader(bytes, 0)) tryDecryptXor32(bytes);
+
     size_t off = 0;
     if (isAnm) {
+        // Parse fixed TV prelude table (11 x 4-byte descriptors at 0x04..0x2F).
+        img.preludeEntries.resize(11);
+        if (bytes.size() >= 0x30) {
+            for (int i = 0; i < 11; ++i) {
+                size_t po = 0x04 + static_cast<size_t>(i) * 4;
+                GfxAnimPreludeEntry& e = img.preludeEntries[i];
+                e.xOffset = bytes[po + 0];
+                e.yOffset = bytes[po + 1];
+                e.width = bytes[po + 2];
+                e.height = bytes[po + 3];
+                e.used = !(bytes[po + 0] == 0xFF && bytes[po + 1] == 0xFF && bytes[po + 2] == 0xFF &&
+                           bytes[po + 3] == 0xFF);
+            }
+        }
+        if (bytes.size() >= 0x33) {
+            img.seqHeaderA = bytes[0x30];
+            img.seqHeaderB = bytes[0x31];
+            img.seqHeaderC = bytes[0x32];
+        }
+
         // Skip prelude (0x04..0x2F) + sequence; just scan for the marker.
         off = findImageChunk(bytes, 0x33);
         if (off == SIZE_MAX) {
             img.error = "could not find FF 00 image chunk";
             return img;
+        }
+
+        // Parse sequence stream bytes between header (0x33) and image marker.
+        // Blocks are delimited by 0xFF and usually hold (frame,delay) pairs.
+        size_t seqStart = 0x33;
+        size_t seqEnd = (off > 0) ? (off - 1) : 0;
+        if (seqStart < bytes.size() && seqStart < seqEnd) {
+            // Some files (e.g. 61.anm) contain more FF-delimited sequence blocks
+            // than (seqHeaderB & 0x7F). Treat header count as a hint only and
+            // keep scanning until the image-chunk marker.
+            size_t cur = seqStart;
+            while (cur < seqEnd) {
+                while (cur < seqEnd && bytes[cur] != 0xFF) ++cur;
+                if (cur >= seqEnd) break;
+                ++cur;  // consume block delimiter
+                size_t begin = cur;
+                while (cur < seqEnd && bytes[cur] != 0xFF) ++cur;
+                if (begin < cur) {
+                    img.sequences.emplace_back(bytes.begin() + static_cast<std::ptrdiff_t>(begin),
+                                               bytes.begin() + static_cast<std::ptrdiff_t>(cur));
+                }
+            }
         }
     } else if (!plausibleHeader(bytes, 0)) {
         // Some .32 files carry a prelude; fall back to the FF 00 marker scan.

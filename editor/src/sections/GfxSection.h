@@ -26,6 +26,9 @@ public:
 private:
     void selectFile(int idx);
     void releaseTextures();
+    bool initTitlePreviewAssets();
+    void updateTitlePlayback();
+    void drawTitleTab();
 
     const char* title_;
     const char* ext_;
@@ -36,6 +39,44 @@ private:
     int selectedFile_ = -1;
     int selectedFrame_ = 0;
     float zoom_ = 2.0f;
+    bool playing_ = false;
+    bool loop_ = true;
+    float speed_ = 1.0f;
+    double lastTick_ = 0.0;
+    float elapsed_ = 0.0f;
+    int selectedSequence_ = 0;
+    int sequenceStep_ = 0;
+    bool useAnmPreludePlacement_ = false;
+    int compositeCanvasW_ = 0;
+    int compositeCanvasH_ = 0;
+    int compositeCanvasMinX_ = 0;
+    int compositeCanvasMinY_ = 0;
+    unsigned int compositeTexture_ = 0;
+    int compositeTextureFrame_ = -1;
+    bool compositeTextureValid_ = false;
+    std::vector<uint8_t> compositeRgba_;
+    // Title compositor preview: intro.32 + introclips.32.
+    bool titleReady_ = false;
+    std::string titleStatus_;
+    GfxImage titleIntro_;
+    GfxImage titleClips_;
+    unsigned int titleTexture_ = 0;
+    int titleCanvasW_ = 0;
+    int titleCanvasH_ = 0;
+    std::vector<uint8_t> titleRgba_;
+    int titleFrame_ = 0;
+    bool titlePlaying_ = true;
+    bool titleLoop_ = true;
+    bool titleAnimateBase_ = false;
+    float titleSpeed_ = 1.0f;
+    double titleLastTick_ = 0.0;
+    float titleElapsed_ = 0.0f;
+    bool titleAsmReplay_ = true;
+    int titleAsmTickCounter_ = 0;   // mirrors A4-$6478 gate in 0x26A10
+    int titleAsmFrame_ = 0;         // mirrors A4-$647A frame index in 0x26A10
+    int titleAsmX_ = 8;
+    int titleAsmYTop_ = 8;
+    int titleAsmYBottom_ = 216;
 
     GfxImage image_;
     std::vector<unsigned int> textures_;

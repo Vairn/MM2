@@ -17,17 +17,22 @@ Then:
 
 1. **Prelude frame descriptors** (fixed 11 slots, 4 bytes each) at `0x04..0x2F`
    - Unused slots are `FF FF FF FF`
-   - Used slot appears to be:
-     - `u8 x_or_kind`
-     - `u8 y_or_kind`
+   - Used slot (current best model):
+     - `u8 x_offset`
+     - `u8 y_offset`
      - `u8 width`
      - `u8 height`
+   - Working composition model from file behavior:
+     - frame `0` = base sprite
+     - frame `N>0` = patch sprite drawn at `prelude[N-1].(x_offset,y_offset)`
+     - `width/height` can act as patch crop bounds
 2. **Sequence header bytes** at `0x30..0x32`
-   - `seq_header_b & 0x7F` ~= number of sequence blocks
+   - `seq_header_b & 0x7F` ~= sequence-count hint (can under-report)
    - high bit in `seq_header_b` is often set (unknown flag)
 3. **Sequence stream** at `0x33...`
    - Sequence blocks are delimited by `0xFF`
    - Payload is typically `(frame_index, delay)` byte pairs
+   - Parse until image marker (`FF 00 ...`), do not hard-stop on header hint
 4. **Image chunk marker + header**
    - Located by scanning for `FF 00` then interpreting big-endian words at the next byte
    - Header words:

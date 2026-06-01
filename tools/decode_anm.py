@@ -27,8 +27,8 @@ def rassize(width: int, height: int) -> int:
 
 @dataclass
 class FrameDesc:
-    a: int
-    b: int
+    x_offset: int
+    y_offset: int
     width: int
     height: int
 
@@ -73,8 +73,8 @@ def parse_prelude_frames(data: bytes) -> list[FrameDesc]:
             continue
         out.append(
             FrameDesc(
-                a=entry[0],
-                b=entry[1],
+                x_offset=entry[0],
+                y_offset=entry[1],
                 width=entry[2],
                 height=entry[3],
             )
@@ -82,21 +82,24 @@ def parse_prelude_frames(data: bytes) -> list[FrameDesc]:
     return out
 
 
-def parse_sequences(data: bytes, off: int, expected_count: int) -> tuple[list[list[int]], int]:
+def parse_sequences(data: bytes, off: int, stop_off: int) -> tuple[list[list[int]], int]:
     seqs: list[list[int]] = []
     cur = off
 
-    while cur < len(data) and len(seqs) < expected_count:
+    # Parse all FF-delimited blocks up to the image marker. seq_header_b count is
+    # only a hint and can under-report (e.g. 61.anm).
+    while cur < len(data) and cur < stop_off:
         if data[cur] != 0xFF:
             # Unknown preamble/noise; skip until explicit sequence marker.
             cur += 1
             continue
         cur += 1
         seq: list[int] = []
-        while cur < len(data) and data[cur] != 0xFF:
+        while cur < len(data) and cur < stop_off and data[cur] != 0xFF:
             seq.append(data[cur])
             cur += 1
-        seqs.append(seq)
+        if seq:
+            seqs.append(seq)
     return seqs, cur
 
 
@@ -173,10 +176,9 @@ def parse_anm(path: Path, out_dir: Path | None) -> ParsedAnm:
     seq_header_a = data[0x30]
     seq_header_b = data[0x31]
     seq_header_c = data[0x32]
-    seq_count = seq_header_b & 0x7F
-    seqs, seq_end = parse_sequences(data, 0x33, seq_count)
+    img_off = find_image_chunk(data, 0x33)
+    seqs, seq_end = parse_sequences(data, 0x33, img_off - 1)
 
-    img_off = find_image_chunk(data, max(0x33, seq_end - 1))
     frames = be16(data, img_off + 0)
     depth = be16(data, img_off + 2)
 

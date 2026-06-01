@@ -13,8 +13,8 @@ extern "C" {
 #define MM2_ANM_PALETTE_COLORS 32
 
 typedef struct mm2_anm_prelude_slot {
-    uint8_t a;
-    uint8_t b;
+    uint8_t x_offset;
+    uint8_t y_offset;
     uint8_t w;
     uint8_t h;
     uint8_t is_used;

@@ -22,6 +22,13 @@ unsigned int makeTextureRGBA(const uint8_t* rgba, int w, int h) {
     return tex;
 }
 
+void uploadTextureRGBA(unsigned int tex, const uint8_t* rgba, int w, int h) {
+    if (!tex || !rgba || w <= 0 || h <= 0) return;
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(tex));
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+}
+
 void freeTexture(unsigned int tex) {
     if (tex) {
         GLuint t = tex;
