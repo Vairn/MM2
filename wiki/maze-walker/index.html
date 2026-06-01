@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MM2 Map Walker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Might and Magic II — map walker</h1>
+      <p>Walk all 60 <code>map.dat</code> screens using collision-page walls and <code>attrib.dat</code> neighbours (north-up, tile <code>a1</code> = south-west).</p>
+    </header>
+
+    <div id="loadError" class="error" hidden></div>
+
+    <div class="toolbar">
+      <label>
+        Screen
+        <select id="screenSelect"></select>
+      </label>
+      <button type="button" id="btnEntry">Jump to entry</button>
+      <button type="button" id="btnNorth" title="North (W / ↑)">↑ N</button>
+      <button type="button" id="btnWest" title="West (A / ←)">← W</button>
+      <button type="button" id="btnEast" title="East (D / →)">→ E</button>
+      <button type="button" id="btnSouth" title="South (S / ↓)">↓ S</button>
+      <span id="status"></span>
+    </div>
+
+    <main>
+      <div id="mapWrap">
+        <canvas id="map" width="512" height="512" aria-label="Map grid"></canvas>
+      </div>
+      <aside>
+        <h2>Location</h2>
+        <dl>
+          <dt>Area</dt><dd id="locName">—</dd>
+          <dt>Screen</dt><dd id="locScreen">—</dd>
+          <dt>Tile</dt><dd id="locTile">—</dd>
+          <dt>Facing</dt><dd id="locFacing">—</dd>
+          <dt>Event cell</dt><dd id="locEvent">—</dd>
+        </dl>
+        <h2>Controls</h2>
+        <ul>
+          <li><strong>WASD</strong> or arrows — move (blocked by walls)</li>
+          <li><strong>Q / E</strong> — turn in place</li>
+          <li>Gold edges — doors on visual page</li>
+          <li>Pink dots — collision <code>0x80</code> event tiles</li>
+          <li>Walk off edge — change screen via neighbours</li>
+        </ul>
+      </aside>
+    </main>
+  </div>
+  <script src="walker.js"></script>
+</body>
+</html>

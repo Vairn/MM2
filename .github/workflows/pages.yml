@@ -1,0 +1,51 @@
+# GitHub Pages — interactive map walker (HTML5/JS, not supported on GitHub Wiki).
+name: Deploy Map Walker
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "wiki/maze-walker/**"
+      - "tools/export_map_walker.py"
+      - "tools/mm2_gfx_export.py"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Export maps.json when map.dat is present
+        run: python tools/export_map_walker.py || true
+
+      - name: Stage site at /maze-walker/
+        run: |
+          mkdir -p _site/maze-walker
+          cp -r wiki/maze-walker/. _site/maze-walker/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - uses: actions/deploy-pages@v4
+        id: deployment

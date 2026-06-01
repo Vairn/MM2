@@ -46,6 +46,23 @@ def publish(source: Path, remote: str, *, dry_run: bool, message: str, no_export
         print(f"Missing {source}/Home.md — run export-github-wiki.py first", file=sys.stderr)
         return 1
 
+    md_count = len(list(source.glob("*.md")))
+    gallery = source / "images" / "gallery"
+    if md_count < 10:
+        print(
+            f"Refusing to publish: only {md_count} markdown pages in {source} "
+            "(expected doc + gallery pages). Run export-github-wiki.py without --skip-gallery.",
+            file=sys.stderr,
+        )
+        return 1
+    if gallery.is_dir() and not any(gallery.rglob("*.png")):
+        print(
+            f"Refusing to publish: {gallery} has no PNG exports. "
+            "Run export-github-wiki.py with game assets present.",
+            file=sys.stderr,
+        )
+        return 1
+
     with tempfile.TemporaryDirectory(prefix="mm2-wiki-") as tmp:
         clone_dir = Path(tmp) / "wiki"
         cloned = False

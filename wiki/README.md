@@ -73,6 +73,27 @@ npm run dev
 | `wiki/scripts/export-gfx-gallery.py` | VitePress gallery only |
 | `wiki/scripts/export-book-logo.py` | `book.32` frame 0 logo |
 | `tools/mm2_gfx_export.py` | Core sprite decoder/exporter |
+| `tools/export_map_walker.py` | Export `maps.json` for the HTML map walker |
+
+---
+
+## Map walker (interactive)
+
+Top-down **HTML5** maze explorer for all 60 `map.dat` screens (collision walls,
+`attrib.dat` screen links). GitHub Wiki cannot run JavaScript — the app is hosted
+on **GitHub Pages**:
+
+**https://vairn.github.io/MM2/maze-walker/**
+
+```powershell
+python tools/export_map_walker.py
+cd wiki/maze-walker
+python -m http.server 8080
+# http://localhost:8080/
+```
+
+Enable **Settings → Pages → Build and deployment → GitHub Actions** once so
+`.github/workflows/pages.yml` can publish.
 
 ---
 

@@ -51,7 +51,10 @@ DOC_SOURCES: list[tuple[str, str]] = [
 
 GALLERY_PAGES = {
     "index": "Gallery",
-    "monsters": "Monster-Sprites",
+    "monster_sprites": "Monster-Sprites",
+    "world_sprites": "World-Sprites",
+    "monsters": "Monsters",
+    "items": "Items-Catalog",
     "tilesets": "Tilesets",
     "maps": "Map-Cartography",
     "map_dat": "Map-dat-Grids",
@@ -200,9 +203,13 @@ def write_sidebar() -> None:
 ### Gallery
 - [Gallery home](Gallery)
 - [Monster sprites](Monster-Sprites)
+- [World sprites](World-Sprites)
+- [Monsters](Monsters)
+- [Items catalog](Items-Catalog)
 - [Tilesets](Tilesets)
+- [Map walker (interactive)](Map-Walker)
 - [Map cartography](Map-Cartography)
-- [map.dat grids](Map-dat-Grids)
+- [map.dat reference](Map-dat-Grids)
 - [3D view graphics](3D-View-Graphics)
 
 ### Tools
@@ -243,6 +250,21 @@ def export_docs() -> None:
         print(f"  doc {title}")
 
 
+def clear_output_dir(path: Path) -> None:
+    """Remove prior export tree; tolerate Windows file locks on the root folder."""
+    if not path.exists():
+        return
+    try:
+        shutil.rmtree(path)
+    except OSError as exc:
+        print(f"  rmtree {path}: {exc} — clearing contents instead")
+        for child in path.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+            else:
+                child.unlink(missing_ok=True)
+
+
 def export_gallery(*, skip_gallery: bool) -> None:
     if skip_gallery:
         print("Skipping sprite gallery (no game assets or --skip-gallery)")
@@ -256,6 +278,7 @@ def export_gallery(*, skip_gallery: bool) -> None:
         )
         return
 
+    print("Exporting sprite gallery…")
     data = resolve_data_dir()
     gallery_img = OUT / "images" / "gallery"
     export_all(
@@ -272,15 +295,51 @@ def export_gallery(*, skip_gallery: bool) -> None:
     export_book_logo(OUT / "images" / "book-f00.png")
 
 
+def export_maze_walker(out_root: Path) -> None:
+    """Copy HTML walker + export maps.json (GitHub Pages, not Wiki markdown)."""
+    src = WIKI / "maze-walker"
+    # Wiki export only adds a link page; static app lives in repo wiki/maze-walker/
+    walker_page = OUT / "Map-Walker.md"
+    pages_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/maze-walker/"
+    walker_page.write_text(
+        "# Map walker\n\n"
+        "Interactive **HTML5** top-down explorer for all 60 `map.dat` screens — "
+        "collision walls, screen transitions via `attrib.dat` neighbours, event tiles.\n\n"
+        "**GitHub Wiki cannot run JavaScript.** Open the walker on GitHub Pages:\n\n"
+        f"**[{pages_url}]({pages_url})**\n\n"
+        "Controls: **WASD** / arrow keys to move, **Q/E** to turn. "
+        "See [map.dat reference](Map-dat-Grids) for tile/event data.\n\n"
+        "### Local dev\n\n"
+        "```powershell\n"
+        "python tools/export_map_walker.py\n"
+        "cd wiki/maze-walker\n"
+        "python -m http.server 8080\n"
+        "# open http://localhost:8080/\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    print(f"  wiki page Map-Walker.md -> {pages_url}")
+
+    if not src.is_dir():
+        print("  skip maze-walker: missing wiki/maze-walker/")
+        return
+
+    try:
+        from export_map_walker import export_map_walker as export_json
+
+        export_json(src / "maps.json")
+    except Exception as exc:
+        print(f"  maze-walker maps.json: {exc}")
+
+
 def has_game_assets() -> bool:
     d = resolve_data_dir()
     return (d / "monsters.dat").exists() and (d / "book.32").exists()
 
 
 def export_github_wiki(*, skip_gallery: bool = False) -> Path:
-    if OUT.exists():
-        shutil.rmtree(OUT)
-    OUT.mkdir(parents=True)
+    clear_output_dir(OUT)
+    OUT.mkdir(parents=True, exist_ok=True)
 
     print(f"Exporting GitHub Wiki -> {OUT}")
     write_home()
@@ -289,6 +348,7 @@ def export_github_wiki(*, skip_gallery: bool = False) -> Path:
     print("Exporting docs…")
     export_docs()
     export_gallery(skip_gallery=skip_gallery or not has_game_assets())
+    export_maze_walker(OUT)
     print("Done.")
     return OUT
 
