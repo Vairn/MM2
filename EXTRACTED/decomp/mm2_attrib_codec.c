@@ -117,6 +117,15 @@ int mm2_attrib_is_outside(const Mm2AttribRecord *r)
     return r && r->raw[MM2_ATTRIB_OFF_SURFACE_FLAG] != 0;
 }
 
+int mm2_attrib_is_outdoor(const Mm2AttribRecord *r)
+{
+    if (!r) {
+        return 0;
+    }
+    return mm2_is_outdoor_area((int)r->raw[MM2_ATTRIB_OFF_AREA_ID],
+                               r->raw[MM2_ATTRIB_OFF_SURFACE_FLAG]);
+}
+
 uint8_t mm2_attrib_neighbor(const Mm2AttribRecord *r, int slot)
 {
     if (!r || slot < 0 || slot > 3) {

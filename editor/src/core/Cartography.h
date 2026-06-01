@@ -48,10 +48,22 @@ inline constexpr uint8_t kCartoTile[64] = {
 // Wall-edge overlay tiles, indexed by (visual & 3) - 1. Data hunk offset 0xA30.
 inline constexpr uint8_t kCartoEdge[3] = {0x1B, 0x1C, 0x1B};
 
+constexpr int kElementalPlaneFirst = 41;
+constexpr int kElementalPlaneLast = 44;
+
+inline bool isElementalPlane(int screen) {
+    return screen >= kElementalPlaneFirst && screen <= kElementalPlaneLast;
+}
+
+// Runtime outdoor view: surface sectors (-$79E2) or elemental planes 41..44.
+inline bool isOutdoorArea(int screen, bool surfaceNonZero) {
+    if (isElementalPlane(screen)) return true;
+    return surfaceNonZero;
+}
+
 // True when auto-map should blit from outb.32 (surface sectors + elemental planes).
 inline bool cartoUsesOutb(int screen, bool outdoorSurface) {
-    if (screen >= 41 && screen <= 44) return true;
-    return outdoorSurface;
+    return isOutdoorArea(screen, outdoorSurface);
 }
 
 // Cartography frame index for a map cell on a given screen (0..59).

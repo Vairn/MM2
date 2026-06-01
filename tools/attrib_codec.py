@@ -63,6 +63,20 @@ ENV_NAMES = {
     ENV_CASTLE_B: "castle",
 }
 
+# Screens 41..44: elemental planes — surface_flag==0 in attrib.dat but runtime
+# uses the outdoor view (-$79E2) and outb.32 cartography (AreaNames.h, Cartography.h).
+ELEMENTAL_PLANE_FIRST = 41
+ELEMENTAL_PLANE_LAST = 44
+
+
+def is_elemental_plane(area_id: int) -> bool:
+    return ELEMENTAL_PLANE_FIRST <= area_id <= ELEMENTAL_PLANE_LAST
+
+
+def is_outdoor_area(area_id: int, surface_flag: int) -> bool:
+    """Outdoor first-person / overland view, including elemental planes."""
+    return is_elemental_plane(area_id) or surface_flag != 0
+
 
 @dataclass
 class AttribRecord:
@@ -87,6 +101,8 @@ class AttribRecord:
 
     @property
     def env_name(self) -> str:
+        if self.is_outdoor and not self.is_outside:
+            return "outside"
         if self.is_outside:
             return "outside"
         return ENV_NAMES.get(self.env_type, "other")
@@ -97,7 +113,13 @@ class AttribRecord:
 
     @property
     def is_outside(self) -> bool:
+        """Raw attrib +0x04 (nonzero = overland sector)."""
         return self.surface_flag != 0
+
+    @property
+    def is_outdoor(self) -> bool:
+        """Runtime outdoor view: surface sectors or elemental planes 41..44."""
+        return is_outdoor_area(self.area_id, self.surface_flag)
 
     @property
     def neighbors(self) -> List[int]:

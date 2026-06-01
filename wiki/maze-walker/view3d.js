@@ -346,9 +346,7 @@ export function skyFrameFor(sc, x, y) {
 }
 
 export function cartoFrame(screenId, visual, outdoor, cartoTable) {
-  if (screenId === 41) return 8;
-  if (screenId === 42 || screenId === 43) return 4;
-  if (screenId === 44) return 5;
+  if (screenId >= 41 && screenId <= 44) return visual & 0x1f;
   if (outdoor) return visual & 0x1f;
   return cartoTable[(visual >> 2) & 0x3f];
 }

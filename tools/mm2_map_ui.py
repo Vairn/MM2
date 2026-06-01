@@ -118,6 +118,6 @@ def location_label_from_attrib(screen: int, x: int, y: int, attrib_record) -> st
         screen,
         x,
         y,
-        is_outside=attrib_record.is_outside,
+        is_outside=attrib_record.is_outdoor,
         outside_label_byte=attrib_record.raw[0x15],
     )

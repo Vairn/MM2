@@ -287,7 +287,7 @@ def build_sector_label_biomes(attrib: AttribFile) -> dict[int, str]:
     """attrib +0x15 per overland sector (A1, C3, …), keyed by label byte."""
     out = dict(SECTOR_LABEL_BIOME)
     for rec in attrib.records:
-        if not rec.is_outside:
+        if not rec.is_outdoor:
             continue
         label = rec.raw[0x15]
         if label in out:
@@ -725,7 +725,7 @@ def run_interactive(
 
     def redraw() -> pygame.Surface:
         rec = attrib.records[cur_screen]
-        if not rec.is_outside:
+        if not rec.is_outdoor:
             surf = pygame.Surface((VIEW_W, VIEW_H))
             surf.fill((80, 0, 0))
             return pygame.transform.scale(surf, (w, h))
@@ -800,7 +800,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"screen must be 0..{MAP_SCREENS - 1}", file=sys.stderr)
         return 1
     rec = attrib.records[args.screen]
-    if not rec.is_outside:
+    if not rec.is_outdoor:
         print(
             f"warning: screen {args.screen} is not outdoor (surface_flag=0)",
             file=sys.stderr,

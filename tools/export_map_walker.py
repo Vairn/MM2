@@ -118,7 +118,7 @@ def build_maps_payload(attrib: list[bytes], screens: list[tuple[bytes, bytes]]) 
             {
                 "id": sid,
                 "name": area_name(sid, attrib),
-                "outdoor": rec.is_outside,
+                "outdoor": rec.is_outdoor,
                 "env": rec.env_name,
                 "surface": rec.surface_flag,
                 "entry": [rec.entry_coord[0], rec.entry_coord[1]],

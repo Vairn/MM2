@@ -23,6 +23,7 @@ ANM_GIF_DURATION_MS = 400
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
+from attrib_codec import is_outdoor_area  # noqa: E402
 from render_view_refs import (  # noqa: E402
     INDOOR_WALLSETS,
     composite_backdrop,
@@ -578,7 +579,7 @@ def load_attrib(data_dir: Path) -> list[bytes]:
 
 def is_outdoor_screen(screen: int, attrib: list[bytes]) -> bool:
     if screen < len(attrib):
-        return attrib[screen][0x04] != 0
+        return is_outdoor_area(screen, attrib[screen][0x04])
     return screen not in AREA_NAMES
 
 
@@ -1212,107 +1213,45 @@ def build_world_sprites_wiki_markdown(world_meta: dict, *, links: dict[str, str]
 
 
 def build_monsters_catalog_wiki_markdown(monster_meta: dict, *, links: dict[str, str], img) -> list[str]:
-    """`monsters.dat` catalog — index table + per-monster decoded stats and sprite."""
+    """`monsters.dat` catalog — one index table with sprite thumbs and decoded stats."""
     fmt = links.get("monsters_format", "monsters-dat-Format")
     sprites_page = links.get("monster_sprites", "Monster-Sprites")
     lines = [
         "# Monsters (`monsters.dat`)",
         "",
         "All named combat monsters from **`monsters.dat`** (256 × 26 bytes). "
-        f"Sprite animations: [{sprites_page}]({sprites_page}). "
+        f"Animated sprites: [{sprites_page}]({sprites_page}). "
         f"Record layout: [monsters.dat Format]({fmt}).",
         "",
-        "HP / XP / AC / damage are decoded with the same formulas as MM2ED "
-        "(unpacker asm `0x4C8E`). Treasure byte `0x10` is a reward *tier* pack "
-        "(gold tier, gem flag, item-drop level — actual gold uses RNG at asm `0x10B74`).",
+        "HP / XP / AC / damage decoded with MM2ED formulas (unpacker asm `0x4C8E`). "
+        "Treasure columns are from byte `0x10` (gold **tier**, gem flag, item-drop level — "
+        "actual gp uses RNG at asm `0x10B74`).",
         "",
         "## Monster index",
         "",
-        "| # | Name | Sprite | HP | XP | AC | Dmg | Large | Group attack | Single effect | Friends | Flags |",
-        "|---|------|--------|----|----|----|-----|-------|--------------|---------------|---------|-------|",
+        "| # | Sprite | Name | HP | XP | AC | Dmg | Gems | Gold tier | Item drop | Large | "
+        "Group attack | Single effect | Friends | Flags |",
+        "|---|--------|------|----|----|----|-----|------|-----------|-----------|-------|"
+        "--------------|---------------|---------|-------|",
     ]
-    for m in monster_meta.get("monsters", []):
-        sprite = f"`{m['sprite']:02d}.anm`" if m["sprite"] else "—"
-        flags = ", ".join(m["flags"]) if m["flags"] else "—"
-        lines.append(
-            f"| {m['index']} | {m['name']} | {sprite} | "
-            f"{m['hp']} | {m['xp']} | {m['ac_val']} | {m['damage_val']} | "
-            f"{'yes' if m['large'] else 'no'} | "
-            f"{m['party_verb_name']} | {m['single_effect_name']} | "
-            f"{m['add_friends']} | {flags} |"
-        )
-
-    lines.extend(["", "## Per-monster detail", ""])
-
     sprites = monster_meta.get("sprites", {})
     for m in monster_meta.get("monsters", []):
         key = f"{m['sprite']:02d}" if m["sprite"] else None
         sp = sprites.get(key or "", {})
+        if key and not sp.get("error"):
+            sprite_cell = f"![{m['name']}]({img(f'monsters/{key}.png', bust=True)})"
+        else:
+            sprite_cell = "—"
         flags = ", ".join(m["flags"]) if m["flags"] else "—"
         gem = "yes" if m["drops_gems"] else "no"
-        ac_note = f"{m['ac_val']}"
-        if m["ac_flags"]:
-            ac_note += f" ({', '.join(m['ac_flags'])})"
         lines.append(
-            f"<details><summary><strong>#{m['index']} {m['name']}</strong> — "
-            f"HP {m['hp']}, XP {m['xp']}, AC {m['ac_val']}, dmg {m['damage_val']}</summary>"
+            f"| {m['index']} | {sprite_cell} | {m['name']} | "
+            f"{m['hp']} | {m['xp']} | {m['ac_val']} | {m['damage_val']} | "
+            f"{gem} | {m['gold_tier']} | {m['item_drop_level']} | "
+            f"{'yes' if m['large'] else 'no'} | "
+            f"{m['party_verb_name']} | {m['single_effect_name']} | "
+            f"{m['add_friends']} | {flags} |"
         )
-        lines.append("")
-        if key and not sp.get("error"):
-            if sp.get("has_gif"):
-                lines.append(
-                    f"![{m['name']}]({img(f'monsters/{key}.gif', bust=True)}) "
-                    f"*(animation — [{sprites_page}]({sprites_page}))*"
-                )
-            else:
-                lines.append(f"![{m['name']}]({img(f'monsters/{key}.png', bust=True)})")
-            lines.append("")
-        lines.append("| Stat | Decoded | Raw |")
-        lines.append("|------|---------|-----|")
-        lines.append(f"| HP | **{m['hp']}** | `0x{m['hp_code']:02X}` |")
-        lines.append(f"| XP | **{m['xp']}** | `0x{m['xp_code']:02X}` |")
-        lines.append(
-            f"| Treasure | item drop {m['item_drop_level']}, gems {gem}, gold tier {m['gold_tier']} | "
-            f"`0x{m['treasure']:02X}` |"
-        )
-        lines.append(f"| AC | **{ac_note}** | `0x{m['ac']:02X}` |")
-        lines.append(f"| Damage | **{m['damage_val']}** | `0x{m['damage']:02X}` |")
-        lines.append(
-            f"| Speed (0x14) | low {m['speed_lo']}, high {m['speed_hi']} | `0x{m['speed']:02X}` |"
-        )
-        lines.append(
-            f"| Initiative (0x18) | **{m['initiative']}** | `0x{m['speed2']:02X}` |"
-        )
-        lines.append(f"| Sprite | `{m['sprite']:02d}.anm` | `0x{m['picture']:02X}` |")
-        lines.append(f"| Large | {'yes' if m['large'] else 'no'} | picture bit 7 |")
-        pabil_raw = (m["party_verb"] & 0x1F) | ((m["party_chance"] & 0x07) << 5)
-        sabil_raw = (
-            (m["single_effect"] & 0x1F)
-            | ((m["single_misc"] & 1) << 5)
-            | ((m["archer"] & 1) << 6)
-            | ((m["undead"] & 1) << 7)
-        )
-        oabil_raw = (
-            (m["add_friends_base"] & 0x0F)
-            | ((m["add_friends_x10"] & 1) << 4)
-            | ((m["flee_tier"] & 3) << 5)
-            | ((m["multiplies"] & 1) << 7)
-        )
-        lines.append(
-            f"| Group attack | {m['party_verb_name']} (chance tier {m['party_chance']}) | "
-            f"`0x{pabil_raw:02X}` |"
-        )
-        lines.append(
-            f"| Single attack | {m['single_effect_name']} | `0x{sabil_raw:02X}` |"
-        )
-        lines.append(
-            f"| Adds friends | {m['add_friends']} (flee tier {m['flee_tier']}) | `0x{oabil_raw:02X}` |"
-        )
-        lines.append(f"| Flags | {flags} | — |")
-        lines.append(f"| Magic resist | — | `0x{m['mres']:02X}` |")
-        lines.append("")
-        lines.append("</details>")
-        lines.append("")
 
     return lines
 

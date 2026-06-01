@@ -20,6 +20,7 @@
 #include <string>
 
 #include "core/ByteIO.h"
+#include "core/Cartography.h"
 
 namespace mm2 {
 
@@ -55,6 +56,7 @@ struct AttribScreen {
     uint8_t envType() const { return raw[attrib_off::kEnvType]; }
     uint8_t outsideFlag() const { return raw[attrib_off::kOutsideFlag]; }
     bool isOutside() const { return raw[attrib_off::kOutsideFlag] != 0; }
+    bool isOutdoor() const { return mm2::isOutdoorArea(areaId(), isOutside()); }
     uint8_t outsideLabel() const { return raw[attrib_off::kOutsideLabel]; }
     uint8_t neighbor(int slot) const {
         return raw[attrib_off::kNeighbor0 + (slot & 3)];

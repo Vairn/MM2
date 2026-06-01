@@ -71,6 +71,21 @@ enum {
     MM2_ENV_CASTLE_B = 0x14
 };
 
+enum {
+    MM2_ELEMENTAL_PLANE_FIRST = 41,
+    MM2_ELEMENTAL_PLANE_LAST = 44
+};
+
+static inline int mm2_is_elemental_plane(int area_id)
+{
+    return area_id >= MM2_ELEMENTAL_PLANE_FIRST && area_id <= MM2_ELEMENTAL_PLANE_LAST;
+}
+
+static inline int mm2_is_outdoor_area(int area_id, uint8_t surface_flag)
+{
+    return mm2_is_elemental_plane(area_id) || surface_flag != 0;
+}
+
 typedef struct Mm2AttribRecord {
     uint8_t raw[MM2_ATTRIB_RECORD_SIZE];
 } Mm2AttribRecord;
@@ -98,6 +113,7 @@ uint8_t mm2_attrib_tileset(const Mm2AttribRecord *r);
 uint8_t mm2_attrib_env_type(const Mm2AttribRecord *r);
 uint8_t mm2_attrib_surface_flag(const Mm2AttribRecord *r);
 int mm2_attrib_is_outside(const Mm2AttribRecord *r); /* surface_flag != 0 */
+int mm2_attrib_is_outdoor(const Mm2AttribRecord *r); /* planes 41..44 or outside */
 
 /* slot: 0..3; slots (0,2) and (1,3) are opposite directions. */
 uint8_t mm2_attrib_neighbor(const Mm2AttribRecord *r, int slot);
