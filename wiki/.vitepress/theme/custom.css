@@ -1,0 +1,184 @@
+/* MM2ED red/black palette (applyRedBlackTheme in editor/src/main.cpp) */
+@font-face {
+  font-family: 'MM2 Mono';
+  src: url('/fonts/mm2_bitmap_monospace.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --mm2-text: #f2eded;
+  --mm2-text-dim: #7a6e6e;
+  --mm2-bg: #0d0303;
+  --mm2-bg-panel: #120303;
+  --mm2-bg-raised: #1a0505;
+  --mm2-bg-frame: #380a0a;
+  --mm2-border: #731a1a;
+  --mm2-accent: #eb3838;
+  --mm2-accent-hover: #ff6363;
+  --mm2-accent-dim: #a61a1a;
+
+  --vp-font-family-base: 'MM2 Mono', ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', monospace;
+  --vp-font-family-mono: 'MM2 Mono', ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', monospace;
+
+  --vp-c-brand-1: var(--mm2-accent);
+  --vp-c-brand-2: var(--mm2-accent-hover);
+  --vp-c-brand-3: var(--mm2-accent-dim);
+  --vp-c-brand-soft: rgba(235, 56, 56, 0.16);
+
+  --vp-c-bg: var(--mm2-bg);
+  --vp-c-bg-alt: var(--mm2-bg-panel);
+  --vp-c-bg-soft: var(--mm2-bg-raised);
+  --vp-c-bg-mute: #240808;
+
+  --vp-c-default-1: var(--mm2-text);
+  --vp-c-default-2: #c9b8b8;
+  --vp-c-default-3: var(--mm2-text-dim);
+
+  --vp-c-text-1: var(--mm2-text);
+  --vp-c-text-2: #c9b8b8;
+  --vp-c-text-3: var(--mm2-text-dim);
+
+  --vp-c-divider: var(--mm2-border);
+  --vp-c-border: var(--mm2-border);
+  --vp-c-gutter: rgba(115, 26, 26, 0.35);
+
+  --vp-c-indigo-1: var(--mm2-accent);
+  --vp-c-indigo-2: var(--mm2-accent-hover);
+  --vp-c-indigo-3: var(--mm2-accent-dim);
+  --vp-c-indigo-soft: var(--vp-c-brand-soft);
+
+  --vp-c-sponsor: var(--mm2-accent);
+
+  --vp-button-brand-bg: #6b0f0f;
+  --vp-button-brand-hover-bg: #a61919;
+  --vp-button-brand-active-bg: #c72424;
+
+  --vp-nav-bg-color: var(--mm2-bg-panel);
+  --vp-sidebar-bg-color: var(--mm2-bg-panel);
+
+  --vp-code-bg: #240808;
+  --vp-code-color: #ffb4b4;
+  --vp-code-block-bg: #120303;
+
+  --vp-custom-block-info-bg: rgba(107, 15, 15, 0.35);
+  --vp-custom-block-info-border: var(--mm2-border);
+  --vp-custom-block-tip-bg: rgba(166, 26, 26, 0.22);
+  --vp-custom-block-tip-border: var(--mm2-accent-dim);
+  --vp-custom-block-warning-bg: rgba(128, 20, 20, 0.28);
+  --vp-custom-block-warning-border: #801414;
+  --vp-custom-block-danger-bg: rgba(235, 56, 56, 0.12);
+  --vp-custom-block-danger-border: var(--mm2-accent);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(
+    120deg,
+    #f2eded 0%,
+    #eb3838 45%,
+    #801414 100%
+  );
+  --vp-home-hero-image-background-image:
+    radial-gradient(circle at 30% 30%, rgba(235, 56, 56, 0.28), transparent 55%),
+    radial-gradient(circle at 70% 60%, rgba(115, 26, 26, 0.35), transparent 50%);
+}
+
+.dark {
+  --vp-c-bg: var(--mm2-bg);
+  --vp-c-bg-alt: var(--mm2-bg-panel);
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  text-rendering: geometricPrecision;
+}
+
+.VPNav,
+.VPSidebar,
+.VPDocFooter,
+.VPLocalNav {
+  border-color: var(--mm2-border) !important;
+}
+
+.VPNavBar {
+  background-color: var(--mm2-bg-panel) !important;
+  border-bottom: 1px solid var(--mm2-border);
+}
+
+.VPSidebar {
+  background-color: var(--mm2-bg-panel) !important;
+}
+
+.VPSidebarItem.is-active > .item > .link {
+  color: var(--mm2-accent);
+}
+
+.VPSidebarItem.is-active > .item > .link:hover {
+  color: var(--mm2-accent-hover);
+}
+
+.VPButton.brand {
+  border: 1px solid var(--mm2-border);
+}
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  color: var(--mm2-text);
+}
+
+.vp-doc a {
+  color: #ff8080;
+}
+
+.vp-doc a:hover {
+  color: var(--mm2-accent-hover);
+}
+
+.vp-doc table {
+  display: table;
+  width: 100%;
+  border-color: var(--mm2-border);
+}
+
+.vp-doc th {
+  background: var(--mm2-bg-frame);
+  border-color: var(--mm2-border);
+}
+
+.vp-doc td {
+  border-color: rgba(115, 26, 26, 0.55);
+}
+
+.vp-doc code {
+  font-size: 0.95em;
+  color: #ffb4b4;
+  background: #240808;
+  border: 1px solid rgba(115, 26, 26, 0.45);
+  padding: 0.1em 0.35em;
+  border-radius: 2px;
+}
+
+.vp-doc pre {
+  border: 1px solid var(--mm2-border);
+}
+
+.vp-doc blockquote {
+  border-left: 3px solid var(--mm2-accent);
+  background: rgba(107, 15, 15, 0.25);
+}
+
+.VPDoc .content-container {
+  max-width: 920px;
+}
+
+/* Local search modal */
+.VPLocalSearchBox {
+  background: var(--mm2-bg-raised) !important;
+  border: 1px solid var(--mm2-border) !important;
+}

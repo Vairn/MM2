@@ -12,6 +12,8 @@
 !editor/**
 !tools/
 !tools/**
+!wiki/
+!wiki/**
 
 # Reverse-engineering docs/source artifacts
 !EXTRACTED/
@@ -25,6 +27,16 @@
 # Ignore generated/build/output files even under included paths
 editor/build/
 editor/build/**
+wiki/node_modules/
+wiki/node_modules/**
+wiki/.vitepress/dist/
+wiki/.vitepress/dist/**
+wiki/.vitepress/cache/
+wiki/.vitepress/cache/**
+wiki/docs/
+wiki/docs/**
+wiki/public/fonts/
+wiki/public/fonts/**
 build/
 build/**
 **/__pycache__/
