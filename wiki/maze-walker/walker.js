@@ -1,277 +1,292 @@
-/** MM2 map maze walker — 16×16 screens from map.dat collision geometry. */
+/** MM2 first-person map walker — ports view3d_indoor.py / view3d_outdoor.py / MapSection. */
+import {
+  MAP_GRID,
+  VIEW_W,
+  VIEW_H,
+  ORIGIN_X,
+  SKY_Y,
+  FLOOR_Y,
+  FACE,
+  StitchedVisual,
+  buildIndoorScene,
+  stepParty,
+  selectIndoorSheets,
+  skyFrameFor,
+  cartoFrame,
+  tileLabel,
+  torchBlitFor,
+  K_CARTO_TILE_FALLBACK,
+} from "./view3d.js";
+import { StitchedOutdoor, buildOutdoorScene } from "./outdoor3d.js";
 
-const GRID = 16;
-const CELL = 32;
-
-/** @typedef {{ id:number, name:string, outdoor:boolean, entry:number[], neighbors:number[], visual:number[], collision:number[] }} Screen */
-
-/** @type {{ version:number, screens: Screen[] } | null} */
-let data = null;
+const SCALE = 3;
+const MINI_TW = 14;
+const MINI_TH = 11;
 
 const state = {
   screen: 0,
   x: 7,
   y: 6,
-  facing: 0, // 0=N 1=E 2=S 3=W
+  facing: 0,
 };
 
-const canvas = document.getElementById("map");
-const ctx = canvas.getContext("2d");
+/** @type {{ version:number, screens: object[] } | null} */
+let maps = null;
+/** @type {object | null} */
+let manifest = null;
+/** @type {Map<string, HTMLImageElement>} */
+const images = new Map();
+
+const viewCanvas = document.getElementById("view");
+const miniCanvas = document.getElementById("minimap");
+const viewCtx = viewCanvas.getContext("2d");
+const miniCtx = miniCanvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const screenSelect = document.getElementById("screenSelect");
 const locName = document.getElementById("locName");
 const locTile = document.getElementById("locTile");
 const locScreen = document.getElementById("locScreen");
 const locFacing = document.getElementById("locFacing");
-const locEvent = document.getElementById("locEvent");
+const locMode = document.getElementById("locMode");
+const locCeiling = document.getElementById("locCeiling");
 
-function tileLabel(x, y) {
-  return `${String.fromCharCode(97 + x)}${y + 1}`;
+function cartoTable() {
+  return manifest?.cartoTile || K_CARTO_TILE_FALLBACK;
 }
 
-function screenRow(y) {
-  return GRID - 1 - y;
+function terrainLookup() {
+  return manifest?.terrainLookup || new Array(256).fill(0);
 }
 
-function idx(x, y) {
-  return y * GRID + x;
+async function loadJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  return res.json();
 }
 
-function wallN(c) {
-  return c & 1;
-}
-function wallE(c) {
-  return (c >> 2) & 1;
-}
-function wallS(c) {
-  return (c >> 4) & 1;
-}
-function wallW(c) {
-  return (c >> 6) & 1;
-}
-
-function visualField(v, dir) {
-  return (v >> (dir * 2)) & 3;
-}
-
-/** @param {Screen} sc */
-function canExit(sc, x, y, dx, dy) {
-  const nx = x + dx;
-  const ny = y + dy;
-  if (nx >= 0 && nx < GRID && ny >= 0 && ny < GRID) {
-    return canMove(sc, x, y, nx, ny);
-  }
-  const c = sc.collision[idx(x, y)];
-  if (dy > 0) return !wallN(c);
-  if (dy < 0) return !wallS(c);
-  if (dx > 0) return !wallE(c);
-  if (dx < 0) return !wallW(c);
-  return false;
+async function loadSpriteTable(spriteTable) {
+  await Promise.all(
+    Object.entries(spriteTable).map(
+      ([key, src]) =>
+        new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            images.set(key, img);
+            resolve();
+          };
+          img.onerror = () => reject(new Error(key));
+          img.src = src;
+        })
+    )
+  );
 }
 
-/** @param {Screen} sc */
-function canMove(sc, x, y, nx, ny) {
-  const c = sc.collision[idx(x, y)];
-  const nc = sc.collision[idx(nx, ny)];
-  const v = sc.visual[idx(x, y)];
-  const nv = sc.visual[idx(nx, ny)];
-
-  if (ny > y) {
-    if (wallN(c) || wallS(nc)) return false;
-    if (visualField(v, 0) === 1 && visualField(nv, 2) === 1) return false;
-    return true;
-  }
-  if (ny < y) {
-    if (wallS(c) || wallN(nc)) return false;
-    if (visualField(v, 2) === 1 && visualField(nv, 0) === 1) return false;
-    return true;
-  }
-  if (nx > x) {
-    if (wallE(c) || wallW(nc)) return false;
-    if (visualField(v, 1) === 1 && visualField(nv, 3) === 1) return false;
-    return true;
-  }
-  if (nx < x) {
-    if (wallW(c) || wallE(nc)) return false;
-    if (visualField(v, 3) === 1 && visualField(nv, 1) === 1) return false;
-    return true;
-  }
-  return false;
-}
-
-/** @param {Screen} sc */
-function stepEdge(sc, x, y) {
-  let screen = state.screen;
-  let nx = x;
-  let ny = y;
-  const n = sc.neighbors;
-
-  if (nx < 0) {
-    if (n[3] >= 0 && n[3] < data.screens.length) {
-      screen = n[3];
-      nx = GRID - 1;
-    }
-  } else if (nx >= GRID) {
-    if (n[1] >= 0 && n[1] < data.screens.length) {
-      screen = n[1];
-      nx = 0;
+async function loadSpritesFromPaths() {
+  if (!manifest?.sheets) return;
+  const tasks = [];
+  for (const [key, sheet] of Object.entries(manifest.sheets)) {
+    for (const [frameStr, fr] of Object.entries(sheet.frames)) {
+      const cacheKey = `${key}:${frameStr}`;
+      if (images.has(cacheKey) || !fr.path) continue;
+      tasks.push(
+        new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            images.set(cacheKey, img);
+            resolve();
+          };
+          img.onerror = () => reject(new Error(fr.path));
+          img.src = fr.path;
+        })
+      );
     }
   }
-  if (ny < 0) {
-    if (n[2] >= 0 && n[2] < data.screens.length) {
-      screen = n[2];
-      ny = GRID - 1;
-    }
-  } else if (ny >= GRID) {
-    if (n[0] >= 0 && n[0] < data.screens.length) {
-      screen = n[0];
-      ny = 0;
-    }
-  }
-
-  nx = Math.max(0, Math.min(GRID - 1, nx));
-  ny = Math.max(0, Math.min(GRID - 1, ny));
-  return { screen, x: nx, y: ny };
+  await Promise.all(tasks);
 }
 
-function tryMove(dx, dy, facing) {
-  if (!data) return;
-  const sc = data.screens[state.screen];
-  const nx = state.x + dx;
-  const ny = state.y + dy;
+async function loadData() {
+  try {
+    const bundle = await import("./walker-bundle.js");
+    if (bundle.WALKER_MAPS && bundle.WALKER_MANIFEST && bundle.WALKER_SPRITES) {
+      return {
+        maps: bundle.WALKER_MAPS,
+        manifest: bundle.WALKER_MANIFEST,
+        sprites: bundle.WALKER_SPRITES,
+      };
+    }
+  } catch {
+    /* fall through to split JSON + PNG layout (--split) */
+  }
+  return {
+    maps: await loadJson("maps.json"),
+    manifest: await loadJson("sprites.json"),
+    sprites: null,
+  };
+}
 
-  if (!canExit(sc, state.x, state.y, dx, dy)) {
-    statusEl.textContent = "Blocked by wall.";
-    state.facing = facing;
-    draw();
-    return;
+function spriteImg(sheetKey, frame) {
+  return images.get(`${sheetKey}:${frame}`);
+}
+
+function blit(ctx, sheetKey, frame, x, y) {
+  const img = spriteImg(sheetKey, frame);
+  if (!img) return;
+  ctx.drawImage(img, x, y);
+}
+
+function blitTransparent(ctx, sheetKey, frame, x, y) {
+  const img = spriteImg(sheetKey, frame);
+  if (!img) return;
+  ctx.drawImage(img, x, y);
+}
+
+function renderIndoorView(ctx, sc, scene) {
+  const sheets = selectIndoorSheets(sc.env);
+  const skyFrame = skyFrameFor(sc, state.x, state.y);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  blitTransparent(ctx, sheets.floor, "0", ORIGIN_X, FLOOR_Y);
+  blitTransparent(ctx, sheets.sky, String(skyFrame), ORIGIN_X, SKY_Y);
+  for (const b of scene.blits) {
+    blitTransparent(ctx, sheets.walls, String(b.frame), b.x, b.y);
+    const tb = torchBlitFor(b);
+    if (tb) blitTransparent(ctx, sheets.torch, String(tb.frame), tb.x, tb.y);
+  }
+}
+
+function renderOutdoorView(ctx, scene) {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  blitTransparent(ctx, "outf_32", "0", ORIGIN_X, FLOOR_Y);
+  blitTransparent(ctx, "sky_32", "0", ORIGIN_X, SKY_Y);
+  for (const b of scene.decor) blitTransparent(ctx, b.sheet, String(b.frame), b.x, b.y);
+  for (const b of scene.horizon) blitTransparent(ctx, b.sheet, String(b.frame), b.x, b.y);
+}
+
+function renderMinimap(sc) {
+  const w = MAP_GRID * MINI_TW;
+  const h = MAP_GRID * MINI_TH;
+  miniCanvas.width = w;
+  miniCanvas.height = h;
+  miniCtx.fillStyle = "#14141e";
+  miniCtx.fillRect(0, 0, w, h);
+  const sheetKey = sc.outdoor ? "outb_32" : "townb_32";
+  const table = cartoTable();
+
+  for (let sy = 0; sy < MAP_GRID; sy++) {
+    const diskY = MAP_GRID - 1 - sy;
+    for (let sx = 0; sx < MAP_GRID; sx++) {
+      const idx = (diskY << 4) | sx;
+      const px = sx * MINI_TW;
+      const py = sy * MINI_TH;
+      miniCtx.fillStyle = "#444450";
+      miniCtx.fillRect(px, py, MINI_TW, MINI_TH);
+      const frame = cartoFrame(state.screen, sc.visual[idx], sc.outdoor, table);
+      const img = spriteImg(sheetKey, String(frame));
+      if (img) miniCtx.drawImage(img, px, py, MINI_TW, MINI_TH);
+      if (sc.collision[idx] & 0x80) {
+        miniCtx.fillStyle = "rgba(255,65,65,0.85)";
+        miniCtx.beginPath();
+        miniCtx.arc(px + MINI_TW / 2, py + MINI_TH / 2, 2, 0, Math.PI * 2);
+        miniCtx.fill();
+      }
+    }
   }
 
-  const next = stepEdge(sc, nx, ny);
+  const px = state.x * MINI_TW;
+  const py = (MAP_GRID - 1 - state.y) * MINI_TH;
+  miniCtx.strokeStyle = "rgba(255,220,0,0.85)";
+  miniCtx.lineWidth = 1;
+  miniCtx.strokeRect(px + 0.5, py + 0.5, MINI_TW - 1, MINI_TH - 1);
+  miniCtx.fillStyle = "rgba(255,220,0,0.25)";
+  miniCtx.fillRect(px + 1, py + 1, MINI_TW - 2, MINI_TH - 2);
+  const dirFrame = [0x20, 0x22, 0x21, 0x23][state.facing & 3];
+  const arr = spriteImg(sheetKey, String(dirFrame));
+  if (arr) miniCtx.drawImage(arr, px, py, MINI_TW, MINI_TH);
+  miniCtx.strokeStyle = "#787887";
+  miniCtx.strokeRect(0, 0, w, h);
+}
+
+function draw() {
+  if (!maps || !manifest) return;
+  const sc = maps.screens[state.screen];
+  viewCanvas.width = VIEW_W * SCALE;
+  viewCanvas.height = VIEW_H * SCALE;
+  viewCtx.imageSmoothingEnabled = false;
+  viewCtx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+
+  if (sc.outdoor) {
+    const grid = new StitchedOutdoor(maps.screens, state.screen);
+    const scene = buildOutdoorScene(grid, state.x, state.y, state.facing, maps.screens, terrainLookup());
+    renderOutdoorView(viewCtx, scene);
+    locMode.textContent = "outdoor 3D";
+  } else {
+    const grid = new StitchedVisual(maps.screens, state.screen);
+    const scene = buildIndoorScene(grid, state.x, state.y, state.facing);
+    renderIndoorView(viewCtx, sc, scene);
+    locMode.textContent = `${sc.env} interior`;
+  }
+
+  renderMinimap(sc);
+  locName.textContent = sc.name;
+  locScreen.textContent = String(state.screen);
+  locTile.textContent = `${tileLabel(state.x, state.y)} (${state.x},${state.y})`;
+  locFacing.textContent = FACE[state.facing];
+  if (locCeiling) {
+    locCeiling.textContent = sc.outdoor
+      ? "open sky"
+      : skyFrameFor(sc, state.x, state.y) ? "ceiling (sky.32 f1)" : "open (sky.32 f0)";
+  }
+}
+
+function stepForward() {
+  const next = stepParty(state.facing, state.x, state.y, state.screen, maps.screens);
+  applyMove(next);
+}
+
+function stepBackward() {
+  const next = stepParty((state.facing + 2) & 3, state.x, state.y, state.screen, maps.screens);
+  applyMove(next);
+}
+
+function applyMove(next) {
   const crossed = next.screen !== state.screen;
   state.screen = next.screen;
   state.x = next.x;
   state.y = next.y;
-  state.facing = facing;
   screenSelect.value = String(state.screen);
   statusEl.textContent = crossed
-    ? `Entered screen ${next.screen} — ${data.screens[next.screen].name}`
+    ? `Entered screen ${next.screen} — ${maps.screens[next.screen].name}`
     : `Moved to ${tileLabel(state.x, state.y)}`;
   draw();
 }
 
-function jumpEntry() {
-  if (!data) return;
-  const sc = data.screens[state.screen];
-  state.x = sc.entry[0];
-  state.y = sc.entry[1];
-  statusEl.textContent = `Spawn at entry ${tileLabel(state.x, state.y)}`;
+function turnLeft() {
+  state.facing = (state.facing + 3) & 3;
+  statusEl.textContent = `Facing ${FACE[state.facing]}`;
   draw();
 }
 
-function draw() {
-  if (!data) return;
-  const sc = data.screens[state.screen];
-  canvas.width = GRID * CELL;
-  canvas.height = GRID * CELL;
+function turnRight() {
+  state.facing = (state.facing + 1) & 3;
+  statusEl.textContent = `Facing ${FACE[state.facing]}`;
+  draw();
+}
 
-  for (let sy = 0; sy < GRID; sy++) {
-    const y = GRID - 1 - sy;
-    for (let x = 0; x < GRID; x++) {
-      const i = idx(x, y);
-      const col = sc.collision[i];
-      const vis = sc.visual[i];
-      const px = x * CELL;
-      const py = sy * CELL;
-
-      const terrain = sc.outdoor ? vis & 0x1f : (vis >> 2) & 0x3f;
-      const hue = sc.outdoor ? 80 + (terrain * 7) % 60 : 0;
-      const sat = sc.outdoor ? 35 + (terrain * 5) % 25 : 0;
-      const lit = sc.outdoor ? 18 + (terrain * 3) % 12 : 12;
-      ctx.fillStyle = sc.outdoor
-        ? `hsl(${hue} ${sat}% ${lit}%)`
-        : col & 0x2a
-          ? "#120808"
-          : "#1a0505";
-      ctx.fillRect(px, py, CELL, CELL);
-
-      if (col & 0x80) {
-        ctx.fillStyle = "rgba(255, 99, 99, 0.35)";
-        ctx.beginPath();
-        ctx.arc(px + CELL / 2, py + CELL / 2, 5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      const doorN = visualField(vis, 0) === 3;
-      const doorE = visualField(vis, 1) === 3;
-      const doorS = visualField(vis, 2) === 3;
-      const doorW = visualField(vis, 3) === 3;
-
-      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--wall");
-      ctx.lineWidth = 3;
-
-      if (wallN(col) || doorN) {
-        ctx.strokeStyle = doorN ? "#d4a017" : "#eb3838";
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(px + CELL, py);
-        ctx.stroke();
-      }
-      if (wallE(col)) {
-        ctx.strokeStyle = doorE ? "#d4a017" : "#eb3838";
-        ctx.beginPath();
-        ctx.moveTo(px + CELL, py);
-        ctx.lineTo(px + CELL, py + CELL);
-        ctx.stroke();
-      }
-      if (wallS(col)) {
-        ctx.strokeStyle = doorS ? "#d4a017" : "#eb3838";
-        ctx.beginPath();
-        ctx.moveTo(px, py + CELL);
-        ctx.lineTo(px + CELL, py + CELL);
-        ctx.stroke();
-      }
-      if (wallW(col)) {
-        ctx.strokeStyle = doorW ? "#d4a017" : "#eb3838";
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(px, py + CELL);
-        ctx.stroke();
-      }
-    }
-  }
-
-  const px = state.x * CELL + CELL / 2;
-  const py = screenRow(state.y) * CELL + CELL / 2;
-  const ang = [ -Math.PI / 2, 0, Math.PI / 2, Math.PI][state.facing];
-  ctx.fillStyle = "#ffe566";
-  ctx.beginPath();
-  ctx.moveTo(px + Math.cos(ang) * 10, py + Math.sin(ang) * 10);
-  ctx.lineTo(px + Math.cos(ang + 2.4) * 8, py + Math.sin(ang + 2.4) * 8);
-  ctx.lineTo(px + Math.cos(ang - 2.4) * 8, py + Math.sin(ang - 2.4) * 8);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.strokeStyle = "#731a1a";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(0, 0, canvas.width, canvas.height);
-
-  locName.textContent = sc.name;
-  locScreen.textContent = `${state.screen} (${sc.outdoor ? "overland" : "interior"})`;
-  locTile.textContent = tileLabel(state.x, state.y);
-  locFacing.textContent = ["N", "E", "S", "W"][state.facing];
-  locEvent.textContent = sc.collision[idx(state.x, state.y)] & 0x80 ? "yes" : "no";
+function jumpEntry() {
+  const sc = maps.screens[state.screen];
+  state.x = sc.entry[0];
+  state.y = sc.entry[1];
+  statusEl.textContent = `Entry ${tileLabel(state.x, state.y)}`;
+  draw();
 }
 
 function bindControls() {
   document.getElementById("btnEntry").addEventListener("click", jumpEntry);
-  document.getElementById("btnNorth").addEventListener("click", () => tryMove(0, 1, 0));
-  document.getElementById("btnSouth").addEventListener("click", () => tryMove(0, -1, 2));
-  document.getElementById("btnWest").addEventListener("click", () => tryMove(-1, 0, 3));
-  document.getElementById("btnEast").addEventListener("click", () => tryMove(1, 0, 1));
+  document.getElementById("btnForward").addEventListener("click", stepForward);
+  document.getElementById("btnBack").addEventListener("click", stepBackward);
+  document.getElementById("btnLeft").addEventListener("click", turnLeft);
+  document.getElementById("btnRight").addEventListener("click", turnRight);
 
   screenSelect.addEventListener("change", () => {
     state.screen = Number(screenSelect.value);
@@ -285,35 +300,25 @@ function bindControls() {
       case "w":
       case "W":
         ev.preventDefault();
-        tryMove(0, 1, 0);
+        stepForward();
         break;
       case "ArrowDown":
       case "s":
       case "S":
         ev.preventDefault();
-        tryMove(0, -1, 2);
+        stepBackward();
         break;
       case "ArrowLeft":
       case "a":
       case "A":
         ev.preventDefault();
-        tryMove(-1, 0, 3);
+        turnLeft();
         break;
       case "ArrowRight":
       case "d":
       case "D":
         ev.preventDefault();
-        tryMove(1, 0, 1);
-        break;
-      case "q":
-      case "Q":
-        state.facing = (state.facing + 3) & 3;
-        draw();
-        break;
-      case "e":
-      case "E":
-        state.facing = (state.facing + 1) & 3;
-        draw();
+        turnRight();
         break;
       default:
         break;
@@ -324,18 +329,20 @@ function bindControls() {
 async function init() {
   bindControls();
   try {
-    const res = await fetch("maps.json");
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    data = await res.json();
+    const data = await loadData();
+    maps = data.maps;
+    manifest = data.manifest;
+    if (data.sprites) await loadSpriteTable(data.sprites);
+    else await loadSpritesFromPaths();
   } catch (err) {
     document.getElementById("loadError").hidden = false;
     document.getElementById("loadError").textContent =
-      `Could not load maps.json (${err.message}). Run: python tools/export_map_walker.py`;
-    statusEl.textContent = "No map data.";
+      `Could not load walker data (${err.message}). Run: python tools/export_map_walker.py`;
+    statusEl.textContent = "No data.";
     return;
   }
 
-  for (const sc of data.screens) {
+  for (const sc of maps.screens) {
     const opt = document.createElement("option");
     opt.value = String(sc.id);
     opt.textContent = `${String(sc.id).padStart(2, "0")} — ${sc.name}`;
@@ -344,7 +351,7 @@ async function init() {
 
   state.screen = 0;
   jumpEntry();
-  statusEl.textContent = "Ready — WASD or arrow keys to walk.";
+  statusEl.textContent = "W/↑ forward · S/↓ back · A/D turn · like view3d_indoor.py";
 }
 
 init();

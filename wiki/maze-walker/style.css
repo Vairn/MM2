@@ -1,16 +1,10 @@
 :root {
-  --bg: #0d0303;
-  --panel: #120303;
-  --border: #731a1a;
-  --text: #f2eded;
-  --dim: #7a6e6e;
-  --accent: #eb3838;
-  --accent-dim: #a61a1a;
-  --floor: #1a0505;
-  --wall: #eb3838;
-  --door: #d4a017;
-  --event: #ff6363;
-  --player: #ffe566;
+  --bg: #0a0a10;
+  --panel: #12121a;
+  --border: #3a3a50;
+  --text: #e8e8f0;
+  --dim: #888898;
+  --accent: #c04040;
 }
 
 * {
@@ -23,24 +17,25 @@ body {
   min-height: 100%;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font: 14px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
 .wrap {
-  max-width: 920px;
+  max-width: 980px;
   margin: 0 auto;
   padding: 16px;
 }
 
 header h1 {
   margin: 0 0 4px;
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   color: var(--accent);
 }
 
 header p {
   margin: 0 0 12px;
   color: var(--dim);
+  font-size: 12px;
 }
 
 .toolbar {
@@ -75,10 +70,6 @@ select:hover {
   border-color: var(--accent);
 }
 
-button:active {
-  background: var(--accent-dim);
-}
-
 #status {
   flex: 1 1 100%;
   color: var(--dim);
@@ -87,28 +78,49 @@ button:active {
 
 main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-columns: minmax(0, 1fr) 200px;
   gap: 12px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 760px) {
   main {
     grid-template-columns: 1fr;
   }
 }
 
-#mapWrap {
+.viewCol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+#viewWrap,
+#miniWrap {
   background: var(--panel);
   border: 1px solid var(--border);
   padding: 8px;
-  overflow: auto;
+}
+
+#viewWrap {
+  flex: 1 1 624px;
+}
+
+#miniWrap {
+  flex: 0 0 auto;
+}
+
+.miniLabel {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+  margin-bottom: 4px;
 }
 
 canvas {
   display: block;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  margin: 0 auto;
 }
 
 aside {
@@ -136,14 +148,21 @@ aside dt {
 }
 
 aside ul {
-  margin: 0;
+  margin: 0 0 8px;
   padding-left: 16px;
   color: var(--dim);
+}
+
+.hint {
+  margin: 0;
+  color: var(--dim);
+  font-size: 11px;
 }
 
 .error {
   padding: 16px;
   border: 1px solid var(--accent);
-  background: #2a0808;
+  background: #2a1010;
   color: var(--text);
+  margin-bottom: 12px;
 }

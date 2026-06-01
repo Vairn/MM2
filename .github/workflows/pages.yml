@@ -29,13 +29,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Export maps.json when map.dat is present
-        run: python tools/export_map_walker.py || true
-
       - name: Stage site at /maze-walker/
         run: |
           mkdir -p _site/maze-walker

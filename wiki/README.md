@@ -79,18 +79,26 @@ npm run dev
 
 ## Map walker (interactive)
 
-Top-down **HTML5** maze explorer for all 60 `map.dat` screens (collision walls,
-`attrib.dat` screen links). GitHub Wiki cannot run JavaScript — the app is hosted
-on **GitHub Pages**:
+First-person **3D** explorer for all 60 `map.dat` screens — same ASM frustum pipeline as
+`tools/view3d_indoor.py`, `tools/view3d_outdoor.py`, and the editor Map section (wall
+sprites, sky/floor backdrops, cartography minimap).
 
 **https://vairn.github.io/MM2/maze-walker/**
 
 ```powershell
-python tools/export_map_walker.py
+python tools/export_map_walker.py   # writes wiki/maze-walker/walker-bundle.js (~550 KiB)
 cd wiki/maze-walker
 python -m http.server 8080
 # http://localhost:8080/
 ```
+
+The bundle embeds all 60 map screens plus `.32` sprite frames as base64 — commit
+`walker-bundle.js` and Pages works with no game data on CI. Requires local
+`map.dat` **and** `attrib.dat` (roof/ceiling mask bytes +0x20..+0x3F, env, neighbours).
+Use `--split` for loose PNG debugging only.
+
+Controls match the Python/C++ viewers: **W/↑** step forward, **S/↓** back,
+**A/←** turn left, **D/→** turn right.
 
 **One-time GitHub Pages setup** (required before the first deploy):
 

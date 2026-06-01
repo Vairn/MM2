@@ -41,6 +41,9 @@ wiki/gh-wiki/
 wiki/gh-wiki/**
 wiki/public/
 wiki/public/**
+wiki/maze-walker/sprites/
+wiki/maze-walker/maps.json
+wiki/maze-walker/sprites.json
 build/
 build/**
 **/__pycache__/

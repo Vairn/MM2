@@ -91,7 +91,9 @@ export default defineConfig({
         },
       ],
     },
-    socialLinks: [],
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/Vairn/MM2' },
+    ],
     search: { provider: 'local' },
     footer: {
       message: 'Might and Magic II (Amiga) reverse-engineering notes',

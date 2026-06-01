@@ -10,7 +10,8 @@
   <div class="wrap">
     <header>
       <h1>Might and Magic II — map walker</h1>
-      <p>Walk all 60 <code>map.dat</code> screens using collision-page walls and <code>attrib.dat</code> neighbours (north-up, tile <code>a1</code> = south-west).</p>
+      <p>First-person 3D view (ASM frustum @0x2900) with cartography minimap — same pipeline as
+        <code>view3d_indoor.py</code>, <code>view3d_outdoor.py</code>, and the editor Map section.</p>
     </header>
 
     <div id="loadError" class="error" hidden></div>
@@ -21,16 +22,22 @@
         <select id="screenSelect"></select>
       </label>
       <button type="button" id="btnEntry">Jump to entry</button>
-      <button type="button" id="btnNorth" title="North (W / ↑)">↑ N</button>
-      <button type="button" id="btnWest" title="West (A / ←)">← W</button>
-      <button type="button" id="btnEast" title="East (D / →)">→ E</button>
-      <button type="button" id="btnSouth" title="South (S / ↓)">↓ S</button>
+      <button type="button" id="btnForward" title="Step forward (W / ↑)">↑ Forward</button>
+      <button type="button" id="btnBack" title="Step back (S / ↓)">↓ Back</button>
+      <button type="button" id="btnLeft" title="Turn left (A / ←)">← Turn</button>
+      <button type="button" id="btnRight" title="Turn right (D / →)">Turn →</button>
       <span id="status"></span>
     </div>
 
     <main>
-      <div id="mapWrap">
-        <canvas id="map" width="512" height="512" aria-label="Map grid"></canvas>
+      <div class="viewCol">
+        <div id="viewWrap">
+          <canvas id="view" width="624" height="360" aria-label="3D view"></canvas>
+        </div>
+        <div id="miniWrap">
+          <span class="miniLabel">Minimap</span>
+          <canvas id="minimap" width="224" height="176" aria-label="Minimap"></canvas>
+        </div>
       </div>
       <aside>
         <h2>Location</h2>
@@ -39,19 +46,21 @@
           <dt>Screen</dt><dd id="locScreen">—</dd>
           <dt>Tile</dt><dd id="locTile">—</dd>
           <dt>Facing</dt><dd id="locFacing">—</dd>
-          <dt>Event cell</dt><dd id="locEvent">—</dd>
+          <dt>Ceiling</dt><dd id="locCeiling">—</dd>
+          <dt>View</dt><dd id="locMode">—</dd>
         </dl>
         <h2>Controls</h2>
         <ul>
-          <li><strong>WASD</strong> or arrows — move (blocked by walls)</li>
-          <li><strong>Q / E</strong> — turn in place</li>
-          <li>Gold edges — doors on visual page</li>
-          <li>Pink dots — collision <code>0x80</code> event tiles</li>
-          <li>Walk off edge — change screen via neighbours</li>
+          <li><strong>W</strong> / <strong>↑</strong> — step forward</li>
+          <li><strong>S</strong> / <strong>↓</strong> — step backward</li>
+          <li><strong>A</strong> / <strong>←</strong> — turn left</li>
+          <li><strong>D</strong> / <strong>→</strong> — turn right</li>
+          <li>Walk off edge — change screen via <code>attrib.dat</code> neighbours</li>
         </ul>
+        <p class="hint">Regenerate embedded data: <code>python tools/export_map_walker.py</code></p>
       </aside>
     </main>
   </div>
-  <script src="walker.js"></script>
+  <script type="module" src="walker.js"></script>
 </body>
 </html>

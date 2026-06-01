@@ -16,27 +16,72 @@ hero:
       text: Data Formats
       link: /docs/reverse-engineering/07-dat-files-and-formats
     - theme: alt
+      text: Sprite Gallery
+      link: /docs/gallery/
+    - theme: alt
       text: MM2ED Editor
       link: /docs/editor/mm2ed
 features:
   - icon: 📦
     title: Decoded .dat formats
-    details: items, roster, map, monsters, spells, event scripts, and attrib — with ASM-confirmed field layouts and round-trip codecs in Python and C.
+    details: items, roster, map, monsters, spells, event scripts, and attrib — ASM-confirmed field layouts with round-trip codecs in Python and C.
   - icon: ⚔️
     title: Game systems
     details: Combat round engine, monster abilities, 3D view / collision pages, copy protection, and the event-script opcode reference.
+  - icon: 🐉
+    title: Sprite gallery
+    details: Monster .anm composites, world sprites, all .32 tilesets, 60-screen auto-map cartography, and first-person 3D view layouts.
   - icon: 🛠️
     title: Tools & editor
     details: Python disassemblers and decoders, C lift scaffold, and MM2ED — an ImGui editor for every major data file.
-  - icon: 🐉
-    title: Sprite gallery
-    details: Monster .anm composites, all .32 tilesets, 60-screen auto-map cartography, and first-person 3D view layouts — decoded from game assets.
   - icon: 🗺️
+    title: Map walker
+    details: Interactive HTML5 top-down explorer for all 60 map.dat screens — collision, attrib links, and event tiles on GitHub Pages.
+  - icon: 📜
     title: Living documentation
     details: Pages sync from EXTRACTED/docs on each dev/build run — edit markdown in the repo, refresh the wiki.
 ---
 
+<div class="mm2-stats">
+  <div class="mm2-stat">
+    <span class="mm2-stat-value">256</span>
+    <span class="mm2-stat-label">items</span>
+  </div>
+  <div class="mm2-stat">
+    <span class="mm2-stat-value">256</span>
+    <span class="mm2-stat-label">monsters</span>
+  </div>
+  <div class="mm2-stat">
+    <span class="mm2-stat-value">96</span>
+    <span class="mm2-stat-label">spells</span>
+  </div>
+  <div class="mm2-stat">
+    <span class="mm2-stat-value">60</span>
+    <span class="mm2-stat-label">map screens</span>
+  </div>
+  <div class="mm2-stat">
+    <span class="mm2-stat-value">71</span>
+    <span class="mm2-stat-label">event locations</span>
+  </div>
+</div>
+
+## Start here
+
+<div class="mm2-paths">
+
+| If you want to… | Go to |
+|:---|:---|
+| Understand the project | [Overview](/docs/reverse-engineering/00-overview) → [Format inventory](/docs/reverse-engineering/07-dat-files-and-formats) |
+| Edit `.dat` files | [MM2ED Editor](/docs/editor/mm2ed) + sidebar *Data formats* |
+| Trace combat or scripts | [Combat](/docs/reverse-engineering/17-combat-system) · [Event opcodes](/docs/reverse-engineering/07-event-script-opcodes) |
+| Browse decoded art | [Sprite gallery](/docs/gallery/) |
+| See open questions | [Open questions](/docs/reverse-engineering/05-open-questions) |
+
+</div>
+
 ## Quick links
+
+<div class="mm2-quick-links">
 
 | Topic | Page |
 |-------|------|
@@ -46,8 +91,9 @@ features:
 | Combat engine | [17-combat-system](/docs/reverse-engineering/17-combat-system) |
 | Event opcodes | [07-event-script-opcodes](/docs/reverse-engineering/07-event-script-opcodes) |
 | RE tooling | [re-tools](/docs/tools/re-tools) |
-| Sprite gallery | [gallery](/docs/gallery/) |
 
-## Endianness reminder
+</div>
 
+::: info Endianness
 MM2 `.dat` multibyte fields are **little-endian on disk** (matching Blitz3D editors and our codecs). The 68000 runtime may byte-swap after load — always trace ASM before assuming otherwise.
+:::

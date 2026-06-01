@@ -17,6 +17,7 @@ from mm2_gfx_export import export_all, resolve_data_dir  # noqa: E402
 OUT = WIKI / "gh-wiki"
 REPO = "Vairn/MM2"
 WIKI_GIT = f"https://github.com/{REPO}.wiki.git"
+WIKI_BASE = f"https://github.com/{REPO}/wiki"
 
 # Source markdown → GitHub Wiki page title (becomes Page-Title.md)
 DOC_SOURCES: list[tuple[str, str]] = [
@@ -130,49 +131,219 @@ def convert_doc(source: Path, title: str) -> str:
     return f"# {title.replace('-', ' ')}\n\n{body.lstrip()}"
 
 
-def write_home() -> None:
+def _wiki_badge(label: str, page: str, *, style: str = "for-the-badge") -> str:
+    """Shields.io button linking to a GitHub Wiki page."""
+    slug = label.replace(" ", "_").replace("→", "")
+    return (
+        f"[![{label}](https://img.shields.io/badge/{slug}-731a1a?style={style})]"
+        f"({WIKI_BASE}/{page})"
+    )
+
+
+def _gallery_preview_row(out: Path) -> str:
+    """Optional sprite strip when gallery PNGs were exported."""
+    candidates = [
+        ("images/gallery/monsters/01.gif", "Creepy Crawler", "Monster-Sprites"),
+        ("images/gallery/views/castle-frames.png", "3D castle view", "3D-View-Graphics"),
+        ("images/gallery/maps/overview-towns.png", "Town auto-maps", "Map-Cartography"),
+    ]
+    cells: list[str] = []
+    for rel, alt, page in candidates:
+        if (out / rel).is_file():
+            cells.append(
+                f'<td align="center" width="33%" valign="top">'
+                f'<a href="{page}"><img src="{rel}" width="160" alt="{alt}"/></a><br/>'
+                f'<sub><a href="{page}">{alt}</a></sub></td>'
+            )
+    if not cells:
+        return ""
+    return (
+        "\n<br/>\n\n<table align=\"center\"><tr>\n"
+        + "\n".join(cells)
+        + "\n</tr></table>\n"
+    )
+
+
+def write_home(*, out: Path = OUT) -> None:
     logo = "images/book-f00.png"
-    text = f"""# Might & Magic II — Reverse Engineering
+    pages_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/maze-walker/"
+    preview = _gallery_preview_row(out)
+    badges = " ".join(
+        [
+            _wiki_badge("Overview", "Overview"),
+            _wiki_badge("Data Formats", "dat-Files-and-Formats"),
+            _wiki_badge("Gallery", "Gallery"),
+            _wiki_badge("MM2ED", "MM2ED-Editor"),
+        ]
+    )
+    text = f"""<div align="center">
 
-![spellbook]({logo})
+<img src="{logo}" width="112" alt="Spellbook icon (book.32 frame 0)"/>
 
-Amiga **Might and Magic II** reverse-engineering notes: data formats, 68k runtime,
-combat, events, graphics codecs, and the MM2ED editor.
+# Might & Magic II
 
-## Quick start
+**Amiga reverse-engineering wiki**
 
-| Topic | Page |
-|-------|------|
-| Project overview | [Overview](Overview) |
-| `.dat` format inventory | [dat Files and Formats](dat-Files-and-Formats) |
-| Monster abilities | [monsters.dat Format](monsters-dat-Format) |
-| Combat engine | [Combat System](Combat-System) |
-| Sprite gallery | [Gallery](Gallery) |
-| RE tooling | [RE Tools](RE-Tools) |
-| Data editor | [MM2ED Editor](MM2ED-Editor) |
+<sub>Data formats · 68k runtime · combat · events · graphics · MM2ED</sub>
 
-## Endianness
+<br/>
 
-MM2 `.dat` multibyte fields are **little-endian on disk**. The 68000 runtime may
-byte-swap after load — trace ASM before assuming otherwise.
+[![GitHub](https://img.shields.io/badge/repo-Vairn%2FMM2-120303?style=for-the-badge&logo=github)](https://github.com/{REPO})
+[![Map Walker](https://img.shields.io/badge/map_walker-GitHub_Pages-731a1a?style=for-the-badge&logo=googlemaps)]({pages_url})
+
+</div>
+
+<br/>
+
+<div align="center">
+
+{badges}
+
+</div>
+{preview}
+---
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+<h3 align="left">📦 Data formats</h3>
+
+<p>ASM-confirmed <code>.dat</code> layouts with round-trip Python &amp; C codecs.</p>
+
+<ul>
+<li><a href="{WIKI_BASE}/items-dat-Format">items.dat</a> — 256 items, class masks, use spells</li>
+<li><a href="{WIKI_BASE}/monsters-dat-Format">monsters.dat</a> — abilities, attacks, sprites</li>
+<li><a href="{WIKI_BASE}/map-dat-Format">map.dat</a> — 60 screens × 512 bytes</li>
+<li><a href="{WIKI_BASE}/event-dat-Format">event.dat</a> — 71 locations, script VM</li>
+<li><a href="{WIKI_BASE}/roster-dat-Format">roster.dat</a> · <a href="{WIKI_BASE}/Spells-and-Item-Use">spells</a> · <a href="{WIKI_BASE}/attrib-dat-Format">attrib.dat</a></li>
+</ul>
+
+<p><b><a href="{WIKI_BASE}/dat-Files-and-Formats">→ Format inventory</a></b></p>
+
+</td>
+<td width="50%" valign="top">
+
+<h3 align="left">⚔️ Game systems</h3>
+
+<p>68000 traces for combat, world simulation, and scripts.</p>
+
+<ul>
+<li><a href="{WIKI_BASE}/Combat-System">Combat engine</a> — round loop, AI, rewards</li>
+<li><a href="{WIKI_BASE}/3D-View-and-Game-Screen">3D view &amp; collision</a> — wall pages, auto-map</li>
+<li><a href="{WIKI_BASE}/Event-Script-Opcodes">Event opcodes</a> — <code>0x00…0x32</code> reference</li>
+<li><a href="{WIKI_BASE}/Main-Loop-and-Map">Main loop &amp; map</a> · <a href="{WIKI_BASE}/Copy-Protection">copy protection</a></li>
+</ul>
+
+<p><b><a href="{WIKI_BASE}/Full-Analysis">→ Full analysis</a></b></p>
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+<h3 align="left">🐉 Sprite gallery</h3>
+
+<p>Decoded <code>.32</code> tilesets and <code>.anm</code> combat animations from original assets.</p>
+
+<ul>
+<li><a href="{WIKI_BASE}/Monster-Sprites">Monster .anm</a> — GIF + contact sheets</li>
+<li><a href="{WIKI_BASE}/World-Sprites">World sprites</a> · <a href="{WIKI_BASE}/Tilesets">tilesets</a></li>
+<li><a href="{WIKI_BASE}/Monsters">Monsters catalog</a> · <a href="{WIKI_BASE}/Items-Catalog">items catalog</a></li>
+<li><a href="{WIKI_BASE}/Map-Cartography">Auto-map cartography</a> · <a href="{WIKI_BASE}/3D-View-Graphics">3D views</a></li>
+</ul>
+
+<p><b><a href="{WIKI_BASE}/Gallery">→ Gallery home</a></b></p>
+
+</td>
+<td width="50%" valign="top">
+
+<h3 align="left">🛠️ Tools &amp; code</h3>
+
+<p>Decoders, disassembly helpers, and the ImGui data editor.</p>
+
+<ul>
+<li><a href="{WIKI_BASE}/RE-Tools">RE Tools</a> — Python disassemblers &amp; codecs</li>
+<li><a href="{WIKI_BASE}/MM2ED-Editor">MM2ED</a> — edit every major <code>.dat</code> file</li>
+<li><a href="{WIKI_BASE}/C-Decomp-Scaffold">C lift scaffold</a> — typed structs &amp; loaders</li>
+<li><a href="{WIKI_BASE}/Map-Walker">Map walker ↗</a> — interactive HTML5 on <a href="{pages_url}">GitHub Pages</a></li>
+</ul>
+
+<p><b><a href="{WIKI_BASE}/Open-Questions">→ Open questions</a></b></p>
+
+</td>
+</tr>
+</table>
 
 ---
-*Wiki synced from [{REPO}](https://github.com/{REPO}). Regenerate with*
-*`python wiki/scripts/export-github-wiki.py`.*
+
+<div align="center">
+
+<h2>By the numbers</h2>
+
+<table>
+<tr>
+<td align="center" width="20%"><h1>256</h1><sub>items</sub></td>
+<td align="center" width="20%"><h1>256</h1><sub>monsters</sub></td>
+<td align="center" width="20%"><h1>96</h1><sub>spells</sub></td>
+<td align="center" width="20%"><h1>60</h1><sub>map screens</sub></td>
+<td align="center" width="20%"><h1>71</h1><sub>event locations</sub></td>
+</tr>
+</table>
+
+</div>
+
+---
+
+> [!TIP]
+> **New here?** Read [Overview](Overview), then the [format inventory](dat-Files-and-Formats).
+> Editing data files? Jump to [MM2ED Editor](MM2ED-Editor).
+> Tracing combat or scripts? [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes).
+
+> [!IMPORTANT]
+> **Endianness** — MM2 `.dat` multibyte fields are **little-endian on disk**
+> (matching our codecs and Blitz3D editors). The 68000 runtime may byte-swap
+> after load — trace ASM before assuming otherwise.
+
+<details>
+<summary><b>📑 All quick links</b></summary>
+
+| If you want to… | Start here |
+|:---|:---|
+| Understand the project | [Overview](Overview) → [dat Files and Formats](dat-Files-and-Formats) |
+| Edit `.dat` files | [MM2ED Editor](MM2ED-Editor) + sidebar *Data formats* |
+| Trace combat or scripts | [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes) |
+| Browse decoded art | [Gallery](Gallery) |
+| See what's still unknown | [Open Questions](Open-Questions) |
+| Boot &amp; memory map | [Startup and Init](Startup-and-Init) · [Runtime Memory Map](Runtime-Memory-Map) |
+| RE tooling | [RE Tools](RE-Tools) |
+
+</details>
+
+---
+
+<div align="center">
+
+<sub>Synced from <a href="https://github.com/{REPO}">{REPO}</a> ·
+<code>python wiki/scripts/export-github-wiki.py</code></sub>
+
+</div>
 """
-    (OUT / "Home.md").write_text(text, encoding="utf-8")
+    (out / "Home.md").write_text(text, encoding="utf-8")
 
 
 def write_sidebar() -> None:
-    text = """**[Home](Home)**
+    text = """**[🏠 Home](Home)**
 
-### Getting started
+---
+
+#### Getting started
 - [Overview](Overview)
 - [Workspace Notes](Workspace-Notes)
 - [Open Questions](Open-Questions)
 - [Full Analysis](Full-Analysis)
 
-### Runtime
+#### Runtime & engine
 - [Startup and Init](Startup-and-Init)
 - [Runtime Memory Map](Runtime-Memory-Map)
 - [Main Loop and Map](Main-Loop-and-Map)
@@ -180,39 +351,39 @@ def write_sidebar() -> None:
 - [Game State Struct](Game-State-Struct)
 - [Time Era Calendar](Time-Era-Calendar)
 
-### Graphics
+#### Graphics
 - [GFX Loading](GFX-Loading)
 - [ANM TV Format](ANM-TV-Format)
 - [3D View and Game Screen](3D-View-and-Game-Screen)
 
-### Data formats
-- [dat Files and Formats](dat-Files-and-Formats)
+#### Data formats (.dat)
+- [Format inventory](dat-Files-and-Formats)
 - [items.dat](items-dat-Format)
 - [monsters.dat](monsters-dat-Format)
 - [roster.dat](roster-dat-Format)
 - [attrib.dat](attrib-dat-Format)
 - [map.dat](map-dat-Format)
-- [spells and item use](Spells-and-Item-Use)
+- [spells & item use](Spells-and-Item-Use)
 - [event.dat](event-dat-Format)
 - [Event Script Opcodes](Event-Script-Opcodes)
 
-### Systems
+#### Game systems
 - [Combat System](Combat-System)
 - [Copy Protection](Copy-Protection)
 
-### Gallery
+#### Gallery
 - [Gallery home](Gallery)
 - [Monster sprites](Monster-Sprites)
 - [World sprites](World-Sprites)
-- [Monsters](Monsters)
+- [Monsters catalog](Monsters)
 - [Items catalog](Items-Catalog)
 - [Tilesets](Tilesets)
-- [Map walker (interactive)](Map-Walker)
 - [Map cartography](Map-Cartography)
-- [map.dat reference](Map-dat-Grids)
 - [3D view graphics](3D-View-Graphics)
+- [map.dat reference](Map-dat-Grids)
+- [Map walker ↗](Map-Walker)
 
-### Tools
+#### Tools
 - [RE Tools](RE-Tools)
 - [C Decomp Scaffold](C-Decomp-Scaffold)
 - [MM2ED Editor](MM2ED-Editor)
@@ -222,7 +393,8 @@ def write_sidebar() -> None:
 
 def write_footer() -> None:
     (OUT / "_Footer.md").write_text(
-        f"[{REPO} on GitHub](https://github.com/{REPO}) · "
+        f"**[🏠 Home](Home)** · "
+        f"[{REPO}](https://github.com/{REPO}) · "
         "Research notes — not affiliated with New World Computing",
         encoding="utf-8",
     )
@@ -270,10 +442,38 @@ def export_gallery(*, skip_gallery: bool) -> None:
         print("Skipping sprite gallery (no game assets or --skip-gallery)")
         stub = OUT / "Gallery.md"
         stub.write_text(
-            "# Sprite gallery\n\n"
-            "Gallery images are generated from game `.32` / `.anm` assets.\n\n"
-            "Run `python wiki/scripts/export-github-wiki.py` locally with the MM2\n"
-            "data files present, then publish.\n",
+            "<div align=\"center\">\n\n"
+            "<img src=\"images/book-f00.png\" width=\"64\" alt=\"Spellbook\"/>\n\n"
+            "# 🐉 Sprite gallery\n\n"
+            "<sub>Decoded <code>.32</code> tilesets and <code>.anm</code> combat animations</sub>\n\n"
+            "</div>\n\n"
+            "---\n\n"
+            "Gallery images are generated from original game assets.\n\n"
+            "```powershell\n"
+            "python wiki/scripts/export-github-wiki.py\n"
+            "python wiki/scripts/publish-github-wiki.py\n"
+            "```\n\n"
+            "<table>\n"
+            "<tr>\n"
+            "<td width=\"50%\" valign=\"top\">\n\n"
+            "<h3>Combat &amp; world</h3>\n\n"
+            "<ul>\n"
+            "<li><a href=\"Monster-Sprites\">Monster .anm</a> — GIF animations</li>\n"
+            "<li><a href=\"World-Sprites\">World sprites</a> — town &amp; overland</li>\n"
+            "<li><a href=\"Monsters\">Monsters catalog</a> · "
+            "<a href=\"Items-Catalog\">Items catalog</a></li>\n"
+            "</ul>\n\n"
+            "</td>\n"
+            "<td width=\"50%\" valign=\"top\">\n\n"
+            "<h3>Maps &amp; tiles</h3>\n\n"
+            "<ul>\n"
+            "<li><a href=\"Tilesets\">Tilesets</a> — planar <code>.32</code> sheets</li>\n"
+            "<li><a href=\"Map-Cartography\">Auto-map cartography</a></li>\n"
+            "<li><a href=\"3D-View-Graphics\">3D view compositing</a></li>\n"
+            "</ul>\n\n"
+            "</td>\n"
+            "</tr>\n"
+            "</table>\n",
             encoding="utf-8",
         )
         return
@@ -303,11 +503,11 @@ def export_maze_walker(out_root: Path) -> None:
     pages_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/maze-walker/"
     walker_page.write_text(
         "# Map walker\n\n"
-        "Interactive **HTML5** top-down explorer for all 60 `map.dat` screens — "
-        "collision walls, screen transitions via `attrib.dat` neighbours, event tiles.\n\n"
+        "Interactive **HTML5** first-person 3D explorer for all 60 `map.dat` screens — "
+        "ASM frustum wall rendering, outdoor terrain lanes, cartography minimap.\n\n"
         "**GitHub Wiki cannot run JavaScript.** Open the walker on GitHub Pages:\n\n"
         f"**[{pages_url}]({pages_url})**\n\n"
-        "Controls: **WASD** / arrow keys to move, **Q/E** to turn. "
+        "Controls: **W/S** forward/back, **A/D** turn. "
         "See [map.dat reference](Map-dat-Grids) for tile/event data.\n\n"
         "### Local dev\n\n"
         "```powershell\n"
@@ -327,7 +527,7 @@ def export_maze_walker(out_root: Path) -> None:
     try:
         from export_map_walker import export_map_walker as export_json
 
-        export_json(src / "maps.json")
+        export_json(src)
     except Exception as exc:
         print(f"  maze-walker maps.json: {exc}")
 
@@ -342,13 +542,14 @@ def export_github_wiki(*, skip_gallery: bool = False) -> Path:
     OUT.mkdir(parents=True, exist_ok=True)
 
     print(f"Exporting GitHub Wiki -> {OUT}")
-    write_home()
     write_sidebar()
     write_footer()
     print("Exporting docs…")
     export_docs()
     export_gallery(skip_gallery=skip_gallery or not has_game_assets())
+    export_book_logo(OUT / "images" / "book-f00.png")
     export_maze_walker(OUT)
+    write_home(out=OUT)
     print("Done.")
     return OUT
 

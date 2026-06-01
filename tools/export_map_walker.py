@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Export compact map.dat + attrib.dat JSON for the wiki maze walker."""
+"""Export embedded map walker bundle (map.dat + attrib.dat + .32 sprites)."""
 from __future__ import annotations
 
+import base64
+import io
 import json
 import sys
 from pathlib import Path
@@ -10,57 +12,200 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
+from attrib_codec import AttribRecord  # noqa: E402
 from mm2_gfx_export import (  # noqa: E402
     area_name,
+    frame_count_32,
     load_attrib,
+    load_frame,
     load_map_screens,
+    resolve_asset,
     resolve_data_dir,
 )
+from render_view_refs import ORIGIN_X, FLOOR_Y, SKY_Y, VIEW_H, VIEW_W  # noqa: E402
+from view3d_indoor import K_CARTO_TILE  # noqa: E402
+
+WALKER_SHEETS = (
+    "town.32",
+    "townf.32",
+    "townt.32",
+    "cave.32",
+    "cavef.32",
+    "cavet.32",
+    "castle.32",
+    "castlef.32",
+    "castlet.32",
+    "sky.32",
+    "outf.32",
+    "outdoor1.32",
+    "outdoor2.32",
+    "outdoor3.32",
+    "desert.32",
+    "ocean.32",
+    "tundra.32",
+    "swamp.32",
+    "townb.32",
+    "outb.32",
+)
+
+DATA_BIN = ROOT / "EXTRACTED" / "ghidra" / "mm2_data_00.bin"
+A4 = 0x7FFE
+BUNDLE_NAME = "walker-bundle.js"
 
 
-def export_map_walker(out_path: Path, data_dir: Path | None = None) -> dict:
-    data = resolve_data_dir(data_dir)
-    attrib = load_attrib(data)
-    screens = load_map_screens(data)
+def sheet_key(name: str) -> str:
+    return name.replace(".", "_")
 
-    payload: dict = {"version": 1, "screens": []}
+
+def load_terrain_lookup() -> list[int]:
+    if not DATA_BIN.is_file():
+        return [0] * 256
+    blob = DATA_BIN.read_bytes()
+    off = A4 - 0x720A
+    if off < 0 or off + 256 > len(blob):
+        return [0] * 256
+    return list(blob[off : off + 256])
+
+
+def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
+    """Build manifest + base64 data-URL sprite table."""
+    manifest: dict = {
+        "view": {
+            "w": VIEW_W,
+            "h": VIEW_H,
+            "originX": ORIGIN_X,
+            "skyY": SKY_Y,
+            "floorY": FLOOR_Y,
+        },
+        "sheets": {},
+        "terrainLookup": load_terrain_lookup(),
+        "cartoTile": list(K_CARTO_TILE),
+    }
+    sprites: dict[str, str] = {}
+    exported = 0
+    for sheet in WALKER_SHEETS:
+        if not resolve_asset(data_dir, sheet):
+            continue
+        key = sheet_key(sheet)
+        frames_meta: dict[str, dict] = {}
+        n = frame_count_32(sheet, data_dir)
+        for fi in range(n):
+            try:
+                img = load_frame(sheet, fi, data_dir)
+            except Exception:
+                break
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            cache_key = f"{key}:{fi}"
+            sprites[cache_key] = f"data:image/png;base64,{b64}"
+            frames_meta[str(fi)] = {"w": img.width, "h": img.height}
+            exported += 1
+        if frames_meta:
+            manifest["sheets"][key] = {"file": sheet, "frames": frames_meta}
+    print(f"  sprites: {exported} frames across {len(manifest['sheets'])} sheets")
+    return manifest, sprites
+
+
+def build_maps_payload(attrib: list[bytes], screens: list[tuple[bytes, bytes]]) -> dict:
+    """map.dat pages + attrib.dat per-screen fields (env, neighbours, roof ceiling mask)."""
+    payload: dict = {"version": 3, "screens": []}
     for sid in range(60):
         visual, collision = screens[sid]
         a = attrib[sid]
-        entry_x = a[0x0E] & 0x0F
-        entry_y = (a[0x0E] >> 4) & 0x0F
+        rec = AttribRecord(bytearray(a))
         payload["screens"].append(
             {
                 "id": sid,
                 "name": area_name(sid, attrib),
-                "outdoor": a[0x04] != 0,
-                "entry": [entry_x, entry_y],
-                "neighbors": [a[0x05], a[0x06], a[0x07], a[0x08]],
+                "outdoor": rec.is_outside,
+                "env": rec.env_name,
+                "surface": rec.surface_flag,
+                "entry": [rec.entry_coord[0], rec.entry_coord[1]],
+                "neighbors": list(rec.neighbors),
+                "sector": a[0x15],
+                # attrib +0x20..+0x3F: 256 roof bits → sky.32 frame 1 (ceiling) vs 0 (open)
+                "roof": list(a[0x20:0x40]),
                 "visual": list(visual),
                 "collision": list(collision),
             }
         )
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
-    print(f"  maze walker: {out_path} ({len(payload['screens'])} screens)")
     return payload
+
+
+def write_embedded_bundle(out_dir: Path, maps: dict, manifest: dict, sprites: dict[str, str]) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    bundle_path = out_dir / BUNDLE_NAME
+    body = "\n".join(
+        [
+            "// Auto-generated by tools/export_map_walker.py — commit this file for GitHub Pages.",
+            f"export const WALKER_MAPS = {json.dumps(maps, separators=(',', ':'))};",
+            f"export const WALKER_MANIFEST = {json.dumps(manifest, separators=(',', ':'))};",
+            f"export const WALKER_SPRITES = {json.dumps(sprites, separators=(',', ':'))};",
+            "",
+        ]
+    )
+    bundle_path.write_text(body, encoding="utf-8")
+    kb = bundle_path.stat().st_size / 1024
+    print(f"  bundle: {bundle_path} ({kb:.0f} KiB)")
+    return bundle_path
+
+
+def export_map_walker(out_dir: Path, data_dir: Path | None = None, *, split: bool = False) -> dict:
+    data = resolve_data_dir(data_dir)
+    if not (data / "map.dat").is_file():
+        raise FileNotFoundError(f"map.dat not found under {data}")
+    if not (data / "attrib.dat").is_file():
+        raise FileNotFoundError(
+            f"attrib.dat not found under {data} (required for env, neighbours, roof/ceiling masks)"
+        )
+    attrib = load_attrib(data)
+    screens = load_map_screens(data)
+    maps = build_maps_payload(attrib, screens)
+    manifest, sprites = collect_sprites(data)
+    write_embedded_bundle(out_dir, maps, manifest, sprites)
+
+    if split:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "maps.json").write_text(json.dumps(maps, separators=(",", ":")), encoding="utf-8")
+        sprite_root = out_dir / "sprites"
+        for cache_key, data_url in sprites.items():
+            key, fi = cache_key.rsplit(":", 1)
+            dir_path = sprite_root / key
+            dir_path.mkdir(parents=True, exist_ok=True)
+            raw = base64.b64decode(data_url.split(",", 1)[1])
+            (dir_path / f"{fi}.png").write_bytes(raw)
+        split_manifest = json.loads(json.dumps(manifest))
+        for key, sheet in split_manifest["sheets"].items():
+            for fi, fr in sheet["frames"].items():
+                fr["path"] = f"sprites/{key}/{fi}.png"
+        (out_dir / "sprites.json").write_text(
+            json.dumps(split_manifest, separators=(",", ":")), encoding="utf-8"
+        )
+        print(f"  split: maps.json + sprites.json + {len(sprites)} PNGs")
+
+    return maps
 
 
 def main() -> int:
     import argparse
 
-    ap = argparse.ArgumentParser(description="Export maps.json for the maze walker")
+    ap = argparse.ArgumentParser(description="Export embedded bundle for the HTML5 map walker")
     ap.add_argument(
         "-o",
         "--out",
         type=Path,
-        default=ROOT / "wiki" / "maze-walker" / "maps.json",
+        default=ROOT / "wiki" / "maze-walker",
     )
     ap.add_argument("--data", type=Path, default=None)
+    ap.add_argument(
+        "--split",
+        action="store_true",
+        help="Also write maps.json, sprites.json, and loose PNGs (local dev)",
+    )
     args = ap.parse_args()
     try:
-        export_map_walker(args.out, args.data)
+        export_map_walker(args.out, args.data, split=args.split)
     except FileNotFoundError as exc:
         print(exc, file=sys.stderr)
         return 1
