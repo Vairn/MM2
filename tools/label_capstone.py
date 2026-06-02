@@ -612,6 +612,46 @@ LABELS: dict[int, tuple[str, list[str]]] = {
             "at $11BD0 (Attack/Fight/Cast/Block/Run/Use/View).",
         ],
     ),
+    0x006E30: (
+        "spell_cast_session_explore",
+        [
+            "Non-combat spell cast: UI setup, LAB_6622 grid, JSR -$7E12 picker,",
+            "JSR LAB_CDB8 effect dispatch. See docs/26-spell-cast-asm.md.",
+        ],
+    ),
+    0x006622: (
+        "spell_grid_ui_build",
+        [
+            "Builds spell picker grid from A4-$8C22/$8C2B tables and",
+            "character spellbook field $51(A0). Called before -$7E12.",
+        ],
+    ),
+    0x013730: (
+        "spell_school_gate",
+        [
+            "Compares picked spell index to 13 words at A4-$6D88;",
+            "returns 1 -> cleric $CDB8, 0 -> sorcerer $CFF8.",
+        ],
+    ),
+    0x0108BC: (
+        "spell_combat_apply",
+        [
+            "Combat spell effect apply helper (party/monster arrays, RNG).",
+            "Called from per-spell stubs after $133B6.",
+        ],
+    ),
+    0x0133B6: (
+        "spell_effect_apply_loop",
+        [
+            "Per-target spell effect loop using caster level and RNG -$7BB4.",
+        ],
+    ),
+    0x00D464: (
+        "spell_target_picker",
+        [
+            "Combat target selection for spells; 'which (A-J)?' style UI.",
+        ],
+    ),
     0x011B0A: (
         "combat_player_block",
         [
@@ -714,8 +754,22 @@ LABELS: dict[int, tuple[str, list[str]]] = {
         "skill_spell_effect_dispatch  (LAB_CFD0)",
         [
             "Reads skill/spell index (arg +8) and runs the shared effect",
-            "dispatcher: bra $D23E -> jmp via per-effect jsr-stub table.",
-            "Fight stubs $B644.. ; Cast stubs $B982.. ; shared exit $D256.",
+            "dispatcher. Two sparse executors are used: $CFDE (0..95 via $CF1E)",
+            "and $D266 (post-subq domain via $D1AE).",
+        ],
+    ),
+    0x00CFDE: (
+        "skill_spell_sparse_executor_A",
+        [
+            "Validates D0 against #$60, then jmp's via word table at $CF1E",
+            "to CDB8 jsr/bra stubs (43 live codes, sparse).",
+        ],
+    ),
+    0x00CF1E: (
+        "DATA_skill_spell_offsets_A",
+        [
+            "Sparse word offsets consumed by $CFDE. Entry value +2 means",
+            "fall-through to return ($CFF4), i.e. code has no handler.",
         ],
     ),
     0x00B644: (
@@ -736,15 +790,22 @@ LABELS: dict[int, tuple[str, list[str]]] = {
     0x00D23E: (
         "skill_spell_jump_executor",
         [
-            "Indexes DATA_spell_effect_offset_table by effect number and",
-            "jmp's to the matching stub; common landing for Fight + Cast.",
+            "Legacy label area; active sparse executor is at $D266 using table",
+            "$D1AE. Region still contains offset words used by dispatch logic.",
+        ],
+    ),
+    0x00D1AE: (
+        "DATA_skill_spell_offsets_B",
+        [
+            "Sparse word offsets consumed by $D266; +2 entries return at $D27E.",
+            "Targets include $D006..$D182 and extra handlers $D186..$D1AA.",
         ],
     ),
     0x00D002: (
         "spell_effect_jump_table",
         [
-            "Cast-command dispatch: sequence of `jsr stub ; bra $D256` pairs",
-            "for spell handlers in the $B900..$C800 block (doc 17).",
+            "Dense `jsr stub ; bra $D27E` block ($D006..) for core spell handlers.",
+            "Entered through sparse executor $D266 and table $D1AE.",
         ],
     ),
     0x00CD98: (

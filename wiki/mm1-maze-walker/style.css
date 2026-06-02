@@ -1,0 +1,168 @@
+:root {
+  --bg: #0a0a10;
+  --panel: #12121a;
+  --border: #3a3a50;
+  --text: #e8e8f0;
+  --dim: #888898;
+  --accent: #c04040;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+.wrap {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+header h1 {
+  margin: 0 0 4px;
+  font-size: 1.2rem;
+  color: var(--accent);
+}
+
+header p {
+  margin: 0 0 12px;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+select,
+button {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover,
+select:hover {
+  border-color: var(--accent);
+}
+
+#status {
+  flex: 1 1 100%;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 12px;
+}
+
+@media (max-width: 760px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+}
+
+.viewCol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+#viewWrap,
+#miniWrap {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 8px;
+}
+
+#viewWrap {
+  flex: 1 1 624px;
+}
+
+#miniWrap {
+  flex: 0 0 auto;
+}
+
+.miniLabel {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+
+canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+aside {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 10px;
+  font-size: 12px;
+}
+
+aside h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+aside dl {
+  margin: 0 0 12px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+}
+
+aside dt {
+  color: var(--dim);
+}
+
+aside ul {
+  margin: 0 0 8px;
+  padding-left: 16px;
+  color: var(--dim);
+}
+
+.hint {
+  margin: 0;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.error {
+  padding: 16px;
+  border: 1px solid var(--accent);
+  background: #2a1010;
+  color: var(--text);
+  margin-bottom: 12px;
+}

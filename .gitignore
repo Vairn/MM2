@@ -44,6 +44,9 @@ wiki/public/**
 wiki/maze-walker/sprites/
 wiki/maze-walker/maps.json
 wiki/maze-walker/sprites.json
+wiki/mm1-maze-walker/sprites/
+wiki/mm1-maze-walker/maps.json
+wiki/mm1-maze-walker/sprites.json
 build/
 build/**
 **/__pycache__/

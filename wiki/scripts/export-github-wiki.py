@@ -40,9 +40,14 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("EXTRACTED/docs/15-3d-view-and-game-screen.md", "3D-View-and-Game-Screen"),
     ("EXTRACTED/docs/16-monster-ability-format.md", "monsters-dat-Format"),
     ("EXTRACTED/docs/17-combat-system.md", "Combat-System"),
+    ("EXTRACTED/docs/26-combat-overview.md", "Combat-Overview"),
+    ("EXTRACTED/docs/25-audio-sounds-music.md", "Audio-Sounds-Music"),
     ("EXTRACTED/docs/18-items-dat-format.md", "items-dat-Format"),
     ("EXTRACTED/docs/19-spells-and-item-use.md", "Spells-and-Item-Use"),
     ("EXTRACTED/docs/20-copy-protection-table.md", "Copy-Protection"),
+    ("EXTRACTED/docs/22-mm1-mazedata-format.md", "MM1-MAZEDATA-Format"),
+    ("EXTRACTED/docs/23-mm1-to-mm2-outdoor.md", "MM1-to-MM2-Outdoor"),
+    ("EXTRACTED/docs/24-mm1-outdoor-wallpix-by-sector.md", "MM1-Outdoor-WALLPIX"),
     ("EXTRACTED/mm2-ANALYSIS.md", "Full-Analysis"),
     ("tools/RE-TOOLS.md", "RE-Tools"),
     ("editor/README.md", "MM2ED-Editor"),
@@ -87,6 +92,11 @@ def build_link_map() -> dict[str, str]:
             m["/docs/gallery/"] = title
     m["Home"] = "Home"
     m["Gallery"] = "Gallery"
+    for _, title in DOC_SOURCES:
+        m[title] = title
+    for title in GALLERY_PAGES.values():
+        m[title] = title
+    m["Map-Walker"] = "Map-Walker"
     return m
 
 
@@ -229,7 +239,8 @@ def write_home(*, out: Path = OUT) -> None:
 <p>68000 traces for combat, world simulation, and scripts.</p>
 
 <ul>
-<li><a href="{WIKI_BASE}/Combat-System">Combat engine</a> — round loop, AI, rewards</li>
+<li><a href="{WIKI_BASE}/Combat-Overview">Combat overview</a> · <a href="{WIKI_BASE}/Combat-System">full ASM trace</a></li>
+<li><a href="{WIKI_BASE}/Audio-Sounds-Music">Audio / SFX / music</a> — <code>audio.device</code>, Controls menu</li>
 <li><a href="{WIKI_BASE}/3D-View-and-Game-Screen">3D view &amp; collision</a> — wall pages, auto-map</li>
 <li><a href="{WIKI_BASE}/Event-Script-Opcodes">Event opcodes</a> — <code>0x00…0x32</code> reference</li>
 <li><a href="{WIKI_BASE}/Main-Loop-and-Map">Main loop &amp; map</a> · <a href="{WIKI_BASE}/Copy-Protection">copy protection</a></li>
@@ -298,7 +309,8 @@ def write_home(*, out: Path = OUT) -> None:
 > [!TIP]
 > **New here?** Read [Overview](Overview), then the [format inventory](dat-Files-and-Formats).
 > Editing data files? Jump to [MM2ED Editor](MM2ED-Editor).
-> Tracing combat or scripts? [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes).
+> Tracing combat or scripts? [Combat Overview](Combat-Overview) · [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes).
+> Audio? [Audio Sounds Music](Audio-Sounds-Music).
 
 > [!IMPORTANT]
 > **Endianness** — MM2 `.dat` multibyte fields are **little-endian on disk**
@@ -312,7 +324,9 @@ def write_home(*, out: Path = OUT) -> None:
 |:---|:---|
 | Understand the project | [Overview](Overview) → [dat Files and Formats](dat-Files-and-Formats) |
 | Edit `.dat` files | [MM2ED Editor](MM2ED-Editor) + sidebar *Data formats* |
-| Trace combat or scripts | [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes) |
+| Trace combat or scripts | [Combat Overview](Combat-Overview) · [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes) |
+| Audio / walk beep / SFX | [Audio Sounds Music](Audio-Sounds-Music) |
+| MM1 map cross-walk | [MM1 MAZEDATA](MM1-MAZEDATA-Format) · [MM1 outdoor](MM1-to-MM2-Outdoor) |
 | Browse decoded art | [Gallery](Gallery) |
 | See what's still unknown | [Open Questions](Open-Questions) |
 | Boot &amp; memory map | [Startup and Init](Startup-and-Init) · [Runtime Memory Map](Runtime-Memory-Map) |
@@ -367,9 +381,24 @@ def write_sidebar() -> None:
 - [event.dat](event-dat-Format)
 - [Event Script Opcodes](Event-Script-Opcodes)
 
-#### Game systems
+#### Combat
+- [Combat Overview](Combat-Overview)
 - [Combat System](Combat-System)
+- [monsters.dat abilities](monsters-dat-Format)
+- [Spells and item use](Spells-and-Item-Use)
+
+#### Audio
+- [Audio, sounds, music](Audio-Sounds-Music)
+
+#### Game systems
 - [Copy Protection](Copy-Protection)
+- [Time Era Calendar](Time-Era-Calendar)
+- [Game State Struct](Game-State-Struct)
+
+#### MM1 cross-walk
+- [MM1 MAZEDATA format](MM1-MAZEDATA-Format)
+- [MM1 to MM2 outdoor](MM1-to-MM2-Outdoor)
+- [MM1 WALLPIX by sector](MM1-Outdoor-WALLPIX)
 
 #### Gallery
 - [Gallery home](Gallery)

@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""Export MM1 MAZEDATA.DTA for the HTML map walker (MM2 .32 art; no MM1 WALLPIX)."""
+from __future__ import annotations
+
+import argparse
+import base64
+import io
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "tools") not in sys.path:
+    sys.path.insert(0, str(ROOT / "tools"))
+
+from mm1_maps import MM1_MAP_SLUGS, MM1_MAP_SCREENS, iter_mm1_screens  # noqa: E402
+from mm1_outdoor_codec import (  # noqa: E402
+    build_mm2_screen_to_mm1,
+    convert_mm1_area_screen,
+    load_mm2_templates,
+)
+from mm1_wallpix import gog_dir_from_mazedata  # noqa: E402
+from mm2_gfx_export import (  # noqa: E402
+    frame_count_32,
+    load_frame,
+    resolve_asset,
+    resolve_data_dir,
+)
+from render_view_refs import ORIGIN_X, FLOOR_Y, SKY_Y, VIEW_H, VIEW_W  # noqa: E402
+from view3d_indoor import K_CARTO_TILE  # noqa: E402
+
+WALKER_SHEETS = (
+    "town.32",
+    "townf.32",
+    "townt.32",
+    "cave.32",
+    "cavef.32",
+    "cavet.32",
+    "castle.32",
+    "castlef.32",
+    "castlet.32",
+    "sky.32",
+    "outf.32",
+    "outdoor1.32",
+    "outdoor2.32",
+    "outdoor3.32",
+    "desert.32",
+    "ocean.32",
+    "tundra.32",
+    "swamp.32",
+    "townb.32",
+    "outb.32",
+)
+
+DATA_BIN = ROOT / "EXTRACTED" / "ghidra" / "mm2_data_00.bin"
+A4 = 0x7FFE
+
+
+def load_terrain_lookup() -> list[int]:
+    if not DATA_BIN.is_file():
+        return [0] * 256
+    blob = DATA_BIN.read_bytes()
+    off = A4 - 0x720A
+    if off < 0 or off + 256 > len(blob):
+        return [0] * 256
+    return list(blob[off : off + 256])
+
+BUNDLE_NAME = "walker-bundle.js"
+DEFAULT_MM1_EXE = Path(r"C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 1\MM.EXE")
+DEFAULT_MAZEDATA = Path(r"C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 1\MAZEDATA.DTA")
+
+
+def sheet_key(name: str) -> str:
+    return name.replace(".", "_")
+
+
+def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
+    manifest: dict = {
+        "game": "mm1",
+        "view": {
+            "w": VIEW_W,
+            "h": VIEW_H,
+            "originX": ORIGIN_X,
+            "skyY": SKY_Y,
+            "floorY": FLOOR_Y,
+        },
+        "sheets": {},
+        "terrainLookup": load_terrain_lookup(),
+        "cartoTile": list(K_CARTO_TILE),
+    }
+    sprites: dict[str, str] = {}
+    exported = 0
+    for sheet in WALKER_SHEETS:
+        if not resolve_asset(data_dir, sheet):
+            continue
+        key = sheet_key(sheet)
+        frames_meta: dict[str, dict] = {}
+        n = frame_count_32(sheet, data_dir)
+        for fi in range(n):
+            try:
+                img = load_frame(sheet, fi, data_dir)
+            except Exception:
+                break
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            cache_key = f"{key}:{fi}"
+            sprites[cache_key] = f"data:image/png;base64,{b64}"
+            frames_meta[str(fi)] = {"w": img.width, "h": img.height}
+            exported += 1
+        if frames_meta:
+            manifest["sheets"][key] = {"file": sheet, "frames": frames_meta}
+    print(f"  sprites: {exported} frames across {len(manifest['sheets'])} sheets")
+    return manifest, sprites
+
+
+def build_maps_payload(
+    mazedata: Path,
+    exe: Path | None,
+    *,
+    mm2_data: Path | None = None,
+) -> dict:
+    templates = None
+    mm2_screen_to_mm1: dict[int, int] = {}
+    gog_dir = gog_dir_from_mazedata(mazedata)
+    if gog_dir is not None:
+        print(f"  outdoor: MM1 OVR dir {gog_dir} (WALLPIX biomes)")
+    if mm2_data is not None:
+        map_dat = mm2_data / "map.dat"
+        attrib_dat = mm2_data / "attrib.dat"
+        if map_dat.is_file() and attrib_dat.is_file():
+            templates = load_mm2_templates(map_dat, attrib_dat)
+            mm2_screen_to_mm1 = build_mm2_screen_to_mm1(MM1_MAP_SLUGS)
+            print(f"  outdoor: MM2 templates loaded ({len(templates)} sectors)")
+
+    payload: dict = {"version": 5, "game": "mm1", "screens": []}
+    outdoor_count = 0
+    for sid, slug, title, visual, collision, entry, env in iter_mm1_screens(mazedata, exe=exe):
+        screen: dict = {
+            "id": sid,
+            "slug": slug,
+            "name": title,
+            "outdoor": False,
+            "env": env,
+            "entry": [entry[0], entry[1]],
+            "neighbors": [-1, -1, -1, -1],
+            "roof": [0] * 32,
+            "visual": list(visual),
+            "collision": list(collision),
+        }
+        if templates is not None:
+            converted = convert_mm1_area_screen(
+                slug,
+                visual,
+                collision,
+                templates,
+                mm2_screen_to_mm1=mm2_screen_to_mm1,
+                gog_dir=gog_dir,
+            )
+            if converted is not None:
+                vis2, col2, meta = converted
+                screen["visual"] = list(vis2)
+                screen["collision"] = list(col2)
+                screen["outdoor"] = True
+                screen["env"] = meta["env"]
+                screen["neighbors"] = meta["neighbors"]
+                screen["sector"] = meta["sector"]
+                screen["surface"] = meta["surface"]
+                screen["conversion"] = meta["conversion"]
+                if "biome" in meta:
+                    screen["biome"] = meta["biome"]
+                if "wallLanes" in meta:
+                    screen["wallLanes"] = meta["wallLanes"]
+                    screen["wallBiomes"] = meta["wallBiomes"]
+                outdoor_count += 1
+        payload["screens"].append(screen)
+    if outdoor_count:
+        print(f"  outdoor: converted {outdoor_count} area* screens to MM2 terrain encoding")
+    if len(payload["screens"]) != MM1_MAP_SCREENS:
+        raise ValueError(f"expected {MM1_MAP_SCREENS} screens, got {len(payload['screens'])}")
+    return payload
+
+
+def write_embedded_bundle(out_dir: Path, maps: dict, manifest: dict, sprites: dict[str, str]) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    bundle_path = out_dir / BUNDLE_NAME
+    body = "\n".join(
+        [
+            "// Auto-generated by tools/export_mm1_map_walker.py",
+            f"export const WALKER_MAPS = {json.dumps(maps, separators=(',', ':'))};",
+            f"export const WALKER_MANIFEST = {json.dumps(manifest, separators=(',', ':'))};",
+            f"export const WALKER_SPRITES = {json.dumps(sprites, separators=(',', ':'))};",
+            "",
+        ]
+    )
+    bundle_path.write_text(body, encoding="utf-8")
+    kb = bundle_path.stat().st_size / 1024
+    print(f"  bundle: {bundle_path} ({kb:.0f} KiB)")
+    return bundle_path
+
+
+def export_mm1_map_walker(
+    out_dir: Path,
+    mazedata: Path,
+    *,
+    data_dir: Path | None = None,
+    exe: Path | None = None,
+    split: bool = False,
+) -> dict:
+    if not mazedata.is_file():
+        raise FileNotFoundError(f"MAZEDATA.DTA not found: {mazedata}")
+    mm2_data = resolve_data_dir(data_dir)
+    maps = build_maps_payload(mazedata, exe, mm2_data=mm2_data)
+    manifest, sprites = collect_sprites(mm2_data)
+    write_embedded_bundle(out_dir, maps, manifest, sprites)
+
+    if split:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "maps.json").write_text(json.dumps(maps, separators=(",", ":")), encoding="utf-8")
+        sprite_root = out_dir / "sprites"
+        for cache_key, data_url in sprites.items():
+            key, fi = cache_key.rsplit(":", 1)
+            dir_path = sprite_root / key
+            dir_path.mkdir(parents=True, exist_ok=True)
+            raw = base64.b64decode(data_url.split(",", 1)[1])
+            (dir_path / f"{fi}.png").write_bytes(raw)
+        split_manifest = json.loads(json.dumps(manifest))
+        for key, sheet in split_manifest["sheets"].items():
+            for fi, fr in sheet["frames"].items():
+                fr["path"] = f"sprites/{key}/{fi}.png"
+        (out_dir / "sprites.json").write_text(
+            json.dumps(split_manifest, separators=(",", ":")), encoding="utf-8"
+        )
+        print(f"  split: maps.json + sprites.json + {len(sprites)} PNGs")
+
+    return maps
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Export MM1 MAZEDATA bundle for the map walker")
+    ap.add_argument(
+        "-o",
+        "--out",
+        type=Path,
+        default=ROOT / "wiki" / "mm1-maze-walker",
+    )
+    ap.add_argument("--mazedata", type=Path, default=DEFAULT_MAZEDATA)
+    ap.add_argument("--exe", type=Path, default=DEFAULT_MM1_EXE, help="MM.EXE (map slug table)")
+    ap.add_argument("--data", type=Path, default=None, help="MM2 asset dir for outdoor .32 sprites")
+    ap.add_argument("--split", action="store_true")
+    args = ap.parse_args()
+    try:
+        export_mm1_map_walker(
+            args.out,
+            args.mazedata,
+            data_dir=args.data,
+            exe=args.exe if args.exe.is_file() else None,
+            split=args.split,
+        )
+    except FileNotFoundError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

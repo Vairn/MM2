@@ -100,6 +100,18 @@ Use `--split` for loose PNG debugging only.
 Controls match the Python/C++ viewers: **W/↑** step forward, **S/↓** back,
 **A/←** turn left, **D/→** turn right.
 
+### MM1 walker (DOS `MAZEDATA.DTA`, indoor only)
+
+Same frustum engine, **55 screens**, map names from `MM.EXE` slug table @ `0x10C07`.
+Uses MM2 `town.32` / `cave.32` as stand-in wall art.
+
+```powershell
+python tools/export_mm1_map_walker.py
+cd wiki/mm1-maze-walker
+python -m http.server 8081
+# http://localhost:8081/
+```
+
 **One-time GitHub Pages setup** (required before the first deploy):
 
 1. Open [MM2 → Settings → Pages](https://github.com/Vairn/MM2/settings/pages).

@@ -143,6 +143,10 @@ export function buildSectorLabelBiomes(screens) {
   for (const rec of screens) {
     if (!rec.outdoor) continue;
     const label = rec.sector;
+    if (rec.biome) {
+      out[label] = remapBiome(rec.biome);
+      continue;
+    }
     if (label in out) continue;
     const sf = rec.surface !== undefined ? rec.surface : 0;
     if (sf === 0xcc) out[label] = "ocean_32";

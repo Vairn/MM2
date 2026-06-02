@@ -17,7 +17,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[1]
 # Bump when gallery PNG semantics change (wiki CDN caches by URL).
-GALLERY_CACHE_VERSION = 14
+GALLERY_CACHE_VERSION = 16
 # Wiki combat GIF frame duration (ms). Original export used 100ms; quarter speed = 400ms.
 ANM_GIF_DURATION_MS = 400
 if str(ROOT) not in sys.path:
@@ -1006,8 +1006,11 @@ def export_map_dat_grids(data_dir: Path, out: Path) -> None:
 MONSTER_RECORD = 0x1A
 MONSTER_PICTURE = 0x15
 
-# Town/overland `.anm` files (61–74); not referenced by monsters.dat picture byte.
+# Non-monster `.anm` files: NPC portraits (41, 56) and town/overland (61–74).
+# 41/56 are the only unused combat-range indices; used for castle king/queen events.
 WORLD_SPRITES: list[tuple[int, str, str]] = [
+    (41, "Queen (castle NPC)", "npc"),
+    (56, "King (castle NPC)", "npc"),
     (61, "City (overland map)", "overland"),
     (69, "Castle (overland map)", "overland"),
     (62, "Blacksmith", "town"),
@@ -1023,6 +1026,7 @@ WORLD_SPRITES: list[tuple[int, str, str]] = [
 ]
 
 WORLD_SPRITE_SECTIONS = {
+    "npc": "Castle NPCs (not in monsters.dat)",
     "overland": "Overland map icons",
     "town": "Town services",
     "chest": "Treasure chests",
@@ -1106,7 +1110,7 @@ def export_monsters(data_dir: Path, out: Path) -> dict:
 
 
 def export_world_sprites(data_dir: Path, out: Path) -> dict:
-    """Export town/overland/chest `.anm` files (61–74, not in monsters.dat)."""
+    """Export NPC / town / overland / chest `.anm` files not indexed by monsters.dat."""
     world_dir = out / "world"
     meta: dict = {"sprites": {}}
     for sprite_idx, label, category in WORLD_SPRITES:
@@ -1146,8 +1150,9 @@ def build_monster_sprites_wiki_markdown(monster_meta: dict, *, links: dict[str, 
         "",
         "Combat animation files referenced by `monsters.dat` byte **`0x15 & 0x7F`**. "
         "GIFs use TV-prelude composite frames at **quarter speed** (same compositing as MM2ED). "
-        f"Per-monster stats: [{catalog}]({catalog}). Town/overland sprites: "
-        f"[{world}]({world}). Byte layout: [monsters.dat Format]({fmt}).",
+        f"Per-monster stats: [{catalog}]({catalog}). NPC / town / overland sprites "
+        f"(incl. king `56.anm`, queen `41.anm`): [{world}]({world}). "
+        f"Byte layout: [monsters.dat Format]({fmt}).",
         "",
     ]
     sprites = monster_meta.get("sprites", {})
@@ -1176,8 +1181,10 @@ def build_world_sprites_wiki_markdown(world_meta: dict, *, links: dict[str, str]
     lines = [
         "# World sprites (`.anm`)",
         "",
-        "Non-combat `.anm` files used for **overland map icons**, **town service screens** "
-        "(blacksmith, tavern, temple, training, arena), and **treasure chests**. "
+        "Non-combat and story `.anm` files: **castle king/queen** (`41.anm`, `56.anm` — "
+        "the only `01`–`60` sprites not referenced by `monsters.dat`), **overland map icons**, "
+        "**town service screens** (blacksmith, tavern, temple, training, arena), and "
+        "**treasure chests**. "
         f"Combat monsters: [{monsters}]({monsters}). Format: [ANM TV Format]({fmt}).",
         "",
     ]
@@ -1186,7 +1193,7 @@ def build_world_sprites_wiki_markdown(world_meta: dict, *, links: dict[str, str]
     for key, entry in sprites.items():
         cat = entry.get("category", "other")
         by_cat.setdefault(cat, []).append((key, entry))
-    for cat in ("overland", "town", "chest"):
+    for cat in ("npc", "overland", "town", "chest"):
         section = WORLD_SPRITE_SECTIONS.get(cat, cat)
         entries = by_cat.get(cat, [])
         if not entries:
@@ -1770,7 +1777,7 @@ def write_gallery_markdown(
         "| Section | Contents |",
         "|---------|----------|",
         f"| [Monster sprites]({links['monster_sprites']}) | `.anm` combat animations (GIF) |",
-        f"| [World sprites]({links['world_sprites']}) | Town, overland, chest `.anm` |",
+        f"| [World sprites]({links['world_sprites']}) | NPC king/queen, town, overland, chest `.anm` |",
         f"| [Monsters]({links['monsters']}) | Full `monsters.dat` catalog |",
         f"| [Items]({links['items']}) | All 256 `items.dat` records |",
         f"| [Tilesets]({links['tilesets']}) | Planar `.32` image sheets (not `globe.32`) |",

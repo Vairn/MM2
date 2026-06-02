@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MM1 Map Walker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Might and Magic I — map walker</h1>
+      <p><code>MAZEDATA.DTA</code>, 55 screens — dungeons use the indoor frustum; the 20
+        <code>area*</code> overland maps are converted to MM2 outdoor terrain encoding
+        (MM1 walls + MM2 sector template) so horizon view and sector neighbours work.</p>
+    </header>
+
+    <div id="loadError" class="error" hidden></div>
+
+    <div class="toolbar">
+      <label>
+        Screen
+        <select id="screenSelect"></select>
+      </label>
+      <button type="button" id="btnEntry">Jump to entry</button>
+      <button type="button" id="btnForward" title="Step forward (W / ↑)">↑ Forward</button>
+      <button type="button" id="btnBack" title="Step back (S / ↓)">↓ Back</button>
+      <button type="button" id="btnLeft" title="Turn left (A / ←)">← Turn</button>
+      <button type="button" id="btnRight" title="Turn right (D / →)">Turn →</button>
+      <span id="status"></span>
+    </div>
+
+    <main>
+      <div class="viewCol">
+        <div id="viewWrap">
+          <canvas id="view" width="624" height="360" aria-label="3D view"></canvas>
+        </div>
+        <div id="miniWrap">
+          <span class="miniLabel">Minimap</span>
+          <canvas id="minimap" width="224" height="176" aria-label="Minimap"></canvas>
+        </div>
+      </div>
+      <aside>
+        <h2>Location</h2>
+        <dl>
+          <dt>Area</dt><dd id="locName">—</dd>
+          <dt>Map file</dt><dd id="locSlug">—</dd>
+          <dt>Screen</dt><dd id="locScreen">—</dd>
+          <dt>Tile</dt><dd id="locTile">—</dd>
+          <dt>Facing</dt><dd id="locFacing">—</dd>
+          <dt>Wall set</dt><dd id="locMode">—</dd>
+        </dl>
+        <h2>Controls</h2>
+        <ul>
+          <li><strong>W</strong> / <strong>↑</strong> — step forward</li>
+          <li><strong>S</strong> / <strong>↓</strong> — step backward</li>
+          <li><strong>A</strong> / <strong>←</strong> — turn left</li>
+          <li><strong>D</strong> / <strong>→</strong> — turn right</li>
+          <li>Pick another screen from the list (no cross-map links yet)</li>
+        </ul>
+        <p class="hint">Regenerate: <code>python tools/export_mm1_map_walker.py</code></p>
+      </aside>
+    </main>
+  </div>
+  <script type="module" src="walker.js"></script>
+</body>
+</html>
