@@ -80,6 +80,13 @@ otherwise default to LE and validate with round-trip on real files.
     keys A/F/S/C/U/B/R/E/V); monster AI `0x1064C`.
   - Battle slots: parallel arrays `A4-$11DE[]` (type), `-$53A[]` (HP),
     `-$519[]` (status), `-$50E[]` (speed); victory `0x12430`, rewards `0x10B74`.
+- **character mechanics**: stats/HP/SP/XP/thievery/races/extra-attacks — see
+ `EXTRACTED/docs/32-character-mechanics.md` (FAQ-sourced; ASM confirmation partial).
+- **skills and hirelings**: 15 skill sellers, Rinaldo Jr./Maxwell, 24 hirelings A–X
+ stats/skills/locations — see `EXTRACTED/docs/33-skills-and-hirelings.md`.
+- **commerce formulas**: training/healing cost, portal table, fly landing coords,
+ day-bonus shop cycle, bar drinks sub-game, bar food + event triggers —
+ see `EXTRACTED/docs/34-commerce-formulas.md`.
 - **spells.dat**: decoded — 96 spells × 2 bytes (Sorcerer 0..47, Cleric 48..95,
   same flat order as the items.dat use-effect index) + 64 trailing/unused bytes
   (preserved on round-trip). See `EXTRACTED/docs/19-spells-and-item-use.md`.
@@ -93,6 +100,13 @@ otherwise default to LE and validate with round-trip on real files.
     cost/type/object/description for all 96 transcribed into
     `editor/src/core/Spells.cpp` `kSpells[]` and `tools/mm2_spells.py`
     `SPELL_META`. Codec: `tools/decode_spells.py`, `core/SpellsFile.{h,cpp}`.
+- **character mechanics** (FAQ-sourced): race modifiers, HP/SP/AC formulas, XP tables,
+  extra-attacks divisors, spell-level gain, thievery — see `EXTRACTED/docs/32-character-mechanics.md`.
+- **skills + hirelings** (FAQ-sourced): 15-skill seller table with town/coords/cost; 24-hireling
+  roster A-X with full stats — see `EXTRACTED/docs/33-skills-and-hirelings.md`.
+- **commerce + world services** (FAQ-sourced): training/healing cost formulas, 30-day item-bonus
+  cycle, bar food/drinks effects, portal connection table, Fly (S3-2) landing coords per sector —
+  see `EXTRACTED/docs/34-commerce-formulas.md`.
 
 
 ## External Reverse-Engineering Reference

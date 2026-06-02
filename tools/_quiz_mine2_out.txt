@@ -1,0 +1,191 @@
+﻿=== ARENA EVENTS ===
+
+--- loc 0 arena-related strings ---
+  [5] Turkov's Training
+  [6] Arena Entrance Only!
+
+loc 0 ev 17 tile (15,15)
+  exec_selector(0x10)
+
+loc 0 ev 18 tile (4,7)
+  exec_selector(0x0E)
+
+loc 0 ev 22 tile (4,4)
+  exec_selector(0x11)
+
+--- loc 1 arena-related strings ---
+  [4] Island Training
+
+loc 1 ev 31 tile (13,15)
+  set_service_context(str[20] "Not enough gold!", mode=0x00)
+  exec_selector(0x12)
+
+--- loc 3 arena-related strings ---
+  [4] Training Academy
+
+loc 3 ev 28 tile (9,3)
+  exec_selector(0x3E)
+
+loc 3 ev 29 tile (3,15)
+  exec_selector(0x3F)
+
+loc 3 ev 30 tile (9,6)
+  exec_selector(0x40)
+
+--- loc 4 arena-related strings ---
+  [5] Sheik Training Arena
+  [6] Monster Bowl
+
+loc 4 ev 18 tile (11,4)
+  set_service_context(str[5] "Sheik Training Arena", mode=0x00)
+  exec_selector(0x04)  # open_training
+
+loc 4 ev 21 tile (7,6)
+  set_service_context(str[6] "Monster Bowl", mode=0x00)
+  exec_selector(0x02)  # open_inn_lodging
+
+loc 4 ev 23 tile (15,4)
+  exec_selector(0x49)
+
+=== LOC 60 NORDON ===
+  [0] '\x00\x00\x00\x00\x00\x00\x00\x00\x15\x00v\x10\x10\x05\x08\x02\x05\x18\x00v∩┐╜\x02\x08\x0f\x18\x00v∩┐╜\x00\x08\x0f\x02\x06\x08\x0f\x02\x07\x08\x0f\x02\x08\x08'
+  [1] '\x15\x00v\x10\x10\t\x15\x00v\x02\x11\t\x15\x00v\x04\x10\t\x15\x00v\x08\x10\t\x03\t\x18\x00v∩┐╜\x04)\x02\n)\x02\x0b)\x02\x0c)\x03\r\x1a\x00\x01\x1a\x01\x01\x18\x00v∩┐╜\x10)'
+  [2] '\x13\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+  [3] '\x02\x0e\n\x11\x06$\x14\x00\x11\x02\x18\x00t∩┐╜\x02\x0f\x01\x0f\x08\x0f'
+  [4] '\x02\x10\t\x11\x07(\x00∩┐╜\x11\x03\x19\x00∩┐╜\x00\x00\x01\x11)\x01\x12)\x0f'
+  [5] '\x12\n\n\n\n\n\n\x00\x00\x00\x00\x00\x00'
+  [6] '\x02\x13\t\x11\x04$∩┐╜\x01\x10\x03\x01\x0f\x07\x0c\x00∩┐╜\x19\x01o\x00\x00\x0f'
+  [8] 'The spirit of Corak proclaims,\n"Fantastic adventure awaits you.\nChallenging quests abound and battles\ninnumerable must b'
+  [9] 'The humble wizard Nordon asks, "Will\nyou do me a service (y/n)?"'
+  [10] '"Numerous rewards will be yours if you\nretreive one of my magical golden\ngoblets, ruthlessly stolen by the\ndreaded gobli'
+  [11] '"Ah, you\'ve found a goblet! For your\nbravery I grant you 2,000 exp, the\nspell Eagle Eye, and if you search,\n1,000 gold."'
+  [12] '"Now, visit my sister Nordonna. She\nlives nearby and could provide\nvaluable information."'
+  [13] '"Remember, you must find my goblet."'
+  [14] '"Remember, you must visit my sister."'
+  [15] '"Such a pity. Now kindly begone!"'
+  [16] 'Nordonna moans, "My kidnapped sons are\nheld captive by the cruel kobolds in\nthe cave under this town. You\'ve\nbraved this'
+  [17] 'Nordonna has gone fishing.'
+  [18] 'Nordonna yelps, "Begone strangers!"'
+  [19] '"Please, rescue my children soon."'
+  [20] '"My grateful sons are now available\nfor hire at Middlegate Inn. I reward\nyou with information to help you gain\nuntold ri'
+  [21] 'A sleepy conjurer yawns, "My friends,\nfor only 20 gold I can enroll you in\nthe local mage guild." Buy in (y/n)?'
+  [22] 'Not enough gold!'
+  [23] 'Fanciful Feldecarb Fountain flows\nfull as fluttering faeries frolic\nfastidiously. Flick a farthing (y/n)?'
+  [24] 'You find a fabulous castle key!'
+  [25] 'Fool, you have no farthing to flick!'
+  [26] 'The mystic green glow of an ancient\nkey catches your eye. The locksmith\noffers it for 500 gold. Pay (y/n)?'
+
+=== LOC 61 sample ===
+kind=string_bank n=55
+  [0] '\x00\x00\x00\x00'
+  [1] '\x12%%%%%%%%\x00\x00\x00\x00'
+  [2] '\x12%%%%9999\x00\x00\x00\x00'
+  [3] '\x12%%%%IIII\x00\x00\x00\x00'
+  [4] '\x12%%%%%WWW\x00\x00\x00\x00'
+  [5] '\x12\x1c\x1c\x1c\x1c\x1c\x1c\x1c\x1c\x1c\x1c\x00\x00'
+  [6] '\x12,,,,====\x00\x00\x00\x00'
+  [7] '\x12\x1c\x1c\x1cJJJJJ\x00\x00\x00\x00'
+  [8] '\x12YYYYZZZZ\x00\x00\x00\x00'
+  [9] '\x02\x04\t\x10\x01\x0f$P∩┐╜\x10\x02\x01\x02)\x19\x01r\x00\x00\x11\x01\x0f\x01\x05)'
+  [10] '\x02\x06)'
+  [11] '\x02\x07)'
+  [12] '\x02\x08)'
+  [13] '\x02\t)'
+  [14] '\x02\n)'
+
+=== LOC 67 HoS ===
+kind=mixed_pool n=0 triplets=56
+  seg 1: cond = prompt_yes_no(); map_transition(0x1E, 0xB1); 
+  seg 2: show_text_block(str[5]); set_abort_and_exit(); 
+  seg 8: cond = check_monster_present(0x01, 0xFB); if not cond: skip_tokens(12); cond = check_monster_present(0x01, 0xFC); if not cond: skip_tokens(10); cond = check_monster_present(0x01, 0xFD); if not cond: skip_tokens(8); 
+
+=== LOC 70 bishop/puzzle ===
+  [5] Yellow Interleave - every two letters / should be matched 'til the end. Try / this way: 9-5-6-1-7-4-2-8-
+  [6] The Bishop of Green Battle is locked / in a cage.
+  [7] The Bishop of Green Battle is freed / from imprisonment by your green key. / (+3000 exp). He grants all 
+
+=== OP_2B in towns ===
+  loc 0 ev 39 tile (12,13): skip_tokens(1); exec_selector(0x26); clear_current_tile_event_flag()
+  loc 0 ev 40 tile (14,12): skip_tokens(1); exec_selector(0x27); clear_current_tile_event_flag()
+  loc 0 ev 41 tile (1,8): skip_tokens(1); exec_selector(0x28); clear_current_tile_event_flag()
+  loc 0 ev 42 tile (4,8): skip_tokens(1); exec_selector(0x29); clear_current_tile_event_flag()
+  loc 1 ev 32 tile (13,0): skip_tokens(1); exec_selector(0x26); clear_current_tile_event_flag()
+  loc 1 ev 33 tile (5,0): skip_tokens(1); exec_selector(0x13); clear_current_tile_event_flag()
+  loc 1 ev 34 tile (2,0): skip_tokens(1); exec_selector(0x14); clear_current_tile_event_flag()
+  loc 1 ev 35 tile (3,2): skip_tokens(1); exec_selector(0x15); clear_current_tile_event_flag()
+  loc 1 ev 36 tile (0,2): skip_tokens(1); exec_selector(0x16); clear_current_tile_event_flag()
+  loc 1 ev 37 tile (4,13): skip_tokens(1); exec_selector(0x17); clear_current_tile_event_flag()
+  loc 1 ev 38 tile (3,15): skip_tokens(1); exec_selector(0x18); clear_current_tile_event_flag()
+  loc 1 ev 39 tile (1,13): skip_tokens(1); exec_selector(0x19); clear_current_tile_event_flag()
+  loc 1 ev 40 tile (0,15): skip_tokens(1); exec_selector(0x1A); clear_current_tile_event_flag()
+  loc 1 ev 41 tile (6,2): skip_tokens(1); exec_selector(0x1B); clear_current_tile_event_flag()
+  loc 3 ev 36 tile (13,3): skip_tokens(1); exec_selector(0x2E); clear_current_tile_event_flag()
+  loc 3 ev 37 tile (14,3): skip_tokens(1); exec_selector(0x46); clear_current_tile_event_flag()
+  loc 3 ev 38 tile (15,3): skip_tokens(1); exec_selector(0x34); clear_current_tile_event_flag()
+  loc 3 ev 39 tile (14,9): skip_tokens(1); exec_selector(0x47); clear_current_tile_event_flag()
+  loc 3 ev 40 tile (14,11): skip_tokens(1); exec_selector(0x45); clear_current_tile_event_flag()
+  loc 3 ev 41 tile (2,4): skip_tokens(1); exec_selector(0x30); clear_current_tile_event_flag()
+  loc 3 ev 42 tile (5,10): skip_tokens(4); apply_party(count=0x00, op=0x78, val=0x04); if cond: skip_tokens(1); end_script(); encounter_setup(monsters=04 04 04 04 04 04 06 06 06 06, flags=06 02)
+  loc 4 ev 31 tile (0,15): skip_tokens(2); set_service_context(str[18] "Not enough gold!", mode=0x00); exec_selector(0x4B); clear_current_tile_event_flag()
+  loc 4 ev 32 tile (2,13): skip_tokens(2); set_service_context(str[14] "Enter the Plains of Peril (y/n)?", mode=0x00); exec_selector(0x4A); clear_current_tile_event_flag()
+  loc 4 ev 40 tile (15,12): skip_tokens(1); encounter_setup(monsters=09 09 09 09 09 09 09 09 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 4 ev 41 tile (6,9): skip_tokens(1); exec_selector(0x2C); clear_current_tile_event_flag()
+  loc 4 ev 45 tile ?: skip_tokens(1); exec_selector(0x53); exec_selector(0x54)
+
+=== OP_03 samples ===
+
+=== Fountain/heal OP_1F loc 0 ===
+
+=== OP_0D cruise loc 14 ev 19 ===
+loc 14 ev 19 tile (9,6)
+  show_text_basic(str[8] "Cruise to Murray's Resort Isle.")
+  apply_party(count=0x00, op=0x7B, val=0x04)
+  show_text_popup_style_b(str[1] "Must be [ / this tall")
+  if cond: skip_tokens(2)
+  show_text_block(str[16] "If you wish to take the cruise, please / make arrangements with travel a")
+  set_abort_and_exit()
+  show_text_block(str[17] ""Welcome aboard folks! I'm Fej, your / cruise director. A boat is just a")
+  cond = prompt_yes_no()
+  if cond: skip_tokens(1)
+  end_script()
+  show_text_block(str[18] "Please remain seated at all times. / This is an E-ticket ride.")
+  delay(0xC8)
+  apply_party_masked(count=0x00, set=0x7B, and=0xF3, or=0x08)
+  engine_call(0x09)
+  map_transition(0x0E, 0x96)
+
+=== OP_0D Murray travel loc 0 ev 37 ===
+loc 0 ev 37 tile (3,10)
+  show_text_block(str[31] "Joan, the travel agent, will book you / on a trip to beautiful Murray's ")
+  cond = prompt_yes_no()
+  if cond: skip_tokens(1)
+  end_script()
+  cond = check_gold_at_least(5000)
+  if cond: skip_tokens(3)
+  show_text_basic(str[17] "Not enough gold!")
+  engine_call(0x09)
+  set_abort_and_exit()
+  show_text_block(str[33] "Catch the ferry in area C3 at x7, y9.")
+  apply_party_masked(count=0x00, set=0x7B, and=0xFB, or=0x04)
+  set_abort_and_exit()
+
+=== Tickets items ===
+  208: 'Green Ticket'
+  209: 'Yellow Tickt'
+  210: 'Red Ticket'
+  211: 'Black Ticket'
+
+=== OP_25 hits ===
+
+=== OP_23 hits ===
+  loc 8 ev 6 tile (14,12) range=[93, 93]
+  loc 10 ev 19 tile (12,12) range=[140, 170]
+
+=== Castle blobs 63/65/68 ===
+  loc 63: kind=castle_blob terminated=False triplets=432 script_len=0 strings=0
+  loc 65: kind=castle_blob terminated=False triplets=265 script_len=0 strings=0
+  loc 68: kind=castle_blob terminated=False triplets=250 script_len=0 strings=0
+
+=== Middlegate OP_06 signs ===
+
+=== Middlegate OP_05 plaque ===

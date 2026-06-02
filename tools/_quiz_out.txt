@@ -1,0 +1,1514 @@
+﻿======================================================================
+Q1 OP_04/05/06
+  loc 0 Middlegate OP_04: [(2, '(4,5)', 'Middlegate Inn'), (3, '(6,5)', 'S.J. Blacksmith'), (4, '(6,7)', 'Slaughtered Lamb')]
+  loc 4 Sandsobar OP_04: [(2, '(14,7)', 'Hourglass Inn'), (3, '(10,5)', "Big Al's Accessories"), (4, '(11,5)', 'Red Lantern Tavern')]
+  loc 4 Sandsobar OP_05: [(30, '(0,11)', 'S 1,51 Em Pleh H S X / l  N           i p O / uR W  Beware of  o X / mu C    Eye')]
+  loc 4 Sandsobar OP_06: [(28, '(3,15)', 'The / Slums')]
+  loc 56 Woodhaven OP_04: [(2, '(2,8)', 'No Entry'), (3, '(10,9)', "Hoardall's Palace"), (4, '(8,10)', 'Throne Room')]
+  loc 57 Pinehurst OP_04: [(2, '(7,13)', 'Yellow Room'), (3, '(8,13)', 'Left Door'), (4, '(6,12)', 'Right Door')]
+  loc 57 Pinehurst OP_05: [(26, '(7,2)', 'Find my mirror image / and you will find / the way out.')]
+  loc 57 Pinehurst OP_06: [(16, '(2,11)', 'Unmarked / are deadly'), (21, '(5,14)', 'See you / later!'), (22, '(6,7)', 'See you / later!')]
+  loc 14 C3 overland OP_06: [(10, '(3,14)', 'Druids / Only!'), (11, '(9,3)', '<Sandsobar / <Hillstone')]
+
+======================================================================
+Q2 OP_01/02/03
+  loc 0 Middlegate ev=21 tile=(5,0) OP_01 str[24]: You are at the city gates. Exit (y/n)?
+    -> show_text_basic(str[24] "You are at the city gates. Exit (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1)
+  loc 0 Middlegate ev=30 tile=(2,10) OP_01 str[21]: Stairs to Cavern. Descend (y/n)?
+    -> show_text_basic(str[21] "Stairs to Cavern. Descend (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(1)
+  loc 0 Middlegate ev=34 tile=(12,3) OP_02 str[22]: Otto adds the finishing touches to an / intricate map. Pay 10 gold to learn / this skill (y/n)?
+    -> show_text_block(str[22] "Otto adds the finishing touches to an / intricate map. Pay 10 gold to le"); cond = prompt_yes_no(); if cond: skip_tokens(1)
+  loc 0 Middlegate ev=35 tile=(9,1) OP_02 str[29]: Sir Edmund Hilary will teach you / Mountaineering for only 2000 gold. / Pay (y/n)?
+    -> show_text_block(str[29] "Sir Edmund Hilary will teach you / Mountaineering for only 2000 gold. / "); cond = prompt_yes_no(); if cond: skip_tokens(1)
+  loc 0 Middlegate ev=36 tile=(8,14) OP_02 str[30]: A ranger will train you in the / difficulties of forest travel for / 2000 gold. Train (y/n)?
+    -> show_text_block(str[30] "A ranger will train you in the / difficulties of forest travel for / 200"); cond = prompt_yes_no(); if cond: skip_tokens(1)
+  loc 0 Middlegate ev=37 tile=(3,10) OP_02 str[31]: Joan, the travel agent, will book you / on a trip to beautiful Murray's Resort / Isle for 5,000 gold. Pa
+    -> show_text_block(str[31] "Joan, the travel agent, will book you / on a trip to beautiful Murray's "); cond = prompt_yes_no(); if cond: skip_tokens(1)
+  loc 0 Middlegate ev=43 tile=(bank/no tile) OP_02 str[9]: Drink from the fountain of / clairvoyance (y/n)?
+    -> show_text_block(str[9] "Drink from the fountain of / clairvoyance (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(2)
+  loc 1 Atlantium ev=24 tile=(10,3) OP_01 str[17]: Stairs to cavern. Descend (y/n)?
+    -> show_text_basic(str[17] "Stairs to cavern. Descend (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1)
+  loc 1 Atlantium ev=23 tile=(15,0) OP_02 str[16]: An empty pier stretches out of town. / Leave (y/n)?
+    -> show_text_block(str[16] "An empty pier stretches out of town. / Leave (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1)
+  loc 1 Atlantium ev=26 tile=(0,12) OP_02 str[19]: A girl in a pure white toga offers / travel to Vulcania for 50 gold. / Accept (y/n)?
+    -> show_text_block(str[19] "A girl in a pure white toga offers / travel to Vulcania for 50 gold. / A"); cond = prompt_yes_no(); if cond: skip_tokens(1)
+  loc 1 Atlantium ev=27 tile=(2,6) OP_02 str[21]: The Keep Atlantium Beautiful Committee / offers to send you to Middlegate for / 25 gold. Embark (y/n)?
+    -> show_text_block(str[21] "The Keep Atlantium Beautiful Committee / offers to send you to Middlegat"); cond = prompt_yes_no(); if cond: skip_tokens(1)
+  loc 1 Atlantium ev=28 tile=(4,8) OP_02 str[22]: Hurl the spear, let fly the discus, / all in the Olympic manner. Spend 500 / gold to be an Athlete (y/n)
+    -> show_text_block(str[22] "Hurl the spear, let fly the discus, / all in the Olympic manner. Spend 5"); cond = prompt_yes_no(); if not cond: skip_tokens(8)
+  loc 1 Atlantium ev=29 tile=(2,9) OP_02 str[24]: Let crafty Odysseus teach you his many / linguistic skills for 500 gold (y/n)?
+    -> show_text_block(str[24] "Let crafty Odysseus teach you his many / linguistic skills for 500 gold "); cond = prompt_yes_no(); if not cond: skip_tokens(8)
+  loc 1 Atlantium ev=30 tile=(7,11) OP_02 str[25]: Become the Hero/Heroine of your / dreams for 1000 gold (y/n)?
+    -> show_text_block(str[25] "Become the Hero/Heroine of your / dreams for 1000 gold (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(3)
+  loc 14 C3 overland ev=3 tile=(7,3) OP_01 str[2]: Etched onto a huge stone is an "I".
+    -> show_text_basic(str[2] "Etched onto a huge stone is an "I"."); set_abort_and_exit()
+  loc 14 C3 overland ev=4 tile=(8,1) OP_01 str[3]: Etched onto a huge stone is a "D".
+    -> show_text_basic(str[3] "Etched onto a huge stone is a "D"."); set_abort_and_exit()
+  loc 14 C3 overland ev=5 tile=(0,15) OP_01 str[4]: Etched onto a huge stone is an "S".
+    -> show_text_basic(str[4] "Etched onto a huge stone is an "S"."); set_abort_and_exit()
+  loc 14 C3 overland ev=19 tile=(9,6) OP_01 str[8]: Cruise to Murray's Resort Isle.
+    -> show_text_basic(str[8] "Cruise to Murray's Resort Isle."); apply_party(count=0x00, op=0x7B, val=0x04); show_text_popup_style_b(str[1] "Must be [ / this tall")
+  loc 14 C3 overland ev=6 tile=(7,0) OP_02 str[5]: A cold draft emerges from the opening / of a web-strewn shaft. Go down (y/n)?
+    -> show_text_block(str[5] "A cold draft emerges from the opening / of a web-strewn shaft. Go down ("); cond = prompt_yes_no(); if cond: skip_tokens(1)
+  loc 14 C3 overland ev=9 tile=(3,4) OP_02 str[11]: A passage leads behind the falls. / Take it (y/n)?
+    -> show_text_block(str[11] "A passage leads behind the falls. / Take it (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1)
+
+======================================================================
+Q3 OP_0D (walkable loc 0-59)
+  loc 0 Middlegate ev=37 tile=(3,10) engine_call(0x09) shop=False map_x=False
+    script: show_text_block(str[31] "Joan, the travel agent, will book you / on a trip to beautiful Murray's "); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(5000); if cond: skip_tokens(3); show_text_basic(str[17] "Not enough gold!"); engine_call(0x09)
+  loc 2 Tundara ev=31 tile=(3,12) engine_call(0x00) shop=False map_x=False
+    script: show_text_block(str[22] "A large button protrudes from the / wall. Push it (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); show_text_basic(str[24] "Click!"); engine_call(0x00); set_tile((y=7,x=15), 0x11, 0x32); set_abort_and_exit()
+  loc 5 ev=6 tile=(8,12) engine_call(0x09) shop=False map_x=True
+    script: op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(5); show_text_basic(str[5] "A blizzard blinds the party!"); wait_for_space(); engine_call(0x09); for_party(mask=0x00): call(0x14,0x00); map_transition(0x85, 0x00)
+  loc 5 ev=7 tile=(11,14) engine_call(0x09) shop=False map_x=True
+    script: op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(5); show_text_basic(str[6] "A snow drift sweeps the party away!"); wait_for_space(); engine_call(0x09); for_party(mask=0x00): call(0x1E,0x00); map_transition(0x85, 0x00)
+  loc 5 ev=8 tile=(3,2) engine_call(0x09) shop=False map_x=True
+    script: op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(5); show_text_basic(str[7] "Avalanche!"); wait_for_space(); engine_call(0x09); for_party(mask=0x00): call(0x32,0x00); map_transition(0x85, 0x00)
+  loc 6 ev=6 tile=(14,1) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[11] "A blizzard blinds the party!"); for_party(mask=0x00): call(0x14,0x00); wait_for_space(); engine_call(0x09); map_transition(0x06, 0x33)
+  loc 6 ev=7 tile=(3,14) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[12] "A snowdrift sweeps the party away!"); for_party(mask=0x00): call(0x1E,0x00); wait_for_space(); engine_call(0x09); map_transition(0x06, 0x33)
+  loc 7 ev=6 tile=(6,2) engine_call(0x09) shop=False map_x=True
+    script: skip_tokens(3); apply_party(count=0x00, op=0x77, val=0x01); if not cond: skip_tokens(2); encounter_setup(monsters=4C 4C 4C 4C 4C 4C 00 00 00 00, flags=00 00); clear_current_tile_event_flag(); show_text_block(str[8] "The sight of ghastly 'horrors' is too / much to bear on an empty stomach"); wait_for_space(); engine_call(0x09)
+  loc 8 ev=5 tile=(6,5) engine_call(0x09) shop=False map_x=True
+    script: show_text_block(str[4] "The party is overcome with queasiness / and uncontrollable retching. You"); op_1c_engine_query_to_cond(0x08); apply_party_masked(count=0x09, set=0x43, and=0x00, or=0xFE); party_effect(sel=0x09, 43 01 01 00 00); wait_for_space(); engine_call(0x09); map_transition(0x27, 0x00)
+  loc 9 ev=8 tile=(14,10) engine_call(0x09) shop=False map_x=True
+    script: op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(5); show_text_basic(str[7] "A snow drift sweeps the party away!"); engine_call(0x09); wait_for_space(); for_party(mask=0x00): call(0x1E,0x00); map_transition(0x89, 0x00)
+  loc 9 ev=9 tile=(5,6) engine_call(0x09) shop=False map_x=True
+    script: op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(5); show_text_basic(str[8] "A blizzard blinds the party!"); engine_call(0x09); wait_for_space(); for_party(mask=0x00): call(0x14,0x00); map_transition(0x89, 0x00)
+  loc 10 ev=7 tile=(13,5) engine_call(0x09) shop=False map_x=False
+    script: op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(3); show_text_basic(str[4] "A snowdrift engulfs your party."); engine_call(0x09); for_party(mask=0x00): call(0x1E,0x00); end_script()
+  loc 10 ev=10 tile=(1,4) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[6] "Poof! You are displaced."); wait_for_space(); engine_call(0x09); map_transition(0x2D, 0xF8)
+  loc 10 ev=11 tile=(3,6) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[7] "Shazam! You are teleported!"); wait_for_space(); engine_call(0x09); map_transition(0x2F, 0xE0)
+  loc 10 ev=12 tile=(1,6) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[8] "Foop! You are ejected!"); wait_for_space(); engine_call(0x09); map_transition(0x31, 0x21)
+  loc 10 ev=13 tile=(5,9) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[9] "Zap! Where am I?"); wait_for_space(); engine_call(0x09); map_transition(0x33, 0x89)
+  loc 12 ev=14 tile=(8,0) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[15] "A tidal wave sweeps the party away!"); wait_for_space(); engine_call(0x09); for_party(mask=0x00): call(0x28,0x00); map_transition(0x0C, 0x48)
+  loc 12 ev=15 tile=(14,0) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[16] "A whirlpool sucks the party under!"); wait_for_space(); engine_call(0x09); map_transition(0x0F, 0x86)
+  loc 13 ev=10 tile=(11,14) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0xBE)
+  loc 13 ev=11 tile=(11,13) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0xBD)
+  loc 13 ev=12 tile=(11,12) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0xBC)
+  loc 13 ev=13 tile=(11,11) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_basic(str[11] "To your right is Jouster's Way."); delay(0xC8); engine_call(0x09); map_transition(0x0D, 0xBB)
+  loc 13 ev=14 tile=(11,10) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0xBA)
+  loc 13 ev=15 tile=(10,10) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0xAA)
+  loc 13 ev=16 tile=(9,10) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x9A)
+  loc 13 ev=17 tile=(8,10) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x8A)
+  loc 13 ev=18 tile=(7,10) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x7A)
+  loc 13 ev=19 tile=(6,10) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x6A)
+  loc 13 ev=20 tile=(5,10) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x5A)
+  loc 13 ev=21 tile=(5,9) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x59)
+  loc 13 ev=22 tile=(5,8) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x58)
+  loc 13 ev=23 tile=(5,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x57)
+  loc 13 ev=24 tile=(4,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x47)
+  loc 13 ev=25 tile=(3,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_basic(str[12] "Isle of the Ancients, Evil Zone."); delay(0xC8); engine_call(0x09); map_transition(0x0D, 0x37)
+  loc 13 ev=26 tile=(2,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x27)
+  loc 13 ev=27 tile=(1,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x17)
+  loc 13 ev=28 tile=(0,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0x07)
+  loc 13 ev=29 tile=(13,10) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0xF7)
+  loc 14 C3 overland ev=19 tile=(9,6) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[8] "Cruise to Murray's Resort Isle."); apply_party(count=0x00, op=0x7B, val=0x04); show_text_popup_style_b(str[1] "Must be [ / this tall"); if cond: skip_tokens(2); show_text_block(str[16] "If you wish to take the cruise, please / make arrangements with travel a"); set_abort_and_exit(); show_text_block(str[17] ""Welcome aboard folks! I'm Fej, your / cruise director. A boat is just a"); cond = prompt_yes_no()
+  loc 14 C3 overland ev=20 tile=(10,6) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0E, 0xA6)
+  loc 14 C3 overland ev=21 tile=(11,6) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0E, 0xB6)
+  loc 14 C3 overland ev=22 tile=(11,5) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0E, 0xB5)
+  loc 14 C3 overland ev=23 tile=(11,4) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0E, 0xB4)
+  loc 14 C3 overland ev=24 tile=(11,3) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0E, 0xB3)
+  loc 14 C3 overland ev=25 tile=(11,2) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_basic(str[19] "To your left is Druid's Point."); delay(0xC8); engine_call(0x09); map_transition(0x0E, 0xB2)
+  loc 14 C3 overland ev=26 tile=(11,1) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0E, 0xB1)
+  loc 14 C3 overland ev=27 tile=(11,0) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0E, 0xB0)
+  loc 14 C3 overland ev=28 tile=? engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x0D, 0xBF)
+  loc 15 ev=11 tile=(12,7) engine_call(0x09) shop=False map_x=False
+    script: op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(4); show_text_basic(str[10] "TIDAL WAVE!!!"); engine_call(0x09); for_party(mask=0x00): call(0x28,0x00); wait_for_space(); end_script()
+  loc 15 ev=12 tile=(6,6) engine_call(0x09) shop=False map_x=True
+    script: op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(4); show_text_basic(str[11] "WHIRLPOOL!!!"); wait_for_space(); engine_call(0x09); map_transition(0x26, 0x8A); end_script()
+  loc 16 ev=7 tile=(4,2) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_basic(str[7] "Off in the distance is Atlantium."); delay(0xC8); engine_call(0x09); map_transition(0x10, 0x57)
+  loc 16 ev=19 tile=(14,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0xE7)
+  loc 16 ev=20 tile=(13,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0xD7)
+  loc 16 ev=21 tile=(12,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0xC7)
+  loc 16 ev=22 tile=(11,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0xB7)
+  loc 16 ev=23 tile=(10,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0xA7)
+  loc 16 ev=24 tile=(9,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_basic(str[9] "Isle of the Ancients, Good Zone."); delay(0xC8); engine_call(0x09); map_transition(0x10, 0x97)
+  loc 16 ev=25 tile=(8,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0x87)
+  loc 16 ev=26 tile=(7,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0x77)
+  loc 16 ev=27 tile=(5,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0x67)
+  loc 16 ev=28 tile=(3,2) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0x47)
+  loc 16 ev=30 tile=(3,7) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0x37)
+  loc 16 ev=31 tile=(3,6) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_basic(str[8] "Coming up, Murray's Resort Isle."); delay(0xC8); engine_call(0x09); map_transition(0x10, 0x36)
+  loc 16 ev=32 tile=(3,5) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x7B, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); engine_call(0x09); map_transition(0x10, 0x35)
+  loc 18 ev=3 tile=(3,3) engine_call(0x09) shop=False map_x=True
+    script: show_text_block(str[2] "A marble statue of a winged beast has / a button protruding from its / p"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); show_text_basic(str[3] "Poof!"); wait_for_space(); engine_call(0x09); map_transition(0x0C, 0x48)
+  loc 18 ev=6 tile=(15,11) engine_call(0x09) shop=False map_x=True
+    script: show_text_block(str[8] "Everytime you look at this statue it / appears to be moving. Touch it (y"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); show_text_basic(str[3] "Poof!"); wait_for_space(); engine_call(0x09); map_transition(0x92, 0x00)
+  loc 22 Corak's Cave ev=4 tile=(3,13) engine_call(0x09) shop=False map_x=True
+    script: cond = consume_item(item_id=193, name="Admit 8 Pass", probe=1); if not cond: skip_tokens(2); show_text_basic(str[4] "Your Admit 8 Pass is taken at the door"); set_abort_and_exit(); show_text_block(str[5] "Ticket takers at the door say, "I / can't let you in if you don't have a"); wait_for_space(); engine_call(0x09); map_transition(0x16, 0x77)
+  loc 22 Corak's Cave ev=6 tile=(0,13) engine_call(0x09) shop=True map_x=True
+    script: cond = check_member_attr(fields=0x03, value=0x05); if cond: skip_tokens(4); show_text_block(str[9] "You catch a glimpse of Corak's coffin / and then -"); wait_for_space(); engine_call(0x09); map_transition(0x16, 0xB5); skip_tokens(2); show_text_block(str[10] "You approach Corak's coffin. / Suddenly you are attacked.")
+  loc 24 ev=5 tile=(7,15) engine_call(0x09) shop=True map_x=True
+    script: cond = check_member_attr(fields=0x40, value=0x00); if cond: skip_tokens(4); show_text_basic(str[27] "You must obey the sign!"); wait_for_space(); engine_call(0x09); map_transition(0x18, 0x8E); show_text_block(str[4] "A pillar of light extends from floor / to ceiling. Step into it (y/n)?"); cond = prompt_yes_no()
+  loc 24 ev=6 tile=(8,0) engine_call(0x09) shop=True map_x=True
+    script: cond = check_member_attr(fields=0x41, value=0x00); if cond: skip_tokens(4); show_text_basic(str[27] "You must obey the sign!"); wait_for_space(); engine_call(0x09); map_transition(0x18, 0x7E); show_text_block(str[4] "A pillar of light extends from floor / to ceiling. Step into it (y/n)?"); cond = prompt_yes_no()
+  loc 26 ev=4 tile=(8,5) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x00, op=0x01, val=0x80); if not cond: skip_tokens(4); show_text_basic(str[3] "No hirelings allowed!"); wait_for_space(); engine_call(0x09); map_transition(0x1A, 0x87); end_script()
+  loc 26 ev=5 tile=(8,4) engine_call(0x09) shop=False map_x=True
+    script: apply_party(count=0x01, op=0x22, val=0x00); cond = (cond >= 0x28); if cond: skip_tokens(4); show_text_basic(str[4] "Not strong enough!"); wait_for_space(); engine_call(0x09); map_transition(0x1A, 0x87); end_script()
+  loc 26 ev=6 tile=(8,3) engine_call(0x01) shop=False map_x=True
+    script: cond = load_cond_from_var(0x08); if cond: skip_tokens(4); show_text_basic(str[5] "You are not heroic!"); wait_for_space(); engine_call(0x01); map_transition(0x1A, 0x87); end_script()
+  loc 27 ev=12 tile=(9,15) engine_call(0x09) shop=False map_x=False
+    script: show_text_basic(str[12] "Water Snare!"); engine_call(0x09); for_party(mask=0x00): call(0x05,0x00); set_abort_and_exit()
+  loc 27 ev=13 tile=(2,15) engine_call(0x09) shop=False map_x=False
+    script: show_text_basic(str[13] "Air Snare!"); engine_call(0x09); for_party(mask=0x00): call(0x0A,0x00); set_abort_and_exit()
+  loc 27 ev=14 tile=(15,2) engine_call(0x09) shop=False map_x=False
+    script: show_text_basic(str[14] "Fire Snare!"); engine_call(0x09); for_party(mask=0x00): call(0x0F,0x00); set_abort_and_exit()
+  loc 27 ev=15 tile=(8,4) engine_call(0x09) shop=False map_x=False
+    script: show_text_basic(str[15] "Earth Snare!"); engine_call(0x09); for_party(mask=0x00): call(0x14,0x00); set_abort_and_exit()
+  loc 27 ev=39 tile=(12,1) engine_call(0x09) shop=False map_x=True
+    script: skip_tokens(8); apply_party(count=0x00, op=0x7E, val=0x08); if cond: skip_tokens(4); show_text_basic(str[20] ""It's not my fault - Leave me alone!""); wait_for_space(); engine_call(0x09); map_transition(0x1B, 0x88); show_text_block(str[21] ""I swear it wasn't my fault," cries / the once-mighty Horvath. Out of / ")
+  loc 28 ev=4 tile=(8,15) engine_call(0x09) shop=False map_x=True
+    script: skip_tokens(3); cond = check_member_attr(fields=0x01, value=0x05); if not cond: skip_tokens(5); encounter_setup(monsters=94 00 00 00 00 00 00 00 00 00, flags=00 00); apply_party_masked(count=0x00, set=0x75, and=0xFE, or=0x01); show_text_block(str[15] "You have proven yourself worthy. Now, / return to the jurors of Mount Fa"); wait_for_space(); clear_current_tile_event_flag()
+  loc 29 ev=3 tile=(2,11) engine_call(0x01) shop=False map_x=False
+    script: show_text_block(str[2] "In this small room is a circular, / swirling pool. Pitch a gold (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(1); if cond: skip_tokens(3); show_text_block(str[3] "Not enough gold!"); engine_call(0x01)
+  loc 29 ev=6 tile=(10,13) engine_call(0x09) shop=False map_x=False
+    script: show_text_block(str[9] "You have found a Titan's Pike, an / Ancient Bow, and a Photon Blade."); add_party_entity(0x01, f3a=0x59, f40=0xC8, f46=0x07); add_party_entity(0x01, f3a=0x41, f40=0xC8, f46=0x07); add_party_entity(0x01, f3a=0x6E, f40=0xC8, f46=0x07); if cond: skip_tokens(2); show_text_basic(str[8] "*** Backpacks Full ***"); engine_call(0x09); wait_for_space()
+  loc 29 ev=8 tile=(10,3) engine_call(0x09) shop=False map_x=False
+    script: show_text_block(str[11] "You add a Flamberge, Broad Sword and a / Great Bow to your collection."); add_party_entity(0x01, f3a=0x17, f40=0x00, f46=0x05); add_party_entity(0x01, f3a=0x61, f40=0x00, f46=0x05); add_party_entity(0x01, f3a=0x4E, f40=0x00, f46=0x05); if cond: skip_tokens(2); show_text_basic(str[8] "*** Backpacks Full ***"); engine_call(0x09); wait_for_space()
+  loc 29 ev=9 tile=(14,3) engine_call(0x09) shop=False map_x=False
+    script: show_text_block(str[12] "In the midst of dragon dung you find / Plate Armor, a Great Shield, and "); add_party_entity(0x01, f3a=0x75, f40=0x00, f46=0x05); add_party_entity(0x01, f3a=0x9B, f40=0x00, f46=0x05); add_party_entity(0x01, f3a=0x85, f40=0x00, f46=0x05); if cond: skip_tokens(2); show_text_basic(str[8] "*** Backpacks Full ***"); engine_call(0x09); wait_for_space()
+  loc 29 ev=12 tile=(5,15) engine_call(0x09) shop=False map_x=False
+    script: show_text_block(str[15] "SQUISH!"); engine_call(0x09); show_text_block(str[16] "SQUISH! The party is up to its waist / in dragon dung!"); set_abort_and_exit()
+  loc 31 ev=5 tile=(10,6) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[4] "Magical Lava! (poof)"); cond = load_var8(group=0x23, index=0x00); if cond: skip_tokens(4); wait_for_space(); engine_call(0x09); for_party(mask=0x00): call(0x32,0x00); map_transition(0x1F, 0xE2); show_text_block(str[16] "/    Your levitation spell saved you!")
+  loc 31 ev=6 tile=(15,11) engine_call(0x09) shop=False map_x=False
+    script: show_text_basic(str[5] "You find a rich deposit of gems!"); wait_for_space(); party_effect(sel=0x01, 38 02 F4 01 00); engine_call(0x09); clear_current_tile_event_flag()
+  loc 31 ev=7 tile=(13,9) engine_call(0x09) shop=False map_x=False
+    script: show_text_basic(str[6] "You find gems strewn about the floor"); wait_for_space(); party_effect(sel=0x01, 38 02 05 00 00); engine_call(0x09); clear_current_tile_event_flag()
+  loc 33 ev=9 tile=(4,5) engine_call(0x09) shop=False map_x=False
+    script: show_text_basic(str[7] "A pool of bubbling lava!"); engine_call(0x09); cond = load_var8(group=0x23, index=0x00); if cond: skip_tokens(2); for_party(mask=0x00): call(0x32,0x00); set_abort_and_exit(); show_text_block(str[14] "/    Your levitation spell saved you!"); set_abort_and_exit()
+  loc 33 ev=15 tile=(5,8) engine_call(0x09) shop=False map_x=False
+    script: op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1F); if cond: skip_tokens(4); show_text_block(str[13] "Hot lava spews violently from the / erupting volcano."); for_party(mask=0x00): call(0xC8,0x00); engine_call(0x09); set_abort_and_exit(); end_script()
+  loc 36 ev=6 tile=(11,8) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[7] "Rift hole!"); cond = load_var8(group=0x23, index=0x00); if cond: skip_tokens(3); wait_for_space(); engine_call(0x09); map_transition(0x20, 0x0D); engine_call(0x01); show_text_block(str[14] "/    Your levitation spell saved you!")
+  loc 36 ev=6 tile=(11,8) engine_call(0x01) shop=False map_x=True
+    script: show_text_basic(str[7] "Rift hole!"); cond = load_var8(group=0x23, index=0x00); if cond: skip_tokens(3); wait_for_space(); engine_call(0x09); map_transition(0x20, 0x0D); engine_call(0x01); show_text_block(str[14] "/    Your levitation spell saved you!")
+  loc 37 ev=7 tile=(15,3) engine_call(0x09) shop=False map_x=False
+    script: op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1F); if not cond: skip_tokens(1); end_script(); show_text_basic(str[4] "An earthquake shakes the party!"); engine_call(0x09); for_party(mask=0x00): call(0x14,0x00); set_abort_and_exit()
+  loc 37 ev=8 tile=(4,5) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[5] "A sandstorm whips the party away!"); wait_for_space(); engine_call(0x09); for_party(mask=0x00): call(0x14,0x00); map_transition(0xA5, 0x00)
+  loc 38 ev=5 tile=(8,9) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[5] "A sinkhole pulls you under!"); wait_for_space(); engine_call(0x09); map_transition(0x28, 0x46)
+  loc 38 ev=6 tile=(9,6) engine_call(0x09) shop=False map_x=False
+    script: show_text_block(str[6] "Quicksand!"); engine_call(0x09); op_1c_engine_query_to_cond(0x08); apply_party_masked(count=0x09, set=0x43, and=0x00, or=0x81); set_abort_and_exit()
+  loc 41 ev=7 tile=? engine_call(0x09) shop=False map_x=True
+    script: cond = load_var8(group=0x28, index=0x00); if not cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_block(str[9] "You are not of this element. Bo gone!"); wait_for_space(); engine_call(0x09); store_var8(group=0x84, value=0x09); map_transition(0x05, 0xF0)
+  loc 42 ev=7 tile=? engine_call(0x09) shop=False map_x=True
+    script: cond = load_var8(group=0x29, index=0x00); if not cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_block(str[9] "You are not of this element. Be gone!"); wait_for_space(); engine_call(0x09); store_var8(group=0x84, value=0x09); map_transition(0x21, 0xEF)
+  loc 43 ev=8 tile=? engine_call(0x09) shop=False map_x=True
+    script: cond = load_var8(group=0x2A, index=0x00); if not cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_block(str[11] "You are not of this element. Be gone!"); wait_for_space(); engine_call(0x09); store_var8(group=0x84, value=0x09); map_transition(0x28, 0x0F)
+  loc 44 ev=7 tile=? engine_call(0x09) shop=False map_x=True
+    script: cond = load_var8(group=0x27, index=0x00); if not cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_block(str[9] "You are not of this element. Be gone!"); wait_for_space(); engine_call(0x09); store_var8(group=0x84, value=0x09); map_transition(0x0F, 0x00)
+  loc 45 ev=4 tile=(14,1) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x26, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[3] "The sign said NO NINJAS!"); wait_for_space(); engine_call(0x09); map_transition(0x2D, 0xF8); show_text_block(str[4] "You have found a Crystal Vial."); add_party_entity(0x01, f3a=0xF3, f40=0x00, f46=0x00)
+  loc 45 ev=5 tile=(12,8) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x27, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[6] "The sign said NO BARBARIANS!"); wait_for_space(); engine_call(0x09); map_transition(0x2D, 0xF8); show_text_block(str[7] "You have found a Coral Brooch!"); add_party_entity(0x01, f3a=0xED, f40=0x00, f46=0x00)
+  loc 45 ev=7 tile=(7,10) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0xA4, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[9] "The sign said NO HALF-ORCS!"); wait_for_space(); engine_call(0x09); map_transition(0x2D, 0xF8); cond = load_var8(group=0x3D, index=0x00); if cond: skip_tokens(6)
+  loc 46 ev=3 tile=(0,4) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x27, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[14] "Your party is whisked away."); wait_for_space(); engine_call(0x09); map_transition(0x2E, 0x88); show_text_block(str[2] "You find a Lapis Scarab."); add_party_entity(0x01, f3a=0xEE, f40=0x00, f46=0x00)
+  loc 46 ev=4 tile=(15,9) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x26, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[17] "The sign said NO NINJAS!"); wait_for_space(); engine_call(0x09); map_transition(0x2E, 0x88); show_text_block(str[3] "You find a Ruby Amulet."); add_party_entity(0x01, f3a=0xF4, f40=0x00, f46=0x00)
+  loc 46 ev=7 tile=(8,0) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0xA4, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[15] "The sign said NO HALF-ORCS!"); wait_for_space(); engine_call(0x09); map_transition(0x2E, 0x88); cond = load_var8(group=0x3E, index=0x00); if cond: skip_tokens(6)
+  loc 47 ev=4 tile=(4,4) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x25, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[6] "The sign said NO ROBBERS!"); wait_for_space(); engine_call(0x09); map_transition(0x2F, 0xF0); show_text_block(str[3] "You have found a Sapphire Pin!"); add_party_entity(0x01, f3a=0xEB, f40=0x00, f46=0x00)
+  loc 47 ev=5 tile=(7,0) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x23, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[7] "The sign said NO CLERICS!"); wait_for_space(); engine_call(0x09); map_transition(0x2F, 0xF0); show_text_block(str[4] "You have found an Onyx Effigy!"); add_party_entity(0x01, f3a=0xF7, f40=0x00, f46=0x00)
+  loc 47 ev=6 tile=(9,1) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0xA1, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[15] "The sign said NO ELVES!"); wait_for_space(); engine_call(0x09); map_transition(0x2F, 0xE0); cond = load_var8(group=0x3D, index=0x00); if cond: skip_tokens(6)
+  loc 48 ev=4 tile=(4,10) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x25, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[3] "You should have paid heed to the sign!"); wait_for_space(); engine_call(0x09); map_transition(0x30, 0xF7); show_text_block(str[4] "You have found an Amethyst Box."); add_party_entity(0x01, f3a=0xEC, f40=0x00, f46=0x00)
+  loc 48 ev=5 tile=(2,12) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x23, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[3] "You should have paid heed to the sign!"); wait_for_space(); engine_call(0x09); map_transition(0x30, 0xF7); show_text_block(str[6] "You have found a Pearl Choker!"); add_party_entity(0x01, f3a=0xF8, f40=0x00, f46=0x00)
+  loc 48 ev=6 tile=(6,8) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0xA1, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[20] "The sign said NO ELVES!"); wait_for_space(); engine_call(0x09); map_transition(0x30, 0xF7); cond = load_var8(group=0x3E, index=0x00); if cond: skip_tokens(6)
+  loc 48 ev=8 tile=(4,4) engine_call(0x09) shop=False map_x=True
+    script: show_text_basic(str[10] "P I N G !!!!"); op_1d_engine_call_rec7(0x0A); engine_call(0x09); map_transition(0xB0, 0x00)
+  loc 49 ev=5 tile=(6,6) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x20, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[4] "The sign said NO KNIGHTS!"); wait_for_space(); engine_call(0x09); map_transition(0x31, 0x21); show_text_block(str[5] "You have found an Ivory Cameo!"); add_party_entity(0x01, f3a=0xF5, f40=0x00, f46=0x00)
+  loc 49 ev=6 tile=(7,2) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x21, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[6] "The sign said NO PALADINS!"); wait_for_space(); engine_call(0x09); map_transition(0x31, 0x21); show_text_block(str[7] "You have found an Agate Grail!"); add_party_entity(0x01, f3a=0xF1, f40=0x00, f46=0x00)
+  loc 49 ev=8 tile=(13,14) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0xA0, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[10] "The sign said NO HUMANS!"); wait_for_space(); engine_call(0x09); map_transition(0x31, 0x21); cond = load_var8(group=0x3D, index=0x00); if cond: skip_tokens(6)
+  loc 50 ev=4 tile=(13,14) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x20, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[3] "The sign said NO KNIGHTS!"); wait_for_space(); engine_call(0x09); map_transition(0x32, 0x77); show_text_block(str[4] "You have found a Ruby Tiara!"); add_party_entity(0x01, f3a=0xF6, f40=0x00, f46=0x00)
+  loc 50 ev=5 tile=(1,2) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x21, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[5] "The sign said NO PALADINS!"); wait_for_space(); engine_call(0x09); map_transition(0x32, 0x77); show_text_block(str[6] "You have found an Opal Pendant!"); add_party_entity(0x01, f3a=0xF2, f40=0x00, f46=0x00)
+  loc 50 ev=7 tile=(15,4) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0xA0, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[12] "The sign said NO HUMANS!"); wait_for_space(); engine_call(0x09); map_transition(0x32, 0x77); cond = load_var8(group=0x3E, index=0x00); if cond: skip_tokens(6)
+  loc 51 ev=5 tile=(0,0) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x22, value=0x00); if not cond: skip_tokens(4); show_text_block(str[4] "Shazam! You're sucked away."); wait_for_space(); engine_call(0x09); map_transition(0x33, 0x89); show_text_block(str[7] "You have found a Topaz Shard!"); add_party_entity(0x01, f3a=0xF9, f40=0x00, f46=0x00)
+  loc 51 ev=6 tile=(0,5) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x24, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[5] "You are teleported elsewhere."); wait_for_space(); engine_call(0x09); map_transition(0x33, 0x89); show_text_block(str[6] "You have found an Amber Skull!"); add_party_entity(0x01, f3a=0xEF, f40=0x00, f46=0x00)
+  loc 51 ev=8 tile=(15,10) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0xA2, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[21] "The sign said NO DWARVES!"); wait_for_space(); engine_call(0x09); map_transition(0x33, 0x89); cond = load_var8(group=0x3D, index=0x00); if cond: skip_tokens(6)
+  loc 52 ev=6 tile=(14,3) engine_call(0x09) shop=False map_x=True
+    script: show_text_popup_style_b(str[5] "See you / later"); wait_for_space(); engine_call(0x09); map_transition(0xB4, 0x00)
+  loc 52 ev=7 tile=(11,5) engine_call(0x09) shop=False map_x=True
+    script: skip_tokens(8); op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x32); if not cond: skip_tokens(4); show_text_popup_style_b(str[6] "Have a / nice day!"); wait_for_space(); engine_call(0x09); map_transition(0xB4, 0x00)
+  loc 52 ev=11 tile=(14,14) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x22, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[11] "The sign said NO ARCHERS!"); wait_for_space(); engine_call(0x09); map_transition(0x34, 0x00); show_text_block(str[12] "You have found a Sun Crown!"); add_party_entity(0x01, f3a=0xFA, f40=0x00, f46=0x00)
+  loc 52 ev=12 tile=(11,8) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x24, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[13] "The sign said NO SORCERERS!"); wait_for_space(); engine_call(0x09); map_transition(0x34, 0x00); show_text_block(str[14] "You have found a Quartz Skull!"); add_party_entity(0x01, f3a=0xF0, f40=0x00, f46=0x00)
+  loc 52 ev=13 tile=(2,10) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0xA2, value=0x00); if not cond: skip_tokens(4); show_text_basic(str[15] "The sign said NO DWARVES!"); wait_for_space(); engine_call(0x09); map_transition(0x34, 0x00); cond = load_var8(group=0x3E, index=0x00); if cond: skip_tokens(6)
+  loc 53 ev=3 tile=(12,3) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x04, value=0x05); if cond: skip_tokens(4); show_text_basic(str[5] "Sorcerers Only!"); wait_for_space(); engine_call(0x09); map_transition(0x0D, 0x44); end_script()
+  loc 54 ev=3 tile=(3,12) engine_call(0x09) shop=False map_x=True
+    script: cond = check_member_attr(fields=0x04, value=0x05); if cond: skip_tokens(4); show_text_basic(str[2] "Sorcerers only!"); wait_for_space(); engine_call(0x09); map_transition(0x10, 0xA4); end_script()
+  loc 55 Hillstone ev=13 tile=(2,12) engine_call(0x09) shop=False map_x=False
+    script: show_text_basic(str[12] "You win the Booby Prize!"); engine_call(0x09); set_abort_and_exit()
+  loc 57 Pinehurst ev=21 tile=(5,14) engine_call(0x09) shop=False map_x=True
+    script: show_text_popup_style_b(str[26] "See you / later!"); wait_for_space(); engine_call(0x09); map_transition(0x39, 0x4F)
+  loc 57 Pinehurst ev=22 tile=(6,7) engine_call(0x09) shop=False map_x=True
+    script: show_text_popup_style_b(str[26] "See you / later!"); wait_for_space(); engine_call(0x09); map_transition(0x39, 0x7B)
+
+======================================================================
+Q4 OP_0B service window arg2 values
+  loc 0 Middlegate ev=19 tile=(12,1) title='Lock and Key LTD' arg2=0x00 (0)
+  loc 0 Middlegate ev=20 tile=(15,5) title='Fool, you have no farthing to flick!' arg2=0x00 (0)
+  loc 0 Middlegate ev=23 tile=(7,7) title='S.J. Blacksmith' arg2=0x00 (0)
+  loc 0 Middlegate ev=24 tile=(6,4) title="Turkov's Training" arg2=0x00 (0)
+  loc 0 Middlegate ev=25 tile=(3,7) title='Gateway Temple' arg2=0x00 (0)
+  loc 0 Middlegate ev=26 tile=(7,10) title='Slaughtered Lamb' arg2=0x00 (0)
+  loc 0 Middlegate ev=27 tile=(14,7) title='Arena Entrance Only!' arg2=0x00 (0)
+  loc 0 Middlegate ev=28 tile=(8,13) title='Fool, you have no farthing to flick!' arg2=0x00 (0)
+  loc 0 Middlegate ev=31 tile=(2,1) title='Fool, you have no farthing to flick!' arg2=0x00 (0)
+  loc 1 Atlantium ev=17 tile=(13,6) title="Boar's Tongue Tavern" arg2=0x00 (0)
+  loc 1 Atlantium ev=18 tile=(7,4) title='Drewnhald Ironworks' arg2=0x00 (0)
+  loc 1 Atlantium ev=19 tile=(4,5) title='Beautify Atlantium' arg2=0x00 (0)
+  loc 1 Atlantium ev=20 tile=(4,10) title='Not enough gold!' arg2=0x00 (0)
+  loc 1 Atlantium ev=21 tile=(10,12) title='The Mystic Portal' arg2=0x00 (0)
+  loc 1 Atlantium ev=22 tile=(15,15) title='Island Training' arg2=0x00 (0)
+  loc 1 Atlantium ev=31 tile=(13,15) title='Not enough gold!' arg2=0x00 (0)
+  loc 1 Atlantium ev=44 tile=(10,0) title='Cabalist Mage Guild' arg2=0x00 (0)
+  loc 1 Atlantium ev=45 tile=(9,0) title='Cabalist Mage Guild' arg2=0x00 (0)
+  loc 1 Atlantium ev=46 tile=(8,0) title='Cabalist Mage Guild' arg2=0x00 (0)
+  loc 1 Atlantium ev=47 tile=(11,15) title='Cabalist Mage Guild' arg2=0x00 (0)
+  loc 1 Atlantium ev=48 tile=(10,15) title='Cabalist Mage Guild' arg2=0x00 (0)
+  loc 1 Atlantium ev=49 tile=(9,15) title='Cabalist Mage Guild' arg2=0x00 (0)
+  loc 1 Atlantium ev=50 tile=(8,15) title='Cabalist Mage Guild' arg2=0x00 (0)
+  loc 1 Atlantium ev=51 tile=(14,0) title='Cabalist Mage Guild' arg2=0x00 (0)
+  loc 2 Tundara ev=13 tile=(13,11) title='Lucky Dog Saloon' arg2=0x00 (0)
+  loc 2 Tundara ev=14 tile=(9,7) title='Enhancement Center' arg2=0x00 (0)
+  loc 2 Tundara ev=15 tile=(11,7) title='White Dove Temple' arg2=0x00 (0)
+  loc 2 Tundara ev=16 tile=(6,11) title='Thundrax Weaponry' arg2=0x00 (0)
+  loc 2 Tundara ev=17 tile=(13,14) title='Polar Passage Portal' arg2=0x00 (0)
+  loc 2 Tundara ev=18 tile=(9,6) title="Don't ya want to haggle? Pay 1000 gold\nto become a merchant (y/n)?" arg2=0x00 (0)
+  loc 2 Tundara ev=51 tile=(4,13) title="Don't ya want to haggle? Pay 1000 gold\nto become a merchant (y/n)?" arg2=0x00 (0)
+  loc 2 Tundara ev=54 tile=? title='A pathway leads to the snowdrift.\nExit (y/n)?' arg2=0x00 (0)
+  loc 3 Vulcania ev=14 tile=(8,11) title='Bestway Blacksmith' arg2=0x00 (0)
+  loc 3 Vulcania ev=15 tile=(2,3) title='Vulcanian Transport' arg2=0x00 (0)
+  loc 3 Vulcania ev=16 tile=(0,7) title='Training Academy' arg2=0x00 (0)
+  loc 3 Vulcania ev=17 tile=(3,4) title="Belinthra's Bar" arg2=0x00 (0)
+  loc 3 Vulcania ev=18 tile=(5,11) title='Vulcanian Export Co.' arg2=0x00 (0)
+  loc 3 Vulcania ev=19 tile=(0,5) title='Not enough gold!' arg2=0x00 (0)
+  loc 3 Vulcania ev=25 tile=(12,7) title='Not enough gold!' arg2=0x00 (0)
+  loc 3 Vulcania ev=31 tile=(11,6) title='Blackrock Mage Guild' arg2=0x00 (0)
+  loc 3 Vulcania ev=32 tile=(11,8) title='Blackrock Mage Guild' arg2=0x00 (0)
+  loc 3 Vulcania ev=33 tile=(9,8) title='Blackrock Mage Guild' arg2=0x00 (0)
+  loc 3 Vulcania ev=34 tile=? title='Blackrock Mage Guild' arg2=0x00 (0)
+  loc 3 Vulcania ev=35 tile=(12,3) title='Blackrock Mage Guild' arg2=0x00 (0)
+  loc 4 Sandsobar ev=17 tile=(11,6) title="Big Al's Accessories" arg2=0x00 (0)
+  loc 4 Sandsobar ev=18 tile=(11,4) title='Sheik Training Arena' arg2=0x00 (0)
+  loc 4 Sandsobar ev=19 tile=(10,3) title='Temple Benedictus' arg2=0x00 (0)
+  loc 4 Sandsobar ev=20 tile=(7,3) title='Red Lantern Tavern' arg2=0x00 (0)
+  loc 4 Sandsobar ev=21 tile=(7,6) title='Monster Bowl' arg2=0x00 (0)
+  loc 4 Sandsobar ev=22 tile=(2,6) title='A desert trader stands next to a\nglowing aura of power. "Hi! I sell\nmagical transport to Middlegate for 20\ngold. Travel (y/n)?"' arg2=0x00 (0)
+  loc 4 Sandsobar ev=26 tile=(8,13) title='A desert trader stands next to a\nglowing aura of power. "Hi! I sell\nmagical transport to Middlegate for 20\ngold. Travel (y/n)?"' arg2=0x00 (0)
+  loc 4 Sandsobar ev=31 tile=(0,15) title='Not enough gold!' arg2=0x00 (0)
+  loc 4 Sandsobar ev=32 tile=(2,13) title='Enter the Plains of Peril (y/n)?' arg2=0x00 (0)
+  loc 4 Sandsobar ev=44 tile=(11,3) title='Enter the Plains of Peril (y/n)?' arg2=0x00 (0)
+
+======================================================================
+Q5/Q6 OP_0E selectors (towns + special)
+  loc 0 Middlegate ev=10 tile=(6,14) exec_selector(0x08)=open_special_shop label=''
+  loc 0 Middlegate ev=17 tile=(15,15) exec_selector(0x10)=sel_10 label=''
+  loc 0 Middlegate ev=18 tile=(4,7) exec_selector(0x0E)=sel_0E label=''
+  loc 0 Middlegate ev=19 tile=(12,1) exec_selector(0x09)=sel_09 label=''
+  loc 0 Middlegate ev=20 tile=(15,5) exec_selector(0x0D)=enroll_mages_guild label=''
+  loc 0 Middlegate ev=22 tile=(4,4) exec_selector(0x11)=sel_11 label=''
+  loc 0 Middlegate ev=23 tile=(7,7) exec_selector(0x06)=open_blacksmith_shop label=''
+  loc 0 Middlegate ev=24 tile=(6,4) exec_selector(0x04)=open_training label=''
+  loc 0 Middlegate ev=25 tile=(3,7) exec_selector(0x03)=open_temple label=''
+  loc 0 Middlegate ev=26 tile=(7,10) exec_selector(0x01)=open_tavern_food label=''
+  loc 0 Middlegate ev=27 tile=(14,7) exec_selector(0x02)=open_inn_lodging label=''
+  loc 0 Middlegate ev=28 tile=(8,13) exec_selector(0x05)=open_mages_guild label=''
+  loc 0 Middlegate ev=31 tile=(2,1) exec_selector(0x0A)=goblet_quest label=''
+  loc 0 Middlegate ev=32 tile=(10,12) exec_selector(0x0B)=sel_0B label=''
+  loc 0 Middlegate ev=33 tile=(15,0) exec_selector(0x07)=open_general_store label=''
+  loc 0 Middlegate ev=39 tile=(12,13) exec_selector(0x26)=sel_26 label=''
+  loc 0 Middlegate ev=40 tile=(14,12) exec_selector(0x27)=sel_27 label=''
+  loc 0 Middlegate ev=41 tile=(1,8) exec_selector(0x28)=sel_28 label=''
+  loc 0 Middlegate ev=42 tile=(4,8) exec_selector(0x29)=sel_29 label=''
+  loc 1 Atlantium ev=17 tile=(13,6) exec_selector(0x01)=open_tavern_food label=''
+  loc 1 Atlantium ev=18 tile=(7,4) exec_selector(0x06)=open_blacksmith_shop label=''
+  loc 1 Atlantium ev=19 tile=(4,5) exec_selector(0x04)=open_training label=''
+  loc 1 Atlantium ev=20 tile=(4,10) exec_selector(0x05)=open_mages_guild label=''
+  loc 1 Atlantium ev=21 tile=(10,12) exec_selector(0x02)=open_inn_lodging label=''
+  loc 1 Atlantium ev=22 tile=(15,15) exec_selector(0x03)=open_temple label=''
+  loc 1 Atlantium ev=25 tile=(0,3) exec_selector(0x1C)=sel_1C label=''
+  loc 1 Atlantium ev=30 tile=(7,11) exec_selector(0x52)=sel_52 label=''
+  loc 1 Atlantium ev=31 tile=(13,15) exec_selector(0x12)=sel_12 label=''
+  loc 1 Atlantium ev=32 tile=(13,0) exec_selector(0x26)=sel_26 label=''
+  loc 1 Atlantium ev=33 tile=(5,0) exec_selector(0x13)=sel_13 label=''
+  loc 1 Atlantium ev=34 tile=(2,0) exec_selector(0x14)=sel_14 label=''
+  loc 1 Atlantium ev=35 tile=(3,2) exec_selector(0x15)=sel_15 label=''
+  loc 1 Atlantium ev=36 tile=(0,2) exec_selector(0x16)=sel_16 label=''
+  loc 1 Atlantium ev=37 tile=(4,13) exec_selector(0x17)=sel_17 label=''
+  loc 1 Atlantium ev=38 tile=(3,15) exec_selector(0x18)=sel_18 label=''
+  loc 1 Atlantium ev=39 tile=(1,13) exec_selector(0x19)=sel_19 label=''
+  loc 1 Atlantium ev=40 tile=(0,15) exec_selector(0x1A)=sel_1A label=''
+  loc 1 Atlantium ev=41 tile=(6,2) exec_selector(0x1B)=sel_1B label=''
+  loc 1 Atlantium ev=44 tile=(10,0) exec_selector(0x24)=sel_24 label=''
+  loc 1 Atlantium ev=45 tile=(9,0) exec_selector(0x1D)=sel_1D label=''
+  loc 1 Atlantium ev=46 tile=(8,0) exec_selector(0x1E)=sel_1E label=''
+  loc 1 Atlantium ev=47 tile=(11,15) exec_selector(0x1F)=sel_1F label=''
+  loc 1 Atlantium ev=48 tile=(10,15) exec_selector(0x20)=sel_20 label=''
+  loc 1 Atlantium ev=49 tile=(9,15) exec_selector(0x21)=sel_21 label=''
+  loc 1 Atlantium ev=50 tile=(8,15) exec_selector(0x22)=sel_22 label=''
+  loc 1 Atlantium ev=51 tile=(14,0) exec_selector(0x23)=sel_23 label=''
+  loc 1 Atlantium ev=52 tile=(9,7) exec_selector(0x25)=sel_25 label=''
+  loc 1 Atlantium ev=53 tile=? exec_selector(0x08)=open_special_shop label=''
+  loc 3 Vulcania ev=14 tile=(8,11) exec_selector(0x06)=open_blacksmith_shop label=''
+  loc 3 Vulcania ev=15 tile=(2,3) exec_selector(0x04)=open_training label=''
+  loc 3 Vulcania ev=16 tile=(0,7) exec_selector(0x03)=open_temple label=''
+  loc 3 Vulcania ev=17 tile=(3,4) exec_selector(0x01)=open_tavern_food label=''
+  loc 3 Vulcania ev=18 tile=(5,11) exec_selector(0x02)=open_inn_lodging label=''
+  loc 3 Vulcania ev=19 tile=(0,5) exec_selector(0x05)=open_mages_guild label=''
+  loc 3 Vulcania ev=28 tile=(9,3) exec_selector(0x3E)=sel_3E label=''
+  loc 3 Vulcania ev=29 tile=(3,15) exec_selector(0x3F)=sel_3F label=''
+  loc 3 Vulcania ev=30 tile=(9,6) exec_selector(0x40)=sel_40 label=''
+  loc 3 Vulcania ev=31 tile=(11,6) exec_selector(0x41)=sel_41 label=''
+  loc 3 Vulcania ev=32 tile=(11,8) exec_selector(0x42)=sel_42 label=''
+  loc 3 Vulcania ev=33 tile=(9,8) exec_selector(0x43)=sel_43 label=''
+  loc 3 Vulcania ev=34 tile=? exec_selector(0x44)=sel_44 label=''
+  loc 3 Vulcania ev=35 tile=(12,3) exec_selector(0x45)=sel_45 label=''
+  loc 3 Vulcania ev=36 tile=(13,3) exec_selector(0x2E)=sel_2E label=''
+  loc 3 Vulcania ev=37 tile=(14,3) exec_selector(0x46)=sel_46 label=''
+  loc 3 Vulcania ev=38 tile=(15,3) exec_selector(0x34)=sel_34 label=''
+  loc 3 Vulcania ev=39 tile=(14,9) exec_selector(0x47)=sel_47 label=''
+  loc 3 Vulcania ev=40 tile=(14,11) exec_selector(0x45)=sel_45 label=''
+  loc 3 Vulcania ev=41 tile=(2,4) exec_selector(0x30)=sel_30 label=''
+  loc 3 Vulcania ev=42 tile=(5,10) exec_selector(0x48)=sel_48 label=''
+  loc 3 Vulcania ev=43 tile=? exec_selector(0x07)=open_general_store label=''
+  loc 4 Sandsobar ev=17 tile=(11,6) exec_selector(0x06)=open_blacksmith_shop label=''
+  loc 4 Sandsobar ev=18 tile=(11,4) exec_selector(0x04)=open_training label=''
+  loc 4 Sandsobar ev=19 tile=(10,3) exec_selector(0x03)=open_temple label=''
+  loc 4 Sandsobar ev=20 tile=(7,3) exec_selector(0x01)=open_tavern_food label=''
+  loc 4 Sandsobar ev=21 tile=(7,6) exec_selector(0x02)=open_inn_lodging label=''
+  loc 4 Sandsobar ev=22 tile=(2,6) exec_selector(0x05)=open_mages_guild label=''
+  loc 4 Sandsobar ev=23 tile=(15,4) exec_selector(0x49)=sel_49 label=''
+  loc 4 Sandsobar ev=27 tile=(1,10) exec_selector(0x08)=open_special_shop label=''
+  loc 4 Sandsobar ev=31 tile=(0,15) exec_selector(0x4B)=sel_4B label=''
+  loc 4 Sandsobar ev=32 tile=(2,13) exec_selector(0x4A)=sel_4A label=''
+  loc 4 Sandsobar ev=35 tile=(5,0) exec_selector(0x4D)=sel_4D label=''
+  loc 4 Sandsobar ev=36 tile=(0,3) exec_selector(0x4E)=sel_4E label=''
+  loc 4 Sandsobar ev=37 tile=(10,4) exec_selector(0x4F)=sel_4F label=''
+  loc 4 Sandsobar ev=38 tile=(3,14) exec_selector(0x4C)=sel_4C label=''
+  loc 4 Sandsobar ev=41 tile=(6,9) exec_selector(0x2C)=sel_2C label=''
+  loc 4 Sandsobar ev=44 tile=(11,3) exec_selector(0x51)=sel_51 label=''
+  loc 4 Sandsobar ev=45 tile=? exec_selector(0x53)=sel_53 label=''
+  loc 4 Sandsobar ev=45 tile=? exec_selector(0x54)=sel_54 label=''
+  loc 22 Corak's Cave ev=6 tile=(0,13) exec_selector(0x65)=sel_65 label=''
+  loc 22 Corak's Cave ev=29 tile=? exec_selector(0x7A)=sel_7A label=''
+
+======================================================================
+Q7 OP_12/13 non-zero tails
+  loc 3 Vulcania ev=42 tile=(5,10) tail=06 02 monsters=[4, 4, 4, 4, 4, 4, 6, 6, 6, 6]
+  loc 5 ev=11 tile=(5,9) tail=C2 03 monsters=[224, 225, 225, 193, 193, 193, 193, 194, 194, 194]
+  loc 5 ev=12 tile=(10,15) OP_13 data=E1 C1 C1 C2 C2 C2 C2 CE CE 00
+  loc 5 ev=13 tile=(3,11) OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 6 ev=9 tile=(3,5) tail=C2 03 monsters=[194, 224, 193, 193, 225, 193, 225, 193, 194, 194]
+  loc 6 ev=10 tile=(3,15) OP_13 data=CE C1 E1 C2 C2 C1 C2 C2 CE 00
+  loc 6 ev=11 tile=(5,5) OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 8 ev=10 tile=(3,9) tail=11 5C monsters=[236, 45, 17, 17, 17, 17, 17, 17, 17, 17]
+  loc 8 ev=11 tile=(3,1) tail=05 0B monsters=[16, 5, 5, 5, 5, 5, 5, 5, 5, 5]
+  loc 8 ev=12 tile=(3,4) tail=05 29 monsters=[16, 5, 5, 5, 5, 5, 5, 5, 5, 5]
+  loc 8 ev=13 tile=(9,13) tail=05 47 monsters=[16, 5, 5, 5, 5, 5, 5, 5, 5, 5]
+  loc 8 ev=18 tile=? tail=05 F0 monsters=[5, 5, 5, 5, 5, 5, 5, 5, 5, 5]
+  loc 9 ev=11 tile=(9,14) tail=17 1A monsters=[136, 136, 136, 136, 136, 136, 23, 23, 23, 23]
+  loc 9 ev=15 tile=(4,2) tail=C2 03 monsters=[224, 225, 225, 193, 193, 193, 193, 194, 194, 194]
+  loc 9 ev=16 tile=(10,3) OP_13 data=E1 C1 C1 C2 C2 C2 C2 CE CE 00
+  loc 9 ev=17 tile=(10,14) OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 10 ev=9 tile=(3,4) tail=37 14 monsters=[55, 55, 55, 55, 55, 55, 55, 55, 55, 55]
+  loc 10 ev=14 tile=(10,14) tail=08 F0 monsters=[8, 8, 8, 8, 8, 8, 8, 8, 8, 8]
+  loc 10 ev=15 tile=(6,3) tail=11 F0 monsters=[17, 17, 17, 17, 17, 17, 17, 17, 17, 17]
+  loc 10 ev=20 tile=(9,13) tail=C2 03 monsters=[224, 225, 225, 193, 194, 193, 194, 193, 193, 194]
+  loc 10 ev=21 tile=(7,14) OP_13 data=CE C2 CE C2 E1 C1 C1 C2 C2 00
+  loc 10 ev=22 tile=(9,14) OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 13 ev=30 tile=(10,15) tail=C1 03 monsters=[194, 194, 224, 225, 225, 194, 194, 194, 194, 193]
+  loc 13 ev=31 tile=(14,7) OP_13 data=C2 C1 C1 C2 E1 CE CE C2 C2 00
+  loc 13 ev=32 tile=(2,12) OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 15 ev=13 tile=(4,7) tail=C2 03 monsters=[224, 225, 225, 193, 193, 193, 193, 194, 194, 194]
+  loc 15 ev=14 tile=(10,0) OP_13 data=E1 C1 C1 C2 C2 C2 C2 CE CE 00
+  loc 15 ev=15 tile=? OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 16 ev=9 tile=(4,4) tail=73 02 monsters=[115, 115, 115, 115, 115, 115, 115, 115, 115, 115]
+  loc 16 ev=11 tile=(2,4) OP_13 data=01 00 00 00 00 00 00 00 00 00
+  loc 16 ev=15 tile=(5,14) tail=4B 05 monsters=[75, 75, 75, 75, 75, 75, 75, 75, 75, 75]
+  loc 17 ev=6 tile=(15,1) tail=05 05 monsters=[17, 17, 17, 17, 17, 17, 28, 5, 5, 5]
+  loc 17 ev=7 tile=(1,2) tail=03 04 monsters=[2, 2, 46, 46, 3, 3, 3, 3, 3, 3]
+  loc 17 ev=8 tile=(6,14) tail=1A 02 monsters=[45, 45, 45, 45, 26, 26, 26, 26, 26, 26]
+  loc 17 ev=9 tile=(10,14) tail=14 32 monsters=[20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+  loc 17 ev=11 tile=(15,5) tail=05 00 monsters=[68, 68, 3, 3, 3, 3, 5, 5, 5, 5]
+  loc 17 ev=13 tile=(8,4) tail=02 02 monsters=[3, 3, 3, 3, 3, 3, 3, 3, 2, 2]
+  loc 17 ev=15 tile=(8,2) tail=11 04 monsters=[5, 5, 5, 5, 5, 5, 5, 5, 5, 5]
+  loc 18 ev=14 tile=(12,4) tail=5E 11 monsters=[94, 94, 94, 94, 94, 94, 138, 94, 94, 94]
+  loc 18 ev=15 tile=(12,0) tail=64 1E monsters=[100, 100, 100, 100, 100, 100, 82, 100, 100, 100]
+  loc 18 ev=16 tile=(14,7) tail=6E 14 monsters=[110, 110, 110, 110, 110, 110, 110, 110, 110, 110]
+  loc 18 ev=17 tile=(5,5) tail=6A 0A monsters=[106, 106, 106, 106, 106, 106, 106, 106, 106, 106]
+  loc 19 ev=4 tile=(13,10) tail=2A BE monsters=[42, 42, 42, 42, 42, 42, 42, 42, 42, 42]
+  loc 21 ev=19 tile=(9,3) tail=21 02 monsters=[33, 33, 33, 33, 33, 33, 33, 33, 33, 33]
+  loc 22 Corak's Cave ev=18 tile=(10,9) tail=0A 02 monsters=[11, 11, 11, 11, 10, 10, 10, 10, 10, 10]
+  loc 22 Corak's Cave ev=19 tile=(7,13) tail=1B 01 monsters=[26, 26, 26, 26, 26, 26, 26, 27, 27, 27]
+  loc 22 Corak's Cave ev=20 tile=(7,3) tail=0A 10 monsters=[42, 42, 42, 42, 42, 42, 10, 10, 10, 10]
+  loc 22 Corak's Cave ev=21 tile=(5,2) tail=0A 10 monsters=[45, 45, 45, 45, 45, 45, 10, 10, 10, 10]
+  loc 22 Corak's Cave ev=22 tile=(5,13) tail=3A 05 monsters=[58, 58, 58, 58, 58, 58, 58, 58, 58, 58]
+  loc 22 Corak's Cave ev=23 tile=(11,10) tail=3B 05 monsters=[59, 59, 59, 59, 59, 59, 59, 59, 59, 59]
+  loc 22 Corak's Cave ev=25 tile=(9,11) tail=0A 06 monsters=[26, 26, 26, 26, 26, 26, 26, 26, 10, 10]
+  loc 22 Corak's Cave ev=26 tile=(5,8) tail=1A 06 monsters=[10, 10, 10, 10, 10, 10, 10, 10, 26, 26]
+  loc 23 ev=17 tile=(12,4) tail=D0 38 monsters=[208, 208, 208, 208, 208, 208, 208, 208, 208, 208]
+  loc 24 ev=8 tile=(4,4) tail=21 5A monsters=[33, 33, 33, 33, 33, 33, 33, 33, 33, 33]
+  loc 24 ev=9 tile=(1,7) tail=03 F0 monsters=[3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+  loc 24 ev=10 tile=(4,10) tail=30 37 monsters=[48, 48, 48, 48, 48, 48, 48, 48, 48, 48]
+  loc 24 ev=11 tile=(1,13) tail=14 8C monsters=[20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+  loc 24 ev=12 tile=(14,1) tail=11 96 monsters=[17, 17, 17, 17, 17, 17, 17, 17, 17, 17]
+  loc 24 ev=13 tile=(11,4) tail=1E 8C monsters=[30, 30, 30, 30, 30, 30, 30, 30, 30, 30]
+  loc 24 ev=14 tile=(14,7) tail=32 28 monsters=[50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
+  loc 24 ev=15 tile=(14,13) tail=05 F0 monsters=[5, 5, 5, 5, 5, 5, 5, 5, 5, 5]
+  loc 24 ev=16 tile=(11,10) tail=44 23 monsters=[68, 68, 68, 68, 68, 68, 68, 68, 68, 68]
+  loc 24 ev=17 tile=(14,15) tail=09 BE monsters=[9, 9, 9, 9, 9, 9, 9, 9, 9, 9]
+  loc 26 ev=16 tile=(11,12) tail=48 10 monsters=[24, 24, 24, 24, 24, 24, 72, 72, 72, 72]
+  loc 28 ev=5 tile=(8,6) OP_13 data=B4 22 32 44 47 51 54 65 67 6E
+  loc 28 ev=19 tile=(4,13) tail=47 0B monsters=[103, 103, 103, 103, 103, 103, 71, 71, 71, 71]
+  loc 28 ev=23 tile=(14,3) tail=03 EF monsters=[46, 46, 46, 46, 46, 46, 46, 46, 46, 3]
+  loc 28 ev=24 tile=(14,6) tail=05 F0 monsters=[5, 5, 5, 5, 5, 5, 5, 5, 5, 5]
+  loc 28 ev=25 tile=(1,12) tail=11 F4 monsters=[89, 89, 89, 89, 17, 17, 17, 17, 17, 17]
+  loc 28 ev=26 tile=(1,11) tail=22 14 monsters=[34, 34, 34, 34, 34, 34, 34, 34, 34, 34]
+  loc 28 ev=28 tile=(14,12) tail=6E 0F monsters=[110, 110, 110, 110, 110, 110, 110, 110, 110, 110]
+  loc 28 ev=29 tile=(14,11) tail=51 0F monsters=[81, 81, 81, 81, 81, 81, 81, 81, 81, 81]
+  loc 28 ev=31 tile=? tail=6E 0F monsters=[110, 110, 110, 110, 110, 110, 110, 110, 110, 110]
+  loc 30 ev=14 tile=(8,2) tail=10 BE monsters=[16, 16, 16, 16, 16, 16, 16, 16, 16, 16]
+  loc 30 ev=17 tile=(10,13) tail=F6 03 monsters=[246, 246, 246, 246, 246, 246, 246, 246, 246, 246]
+  loc 32 ev=9 tile=(7,12) tail=09 05 monsters=[9, 9, 9, 9, 9, 9, 9, 9, 9, 9]
+  loc 33 ev=7 tile=(3,2) OP_13 data=C1 C1 00 00 00 00 00 00 00 00
+  loc 33 ev=8 tile=(12,1) tail=03 5A monsters=[3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+  loc 33 ev=16 tile=(12,0) tail=C2 03 monsters=[225, 224, 225, 193, 193, 193, 193, 194, 194, 194]
+  loc 33 ev=17 tile=(6,7) OP_13 data=CE C2 C1 E1 C1 C2 CE C2 C2 00
+  loc 33 ev=18 tile=? OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 34 ev=8 tile=(12,1) OP_13 data=F5 97 99 00 00 00 00 00 00 00
+  loc 34 ev=14 tile=(13,14) tail=C2 03 monsters=[194, 193, 225, 224, 224, 193, 193, 193, 194, 194]
+  loc 34 ev=15 tile=(8,7) OP_13 data=CE C1 E1 C1 C2 CE C2 C2 C2 00
+  loc 34 ev=16 tile=? OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 35 ev=7 tile=(14,10) OP_13 data=DD CA 00 00 00 00 00 00 00 00
+  loc 35 ev=8 tile=(13,7) OP_13 data=CC 8C 8C 00 00 00 00 00 00 00
+  loc 35 ev=9 tile=(12,4) tail=0F 13 monsters=[181, 149, 149, 149, 149, 149, 149, 149, 149, 15]
+  loc 35 ev=10 tile=(4,5) tail=0F C6 monsters=[211, 181, 181, 149, 149, 149, 149, 149, 15, 15]
+  loc 35 ev=11 tile=(14,14) tail=4B 15 monsters=[233, 75, 75, 75, 75, 75, 75, 75, 75, 75]
+  loc 35 ev=12 tile=(12,2) tail=C1 03 monsters=[224, 225, 225, 194, 194, 193, 194, 194, 194, 194]
+  loc 35 ev=13 tile=(15,1) OP_13 data=E1 C1 C2 C1 C2 CE C2 C2 CE 00
+  loc 35 ev=14 tile=? OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 36 ev=9 tile=(12,6) tail=C2 03 monsters=[224, 225, 225, 193, 193, 193, 193, 194, 194, 194]
+  loc 36 ev=10 tile=(11,1) OP_13 data=E1 C1 C1 C2 C2 C2 C2 CE CE 00
+  loc 36 ev=11 tile=(2,8) OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 37 ev=9 tile=(4,7) tail=C2 03 monsters=[224, 225, 225, 193, 193, 193, 193, 194, 194, 194]
+  loc 37 ev=10 tile=(5,2) OP_13 data=E1 C1 C1 C2 C2 C2 C2 CE CE 00
+  loc 37 ev=11 tile=(2,7) OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 38 ev=4 tile=(11,14) tail=3F E7 monsters=[223, 63, 63, 63, 63, 63, 63, 63, 63, 63]
+  loc 38 ev=7 tile=(11,11) tail=13 0A monsters=[19, 19, 19, 19, 19, 19, 19, 19, 19, 19]
+  loc 38 ev=8 tile=(12,13) tail=35 05 monsters=[19, 19, 19, 19, 19, 53, 53, 53, 53, 53]
+  loc 38 ev=15 tile=(12,10) tail=C2 03 monsters=[224, 225, 225, 193, 193, 193, 193, 194, 194, 194]
+  loc 38 ev=16 tile=? OP_13 data=E1 C1 C1 C2 C2 C2 C2 CE CE 00
+  loc 39 ev=5 tile=(11,0) tail=13 0F monsters=[19, 19, 19, 19, 19, 19, 19, 19, 19, 19]
+  loc 39 ev=6 tile=(10,2) tail=35 02 monsters=[19, 19, 19, 19, 53, 53, 53, 53, 53, 53]
+  loc 39 ev=12 tile=(14,7) tail=63 22 monsters=[99, 99, 99, 99, 99, 99, 99, 99, 99, 99]
+  loc 39 ev=13 tile=(14,10) tail=64 5B monsters=[100, 100, 100, 100, 100, 100, 100, 98, 100, 100]
+  loc 39 ev=14 tile=(14,9) tail=C2 03 monsters=[225, 224, 193, 225, 194, 193, 193, 193, 194, 194]
+  loc 39 ev=15 tile=(14,11) OP_13 data=C2 C1 E1 C1 C2 CE CE C2 C2 00
+  loc 39 ev=16 tile=(10,12) OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 40 ev=10 tile=(15,13) tail=C2 03 monsters=[194, 193, 194, 224, 225, 225, 193, 193, 193, 194]
+  loc 40 ev=11 tile=(15,11) OP_13 data=CE CE C2 C1 C2 C2 C1 E1 C2 00
+  loc 40 ev=12 tile=(11,2) OP_13 data=CE CE CE CE 00 00 00 00 00 00
+  loc 42 ev=2 tile=(4,4) OP_13 data=C1 C1 C1 C1 C1 C1 FC C1 C1 C1
+
+======================================================================
+Q8/Q9/Q21 Atlantium loc 1
+  ev=26 tile=(0,12) text='Not enough gold!'
+    show_text_block(str[19] "A girl in a pure white toga offers / travel to Vulcania for 50 gold. / A"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(50); if not cond: skip_tokens(1); map_transition(0x03, 0x38); show_text_basic(str[20] "Not enough gold!"); set_abort_and_exit()
+  ev=27 tile=(2,6) text='Not enough gold!'
+    show_text_block(str[21] "The Keep Atlantium Beautiful Committee / offers to send you to Middlegat"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(25); if not cond: skip_tokens(1); map_transition(0x00, 0x50); show_text_basic(str[20] "Not enough gold!"); set_abort_and_exit()
+  ev=28 tile=(4,8) text='Not enough gold!'
+    show_text_block(str[22] "Hurl the spear, let fly the discus, / all in the Olympic manner. Spend 5"); cond = prompt_yes_no(); if not cond: skip_tokens(8); show_text_block(str[27] "Who will learn this skill (1-8)?"); selected = select_party_member(); apply_party(count=0x09, op=0x6D, val=0x0F); if cond: skip_tokens(5); cond = check_gold_at_least(500); if not cond: skip_tokens(12); apply_party_masked(count=0x09, set=0x6D, and=0xF0, or=0x02); party_effect(sel=0x09, 13 01 05 00 00); end_script(); apply_party(count=0x09, op=0x6D, val=0xF0); if cond: skip_tokens(5); cond = check_gold_at_least(500); if not cond: skip_tokens(5); apply_party_masked(count=0x09, set=0x6D, and=0x0F, or=0x20); party_effect(sel=0x09, 13 01 05 00 00); end_script(); show_text_basic(str[23] "You already have two Skills!"); set_abort_and_exit(); show_text_basic(str[20] "Not enough gold!"); set_abort_and_exit()
+  ev=29 tile=(2,9) text='Not enough gold!'
+    show_text_block(str[24] "Let crafty Odysseus teach you his many / linguistic skills for 500 gold "); cond = prompt_yes_no(); if not cond: skip_tokens(8); show_text_block(str[27] "Who will learn this skill (1-8)?"); selected = select_party_member(); apply_party(count=0x09, op=0x6D, val=0x0F); if cond: skip_tokens(5); cond = check_gold_at_least(500); if not cond: skip_tokens(12); apply_party_masked(count=0x09, set=0x6D, and=0xF0, or=0x09); party_effect(sel=0x09, 11 01 05 00 00); end_script(); apply_party(count=0x09, op=0x6D, val=0xF0); if cond: skip_tokens(5); cond = check_gold_at_least(500); if not cond: skip_tokens(5); apply_party_masked(count=0x09, set=0x6D, and=0x0F, or=0x90); party_effect(sel=0x09, 11 01 05 00 00); end_script(); show_text_basic(str[23] "You already have two Skills!"); set_abort_and_exit(); show_text_basic(str[20] "Not enough gold!"); set_abort_and_exit()
+
+======================================================================
+Q10 OP_21 loc 22
+  ev=5 tile=(0,8) set_tile((y=3,x=7), 0x00, 0x02) text=''
+    full: cond = check_member_attr(fields=0x03, value=0x05); if cond: skip_tokens(2); show_text_block(str[6] ""I cannot help anyone but Clerics / and their Robber assistants.""); set_abort_and_exit(); cond = check_monster_present(0x01, 0xE5); if cond: skip_tokens(2); show_text_block(str[7] ""I cannot help you until you / bring me Corak's Soul!""); set_abort_and_exit(); show_text_block(str[8] ""Ah, I have been waiting for you. / Proceed to the Hero's Tomb. I have /"); set_tile((y=3,x=7), 0x00, 0x02); set_tile((y=3,x=8), 0x00, 0x02); set_tile((y=2,x=7), 0x08, 0x22); set_tile((y=2,x=8), 0x08, 0x22); wait_for_space(); clear_current_tile_event_flag()
+  ev=5 tile=(0,8) set_tile((y=3,x=8), 0x00, 0x02) text=''
+    full: cond = check_member_attr(fields=0x03, value=0x05); if cond: skip_tokens(2); show_text_block(str[6] ""I cannot help anyone but Clerics / and their Robber assistants.""); set_abort_and_exit(); cond = check_monster_present(0x01, 0xE5); if cond: skip_tokens(2); show_text_block(str[7] ""I cannot help you until you / bring me Corak's Soul!""); set_abort_and_exit(); show_text_block(str[8] ""Ah, I have been waiting for you. / Proceed to the Hero's Tomb. I have /"); set_tile((y=3,x=7), 0x00, 0x02); set_tile((y=3,x=8), 0x00, 0x02); set_tile((y=2,x=7), 0x08, 0x22); set_tile((y=2,x=8), 0x08, 0x22); wait_for_space(); clear_current_tile_event_flag()
+  ev=5 tile=(0,8) set_tile((y=2,x=7), 0x08, 0x22) text=''
+    full: cond = check_member_attr(fields=0x03, value=0x05); if cond: skip_tokens(2); show_text_block(str[6] ""I cannot help anyone but Clerics / and their Robber assistants.""); set_abort_and_exit(); cond = check_monster_present(0x01, 0xE5); if cond: skip_tokens(2); show_text_block(str[7] ""I cannot help you until you / bring me Corak's Soul!""); set_abort_and_exit(); show_text_block(str[8] ""Ah, I have been waiting for you. / Proceed to the Hero's Tomb. I have /"); set_tile((y=3,x=7), 0x00, 0x02); set_tile((y=3,x=8), 0x00, 0x02); set_tile((y=2,x=7), 0x08, 0x22); set_tile((y=2,x=8), 0x08, 0x22); wait_for_space(); clear_current_tile_event_flag()
+  ev=5 tile=(0,8) set_tile((y=2,x=8), 0x08, 0x22) text=''
+    full: cond = check_member_attr(fields=0x03, value=0x05); if cond: skip_tokens(2); show_text_block(str[6] ""I cannot help anyone but Clerics / and their Robber assistants.""); set_abort_and_exit(); cond = check_monster_present(0x01, 0xE5); if cond: skip_tokens(2); show_text_block(str[7] ""I cannot help you until you / bring me Corak's Soul!""); set_abort_and_exit(); show_text_block(str[8] ""Ah, I have been waiting for you. / Proceed to the Hero's Tomb. I have /"); set_tile((y=3,x=7), 0x00, 0x02); set_tile((y=3,x=8), 0x00, 0x02); set_tile((y=2,x=7), 0x08, 0x22); set_tile((y=2,x=8), 0x08, 0x22); wait_for_space(); clear_current_tile_event_flag()
+
+======================================================================
+Q11 OP_25 (if any)
+Q13 OP_24 gold checks
+Q12 OP_28 consume
+  GOLD loc 0 Middlegate ev=34 tile=(12,3) amount=10 prompt='Not enough gold!'
+    show_text_block(str[22] "Otto adds the finishing touches to an / intricate map. Pay 10 gold to le"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); show_text_block(str[27] "Who will learn this skill (1-8)"); selected = select_party_member()
+  GOLD loc 0 Middlegate ev=34 tile=(12,3) amount=10 prompt='Not enough gold!'
+    show_text_block(str[22] "Otto adds the finishing touches to an / intricate map. Pay 10 gold to le"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); show_text_block(str[27] "Who will learn this skill (1-8)"); selected = select_party_member()
+  GOLD loc 1 Atlantium ev=26 tile=(0,12) amount=50 prompt='Not enough gold!'
+    show_text_block(str[19] "A girl in a pure white toga offers / travel to Vulcania for 50 gold. / A"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(50); if not cond: skip_tokens(1)
+  GOLD loc 1 Atlantium ev=27 tile=(2,6) amount=25 prompt='Not enough gold!'
+    show_text_block(str[21] "The Keep Atlantium Beautiful Committee / offers to send you to Middlegat"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(25); if not cond: skip_tokens(1)
+  GOLD loc 1 Atlantium ev=28 tile=(4,8) amount=500 prompt='Not enough gold!'
+    show_text_block(str[22] "Hurl the spear, let fly the discus, / all in the Olympic manner. Spend 5"); cond = prompt_yes_no(); if not cond: skip_tokens(8); show_text_block(str[27] "Who will learn this skill (1-8)?"); selected = select_party_member(); apply_party(count=0x09, op=0x6D, val=0x0F)
+  GOLD loc 1 Atlantium ev=28 tile=(4,8) amount=500 prompt='Not enough gold!'
+    show_text_block(str[22] "Hurl the spear, let fly the discus, / all in the Olympic manner. Spend 5"); cond = prompt_yes_no(); if not cond: skip_tokens(8); show_text_block(str[27] "Who will learn this skill (1-8)?"); selected = select_party_member(); apply_party(count=0x09, op=0x6D, val=0x0F)
+  GOLD loc 1 Atlantium ev=29 tile=(2,9) amount=500 prompt='Not enough gold!'
+    show_text_block(str[24] "Let crafty Odysseus teach you his many / linguistic skills for 500 gold "); cond = prompt_yes_no(); if not cond: skip_tokens(8); show_text_block(str[27] "Who will learn this skill (1-8)?"); selected = select_party_member(); apply_party(count=0x09, op=0x6D, val=0x0F)
+  GOLD loc 1 Atlantium ev=29 tile=(2,9) amount=500 prompt='Not enough gold!'
+    show_text_block(str[24] "Let crafty Odysseus teach you his many / linguistic skills for 500 gold "); cond = prompt_yes_no(); if not cond: skip_tokens(8); show_text_block(str[27] "Who will learn this skill (1-8)?"); selected = select_party_member(); apply_party(count=0x09, op=0x6D, val=0x0F)
+  GOLD loc 2 Tundara ev=19 tile=(11,6) amount=50 prompt='Not enough gold!'
+    show_text_block(str[12] "A talkative polar bear sells passage / to Vulcania for 50 gold. Travel ("); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(50); if not cond: skip_tokens(1)
+  GOLD loc 2 Tundara ev=20 tile=(11,15) amount=10 prompt='Not enough gold!'
+    show_text_block(str[13] ""I am Jean-Luc. Energize you to / Sandsobar for 10 gold (y/n)?""); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(10); if not cond: skip_tokens(1)
+  GOLD loc 2 Tundara ev=23 tile=(13,5) amount=250 prompt='Not enough gold!'
+    show_text_block(str[16] "An armed priest shouts, "Fight for the / cause!" Pay 250 gold to crusade"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); show_text_block(str[17] "Who will learn this skill (1-8)?"); selected = select_party_member()
+  GOLD loc 2 Tundara ev=23 tile=(13,5) amount=250 prompt='Not enough gold!'
+    show_text_block(str[16] "An armed priest shouts, "Fight for the / cause!" Pay 250 gold to crusade"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); show_text_block(str[17] "Who will learn this skill (1-8)?"); selected = select_party_member()
+  CONSUME loc 2 Tundara ev=28 tile=(8,15) item=230 (Emerald Ring) text=''
+    cond = consume_item(item_id=230, name="Emerald Ring", probe=1); if not cond: skip_tokens(1); exec_selector(0x3B); end_script()
+  GOLD loc 3 Vulcania ev=21 tile=(3,8) amount=30 prompt='Not enough gold!'
+    show_text_block(str[14] "The Vulcanian Transport Company offers / immediate transference to Tunda"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(30); if not cond: skip_tokens(1)
+  GOLD loc 3 Vulcania ev=22 tile=(0,10) amount=100 prompt='Not enough gold!'
+    show_text_block(str[15] "Wearing a uniform labeled "Vulcanian / Export" a pointy-eared dust devil"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(100); if not cond: skip_tokens(1)
+  GOLD loc 4 Sandsobar ev=24 tile=(1,8) amount=50 prompt='Not enough gold!'
+    show_text_block(str[19] "A dusty nomad offers transport to / Tundara for 50 gold. Accept (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(50); if cond: skip_tokens(2)
+  GOLD loc 4 Sandsobar ev=25 tile=(12,0) amount=20 prompt='Not enough gold!'
+    show_text_block(str[20] "A desert trader stands next to a / glowing aura of power. "Hi! I sell / "); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(20); if cond: skip_tokens(2)
+  GOLD loc 4 Sandsobar ev=26 tile=(8,13) amount=200 prompt='Not enough gold!'
+    set_service_context(str[20] "A desert trader stands next to a / glowing aura of power. "Hi! I sell / ", mode=0x00); show_text_block(str[21] "Drunk beyond belief, a sorcerer / mumbles, "... Join da Magesh Gill... /"); cond = prompt_yes_no(mode=1); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(200)
+  CONSUME loc 6 ev=12 tile=? item=200 (Phaser) text='Thank you so much. The House of Haart\nis indebted to you. You shall receive\n250,'
+    set_service_context(str[7] "The water in this fountain is frozen / solid. Break it (y/n)?", mode=0x00); show_text_block(str[15] "Before you rests antiquated Haart / Hold. Request an audience with Lord "); cond = prompt_yes_no(mode=1); if cond: skip_tokens(1); end_script(); apply_party(count=0x00, op=0x7E, val=0x10); if cond: skip_tokens(1); exec_selector(0x56)
+  CONSUME loc 6 ev=12 tile=? item=225 (+7 Loincloth) text='Thank you so much. The House of Haart\nis indebted to you. You shall receive\n250,'
+    set_service_context(str[7] "The water in this fountain is frozen / solid. Break it (y/n)?", mode=0x00); show_text_block(str[15] "Before you rests antiquated Haart / Hold. Request an audience with Lord "); cond = prompt_yes_no(mode=1); if cond: skip_tokens(1); end_script(); apply_party(count=0x00, op=0x7E, val=0x10); if cond: skip_tokens(1); exec_selector(0x56)
+  CONSUME loc 7 ev=4 tile=(5,5) item=214 (Mark's Keys) text='"Thanks, I\'ve been looking everywhere\nfor these keys!" (+10,000 exp)'
+    set_service_context(str[16] "Remnants of Devil's Food are strewn / about the clearing.", mode=0x00); show_text_block(str[4] "Mark, a whistling hermit, yells, / "Where are my keys!?!""); wait_key(); cond = check_monster_present(0x00, 0xD6); if cond: skip_tokens(5); show_text_block(str[5] ""You don't have my keys? Get / the rope and hang 'em high!""); op_1c_engine_query_to_cond(0x08); apply_party_masked(count=0x09, set=0x43, and=0x00, or=0x81)
+  GOLD loc 11 ev=6 tile=(4,10) amount=50 prompt='Not enough gold!'
+    show_text_block(str[6] "A curious looking fellow walks easily / over the turbulent river, yet no"); cond = prompt_yes_no(); if not cond: skip_tokens(3); cond = check_gold_at_least(50); if not cond: skip_tokens(2); set_party_attr(class=0xF0, bits=0x08)
+  GOLD loc 11 ev=7 tile=(12,10) amount=5 prompt='Not enough gold!'
+    show_text_block(str[8] "Ferry boat crossing. 5 Gold one way. / Buy ticket (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(5); cond = check_gold_at_least(5); if not cond: skip_tokens(1); map_transition(0x0B, 0x4C)
+  GOLD loc 11 ev=8 tile=(4,12) amount=5 prompt='Not enough gold!'
+    show_text_block(str[8] "Ferry boat crossing. 5 Gold one way. / Buy ticket (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(5); cond = check_gold_at_least(5); if not cond: skip_tokens(1); map_transition(0x0B, 0xCC)
+  GOLD loc 11 ev=9 tile=(12,12) amount=5 prompt='Not enough gold!'
+    show_text_block(str[8] "Ferry boat crossing. 5 Gold one way. / Buy ticket (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(5); cond = check_gold_at_least(5); if not cond: skip_tokens(1); map_transition(0x0B, 0x4A)
+  GOLD loc 11 ev=10 tile=(6,2) amount=5 prompt='Not enough gold!'
+    show_text_block(str[8] "Ferry boat crossing. 5 Gold one way. / Buy ticket (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(5); cond = check_gold_at_least(5); if not cond: skip_tokens(1); map_transition(0x0B, 0xCA)
+  GOLD loc 21 ev=4 tile=(0,0) amount=250 prompt='Not enough gold!'
+    set_service_context(str[14] "Sharp Tooth Den", mode=0x00); show_text_block(str[5] "The Thieving Fiend Maxwell will teach / all your thieves the intricacies"); cond = prompt_yes_no(mode=1); if not cond: skip_tokens(39); cond = check_gold_at_least(250); if not cond: skip_tokens(35)
+  CONSUME loc 22 Corak's Cave ev=4 tile=(3,13) item=193 (Admit 8 Pass) text='Ticket takers at the door say, "I\ncan\'t let you in if you don\'t have an\nAdmit 8 '
+    cond = consume_item(item_id=193, name="Admit 8 Pass", probe=1); if not cond: skip_tokens(2); show_text_basic(str[4] "Your Admit 8 Pass is taken at the door"); set_abort_and_exit(); show_text_block(str[5] "Ticket takers at the door say, "I / can't let you in if you don't have a"); wait_for_space(); engine_call(0x09); map_transition(0x16, 0x77)
+  CONSUME loc 22 Corak's Cave ev=6 tile=(0,13) item=229 (Corak's Soul) text="You approach Corak's coffin.\nSuddenly you are attacked."
+    cond = check_member_attr(fields=0x03, value=0x05); if cond: skip_tokens(4); show_text_block(str[9] "You catch a glimpse of Corak's coffin / and then -"); wait_for_space(); engine_call(0x09); map_transition(0x16, 0xB5); skip_tokens(2); show_text_block(str[10] "You approach Corak's coffin. / Suddenly you are attacked.")
+  GOLD loc 29 ev=3 tile=(2,11) amount=1 prompt=''
+    show_text_block(str[2] "In this small room is a circular, / swirling pool. Pitch a gold (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); cond = check_gold_at_least(1); if cond: skip_tokens(3)
+  CONSUME loc 36 ev=2 tile=(14,3) item=218 (Cupie Doll) text='A mad old man ignores you while\nranting about a Cupie Doll.'
+    set_service_context(str[8] "Yellow / Message 9", mode=0x00); cond = consume_item(item_id=218, name="Cupie Doll", probe=0); if not cond: skip_tokens(4); show_text_block(str[2] "A mad old man raves, "Hooray! A Cupie / Doll! Use the pool in the Inner "); apply_party_masked(count=0x00, set=0x7B, and=0xFE, or=0x01); wait_key(); clear_current_tile_event_flag(); show_text_block(str[1] "A mad old man ignores you while / ranting about a Cupie Doll.")
+  CONSUME loc 38 ev=14 tile=(11,1) item=219 (Water Talon) text="If only you'd had the Elemental Orb\nand Talons..."
+    cond = (era in [8..8]); if not cond: skip_tokens(28); skip_tokens(27); cond = check_monster_present(0x01, 0xDB); if not cond: skip_tokens(21); cond = check_monster_present(0x01, 0xDC); if not cond: skip_tokens(19); cond = check_monster_present(0x01, 0xDD)
+  CONSUME loc 38 ev=14 tile=(11,1) item=220 (Air Talon) text="If only you'd had the Elemental Orb\nand Talons..."
+    cond = (era in [8..8]); if not cond: skip_tokens(28); skip_tokens(27); cond = check_monster_present(0x01, 0xDB); if not cond: skip_tokens(21); cond = check_monster_present(0x01, 0xDC); if not cond: skip_tokens(19); cond = check_monster_present(0x01, 0xDD)
+  CONSUME loc 38 ev=14 tile=(11,1) item=221 (Fire Talon) text="If only you'd had the Elemental Orb\nand Talons..."
+    cond = (era in [8..8]); if not cond: skip_tokens(28); skip_tokens(27); cond = check_monster_present(0x01, 0xDB); if not cond: skip_tokens(21); cond = check_monster_present(0x01, 0xDC); if not cond: skip_tokens(19); cond = check_monster_present(0x01, 0xDD)
+  CONSUME loc 38 ev=14 tile=(11,1) item=222 (Earth Talon) text="If only you'd had the Elemental Orb\nand Talons..."
+    cond = (era in [8..8]); if not cond: skip_tokens(28); skip_tokens(27); cond = check_monster_present(0x01, 0xDB); if not cond: skip_tokens(21); cond = check_monster_present(0x01, 0xDC); if not cond: skip_tokens(19); cond = check_monster_present(0x01, 0xDD)
+  CONSUME loc 38 ev=14 tile=(11,1) item=223 (Element Orb) text="If only you'd had the Elemental Orb\nand Talons..."
+    cond = (era in [8..8]); if not cond: skip_tokens(28); skip_tokens(27); cond = check_monster_present(0x01, 0xDB); if not cond: skip_tokens(21); cond = check_monster_present(0x01, 0xDC); if not cond: skip_tokens(19); cond = check_monster_present(0x01, 0xDD)
+  CONSUME loc 41 ev=3 tile=(15,15) item=232 (Air Disc) text='A transparent shrine contains a domed\npedestal. A small disc slot appears to\nbe '
+    cond = consume_item(item_id=232, name="Air Disc", probe=0); if not cond: skip_tokens(4); show_text(str[2] "A transparent shrine contains a domed / pedestal. You insert your Air Di"); wait_for_space(); add_party_entity(0x01, f3a=0xDC, f40=0x01, f46=0x00); clear_current_tile_event_flag(); show_text_block(str[3] "A transparent shrine contains a domed / pedestal. A small disc slot appe"); set_abort_and_exit()
+  CONSUME loc 42 ev=3 tile=(15,3) item=233 (Fire Disc) text=''
+    cond = consume_item(item_id=233, name="Fire Disc", probe=0); if not cond: skip_tokens(4); show_text(str[2] "A shrine of red copper with intricate / cloisonne inlay, contains a dome"); add_party_entity(0x01, f3a=0xDD, f40=0x01, f46=0x00); wait_for_space(); clear_current_tile_event_flag(); show_text(str[3] "A small shrine of copper with / intricate cloisonne inlay, contains a / "); set_abort_and_exit()
+  CONSUME loc 43 ev=3 tile=(14,14) item=234 (Earth Disc) text=''
+    cond = consume_item(item_id=234, name="Earth Disc", probe=0); if not cond: skip_tokens(4); show_text(str[2] "A small shrine made from dried mud / contains a domed pedestal. You inse"); wait_for_space(); add_party_entity(0x01, f3a=0xDE, f40=0x01, f46=0x00); clear_current_tile_event_flag(); show_text(str[3] "A small shrine made from dried mud / contains a domed pedestal. A small "); set_abort_and_exit()
+  CONSUME loc 44 ev=3 tile=(13,5) item=231 (Water Disc) text=''
+    cond = consume_item(item_id=231, name="Water Disc", probe=0); if not cond: skip_tokens(4); show_text(str[2] "A turquoise shrine with many fountains / contains a domed pedestal. You "); add_party_entity(0x01, f3a=0xDB, f40=0x01, f46=0x00); wait_for_space(); clear_current_tile_event_flag(); show_text(str[3] "A turquoise shrine with many fountains / contains a domed pedestal. A sm"); set_abort_and_exit()
+  CONSUME loc 55 Hillstone ev=18 tile=(15,13) item=113 (Red Key) text='The Bishop of Red Battle is locked in\na cage.'
+    set_service_context(str[5] "Zookeeper", mode=0x00); cond = consume_item(item_id=113, name="Red Key", probe=1); if not cond: skip_tokens(44); show_text_block(str[19] "The Bishop of Red Battle is freed / from imprisonment by your red key / "); party_effect(sel=0x00, 31 04 40 1F 00); apply_party(count=0x01, op=0x7D, val=0x61); cond = (cond >= 0x61); if not cond: skip_tokens(2)
+  CONSUME loc 57 Pinehurst ev=25 tile=(10,14) item=112 (Yellow Key) text='The Bishop of Yellow Battle is locked\nin a cage.'
+    set_service_context(str[5] "The", mode=0x00); cond = consume_item(item_id=112, name="Yellow Key", probe=0); if not cond: skip_tokens(44); show_text_block(str[19] "The Bishop of Yellow Battle is freed / from imprisonment by your yellow "); party_effect(sel=0x00, 31 04 88 13 00); apply_party(count=0x01, op=0x7C, val=0x38); cond = (cond >= 0x38); if not cond: skip_tokens(2)
+  CONSUME loc 58 ev=17 tile=(6,0) item=114 (Black Key) text='The Bishop of Black Battle is locked\nin a cage.'
+    set_service_context(str[5] "Corak's Study", mode=0x00); cond = consume_item(item_id=114, name="Black Key", probe=1); if not cond: skip_tokens(52); show_text_block(str[17] "The Bishop of Black Battle is freed / from imprisonment by your black ke"); party_effect(sel=0x00, 31 04 10 27 00); apply_party(count=0x01, op=0x7D, val=0x0E); cond = (cond >= 0x0E); if not cond: skip_tokens(3)
+  CONSUME loc 67 Hall of Spells pool ev=8 tile=(1,5) item=254 (N-19 Capitor) text=''
+    cond = check_monster_present(0x01, 0xFB); if not cond: skip_tokens(12); cond = check_monster_present(0x01, 0xFC); if not cond: skip_tokens(10); cond = check_monster_present(0x01, 0xFD); if not cond: skip_tokens(8); cond = consume_item(item_id=254, name="N-19 Capitor", probe=1); if not cond: skip_tokens(6)
+  CONSUME loc 67 Hall of Spells pool ev=8 tile=(1,5) item=251 (J-26 Fluxer) text=''
+    cond = check_monster_present(0x01, 0xFB); if not cond: skip_tokens(12); cond = check_monster_present(0x01, 0xFC); if not cond: skip_tokens(10); cond = check_monster_present(0x01, 0xFD); if not cond: skip_tokens(8); cond = consume_item(item_id=254, name="N-19 Capitor", probe=1); if not cond: skip_tokens(6)
+  CONSUME loc 67 Hall of Spells pool ev=8 tile=(1,5) item=252 (M-27 Radicon) text=''
+    cond = check_monster_present(0x01, 0xFB); if not cond: skip_tokens(12); cond = check_monster_present(0x01, 0xFC); if not cond: skip_tokens(10); cond = check_monster_present(0x01, 0xFD); if not cond: skip_tokens(8); cond = consume_item(item_id=254, name="N-19 Capitor", probe=1); if not cond: skip_tokens(6)
+  CONSUME loc 67 Hall of Spells pool ev=8 tile=(1,5) item=253 (A-1 Todilor) text=''
+    cond = check_monster_present(0x01, 0xFB); if not cond: skip_tokens(12); cond = check_monster_present(0x01, 0xFC); if not cond: skip_tokens(10); cond = check_monster_present(0x01, 0xFD); if not cond: skip_tokens(8); cond = consume_item(item_id=254, name="N-19 Capitor", probe=1); if not cond: skip_tokens(6)
+
+======================================================================
+Q14 OP_2B
+  loc 0 Middlegate ev=39 tile=(12,13) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x26); clear_current_tile_event_flag()
+  loc 0 Middlegate ev=40 tile=(14,12) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x27); clear_current_tile_event_flag()
+  loc 0 Middlegate ev=41 tile=(1,8) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x28); clear_current_tile_event_flag()
+  loc 0 Middlegate ev=42 tile=(4,8) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x29); clear_current_tile_event_flag()
+  loc 1 Atlantium ev=32 tile=(13,0) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x26); clear_current_tile_event_flag()
+  loc 1 Atlantium ev=33 tile=(5,0) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x13); clear_current_tile_event_flag()
+  loc 1 Atlantium ev=34 tile=(2,0) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x14); clear_current_tile_event_flag()
+  loc 1 Atlantium ev=35 tile=(3,2) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x15); clear_current_tile_event_flag()
+  loc 1 Atlantium ev=36 tile=(0,2) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x16); clear_current_tile_event_flag()
+  loc 1 Atlantium ev=37 tile=(4,13) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x17); clear_current_tile_event_flag()
+  loc 1 Atlantium ev=38 tile=(3,15) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x18); clear_current_tile_event_flag()
+  loc 1 Atlantium ev=39 tile=(1,13) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x19); clear_current_tile_event_flag()
+  loc 1 Atlantium ev=40 tile=(0,15) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x1A); clear_current_tile_event_flag()
+  loc 1 Atlantium ev=41 tile=(6,2) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x1B); clear_current_tile_event_flag()
+  loc 2 Tundara ev=29 tile=(5,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=EB EB EB EB EB EB EB EB 00 00, flags=00 00); set_treasure(gold/exp=10000, gems=0, items=[0, 0, 0]); clear_current_tile_event_flag()
+  loc 2 Tundara ev=34 tile=(2,2) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x0C); clear_current_tile_event_flag()
+  loc 2 Tundara ev=35 tile=(2,3) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x0F); clear_current_tile_event_flag()
+  loc 2 Tundara ev=36 tile=(2,4) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x34); clear_current_tile_event_flag()
+  loc 2 Tundara ev=37 tile=(2,5) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x26); clear_current_tile_event_flag()
+  loc 2 Tundara ev=38 tile=(2,6) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x2A); clear_current_tile_event_flag()
+  loc 2 Tundara ev=39 tile=(2,7) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x2B); clear_current_tile_event_flag()
+  loc 2 Tundara ev=40 tile=(2,8) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x2C); clear_current_tile_event_flag()
+  loc 2 Tundara ev=41 tile=(2,9) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x2D); clear_current_tile_event_flag()
+  loc 2 Tundara ev=42 tile=(2,10) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x14); clear_current_tile_event_flag()
+  loc 2 Tundara ev=43 tile=(2,11) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x2E); clear_current_tile_event_flag()
+  loc 2 Tundara ev=44 tile=(2,12) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x2F); clear_current_tile_event_flag()
+  loc 2 Tundara ev=45 tile=(2,13) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x30); clear_current_tile_event_flag()
+  loc 2 Tundara ev=46 tile=(10,3) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x31); clear_current_tile_event_flag()
+  loc 2 Tundara ev=47 tile=(9,3) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x32); clear_current_tile_event_flag()
+  loc 2 Tundara ev=48 tile=(9,4) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x33); clear_current_tile_event_flag()
+  loc 2 Tundara ev=49 tile=(10,4) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x35); clear_current_tile_event_flag()
+  loc 2 Tundara ev=50 tile=(7,9) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x36); clear_current_tile_event_flag()
+  loc 3 Vulcania ev=36 tile=(13,3) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x2E); clear_current_tile_event_flag()
+  loc 3 Vulcania ev=37 tile=(14,3) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x46); clear_current_tile_event_flag()
+  loc 3 Vulcania ev=38 tile=(15,3) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x34); clear_current_tile_event_flag()
+  loc 3 Vulcania ev=39 tile=(14,9) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x47); clear_current_tile_event_flag()
+  loc 3 Vulcania ev=40 tile=(14,11) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x45); clear_current_tile_event_flag()
+  loc 3 Vulcania ev=41 tile=(2,4) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x30); clear_current_tile_event_flag()
+  loc 3 Vulcania ev=42 tile=(5,10) skip_count=0x04 if present
+    skip_tokens(4); apply_party(count=0x00, op=0x78, val=0x04); if cond: skip_tokens(1); end_script(); encounter_setup(monsters=04 04 04 04 04 04 06 06 06 06, flags=06 02); cond = load_var8(group=0x03, index=0x00)
+  loc 4 Sandsobar ev=31 tile=(0,15) skip_count=0x02 if present
+    skip_tokens(2); set_service_context(str[18] "Not enough gold!", mode=0x00); exec_selector(0x4B); clear_current_tile_event_flag()
+  loc 4 Sandsobar ev=32 tile=(2,13) skip_count=0x02 if present
+    skip_tokens(2); set_service_context(str[14] "Enter the Plains of Peril (y/n)?", mode=0x00); exec_selector(0x4A); clear_current_tile_event_flag()
+  loc 4 Sandsobar ev=40 tile=(15,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=09 09 09 09 09 09 09 09 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 4 Sandsobar ev=41 tile=(6,9) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x2C); clear_current_tile_event_flag()
+  loc 4 Sandsobar ev=45 tile=? skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x53); exec_selector(0x54)
+  loc 5 ev=10 tile=(6,10) skip_count=0x02 if present
+    skip_tokens(2); show_text_block(str[9] "/         Air Elementals Attack!"); encounter_setup(monsters=C2 C2 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 5 ev=11 tile=(5,9) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=E0 E1 E1 C1 C1 C1 C1 C2 C2 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 5 ev=12 tile=(10,15) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=E1 C1 C1 C2 C2 C2 C2 CE CE 00); clear_current_tile_event_flag()
+  loc 5 ev=13 tile=(3,11) skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 5 ev=14 tile=? skip_count=0x04 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(7); skip_tokens(4); show_text_block(str[10] "Unconquerable Spaz Twit and his mighty / phaser own this area. Do you ch"); cond = prompt_yes_no(); if not cond: skip_tokens(4)
+  loc 6 ev=9 tile=(3,5) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=C2 E0 C1 C1 E1 C1 E1 C1 C2 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 6 ev=10 tile=(3,15) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE C1 E1 C2 C2 C1 C2 C2 CE 00); clear_current_tile_event_flag()
+  loc 6 ev=11 tile=(5,5) skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 7 ev=2 tile=(8,1) skip_count=0x0C if present
+    skip_tokens(12); set_service_context(str[7] "Carved onto a tree, the spell Holy / Word is now yours to utter when / n", mode=0x00); show_text_block(str[1] "The drawbridge of Castle Woodhaven is / raised. Request lowering (y/n)?"); cond = prompt_yes_no(mode=1); if cond: skip_tokens(1); end_script()
+  loc 7 ev=3 tile=(1,1) skip_count=0x03 if present
+    skip_tokens(3); apply_party(count=0x00, op=0x78, val=0x40); if not cond: skip_tokens(5); encounter_setup(monsters=8C 8C 00 00 00 00 00 00 00 00, flags=00 00); show_text_block(str[3] "You find an aged scroll inscribed with / the runes for Fingers of Death."); set_party_attr(class=0x71, bits=0x08)
+  loc 7 ev=6 tile=(6,2) skip_count=0x03 if present
+    skip_tokens(3); apply_party(count=0x00, op=0x77, val=0x01); if not cond: skip_tokens(2); encounter_setup(monsters=4C 4C 4C 4C 4C 4C 00 00 00 00, flags=00 00); clear_current_tile_event_flag(); show_text_block(str[8] "The sight of ghastly 'horrors' is too / much to bear on an empty stomach")
+  loc 7 ev=7 tile=(11,1) skip_count=0x03 if present
+    skip_tokens(3); apply_party(count=0x00, op=0x77, val=0x02); if cond: skip_tokens(2); encounter_setup(monsters=2B 2B 2B 2B 2B 2B 2B 2B 00 00, flags=00 00); clear_current_tile_event_flag(); show_text_block(str[9] "Aghast at the stench of their fellow / ghouls still fresh on your breath")
+  loc 7 ev=10 tile=(3,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=AA AA AA AA AA AA AA AA 00 00, flags=00 00); cond = check_monster_present(0x01, 0xE5); if cond: skip_tokens(5); show_text_block(str[12] "After defeating those nasty ghosts, / you have discovered, hidden inside"); add_party_entity(0x01, f3a=0xE5, f40=0x00, f46=0x00)
+  loc 7 ev=13 tile=(9,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=2B 2B 2B 2B 2B 2B 2B 2B 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 7 ev=14 tile=(14,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=2D 2D 2D 2D 2D 2D 2D 2D 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 7 ev=15 tile=(13,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=3B 3B 3B 3B 3A 3A 3A 3A 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 7 ev=16 tile=(7,7) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=3C 3C 3C 3C 3F 3F 3F 3F 4C 00, flags=00 00); clear_current_tile_event_flag()
+  loc 7 ev=17 tile=(15,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=4C 4C 4C 4C 5C 5C 5C 5C 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 7 ev=18 tile=(13,7) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=7B 7B 5D 5D 5D 5D 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 7 ev=19 tile=? skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=7B 7B 7B 7B 7B 7B 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 8 ev=8 tile=(8,0) skip_count=0x04 if present
+    skip_tokens(4); apply_party(count=0x00, op=0x7A, val=0x80); if cond: skip_tokens(3); show_text_block(str[9] "The Winged Envoy of Evil attacks you!"); encounter_setup(monsters=F4 37 05 05 00 00 00 00 00 00, flags=00 00); apply_party_masked(count=0x00, set=0x7A, and=0x7F, or=0x80)
+  loc 8 ev=9 tile=(1,14) skip_count=0x04 if present
+    skip_tokens(4); show_text_block(str[10] "Do you seek the Sword of / Nobility (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(3); encounter_setup(monsters=89 89 89 89 00 00 00 00 00 00, flags=00 00); set_treasure(gold/exp=0, gems=0, items=[228, 0, 0])
+  loc 8 ev=10 tile=(3,9) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=EC 2D 11 11 11 11 11 11 11 11, flags=11 5C); cond = load_var8(group=0x0D, index=0x00); if cond: skip_tokens(4); show_text_block(str[15] "Red Duke and Dead Eye are free! / Hire at Hotel Four."); wait_for_space()
+  loc 8 ev=11 tile=(3,1) skip_count=0x05 if present
+    skip_tokens(5); op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(3); show_text_block(str[11] "/                AMBUSH!"); encounter_setup(monsters=10 05 05 05 05 05 05 05 05 05, flags=05 0B)
+  loc 8 ev=12 tile=(3,4) skip_count=0x05 if present
+    skip_tokens(5); op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(3); show_text_block(str[11] "/                AMBUSH!"); encounter_setup(monsters=10 05 05 05 05 05 05 05 05 05, flags=05 29)
+  loc 8 ev=13 tile=(9,13) skip_count=0x05 if present
+    skip_tokens(5); op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x1E); if cond: skip_tokens(3); show_text_block(str[11] "/                AMBUSH!"); encounter_setup(monsters=10 05 05 05 05 05 05 05 05 05, flags=05 47)
+  loc 8 ev=15 tile=(14,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=74 74 74 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 8 ev=16 tile=(14,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=75 75 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 8 ev=17 tile=(1,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=85 85 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 8 ev=18 tile=? skip_count=0x04 if present
+    skip_tokens(4); show_text_block(str[13] "Nestled before you is a peaceful / Goblin Village, whose destiny is to /"); cond = prompt_yes_no(); if not cond: skip_tokens(2); encounter_setup(monsters=05 05 05 05 05 05 05 05 05 05, flags=05 F0); clear_current_tile_event_flag()
+  loc 8 ev=19 tile=? skip_count=0x05 if present
+    skip_tokens(5); apply_party(count=0x00, op=0x77, val=0x04); if cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_block(str[14] "Several dragons are a little upset / about your choice of entrees."); encounter_setup(monsters=74 75 85 94 A6 B4 C4 00 00 00, flags=00 00)
+  loc 9 ev=2 tile=(3,12) skip_count=0x0C if present
+    skip_tokens(12); set_service_context(str[7] "A snow drift sweeps the party away!", mode=0x00); show_text_block(str[1] "Before you stands the hold of Lord / Peabody, Castle Pinehurst. / Enter "); cond = prompt_yes_no(mode=1); if cond: skip_tokens(1); end_script()
+  loc 9 ev=4 tile=(3,1) skip_count=0x06 if present
+    skip_tokens(6); set_service_context(str[4] "Pool of pestilence. Jump in (y/n)?", mode=0x00); show_text_block(str[3] "Burly mountain men guard the Sword of / Valor. Challenge them for it (y/"); cond = prompt_yes_no(mode=1); if cond: skip_tokens(1); end_script()
+  loc 9 ev=10 tile=(5,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=5B 5B 5B 5B 5B 5B 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 9 ev=11 tile=(9,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=88 88 88 88 88 88 17 17 17 17, flags=17 1A); clear_current_tile_event_flag()
+  loc 9 ev=12 tile=(11,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=C3 00 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 9 ev=13 tile=(9,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=F1 00 00 00 00 00 00 00 00 00, flags=00 00); show_text_block(str[9] "Your successful battle with the mighty / Mist Warrior has taught you, th"); set_party_attr(class=0x72, bits=0x10); wait_for_space(); clear_current_tile_event_flag()
+  loc 9 ev=14 tile=(14,1) skip_count=0x0E if present
+    skip_tokens(14); set_service_context(str[23], mode=0x00); show_text_block(str[12] "Suddenly, the party is ensnared in a / massive web! The treacherous Deat"); wait_key(); show_text_block(str[15] "unless you answer this riddle. / What has Mark lost?""); op_2f_clear_input_buf()
+  loc 9 ev=15 tile=(4,2) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=E0 E1 E1 C1 C1 C1 C1 C2 C2 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 9 ev=16 tile=(10,3) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=E1 C1 C1 C2 C2 C2 C2 CE CE 00); clear_current_tile_event_flag()
+  loc 9 ev=17 tile=(10,14) skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 9 ev=18 tile=? skip_count=0x04 if present
+    skip_tokens(4); apply_party(count=0x00, op=0x78, val=0x20); if not cond: skip_tokens(2); show_text_block(str[10] "A gnome voice shrieks, "You ate / my brother! Now you must die!""); encounter_setup(monsters=51 51 51 51 51 51 51 51 51 51, flags=00 00); clear_current_tile_event_flag()
+  loc 10 ev=2 tile=(3,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=D4 D4 D4 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 10 ev=4 tile=(7,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=82 82 82 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 10 ev=9 tile=(3,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=37 37 37 37 37 37 37 37 37 37, flags=37 14); clear_current_tile_event_flag()
+  loc 10 ev=14 tile=(10,14) skip_count=0x04 if present
+    skip_tokens(4); show_text_block(str[10] "The Grand Order of Merchants is / holding a meeting. Disrupt (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(2); encounter_setup(monsters=08 08 08 08 08 08 08 08 08 08, flags=08 F0); clear_current_tile_event_flag()
+  loc 10 ev=15 tile=(6,3) skip_count=0x04 if present
+    skip_tokens(4); show_text_block(str[11] "Orcon Convention. Disrupt / the unwashed Orcs (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(2); encounter_setup(monsters=11 11 11 11 11 11 11 11 11 11, flags=11 F0); clear_current_tile_event_flag()
+  loc 10 ev=16 tile=(12,13) skip_count=0x04 if present
+    skip_tokens(4); show_text_block(str[12] "Cosmic Sludge drips from the sky. / Investigate (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(2); encounter_setup(monsters=E7 E7 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 10 ev=17 tile=(2,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=37 37 37 37 37 37 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 10 ev=18 tile=(4,14) skip_count=0x07 if present
+    skip_tokens(7); cond = check_member_attr(fields=0x02, value=0x05); if cond: skip_tokens(3); show_text_block(str[14] "Baron Wilfrey refuses to be bothered / by any except archers."); wait_for_space(); clear_current_tile_event_flag()
+  loc 10 ev=20 tile=(9,13) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=E0 E1 E1 C1 C2 C1 C2 C1 C1 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 10 ev=21 tile=(7,14) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE C2 CE C2 E1 C1 C1 C2 C2 00); clear_current_tile_event_flag()
+  loc 10 ev=22 tile=(9,14) skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 11 ev=21 tile=(1,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=11 11 11 11 11 11 11 11 11 11, flags=00 00); clear_current_tile_event_flag()
+  loc 11 ev=22 tile=(8,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=11 11 11 11 34 34 34 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 11 ev=23 tile=? skip_count=0x07 if present
+    cond = (era in [8..8]); if not cond: skip_tokens(3); skip_tokens(7); set_service_context(str[7] "Not enough gold!", mode=0x00); exec_selector(0x5A); cond = (era in [9..9])
+  loc 12 ev=4 tile=(2,2) skip_count=0x05 if present
+    skip_tokens(5); show_text_block(str[4] "Squirming prisoners are staked to the / ground. Free them (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); encounter_setup(monsters=76 76 76 00 00 00 00 00 00 00, flags=00 00)
+  loc 12 ev=5 tile=(11,13) skip_count=0x1A if present
+    skip_tokens(26); show_text_block(str[3] "A sultry siren's seductive song sweeps / surreptitiously through the sea"); apply_party(count=0x02, op=0x0C, val=0x00); if cond: skip_tokens(1); apply_party_masked(count=0x02, set=0x43, and=0x00, or=0x81); apply_party(count=0x03, op=0x0C, val=0x00)
+  loc 12 ev=9 tile=(9,12) skip_count=0x02 if present
+    skip_tokens(2); show_text_block(str[14] "Dragons strike from above!"); encounter_setup(monsters=85 74 74 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 12 ev=10 tile=(14,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=92 AA BB 8E 7A 5D 4C 3F 3C 3B, flags=00 00); clear_current_tile_event_flag()
+  loc 12 ev=11 tile=(11,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=2D 2D 2D 2D 2D 2D 2D 2D 2D 2D, flags=00 00); clear_current_tile_event_flag()
+  loc 12 ev=12 tile=(14,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=65 00 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 12 ev=13 tile=(8,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=2B 2B 2B 2B 2B 2B 2B 2B 2B 2B, flags=00 00); clear_current_tile_event_flag()
+  loc 12 ev=16 tile=? skip_count=0x02 if present
+    skip_tokens(2); show_text_block(str[17] ""Uh oh! You caught me!""); encounter_setup(monsters=65 00 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 13 ev=6 tile=(2,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=4A 4A 4A 4A 4A 4A 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 13 ev=8 tile=(14,5) skip_count=0x05 if present
+    skip_tokens(5); show_text_block(str[7] "A knight proclaims, / "None shall pass!" Attack (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1); map_transition(0x0D, 0xEF); encounter_setup(monsters=C9 00 00 00 00 00 00 00 00 00, flags=00 00)
+  loc 13 ev=9 tile=(11,15) skip_count=0x09 if present
+    skip_tokens(9); cond = check_member_attr(fields=0x00, value=0x05); if cond: skip_tokens(2); show_text_block(str[8] "The Jouster will only battle Knights!"); set_abort_and_exit(); show_text_block(str[9] "A flurry of motion pervades Jouster's / Way. Banners fly and trumpets bl")
+  loc 13 ev=30 tile=(10,15) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=C2 C2 E0 E1 E1 C2 C2 C2 C2 C1, flags=C1 03); clear_current_tile_event_flag()
+  loc 13 ev=31 tile=(14,7) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=C2 C1 C1 C2 E1 CE CE C2 C2 00); clear_current_tile_event_flag()
+  loc 13 ev=32 tile=(2,12) skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 14 C3 overland ev=12 tile=(8,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=4A 4A 4A 4A 4A 4A 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 14 C3 overland ev=13 tile=(2,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=9B 9B 9B 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 14 C3 overland ev=14 tile=(1,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=39 39 39 39 39 39 39 39 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 14 C3 overland ev=15 tile=(2,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=5B 5B 5B 5B 5B 5B 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 14 C3 overland ev=16 tile=(1,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=49 49 49 49 49 49 49 49 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 14 C3 overland ev=17 tile=(0,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=57 57 57 57 57 57 57 57 57 57, flags=00 00); clear_current_tile_event_flag()
+  loc 14 C3 overland ev=18 tile=(9,7) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=39 39 5B 5B 49 49 57 57 57 57, flags=00 00); clear_current_tile_event_flag()
+  loc 15 ev=4 tile=(1,1) skip_count=0x04 if present
+    skip_tokens(4); show_text_block(str[3] "Prisoners are staked to the ground. / Free them (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(2); encounter_setup(monsters=76 76 76 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 15 ev=7 tile=(7,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=E1 E1 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 15 ev=13 tile=(4,7) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=E0 E1 E1 C1 C1 C1 C1 C2 C2 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 15 ev=14 tile=(10,0) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=E1 C1 C1 C2 C2 C2 C2 CE CE 00); clear_current_tile_event_flag()
+  loc 15 ev=15 tile=? skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 16 ev=9 tile=(4,4) skip_count=0x04 if present
+    skip_tokens(4); show_text_basic(str[10] "Giants playing volleyball. Join (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(2); encounter_setup(monsters=73 73 73 73 73 73 73 73 73 73, flags=73 02); clear_current_tile_event_flag()
+  loc 16 ev=11 tile=(2,4) skip_count=0x09 if present
+    skip_tokens(9); show_text_basic(str[12] "Murray's Gym. Work out (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(7); op_1c_engine_query_to_cond(0x14); party_effect(sel=0x80, 22 01 00 00 00)
+  loc 16 ev=14 tile=(1,8) skip_count=0x03 if present
+    skip_tokens(3); cond = load_var8(group=0x0F, index=0x00); if cond: skip_tokens(2); encounter_setup(monsters=8B 8B 8B 8B 8B 8B 8B 8B 8B 8B, flags=00 00); exec_selector(0x5C); clear_current_tile_event_flag()
+  loc 16 ev=15 tile=(5,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=4B 4B 4B 4B 4B 4B 4B 4B 4B 4B, flags=4B 05); set_party_attr(class=0xF1, bits=0x10); show_text_block(str[18] "The hyperactive fighting style of the / crazed natives has influenced yo"); wait_for_space(); clear_current_tile_event_flag()
+  loc 16 ev=16 tile=(9,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=4B 4B 4B 4B 4B 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 16 ev=18 tile=(15,7) skip_count=0x07 if present
+    skip_tokens(7); show_text_basic(str[20] "Gems wash ashore!"); party_effect(sel=0x00, 38 02 05 00 00); wait_for_space(); op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x0B)
+  loc 17 ev=6 tile=(15,1) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=11 11 11 11 11 11 1C 05 05 05, flags=05 05); clear_current_tile_event_flag()
+  loc 17 ev=7 tile=(1,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=02 02 2E 2E 03 03 03 03 03 03, flags=03 04); clear_current_tile_event_flag()
+  loc 17 ev=8 tile=(6,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=2D 2D 2D 2D 1A 1A 1A 1A 1A 1A, flags=1A 02); clear_current_tile_event_flag()
+  loc 17 ev=9 tile=(10,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=14 14 14 14 14 14 14 14 14 14, flags=14 32); clear_current_tile_event_flag()
+  loc 17 ev=10 tile=(11,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=15 15 15 15 15 15 15 15 36 36, flags=00 00); clear_current_tile_event_flag()
+  loc 17 ev=11 tile=(15,5) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=44 44 03 03 03 03 05 05 05 05, flags=05 00); clear_current_tile_event_flag()
+  loc 17 ev=12 tile=(15,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=03 03 03 03 02 02 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 17 ev=13 tile=(8,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=03 03 03 03 03 03 03 03 02 02, flags=02 02); clear_current_tile_event_flag()
+  loc 17 ev=14 tile=(8,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=05 05 05 05 05 05 05 05 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 17 ev=15 tile=(8,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=05 05 05 05 05 05 05 05 05 05, flags=11 04); clear_current_tile_event_flag()
+  loc 18 ev=4 tile=(1,5) skip_count=0x06 if present
+    skip_tokens(6); show_text_block(str[4] "An old rotting wooden statue appears / unstable. A small but sturdy butt"); cond = prompt_yes_no(); if not cond: skip_tokens(4); show_text_block(str[5] "The statue explodes, releasing angry / monsters."); for_party(mask=0x00): call(0x32,0x00)
+  loc 18 ev=5 tile=(5,14) skip_count=0x0C if present
+    skip_tokens(12); show_text_block(str[6] "A metallic statue of an Atlantian / deity stares at you intensely. / Tou"); cond = prompt_yes_no(); if not cond: skip_tokens(10); show_text_block(str[7] "Its eyes appear to come alive and you / feel drained."); apply_party_masked(count=0x00, set=0x22, and=0x00, or=0x03)
+  loc 18 ev=11 tile=(7,1) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=50 50 50 50 50 50 50 50 50 50, flags=00 00); clear_current_tile_event_flag()
+  loc 18 ev=12 tile=(9,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=70 70 70 70 70 70 7E 7E 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 18 ev=13 tile=(9,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=77 77 77 77 77 77 77 77 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 18 ev=14 tile=(12,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=5E 5E 5E 5E 5E 5E 8A 5E 5E 5E, flags=5E 11); clear_current_tile_event_flag()
+  loc 18 ev=15 tile=(12,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=64 64 64 64 64 64 52 64 64 64, flags=64 1E); clear_current_tile_event_flag()
+  loc 18 ev=16 tile=(14,7) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6E 6E 6E 6E 6E 6E 6E 6E 6E 6E, flags=6E 14); clear_current_tile_event_flag()
+  loc 18 ev=17 tile=(5,5) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6A 6A 6A 6A 6A 6A 6A 6A 6A 6A, flags=6A 0A); clear_current_tile_event_flag()
+  loc 19 ev=4 tile=(13,10) skip_count=0x03 if present
+    skip_tokens(3); cond = load_var8(group=0x33, index=0x00); if not cond: skip_tokens(2); encounter_setup(monsters=2A 2A 2A 2A 2A 2A 2A 2A 2A 2A, flags=2A BE); clear_current_tile_event_flag(); end_script()
+  loc 19 ev=6 tile=(6,13) skip_count=0x04 if present
+    skip_tokens(4); cond = load_var8(group=0x33, index=0x00); if not cond: skip_tokens(1); encounter_setup(monsters=2A 2A 2A 2A 2A 2A 2A 2A 2A 2A, flags=00 00); end_script(); clear_current_tile_event_flag()
+  loc 19 ev=15 tile=(2,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=62 62 62 62 62 62 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 20 ev=7 tile=(1,15) skip_count=0x09 if present
+    skip_tokens(9); show_text_block(str[6] "A bubbling lava pit!"); cond = load_var8(group=0x23, index=0x01); if cond: skip_tokens(7); op_1c_engine_query_to_cond(0x64); for_party(mask=0x80): call(0x01,0x00)
+  loc 20 ev=9 tile=(1,9) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=68 68 68 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 21 ev=12 tile=(8,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=27 27 27 27 27 27 35 35 35 00, flags=00 00); clear_current_tile_event_flag()
+  loc 21 ev=13 tile=(0,5) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=30 30 30 30 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 21 ev=14 tile=(2,6) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=45 45 45 45 45 45 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 21 ev=15 tile=(3,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=34 34 34 34 34 34 34 34 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 21 ev=16 tile=(0,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=53 53 53 53 53 53 53 53 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 21 ev=17 tile=(13,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=55 55 55 55 55 55 55 55 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 21 ev=18 tile=(12,9) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=56 56 56 56 56 56 56 56 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 21 ev=19 tile=(9,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=21 21 21 21 21 21 21 21 21 21, flags=21 02); clear_current_tile_event_flag()
+  loc 21 ev=20 tile=(15,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=29 29 29 29 29 29 29 29 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 21 ev=21 tile=(14,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=38 38 38 38 38 38 38 38 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=6 tile=(0,13) skip_count=0x02 if present
+    cond = check_member_attr(fields=0x03, value=0x05); if cond: skip_tokens(4); show_text_block(str[9] "You catch a glimpse of Corak's coffin / and then -"); wait_for_space(); engine_call(0x09); map_transition(0x16, 0xB5)
+  loc 22 Corak's Cave ev=12 tile=(12,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=0C 0C 0C 0C 0C 0C 0C 0C 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=13 tile=(14,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=1D 1D 1D 1D 1D 1D 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=14 tile=(10,1) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=0C 0C 1D 1D 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=15 tile=(12,1) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=2B 2B 2B 2B 0C 0C 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=16 tile=(14,1) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=3B 3B 3B 3B 3B 3B 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=17 tile=(13,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=3C 3C 3C 3C 1D 1D 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=18 tile=(10,9) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=0B 0B 0B 0B 0A 0A 0A 0A 0A 0A, flags=0A 02); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=19 tile=(7,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=1A 1A 1A 1A 1A 1A 1A 1B 1B 1B, flags=1B 01); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=20 tile=(7,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=2A 2A 2A 2A 2A 2A 0A 0A 0A 0A, flags=0A 10); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=21 tile=(5,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=2D 2D 2D 2D 2D 2D 0A 0A 0A 0A, flags=0A 10); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=22 tile=(5,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=3A 3A 3A 3A 3A 3A 3A 3A 3A 3A, flags=3A 05); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=23 tile=(11,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=3B 3B 3B 3B 3B 3B 3B 3B 3B 3B, flags=3B 05); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=24 tile=(9,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=4C 4C 4C 4C 4C 4C 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=25 tile=(9,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=1A 1A 1A 1A 1A 1A 1A 1A 0A 0A, flags=0A 06); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=26 tile=(5,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=0A 0A 0A 0A 0A 0A 0A 0A 1A 1A, flags=1A 06); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=27 tile=(3,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=5D 5D 5D 5D 5C 5C 5C 5C 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 22 Corak's Cave ev=28 tile=(11,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=7A 7A 7A 79 79 79 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 23 ev=17 tile=(12,4) skip_count=0x08 if present
+    skip_tokens(8); apply_party(count=0x00, op=0x7F, val=0x01); if not cond: skip_tokens(4); show_text_block(str[16] "66 Devil Kings bow down to the / Chosen One. Care to attack (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(2)
+  loc 23 ev=18 tile=(15,0) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0x7F)  # special_127; clear_current_tile_event_flag()
+  loc 23 ev=19 tile=? skip_count=0x04 if present
+    skip_tokens(4); apply_party(count=0x00, op=0x7F, val=0x20); if not cond: skip_tokens(4); set_service_context(str[3] "Hope so!", mode=0x00); exec_selector(0xFD)  # special_253; set_service_context(str[137], mode=0x00)
+  loc 24 ev=7 tile=(1,1) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=B6 B6 A4 A4 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 24 ev=8 tile=(4,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=21 21 21 21 21 21 21 21 21 21, flags=21 5A); clear_current_tile_event_flag()
+  loc 24 ev=9 tile=(1,7) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=03 03 03 03 03 03 03 03 03 03, flags=03 F0); clear_current_tile_event_flag()
+  loc 24 ev=10 tile=(4,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=30 30 30 30 30 30 30 30 30 30, flags=30 37); clear_current_tile_event_flag()
+  loc 24 ev=11 tile=(1,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=14 14 14 14 14 14 14 14 14 14, flags=14 8C); clear_current_tile_event_flag()
+  loc 24 ev=12 tile=(14,1) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=11 11 11 11 11 11 11 11 11 11, flags=11 96); clear_current_tile_event_flag()
+  loc 24 ev=13 tile=(11,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=1E 1E 1E 1E 1E 1E 1E 1E 1E 1E, flags=1E 8C); clear_current_tile_event_flag()
+  loc 24 ev=14 tile=(14,7) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=32 32 32 32 32 32 32 32 32 32, flags=32 28); clear_current_tile_event_flag()
+  loc 24 ev=15 tile=(14,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=05 05 05 05 05 05 05 05 05 05, flags=05 F0); clear_current_tile_event_flag()
+  loc 24 ev=16 tile=(11,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=44 44 44 44 44 44 44 44 44 44, flags=44 23); clear_current_tile_event_flag()
+  loc 24 ev=17 tile=(14,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=09 09 09 09 09 09 09 09 09 09, flags=09 BE); clear_current_tile_event_flag()
+  loc 24 ev=18 tile=(0,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=7E 7E 38 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 24 ev=19 tile=(9,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=76 76 38 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 25 ev=3 tile=(1,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=8D 8D 8D 8D 8D 8D 8C 8C 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 25 ev=6 tile=(2,7) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=E8 92 92 AA AA AA 93 93 93 00, flags=00 00); show_text_block(str[4] "Sarakin's Secret Fountain appears / before you. Take a drink (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(34); apply_party(count=0x01, op=0x2F, val=0x00)
+  loc 25 ev=10 tile=(3,7) skip_count=0x04 if present
+    skip_tokens(4); show_text_basic(str[9] "CAVE-IN!"); wait_for_space(); for_party(mask=0x00): call(0x14,0x00); encounter_setup(monsters=5D 5D 5D 5D 5D 5D 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 26 ev=14 tile=(1,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=73 73 73 73 73 73 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 26 ev=15 tile=(12,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=A2 A2 A2 A2 A2 A2 BD 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 26 ev=16 tile=(11,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=18 18 18 18 18 18 48 48 48 48, flags=48 10); clear_current_tile_event_flag()
+  loc 27 ev=18 tile=(6,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=42 4A 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=19 tile=(7,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=42 42 4A 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=20 tile=(6,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=42 42 42 4A 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=21 tile=(2,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=42 42 42 42 4A 4A 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=22 tile=(12,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=68 68 4A 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=23 tile=(10,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=14 14 14 14 14 14 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=24 tile=(9,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=1E 1E 1E 1E 1E 1E 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=25 tile=(9,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=14 14 14 14 1E 1E 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=26 tile=(11,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=1E 1E 1E 1E 14 14 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=27 tile=(11,9) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=1E 1E 1E 1E 14 14 14 14 4A 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=28 tile=(13,9) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=02 02 02 02 02 02 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=29 tile=(15,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=02 02 13 13 13 13 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=30 tile=(13,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=02 02 02 13 13 13 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=31 tile=(13,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=02 02 02 02 13 13 13 13 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=32 tile=(7,6) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=02 02 02 13 13 13 13 13 4A 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=33 tile=(10,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=35 35 35 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=34 tile=(15,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=36 36 35 35 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=35 tile=(13,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=36 36 36 36 35 35 35 35 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=36 tile=(15,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=44 44 36 36 35 35 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=37 tile=(14,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6C 4A 4A 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 27 ev=39 tile=(12,1) skip_count=0x08 if present
+    skip_tokens(8); apply_party(count=0x00, op=0x7E, val=0x08); if cond: skip_tokens(4); show_text_basic(str[20] ""It's not my fault - Leave me alone!""); wait_for_space(); engine_call(0x09)
+  loc 28 ev=4 tile=(8,15) skip_count=0x03 if present
+    skip_tokens(3); cond = check_member_attr(fields=0x01, value=0x05); if not cond: skip_tokens(5); encounter_setup(monsters=94 00 00 00 00 00 00 00 00 00, flags=00 00); apply_party_masked(count=0x00, set=0x75, and=0xFE, or=0x01); show_text_block(str[15] "You have proven yourself worthy. Now, / return to the jurors of Mount Fa")
+  loc 28 ev=5 tile=(8,6) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup_b(data=B4 22 32 44 47 51 54 65 67 6E); clear_current_tile_event_flag()
+  loc 28 ev=17 tile=(11,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=44 44 44 44 44 44 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 28 ev=18 tile=(7,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=05 05 05 05 05 05 05 05 05 05, flags=00 00); clear_current_tile_event_flag()
+  loc 28 ev=19 tile=(4,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=67 67 67 67 67 67 47 47 47 47, flags=47 0B); clear_current_tile_event_flag()
+  loc 28 ev=20 tile=(9,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=11 11 11 11 11 11 11 11 11 11, flags=00 00); clear_current_tile_event_flag()
+  loc 28 ev=21 tile=(8,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=65 65 65 6E 6E 6E 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 28 ev=22 tile=(1,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=32 32 32 32 32 32 32 32 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 28 ev=23 tile=(14,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=2E 2E 2E 2E 2E 2E 2E 2E 2E 03, flags=03 EF); clear_current_tile_event_flag()
+  loc 28 ev=24 tile=(14,6) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=05 05 05 05 05 05 05 05 05 05, flags=05 F0); clear_current_tile_event_flag()
+  loc 28 ev=25 tile=(1,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=59 59 59 59 11 11 11 11 11 11, flags=11 F4); clear_current_tile_event_flag()
+  loc 28 ev=26 tile=(1,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=22 22 22 22 22 22 22 22 22 22, flags=22 14); clear_current_tile_event_flag()
+  loc 28 ev=27 tile=(1,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=CC 00 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 28 ev=28 tile=(14,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6E 6E 6E 6E 6E 6E 6E 6E 6E 6E, flags=6E 0F); clear_current_tile_event_flag()
+  loc 28 ev=29 tile=(14,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=51 51 51 51 51 51 51 51 51 51, flags=51 0F); clear_current_tile_event_flag()
+  loc 28 ev=30 tile=(14,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=CA 00 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 28 ev=31 tile=? skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6E 6E 6E 6E 6E 6E 6E 6E 6E 6E, flags=6E 0F); clear_current_tile_event_flag()
+  loc 29 ev=13 tile=(15,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=B4 A6 94 85 75 74 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=14 tile=(10,6) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=75 75 75 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=15 tile=(0,7) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=74 74 74 74 74 74 74 74 74 74, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=16 tile=(13,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=B4 00 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=17 tile=(15,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=C4 00 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=18 tile=(9,9) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=D2 00 00 00 00 00 00 00 00 00, flags=00 00); set_treasure(gold/exp=10000000, gems=1000, items=[0, 0, 0]); clear_current_tile_event_flag()
+  loc 29 ev=19 tile=(9,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=75 75 75 75 75 75 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=20 tile=(11,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=85 85 85 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=21 tile=(11,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=94 94 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=22 tile=(13,6) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=C4 A6 94 85 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=23 tile=(13,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=74 74 75 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=24 tile=(11,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=75 85 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 29 ev=25 tile=? skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=74 75 94 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 30 ev=5 tile=(15,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=F9 AC AC 00 00 00 00 00 00 00, flags=00 00); apply_party_masked(count=0x00, set=0x7B, and=0xDF, or=0x20); cond = check_member_attr(fields=0x06, value=0x05); if cond: skip_tokens(1); clear_current_tile_event_flag()
+  loc 30 ev=7 tile=(11,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=F8 F8 F8 F8 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 30 ev=8 tile=(7,12) skip_count=0x03 if present
+    skip_tokens(3); cond = load_var8(group=0x15, index=0x00); if cond: skip_tokens(1); exec_selector(0x6C); clear_current_tile_event_flag()
+  loc 30 ev=14 tile=(8,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=10 10 10 10 10 10 10 10 10 10, flags=10 BE); clear_current_tile_event_flag()
+  loc 30 ev=15 tile=(14,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=5F 5F 5F 5F 5F 5F 5F 5F 5F 5F, flags=00 00); clear_current_tile_event_flag()
+  loc 30 ev=16 tile=(8,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=44 44 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 30 ev=17 tile=(10,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=F6 F6 F6 F6 F6 F6 F6 F6 F6 F6, flags=F6 03); clear_current_tile_event_flag()
+  loc 30 ev=18 tile=(12,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=73 73 73 73 73 73 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 30 ev=19 tile=(14,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=85 00 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 30 ev=20 tile=(1,1) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=72 72 72 72 72 72 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 32 ev=8 tile=(7,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=62 62 62 62 62 62 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 32 ev=9 tile=(7,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=09 09 09 09 09 09 09 09 09 09, flags=09 05); clear_current_tile_event_flag()
+  loc 32 ev=10 tile=(7,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=10 10 10 10 10 10 10 10 10 10, flags=00 00); clear_current_tile_event_flag()
+  loc 32 ev=11 tile=(7,8) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=1F 1F 1F 1F 1F 1F 1F 1F 1F 1F, flags=00 00); clear_current_tile_event_flag()
+  loc 32 ev=12 tile=(7,6) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=38 38 38 38 38 38 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 32 ev=13 tile=(7,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=50 50 50 50 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 32 ev=14 tile=(7,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=33 33 33 33 38 38 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 32 ev=15 tile=(7,1) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=28 28 28 28 50 50 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 32 ev=16 tile=(13,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6A 6A 6A 6A 6A 6A 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 33 ev=7 tile=(3,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup_b(data=C1 C1 00 00 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 33 ev=8 tile=(12,1) skip_count=0x05 if present
+    skip_tokens(5); apply_party(count=0x00, op=0x78, val=0x08); if cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_block(str[6] "Furious at the Cream of Kobold stains / on your clothes, vengeful kobold"); encounter_setup(monsters=03 03 03 03 03 03 03 03 03 03, flags=03 5A)
+  loc 33 ev=16 tile=(12,0) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=E1 E0 E1 C1 C1 C1 C1 C2 C2 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 33 ev=17 tile=(6,7) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE C2 C1 E1 C1 C2 CE C2 C2 00); clear_current_tile_event_flag()
+  loc 33 ev=18 tile=? skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 34 ev=6 tile=(14,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=9C 9C 9C 9C 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 34 ev=7 tile=(8,6) skip_count=0x0E if present
+    skip_tokens(14); set_service_context(str[6] "Guards rudely deny access, exclaiming, / "No key, no admittance!" Attack", mode=0x00); show_text_block(str[5] "The Great Luxus Palace Royale stands / before you majestically. Banners "); wait_key(); show_text_block(str[13] "flutter from every turret while / colorfully clad guardsman pace / the b"); cond = prompt_yes_no(mode=1)
+  loc 34 ev=8 tile=(12,1) skip_count=0x06 if present
+    skip_tokens(6); set_service_context(str[6] "Guards rudely deny access, exclaiming, / "No key, no admittance!" Attack", mode=0x00); show_text_block(str[7] "Dreary Mandagual's Keep casts a dark / shadow. A chill crawls up your sp"); cond = prompt_yes_no(mode=1); if cond: skip_tokens(1); map_transition(0x22, 0x76)
+  loc 34 ev=12 tile=(0,7) skip_count=0x08 if present
+    skip_tokens(8); op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x15); if not cond: skip_tokens(5); show_text_block(str[9] "Horns blow, heralding a pack of fierce / hounds chasing a stag, as the r"); wait_for_space()
+  loc 34 ev=14 tile=(13,14) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=C2 C1 E1 E0 E0 C1 C1 C1 C2 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 34 ev=15 tile=(8,7) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE C1 E1 C1 C2 CE C2 C2 C2 00); clear_current_tile_event_flag()
+  loc 34 ev=16 tile=? skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 35 ev=2 tile=(7,3) skip_count=0x05 if present
+    skip_tokens(5); apply_party(count=0x00, op=0x7A, val=0x40); if not cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_block(str[5] "The Crawling Envoy of Evil attacks!"); encounter_setup(monsters=F2 00 00 00 00 00 00 00 00 00, flags=00 00)
+  loc 35 ev=7 tile=(14,10) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup_b(data=DD CA 00 00 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 35 ev=8 tile=(13,7) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup_b(data=CC 8C 8C 00 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 35 ev=9 tile=(12,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=B5 95 95 95 95 95 95 95 95 0F, flags=0F 13); clear_current_tile_event_flag()
+  loc 35 ev=10 tile=(4,5) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=D3 B5 B5 95 95 95 95 95 0F 0F, flags=0F C6); clear_current_tile_event_flag()
+  loc 35 ev=11 tile=(14,14) skip_count=0x06 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(12); skip_tokens(6); show_text_block(str[6] "The charismatic shaman known as The / Long One kneels before you. He lea"); cond = prompt_yes_no(); if cond: skip_tokens(2)
+  loc 35 ev=12 tile=(12,2) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=E0 E1 E1 C2 C2 C1 C2 C2 C2 C2, flags=C1 03); clear_current_tile_event_flag()
+  loc 35 ev=13 tile=(15,1) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=E1 C1 C2 C1 C2 CE C2 C2 CE 00); clear_current_tile_event_flag()
+  loc 35 ev=14 tile=? skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 36 ev=4 tile=(3,13) skip_count=0x07 if present
+    skip_tokens(7); cond = load_var8(group=0x17, index=0x00); if not cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_block(str[4] "A Lich Lord holds a top scientist / captive. Attempt to free him (y/n)?"); cond = prompt_yes_no()
+  loc 36 ev=7 tile=(14,4) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=59 59 59 59 59 59 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 36 ev=8 tile=(14,6) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=62 62 62 62 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 36 ev=9 tile=(12,6) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=E0 E1 E1 C1 C1 C1 C1 C2 C2 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 36 ev=10 tile=(11,1) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=E1 C1 C1 C2 C2 C2 C2 CE CE 00); clear_current_tile_event_flag()
+  loc 36 ev=11 tile=(2,8) skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 37 ev=3 tile=(12,10) skip_count=0x05 if present
+    skip_tokens(5); apply_party(count=0x00, op=0x7A, val=0x20); if not cond: skip_tokens(1); clear_current_tile_event_flag(); show_text_block(str[6] "The Slithering Envoy of Evil attacks!"); encounter_setup(monsters=F3 00 00 00 00 00 00 00 00 00, flags=00 00)
+  loc 37 ev=5 tile=(10,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=7D 7D 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 37 ev=9 tile=(4,7) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=E0 E1 E1 C1 C1 C1 C1 C2 C2 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 37 ev=10 tile=(5,2) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=E1 C1 C1 C2 C2 C2 C2 CE CE 00); clear_current_tile_event_flag()
+  loc 37 ev=11 tile=(2,7) skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 38 ev=4 tile=(11,14) skip_count=0x04 if present
+    skip_tokens(4); show_text_block(str[4] "You stumble across The Door to Hell! / Open (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(2); encounter_setup(monsters=DF 3F 3F 3F 3F 3F 3F 3F 3F 3F, flags=3F E7); clear_current_tile_event_flag()
+  loc 38 ev=7 tile=(11,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=13 13 13 13 13 13 13 13 13 13, flags=13 0A); clear_current_tile_event_flag()
+  loc 38 ev=8 tile=(12,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=13 13 13 13 13 35 35 35 35 35, flags=35 05); clear_current_tile_event_flag()
+  loc 38 ev=9 tile=(10,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6C 6C 6C 6C 6C 6C 6C 6C 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 38 ev=10 tile=(8,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=66 66 66 66 66 66 66 66 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 38 ev=11 tile=(0,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=80 80 80 80 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 38 ev=12 tile=(15,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=B1 00 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 38 ev=13 tile=(5,14) skip_count=0x07 if present
+    skip_tokens(7); cond = check_member_attr(fields=0x07, value=0x05); if cond: skip_tokens(3); show_text_block(str[7] "Only the barbaric may speak / to Brutal Bruno."); wait_for_space(); clear_current_tile_event_flag()
+  loc 38 ev=14 tile=(11,1) skip_count=0x1B if present
+    cond = (era in [8..8]); if not cond: skip_tokens(28); skip_tokens(27); cond = check_monster_present(0x01, 0xDB); if not cond: skip_tokens(21); cond = check_monster_present(0x01, 0xDC)
+  loc 38 ev=15 tile=(12,10) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=E0 E1 E1 C1 C1 C1 C1 C2 C2 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 38 ev=16 tile=? skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=E1 C1 C1 C2 C2 C2 C2 CE CE 00); clear_current_tile_event_flag()
+  loc 39 ev=3 tile=(10,13) skip_count=0x0C if present
+    skip_tokens(12); set_service_context(str[6] "Farm of Fear. Enter (y/n)?", mode=0x00); show_text_block(str[3] "The marble walls of Castle Hillstone / gleam before you. Enter (y/n)?"); cond = prompt_yes_no(mode=1); if cond: skip_tokens(1); end_script()
+  loc 39 ev=5 tile=(11,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=13 13 13 13 13 13 13 13 13 13, flags=13 0F); clear_current_tile_event_flag()
+  loc 39 ev=6 tile=(10,2) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=13 13 13 13 35 35 35 35 35 35, flags=35 02); clear_current_tile_event_flag()
+  loc 39 ev=7 tile=(8,1) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6C 6C 6C 6C 6C 6C 6C 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 39 ev=8 tile=(8,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=66 66 66 66 66 66 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 39 ev=9 tile=(6,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=80 80 80 80 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 39 ev=10 tile=(11,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=B1 00 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 39 ev=11 tile=(11,9) skip_count=0x05 if present
+    skip_tokens(5); show_text_block(str[5] "The Guardian defends the Sword of / Honor. Challenge for it (y/n)?"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); encounter_setup(monsters=7D 7D 7D 7D 7D 7D 00 00 00 00, flags=00 00)
+  loc 39 ev=12 tile=(14,7) skip_count=0x04 if present
+    skip_tokens(4); show_text_basic(str[6] "Farm of Fear. Enter (y/n)?"); cond = prompt_yes_no(); if not cond: skip_tokens(2); encounter_setup(monsters=63 63 63 63 63 63 63 63 63 63, flags=63 22); clear_current_tile_event_flag()
+  loc 39 ev=13 tile=(14,10) skip_count=0x04 if present
+    skip_tokens(4); show_text_block(str[7] "Outcast lepers sit around large / tables playing various games. A sign /"); cond = prompt_yes_no(); if not cond: skip_tokens(2); encounter_setup(monsters=64 64 64 64 64 64 64 62 64 64, flags=64 5B); clear_current_tile_event_flag()
+  loc 39 ev=14 tile=(14,9) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=E1 E0 C1 E1 C2 C1 C1 C1 C2 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 39 ev=15 tile=(14,11) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=C2 C1 E1 C1 C2 CE CE C2 C2 00); clear_current_tile_event_flag()
+  loc 39 ev=16 tile=(10,12) skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 40 ev=6 tile=(10,3) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=E0 E0 00 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 40 ev=7 tile=(15,12) skip_count=0x04 if present
+    skip_tokens(4); apply_party(count=0x00, op=0x77, val=0x10); if not cond: skip_tokens(2); show_text_block(str[5] "Outraged at the tell-tale odor from a / belch let loose by one of you, m"); encounter_setup(monsters=5E 5E 5E 5E 5E 5E 5E 5E 59 00, flags=00 00); clear_current_tile_event_flag()
+  loc 40 ev=10 tile=(15,13) skip_count=0x01 if present
+    cond = (era in [5..5]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup(monsters=C2 C1 C2 E0 E1 E1 C1 C1 C1 C2, flags=C2 03); clear_current_tile_event_flag()
+  loc 40 ev=11 tile=(15,11) skip_count=0x01 if present
+    cond = (era in [6..6]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE C2 C1 C2 C2 C1 E1 C2 00); clear_current_tile_event_flag()
+  loc 40 ev=12 tile=(11,2) skip_count=0x01 if present
+    cond = (era in [7..7]); if not cond: skip_tokens(2); skip_tokens(1); encounter_setup_b(data=CE CE CE CE 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 41 ev=2 tile=(7,11) skip_count=0x02 if present
+    skip_tokens(2); show_text_block(str[1] "Lord Shalwend bellows, "How dare you / invade my plane! Die intruders!""); encounter_setup(monsters=C2 C2 C2 C2 C2 FB C2 C2 C2 C2, flags=00 00); clear_current_tile_event_flag()
+  loc 41 ev=4 tile=(7,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=CE C2 C2 C2 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 42 ev=2 tile=(4,4) skip_count=0x02 if present
+    skip_tokens(2); show_text_block(str[1] "Lord Pyrannaste's voice crackles, / "You dare to invade my plane? / Die "); encounter_setup_b(data=C1 C1 C1 C1 C1 C1 FC C1 C1 C1); clear_current_tile_event_flag()
+  loc 42 ev=4 tile=(7,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=C1 C1 C1 CE 68 68 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 43 ev=2 tile=(8,8) skip_count=0x02 if present
+    skip_tokens(2); show_text_block(str[1] "Lord Gralkor exclaims, "How dare you / invade my plane! Die intruders!""); encounter_setup(monsters=E0 E0 E0 E0 E0 E0 FE E0 E0 E0, flags=00 00); clear_current_tile_event_flag()
+  loc 43 ev=4 tile=(8,15) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=CE E0 E0 E0 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 44 ev=2 tile=(10,10) skip_count=0x02 if present
+    skip_tokens(2); show_text_block(str[1] "Lord Acwalandar gurgles, "How dare you / invade my plane! Die intruders!"); encounter_setup(monsters=E1 E1 E1 E1 E1 E1 FD E1 E1 E1, flags=00 00); clear_current_tile_event_flag()
+  loc 44 ev=4 tile=(8,0) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=CE E1 E1 E1 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 45 ev=6 tile=(1,11) skip_count=0x03 if present
+    skip_tokens(3); show_text_block(str[8] "A trap! Spikes hit you from behind!"); for_party(mask=0x00): call(0x1E,0x00); encounter_setup_b(data=00 00 00 00 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 46 ev=10 tile=(14,13) skip_count=0x03 if present
+    skip_tokens(3); show_text_block(str[10] "As you move forward, scores of darts / fly at you from all directions."); apply_party_masked(count=0x00, set=0x43, and=0xF7, or=0x08); encounter_setup_b(data=00 00 00 00 00 00 00 00 00 00); clear_current_tile_event_flag()
+  loc 49 ev=10 tile=(14,11) skip_count=0x1B if present
+    skip_tokens(27); show_text_block(str[14] "An ancient curse from a misguided / wizard drains your magic."); wait_for_space(); party_effect_b(sel=0x01, 28 02 14 00 00); if cond: skip_tokens(1); apply_party_masked(count=0x01, set=0x28, and=0x00, or=0x00)
+  loc 50 ev=10 tile=(14,2) skip_count=0x1B if present
+    skip_tokens(27); show_text_block(str[18] "You are struck by bolts of electricity / which drain your magic."); party_effect_b(sel=0x01, 28 02 32 00 00); if cond: skip_tokens(1); apply_party_masked(count=0x01, set=0x28, and=0x00, or=0x00); party_effect_b(sel=0x02, 28 02 32 00 00)
+  loc 52 ev=7 tile=(11,5) skip_count=0x08 if present
+    skip_tokens(8); op_1c_engine_query_to_cond(0x64); cond = (cond >= 0x32); if not cond: skip_tokens(4); show_text_popup_style_b(str[6] "Have a / nice day!"); wait_for_space()
+  loc 53 ev=43 tile=? skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6D 6D 6D 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 54 ev=44 tile=? skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6D 6D 6D 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 55 Hillstone ev=19 tile=(14,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=69 69 69 69 69 69 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 55 Hillstone ev=20 tile=(9,5) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=69 69 69 69 69 69 69 69 69 69, flags=00 00); clear_current_tile_event_flag()
+  loc 55 Hillstone ev=22 tile=(12,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=0E 0E 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=23 tile=(10,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=1D 1D 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=24 tile=(11,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=2E 2E 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=25 tile=(9,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=3D 3D 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=26 tile=(10,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=44 44 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=27 tile=(8,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=47 47 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=28 tile=(9,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=52 52 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=29 tile=(7,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=5A 5A 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=30 tile=(8,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=5C 5C 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=31 tile=(6,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=5D 5D 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=32 tile=(7,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=5F 5F 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=33 tile=(5,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=6D 6D 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=34 tile=(6,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=71 71 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=35 tile=(4,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=73 73 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=36 tile=(5,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=7E 7E 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=37 tile=(3,12) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=7A 7A 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=38 tile=(4,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=8A 8A 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=39 tile=(3,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=8C 8C 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=40 tile=(12,11) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=87 87 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 55 Hillstone ev=41 tile=(2,13) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=9D 9D 00 00 00 00 00 00 00 00, flags=00 00); exec_selector(0xFA)
+  loc 56 Woodhaven ev=13 tile=(14,14) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=69 69 69 69 69 69 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 56 Woodhaven ev=14 tile=(8,7) skip_count=0x01 if present
+    skip_tokens(1); encounter_setup(monsters=69 69 69 69 69 69 69 69 69 69, flags=00 00); clear_current_tile_event_flag()
+  loc 56 Woodhaven ev=17 tile=(6,10) skip_count=0x04 if present
+    skip_tokens(4); apply_party(count=0x00, op=0x7D, val=0x10); if not cond: skip_tokens(2); show_text_block(str[16] "Castle guards yell, "Stop thieves!""); encounter_setup(monsters=A2 A2 A2 00 00 00 00 00 00 00, flags=00 00); clear_current_tile_event_flag()
+  loc 58 ev=24 tile=(11,9) skip_count=0x06 if present
+    skip_tokens(6); show_text_block(str[19] "The palace alchemist chamber contains / piles of gold made for the treas"); cond = prompt_yes_no(); if cond: skip_tokens(1); end_script(); show_text_block(str[25] "Castle Guards intervene!")
+  loc 58 ev=27 tile=(7,6) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xE6); clear_current_tile_event_flag(); if not cond: skip_tokens(1)
+  loc 58 ev=28 tile=(9,9) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xE7); clear_current_tile_event_flag()
+  loc 58 ev=29 tile=(3,10) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xE8); clear_current_tile_event_flag()
+  loc 58 ev=30 tile=(9,12) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xE9); clear_current_tile_event_flag()
+  loc 58 ev=31 tile=(9,14) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xEA); clear_current_tile_event_flag()
+  loc 58 ev=32 tile=(12,1) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xEB); clear_current_tile_event_flag()
+  loc 58 ev=33 tile=(12,3) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xEC); clear_current_tile_event_flag()
+  loc 58 ev=34 tile=(14,12) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xED); clear_current_tile_event_flag()
+  loc 58 ev=35 tile=(13,3) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xEE); clear_current_tile_event_flag()
+  loc 58 ev=36 tile=(7,2) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xEF); clear_current_tile_event_flag()
+  loc 58 ev=37 tile=(15,9) skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xF0); clear_current_tile_event_flag()
+  loc 58 ev=38 tile=? skip_count=0x01 if present
+    skip_tokens(1); exec_selector(0xF1); clear_current_tile_event_flag()
+
+======================================================================
+Q15 OP_23 day gate
+  loc 8 ev=6 tile=(14,12) day_range=[93, 93]
+  loc 10 ev=19 tile=(12,12) day_range=[140, 170]
+
+======================================================================
+Q16-19 string banks
+
+  loc 60 Quest: Nordon/Nordonna/Corak kind=string_bank strings=28 triplets=20
+python : Traceback (most recent call last):
+At C:\Users\Adam Templeton\AppData\Local\Temp\ps-script-ddeefdb9-a4b6-4eb6-977e-d34933546e1f.ps1:109 char:43
++ ... 0421_\D-REC\development\MM2"; python tools/_quiz_mine.py 2>&1 | Out-F ...
++                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "C:\_20260421_\D-REC\development\MM2\tools\_quiz_mine.py", line 359, in <module>
+    print(f"    [{i:2d}] {s[:100].replace(chr(10), ' / ')}")
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\ufffd' in position 29: character maps to <undefined>

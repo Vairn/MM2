@@ -58,3 +58,4 @@ imgui.ini
 # Ignore bulky extracted image outputs
 EXTRACTED/docs/img/
 EXTRACTED/docs/img/**
+EXTRACTED/event_quiz_answers.json

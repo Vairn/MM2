@@ -69,7 +69,10 @@ constexpr int kLevel = 0x71;
 constexpr int kSpellLevel = 0x72;
 constexpr int kEnduranceBase = 0x73;
 constexpr int kHpCur = 0x74;         // u16 LE
-constexpr int kClassQuestFlags = 0x79;  // bit7 renders in-game class '+'
+constexpr int kTempScoreWord = 0x76; // u16 LE
+constexpr int kScriptWorkFlag = 0x78;
+constexpr int kClassQuestGuildMask = 0x79;  // bit7 = class '+'; low bits AND A4-$66A9[town]
+constexpr int kTailPadding7A = 0x7A;        // 10 bytes, mostly padding
 }  // namespace roster_off
 
 struct RosterRecord {

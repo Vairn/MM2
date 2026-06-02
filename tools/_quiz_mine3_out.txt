@@ -1,0 +1,85 @@
+﻿
+=== loc 0 ev 27 tile (14,7) ===
+  set_service_context(str[6] "Arena Entrance Only!", mode=0x00)
+  exec_selector(0x02)  # open_inn_lodging
+
+=== loc 0 ev 32 tile (10,12) ===
+  exec_selector(0x0B)
+
+=== loc 0 ev 17 tile (15,15) ===
+  exec_selector(0x10)
+
+=== loc 0 ev 18 tile (4,7) ===
+  exec_selector(0x0E)
+
+=== loc 0 ev 22 tile (4,4) ===
+  exec_selector(0x11)
+
+=== loc 4 ev 23 tile (15,4) ===
+  exec_selector(0x49)
+
+=== loc 3 ev 28 tile (9,3) ===
+  exec_selector(0x3E)
+portal 0x64: loc 10 ev 19 tile (12,12)
+
+=== party_effect samples (first 15) ===
+loc 1 ev 28 tile (4,8): Not enough gold!
+  party_effect(sel=0x09, 13 01 05 00 00)
+  party_effect(sel=0x09, 13 01 05 00 00)
+loc 1 ev 29 tile (2,9): Not enough gold!
+  party_effect(sel=0x09, 11 01 05 00 00)
+  party_effect(sel=0x09, 11 01 05 00 00)
+loc 6 ev 12 tile ?: Thank you so much. The House of Haart / is indebted to you. Yo
+  party_effect(sel=0x00, 31 04 90 D0 03)
+loc 7 ev 4 tile (5,5): "Thanks, I've been looking everywhere / for these keys!" (+10,
+  party_effect(sel=0x00, 31 04 10 27 00)
+loc 8 ev 5 tile (6,5): The party is overcome with queasiness / and uncontrollable ret
+  party_effect(sel=0x09, 43 01 01 00 00)
+loc 12 ev 8 tile (6,5): A voice exclaims, "Darn, I thought I / could fool you!" (+25 S
+  party_effect(sel=0x00, 23 01 19 00 00)
+loc 15 ev 10 tile (14,15): Who will drink (1-8)?
+  party_effect(sel=0x09, 43 01 01 00 00)
+loc 16 ev 11 tile (2,4): Murray's Gym. Work out (y/n)?
+  party_effect(sel=0x80, 22 01 00 00 00)
+loc 16 ev 18 tile (15,7): Gems wash ashore!
+  party_effect(sel=0x00, 38 02 05 00 00)
+loc 18 ev 7 tile (8,6): After reading the pages you are / enlightened.
+  party_effect(sel=0x01, 11 01 0A 00 00)
+  party_effect(sel=0x02, 11 01 0A 00 00)
+  party_effect(sel=0x03, 11 01 0A 00 00)
+  party_effect(sel=0x04, 11 01 0A 00 00)
+  party_effect(sel=0x05, 11 01 0A 00 00)
+  party_effect(sel=0x06, 11 01 0A 00 00)
+  party_effect(sel=0x07, 11 01 0A 00 00)
+  party_effect(sel=0x08, 11 01 0A 00 00)
+loc 20 ev 4 tile (4,1): You stumble upon some wayward gems.
+  party_effect(sel=0x01, 38 02 C8 00 00)
+loc 20 ev 6 tile (15,7): You cringe as a lumbering giant sings / a popular ballad very 
+  party_effect(sel=0x02, 44 01 0A 00 00)
+  party_effect(sel=0x03, 44 01 0A 00 00)
+  party_effect(sel=0x04, 44 01 0A 00 00)
+  party_effect(sel=0x05, 44 01 0A 00 00)
+  party_effect(sel=0x06, 44 01 0A 00 00)
+  party_effect(sel=0x07, 44 01 0A 00 00)
+  party_effect(sel=0x08, 44 01 0A 00 00)
+  party_effect(sel=0x01, 44 01 0A 00 00)
+loc 21 ev 3 tile (9,13): Not enough gold!
+  party_effect(sel=0x01, 1E 01 0A 00 00)
+  party_effect(sel=0x02, 1E 01 0A 00 00)
+  party_effect(sel=0x03, 1E 01 0A 00 00)
+  party_effect(sel=0x04, 1E 01 0A 00 00)
+  party_effect(sel=0x05, 1E 01 0A 00 00)
+  party_effect(sel=0x06, 1E 01 0A 00 00)
+  party_effect(sel=0x07, 1E 01 0A 00 00)
+  party_effect(sel=0x08, 1E 01 0A 00 00)
+loc 21 ev 4 tile (0,0): Not enough gold!
+  party_effect_b(sel=0x01, 1E 01 05 00 00)
+  party_effect_b(sel=0x02, 1E 01 05 00 00)
+  party_effect_b(sel=0x03, 1E 01 05 00 00)
+  party_effect_b(sel=0x04, 1E 01 05 00 00)
+  party_effect_b(sel=0x05, 1E 01 05 00 00)
+  party_effect_b(sel=0x06, 1E 01 05 00 00)
+  party_effect_b(sel=0x07, 1E 01 05 00 00)
+  party_effect_b(sel=0x08, 1E 01 05 00 00)
+loc 24 ev 35 tile (12,5): You have found 500 Gems!
+  party_effect(sel=0x01, 38 02 F4 01 00)

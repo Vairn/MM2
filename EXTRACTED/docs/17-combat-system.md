@@ -166,8 +166,87 @@ case.
 | `0x4C8E`  | monster stat unpacker (doc 16) |
 | `0xD000`  | spell-effect jump table |
 
+## Character combat stats (FAQ)
+
+From FAQ §2-5 / §3-8 — detail in [`32-character-mechanics.md`](32-character-mechanics.md):
+
+- **Extra attacks:** `floor(level / divisor)` — divisor 4 (Knight/Paladin/Barbarian),
+  5 (Archer/Robber/Ninja), 7 (Cleric), 10 (Sorcerer). *ASM divisor table TBD.*
+- **HP per level** at End 11–12: Barbarian 15 … Sorcerer 6 (see doc 32 table).
+
+---
+
+## Extra attacks formula [FAQ §2-5]
+
+Extra attacks per round = `floor(level / x)` where `x` is class-dependent:
+
+| Divisor `x` | Classes |
+|-------------|---------|
+| 4 | Knight, Paladin, Barbarian |
+| 5 | Archer, Robber, Ninja |
+| 7 | Cleric |
+| 10 | Sorcerer |
+
+**Status: FAQ-sourced.** ASM computation site not yet located in the current trace.
+See also [`32-character-mechanics.md §4`](32-character-mechanics.md) for HP/level baseline.
+
+## HP per level baseline [FAQ §2-5]
+
+At Endurance 11–12 (no bonus): Knight 12, Paladin/Archer/Ninja 10, Cleric/Robber 8, Sorcerer 6, Barbarian 15 HP/level.
+Endurance above 12 adds a bonus (see [`32-character-mechanics.md §3`](32-character-mechanics.md)).
+Training at Atlantium vs Middlegate is ~6 HP/level difference. [FAQ §4-2]
+
+## XP rules (FAQ §3-8)
+
+- **Unconscious** party members: **receive XP** for the fight.
+- **Stoned / dead** party members: **do not receive XP**.
+- Characters who **flee** during combat: **do not receive their share** (but their share is **not forfeited** — it is distributed to the remaining party).
+- Monsters that **frenzy or explode**: party **does receive** treasure + XP.
+- Monsters that **flee**: party **does NOT receive** treasure/XP.
+- **Friend summon cap**: only one friend-summon per fight; summon doubles the count of monsters not in the first 10; hard cap at 255 monsters total (>122 in back → summon impossible). [FAQ §3-8]
+
+XP accumulation: `0x10B74` per-monster reward decode; accumulated in `-$119E`, added to party total `-$6FC6` at victory `0x12430`. [ASM confirmed]
+
 ## Open items (not fully reduced)
 - Exact to-hit / AC interaction and physical damage formula inside
   `0xCD90`/`0xCFD0`/`0x10118`.
 - HP/XP code -> value tables (`A4-$746C`, `A4-$7464`) numeric contents.
 - Full per-spell handler semantics (`0xBC00..0xC800`).
+
+---
+
+## FAQ cross-check notes (Schultz v2.2 §3-8)
+
+The following notes are **FAQ-sourced** (lines 1841-1864) and have not been
+independently traced in ASM — treat as player-visible behaviour pending code
+confirmation.
+
+### XP / treasure rules
+
+- **Frenzy / explode**: the party **does receive** XP and treasure (FAQ line
+  1841). Frenzy and explode are Pabil group-attack verbs (doc 16, verb table
+  `A4-$6E56`).
+- **Flee**: monsters that flee yield **no treasure and no XP share** (FAQ line
+  1842-1843). `0x10DFC` prints "<name> runs".
+- **Fleeing party members**: a party member who flees combat **does not receive
+  XP for that encounter**. However, their XP share is **not forfeited** to the
+  remaining party — it is simply lost (FAQ line 1843-1844).
+- **Unconscious characters**: receive XP (FAQ line 1845).
+- **Stoned / dead characters**: do **not** receive XP (FAQ line 1845).
+
+### Monster friend-summon cap
+
+- When a monster uses "adds friends" (`Oabil` low nibble via `0x11F0A`): the
+  count of monsters **not in the front 10 doubles** (FAQ line 1846-1848).
+  Example: 6 woodsmen in back → 12 after summon.
+- Maximum total monsters: **255**. If there are > 122 monsters already in the
+  back ranks, no more can be summoned (FAQ line 1848-1849).
+- There is **only one "adds friends" event per fight** (FAQ line 1850).
+
+### Undead `Y` column
+
+The monster list in FAQ §3-8 includes a `U` (undead) column (Y/N). This
+corresponds to `Sabil` bit 7 in `monsters.dat` byte `0x12` (doc 16). Undead
+flag `Y` means: the monster is classified undead and can be affected by Turn
+Undead (`C1-7`) and Holy Word (`C9-2`). Cross-reference: `Sabil` bit7
+**ASM-confirmed** via `0xFEEA` / `0x4C8E` (doc 16).

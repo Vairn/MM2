@@ -66,7 +66,13 @@ export default defineConfig({
         {
           text: 'Game Systems',
           items: [
+            { text: 'Combat Overview', link: '/docs/reverse-engineering/26-combat-overview' },
             { text: 'Combat System', link: '/docs/reverse-engineering/17-combat-system' },
+            { text: 'Town Services', link: '/docs/reverse-engineering/28-town-services' },
+            { text: 'Spell Sources', link: '/docs/reverse-engineering/31-spell-sources' },
+            { text: 'Event → String Path', link: '/docs/reverse-engineering/30-event-to-string-path' },
+            { text: 'Embedded Exe Strings', link: '/docs/reverse-engineering/29-embedded-exe-strings' },
+            { text: 'Audio / Sounds / Music', link: '/docs/reverse-engineering/25-audio-sounds-music' },
             { text: 'Copy Protection', link: '/docs/reverse-engineering/20-copy-protection-table' },
           ],
         },

@@ -496,6 +496,23 @@ LAB_1280  ← main hub (keys, menus, poll)
 | `tools/disasm_m68k.py` | Regenerate capstone asm |
 | `tools/RE-TOOLS.md` | Tooling / Ghidra import |
 
+## Key docs index (EXTRACTED/docs/)
+
+| Doc | Topic |
+|-----|-------|
+| `06-event-dat-format.md` | event.dat container (71 locations, header, script layout) |
+| `07-event-script-opcodes.md` | opcode table 0x00–0x32 |
+| `15-3d-view-and-game-screen.md` | 3D hood, auto-map, map.dat visual/collision pages |
+| `16-monster-ability-format.md` | monsters.dat 26-byte record, Pabil/Sabil/Oabil; FAQ monster table appendix |
+| `17-combat-system.md` | round loop, player/monster turn, XP/flee/frenzy rules (FAQ §3-8 notes) |
+| `18-items-dat-format.md` | items.dat 20-byte record, forbidden-class mask, bonus nibble, use-power |
+| `19-spells-and-item-use.md` | spells.dat 2-byte record, item use-power encoding |
+| `28-town-services.md` | OP_0E dispatch, per-town service matrix, training/healing formulas, portal link |
+| `31-spell-sources.md` | all 96 spells — where to acquire; world-grant cross-check vs FAQ §3-2-2 |
+| `32-character-mechanics.md` | Race modifiers, HP/SP/AC formulas, XP tables, extra attacks, thievery (FAQ-sourced) |
+| `33-skills-and-hirelings.md` | 15-skill table with sellers/coords/cost; 24-hireling roster A-X (FAQ-sourced) |
+| `34-commerce-formulas.md` | Training/healing costs, day-bonus cycle, bar food/drinks, portals, Fly coords (FAQ-sourced) |
+
 ---
 
 *Continue with Part 13 (combat, `map.dat` loader, or `A4` thunk table dump) when you pick a focus.*

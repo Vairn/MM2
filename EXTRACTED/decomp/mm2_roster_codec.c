@@ -107,7 +107,10 @@ static void decode_record(const uint8_t *src, Mm2RosterRecord *dst)
     dst->spell_level = src[0x72];
     dst->endurance_base = src[0x73];
     dst->hp_current = read_le16(src + 0x74);
-    memcpy(dst->unknown_76_81, src + 0x76, sizeof(dst->unknown_76_81));
+    dst->temp_score_word = read_le16(src + 0x76);
+    dst->script_work_flag = src[0x78];
+    dst->class_quest_guild_mask = src[0x79];
+    memcpy(dst->tail_padding_7a_81, src + 0x7A, sizeof(dst->tail_padding_7a_81));
 }
 
 static void encode_record(const Mm2RosterRecord *src, uint8_t *dst)
@@ -162,7 +165,10 @@ static void encode_record(const Mm2RosterRecord *src, uint8_t *dst)
     dst[0x72] = src->spell_level;
     dst[0x73] = src->endurance_base;
     write_le16(dst + 0x74, src->hp_current);
-    memcpy(dst + 0x76, src->unknown_76_81, sizeof(src->unknown_76_81));
+    write_le16(dst + 0x76, src->temp_score_word);
+    dst[0x78] = src->script_work_flag;
+    dst[0x79] = src->class_quest_guild_mask;
+    memcpy(dst + 0x7A, src->tail_padding_7a_81, sizeof(src->tail_padding_7a_81));
 }
 
 Mm2RosterError mm2_roster_decode(const uint8_t *bytes, size_t bytes_size, Mm2RosterFile *out)

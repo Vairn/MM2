@@ -133,13 +133,17 @@ Notes:
 - Row 0 on disk = south; MM2ED and wiki grids draw north-up.
 - Full field decode: [map.dat format](21-map-dat-format.md).
 
+## Decoded formats
+
+- **event.dat** (95687 bytes) — 71 location records; see [06-event-dat-format.md](06-event-dat-format.md), [07-event-script-opcodes.md](07-event-script-opcodes.md), [08-event-runtime.md](08-event-runtime.md)
+- **spells.dat** (256 bytes) — see [19-spells-and-item-use.md](19-spells-and-item-use.md)
+- **attrib.dat** (3840 bytes) — see [12-attrib-dat-format.md](12-attrib-dat-format.md)
+
 ## Partially Characterized / TODO
 
-These files are inventoried and size-confirmed, but structure still needs field-level confirmation against ASM call sites:
+These files still need additional field-level work against ASM call sites:
 
-- `event.dat` (95687 bytes)
-- `spells.dat` (256 bytes)
-- `attrib.dat` (3840 bytes)
+- (none of the primary `.dat` containers remain fully TODO)
 
 Working rule:
 

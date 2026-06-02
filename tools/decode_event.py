@@ -13,7 +13,7 @@ Header entry (6 bytes, big-endian):
 
 Per-location record:
   1. Tile event table: 3-byte triplets until 00 00 00
-       byte 0: tile position = (x << 4) | y  in 16x16 grid
+       byte 0: tile position = (y << 4) | x  in 16x16 grid
        byte 1: event handler ID (indexes the event script section)
        byte 2: condition flags (AND-masked with context to gate firing)
   2. String offset word (2 bytes, little-endian):
@@ -119,8 +119,21 @@ def decode_location(blob: bytes, loc_id: int) -> dict:
 
     strings = decode_strings(blob, str_table_offset) if str_table_offset < len(blob) else []
 
+    script_len = max(0, str_table_offset - script_start)
+    if not terminated:
+        kind = "castle_blob"
+    elif script_len == 0 and strings:
+        kind = "string_bank"
+    elif script_len > 500:
+        kind = "mixed_pool"
+    elif triplets and script_len > 0:
+        kind = "standard"
+    else:
+        kind = "unknown"
+
     return {
         "location_id": loc_id,
+        "record_kind": kind,
         "triplets": triplets,
         "script_offset": script_start,
         "script_length": len(script_bytes),
@@ -195,12 +208,31 @@ OPCODES: dict[int, dict[str, object]] = {
 
 SELECTOR_NAMES = {
     0x01: "open_tavern_food",
+    0x02: "open_inn_lodging",
     0x03: "open_temple",
     0x04: "open_training",
     0x05: "open_mages_guild",
     0x06: "open_blacksmith_shop",
+    0x07: "open_general_store",
+    0x08: "open_special_shop",
     0x0A: "goblet_quest",
     0x0D: "enroll_mages_guild",
+    0x64: "portal_travel_100",
+    0x7E: "special_126",
+    0x7F: "special_127",
+    0x80: "special_128",
+    0x81: "special_129",
+    0x82: "special_130",
+    0x83: "special_131",
+    0xC9: "quest_handler_201",
+    0xCA: "quest_handler_202",
+    0xCB: "quest_handler_203",
+    0xCC: "quest_handler_204",
+    0xCD: "quest_handler_205",
+    0xCE: "quest_handler_206",
+    0xCF: "quest_handler_207",
+    0xE2: "special_226",
+    0xFD: "special_253",
 }
 
 TRANSITION_NAMES = {
@@ -564,10 +596,17 @@ def decompile_op(op: int, args: list[int], strings: list[str], items: list[str])
         return f"engine_call(0x{args[0]:02X})"
     if op == 0x0F:
         return "end_script()"
-    if op == 0x12:
-        return f"encounter_setup(12 bytes: {' '.join(f'{x:02X}' for x in args)})"
-    if op == 0x13:
-        return f"encounter_setup_b(10 bytes: {' '.join(f'{x:02X}' for x in args)})"
+    if op == 0x12 and len(args) >= 12:
+        block = args[:10]
+        tail = args[10:12]
+        return (
+            f"encounter_setup(monsters={' '.join(f'{x:02X}' for x in block)}, "
+            f"flags={' '.join(f'{x:02X}' for x in tail)})"
+        )
+    if op == 0x13 and len(args) >= 10:
+        return f"encounter_setup_b(data={' '.join(f'{x:02X}' for x in args[:10])})"
+    if op == 0x15 and len(args) >= 3:
+        return f"apply_party(count=0x{args[0]:02X}, op=0x{args[1]:02X}, val=0x{args[2]:02X})"
     if op == 0x16 and len(args) >= 2:
         return f"cond = check_monster_present(0x{args[0]:02X}, 0x{args[1]:02X})"
     if op == 0x18 and len(args) >= 4:
@@ -653,7 +692,10 @@ def decompile_op(op: int, args: list[int], strings: list[str], items: list[str])
     if op == 0x25:
         value = decode_u16_arg(op, args)
         if value is not None:
-            return f"cond = check_code16(0x{value:04X})"
+            labels = {0: "flag_clear", 1: "flag_set", 2: "flag_alt"}
+            hint = labels.get(value, "")
+            suffix = f"  # {hint}" if hint else ""
+            return f"cond = check_code16(0x{value:04X}){suffix}"
     if op == 0x28:
         probe = args[0] if len(args) >= 1 else None
         item_id = args[1] if len(args) >= 2 else None
@@ -1137,6 +1179,43 @@ def main():
             triplets, _, _ = decode_triplets(blob)
             total_triplets += len(triplets)
         print(f"Total tile events: {total_triplets}")
+
+
+def encode_header(entries: list[tuple[int, int]]) -> bytes:
+    out = bytearray()
+    for off, length in entries:
+        out += struct.pack(">I", off)
+        out += struct.pack(">H", length)
+    return bytes(out)
+
+
+def encode_event_dat(records: list[bytes], entries: list[tuple[int, int]] | None = None) -> bytes:
+    """Rebuild event.dat from ordered location record blobs.
+
+    If ``entries`` is omitted, offsets are computed contiguously after the
+    426-byte header (preserving on-disk layout when record sizes unchanged).
+    """
+    if entries is None:
+        off = len(read_header(b"\x00" * 426)) * 6  # 426
+        entries = []
+        cursor = off
+        for rec in records:
+            entries.append((cursor, len(rec)))
+            cursor += len(rec)
+    header = encode_header(entries)
+    body = b"".join(records)
+    return header + body
+
+
+def load_event_records(data: bytes) -> tuple[list[tuple[int, int]], list[bytes]]:
+    header = read_header(data)
+    records = [data[off : off + length] for off, length in header]
+    return header, records
+
+
+def round_trip_check(data: bytes) -> bool:
+    header, records = load_event_records(data)
+    return encode_event_dat(records, header) == data
 
 
 if __name__ == "__main__":

@@ -91,12 +91,7 @@ bool EventSection::save(const std::string& dataDir) {
 }
 
 static std::string locLabel(int id) {
-    char buf[96];
-    if (id < kAreaCount)
-        snprintf(buf, sizeof(buf), "%02d  %s", id, areaLabel(id).c_str());
-    else
-        snprintf(buf, sizeof(buf), "%02d  (extra area)", id);
-    return buf;
+    return eventLocationLabel(id);
 }
 
 void EventSection::draw(App& app) {

@@ -92,6 +92,5 @@ layout sanity checks without forcing a hard format interpretation.
 | monsters.dat | 26-byte records; fields partial | name + named/raw fields |
 | map.dat      | 512 B/screen confirmed          | tile + collision grids |
 | attrib.dat   | partial (env + roof)            | known fields + roof grid + hex |
-| spells.dat   | layout unknown                  | raw hex |
-| event.dat    | container decoded (python tool) | raw hex (structured TODO) |
-```
+| spells.dat   | fully decoded                   | cast/SP/gem/outdoor + reference text |
+| event.dat    | container + VM decoded          | imnodes graph editor (triggers/scripts/strings) |

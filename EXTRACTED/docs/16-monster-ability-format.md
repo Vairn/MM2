@@ -83,3 +83,45 @@ party verb base A4-$6E56 -> entry[40] "sprays poison"
    => A4 = 0x26ADC + 0x6E56 = 0x2D932 = data_base + 0x7FFE   (consistent)
 party verb [29] = master[69] = "frenzies"                    (Cuisinart)
 ```
+
+---
+
+## Appendix A — FAQ monster reference table (validation source)
+
+**FAQ §3-8 (lines 1582-1839). FAQ-sourced player-visible stats.**
+
+This table is the primary validation source for decoded HP/XP/AC/undead values.
+It lists all named monsters in encounter order (roughly index order in
+`monsters.dat`). Columns: `HitPts` | `Exp.Pts.` | `U` (undead Y/N = Sabil bit7)
+| `AC`.
+
+The undead `Y` column directly corresponds to `Sabil` byte 0x12 bit 7 —
+**ASM-confirmed** via `0xFEEA` / `0x4C8E`. AC values are player-visible AC;
+the relationship to the encoded `AC byte` 0x16 (`low5+1`, ×10 if bit5) is
+**not yet fully validated** across all 256 entries.
+
+Selected entries for quick cross-check (indexes approximate — exact index
+mapping to `monsters.dat` records requires a full name-match scan):
+
+| Name           | HitPts | Exp.Pts. | U | AC  |
+|----------------|--------|----------|---|-----|
+| Creepy Crawler | 5      | 150      | N | 4   |
+| Giant Beetle   | 10     | 200      | N | 7   |
+| Skeleton       | 6      | 200      | Y | 50  |
+| Flesh Eater    | 6      | 200      | Y | 40  |
+| Zombie         | 20     | 400      | Y | 7   |
+| Carnage Spirit | 25     | 1000     | Y | 80  |
+| Cuisinart      | 1000   | 20000000 | N | 60  |
+| Lich Lord      | 2000   | 6000000  | Y | 40  |
+| Mega Dragon    | 64000  | 32000000 | N | 250 |
+| Ghost          | 200    | 40000    | Y | 170 |
+| Vampire        | 250    | 25000    | Y | 240 |
+| Devil King     | 5000   | 30000000 | N | 60  |
+| Time Lord      | 3000   | 15000000 | N | 11  |
+| Orc God        | 50000  | 15000000 | N | 40  |
+
+> **Full table** in FAQ lines 1584-1839 (256 entries). Prefer extracting and
+> cross-validating the full decoded dataset via `tools/` against `monsters.dat`
+> rather than duplicating all 256 rows here. The FAQ table is the authoritative
+> **player-visible** reference; the codec (byte 0x0E hp-code, 0x0F xp-code)
+> produces these values.

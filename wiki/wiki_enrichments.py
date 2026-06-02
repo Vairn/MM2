@@ -35,6 +35,10 @@ SECTIONS: dict[str, str] = {
     "Combat-System": "Combat",
     "Audio-Sounds-Music": "Audio",
     "Copy-Protection": "Game systems",
+    "Town-Services": "Game systems",
+    "Spell-Sources": "Game systems",
+    "Event-to-String-Path": "Game systems",
+    "Embedded-Exe-Strings": "Game systems",
     "MM1-MAZEDATA-Format": "MM1 cross-walk",
     "MM1-to-MM2-Outdoor": "MM1 cross-walk",
     "MM1-Outdoor-WALLPIX": "MM1 cross-walk",
@@ -108,6 +112,27 @@ RELATED: dict[str, list[tuple[str, str]]] = {
     "MM2ED-Editor": [
         ("dat-Files-and-Formats", "What each section edits"),
         ("RE-Tools", "Python codecs"),
+    ],
+    "Town-Services": [
+        ("Spell-Sources", "Where temple/guild spells come from"),
+        ("Event-to-String-Path", "OP_0E vs event strings"),
+        ("Event-Script-Opcodes", "OP_0E / OP_0B / OP_24"),
+        ("Embedded-Exe-Strings", "Exe-embedded shop prompts"),
+    ],
+    "Spell-Sources": [
+        ("Town-Services", "Temple & mage guild handlers"),
+        ("Spells-and-Item-Use", "spells.dat flags & item use byte"),
+        ("items-dat-Format", "Item use-power @ 0x0F"),
+    ],
+    "Event-to-String-Path": [
+        ("Town-Services", "OP_0E service handlers"),
+        ("event-dat-Format", "Per-location string banks"),
+        ("Embedded-Exe-Strings", "PEA PC-relative exe text"),
+        ("Event-Script-Opcodes", "OP_01..OP_06, OP_0B"),
+    ],
+    "Embedded-Exe-Strings": [
+        ("Event-to-String-Path", "When exe text vs str.dat"),
+        ("Town-Services", "Inn & service prompts"),
     ],
 }
 
@@ -184,6 +209,27 @@ MERMAID: dict[str, str] = {
   thunk --> dev["audio.device<br/>9 named channels"]
   ctrl["Controls menu keys 1-4"] -.toggles.-> snd
   ctrl -.toggles.-> beep""",
+    "Town-Services": """flowchart TD
+  tile["Tile trigger<br/>collision 0x80"] --> scan["Scanner 0x1754A"]
+  scan --> vm["Script VM 0x172CA"]
+  vm --> op0e["OP_0E selector byte"]
+  op0e --> svc{"Service handler"}
+  svc --> pub["Pub 0x1A132"]
+  svc --> inn["Inn -$7CD4"]
+  svc --> temp["Temple 0x1D208"]
+  svc --> guild["Mage guild"]
+  svc --> train["Training 0x9BCA"]
+  pub --> str["str.dat UI strings"]
+  inn --> exe["exe-embedded ASCII"]
+  temp --> spells["3 cleric spells/town"]
+  guild --> sorc["4 sorcerer spells/town"]""",
+    "Event-to-String-Path": """flowchart LR
+  script["event.dat script"] --> op{"opcode"}
+  op -- OP_01..06 --> evs["Location string bank<br/>A4-$47C8"]
+  op -- OP_0B --> evs
+  op -- OP_0E --> hdl["Service handler"]
+  hdl --> str["str.dat A4-$703e"]
+  hdl --> exe["Code hunk ASCII"]""",
 }
 
 TOC_PAGES = {
@@ -193,6 +239,10 @@ TOC_PAGES = {
     "Full-Analysis",
     "Runtime-Memory-Map",
     "Audio-Sounds-Music",
+    "Town-Services",
+    "Spell-Sources",
+    "Event-to-String-Path",
+    "Embedded-Exe-Strings",
     "monsters-dat-Format",
     "items-dat-Format",
     "event-dat-Format",
@@ -224,6 +274,8 @@ New here? Start with [Getting Started](Getting-Started), then [dat Files and For
 Editing data? Jump to [MM2ED Editor](MM2ED-Editor).
 
 Tracing combat or scripts? [Combat Overview](Combat-Overview) - [Event Script Opcodes](Event-Script-Opcodes).
+
+Town shops, temples, and spell acquisition? [Town Services](Town-Services) - [Spell Sources](Spell-Sources).
 
 ## Address rules
 
@@ -382,7 +434,8 @@ flowchart LR
 1. [Main Loop and Map](Main-Loop-and-Map) - scheduler
 2. [Combat Overview](Combat-Overview) -> [Combat System](Combat-System)
 3. [Event Script Opcodes](Event-Script-Opcodes) - script VM
-4. [3D View and Game Screen](3D-View-and-Game-Screen) - renderer
+4. [Town Services](Town-Services) - pub, temple, guild, training
+5. [3D View and Game Screen](3D-View-and-Game-Screen) - renderer
 
 </td>
 </tr>

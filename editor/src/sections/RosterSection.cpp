@@ -6,6 +6,7 @@
 #include <array>
 
 #include "app/App.h"
+#include "core/RosterGlobalTail.h"
 #include "core/Spells.h"
 #include "imgui.h"
 #include "widgets/HexView.h"
@@ -214,7 +215,7 @@ void RosterSection::drawCharacterSheet(RosterRecord& r) {
     uint8_t townFlags = r.u8(kTownFlags);
     bool inParty = (townFlags & 0x80) != 0;
     int townId = townFlags & 0x7F;
-    const bool classQuestPlus = (r.u8(kClassQuestFlags) & 0x80) != 0;
+    const bool classQuestPlus = (r.u8(kClassQuestGuildMask) & 0x80) != 0;
 
     ImGui::Text("A>");
     ImGui::SameLine();
@@ -490,20 +491,39 @@ void RosterSection::drawCharacterSheet(RosterRecord& r) {
                 }
             });
         flagsGrid.row2(
-            "Class quest '+' (bit7 @ +0x79)", [&] {
-                bool hasPlus = (r.u8(kClassQuestFlags) & 0x80) != 0;
+            "Class '+' display (bit7 @ +0x79)", [&] {
+                bool hasPlus = (r.u8(kClassQuestGuildMask) & 0x80) != 0;
                 if (ImGui::Checkbox("##class_plus", &hasPlus)) {
-                    const uint8_t raw = r.u8(kClassQuestFlags);
+                    const uint8_t raw = r.u8(kClassQuestGuildMask);
                     const uint8_t next = static_cast<uint8_t>(hasPlus ? (raw | 0x80) : (raw & 0x7F));
-                    r.setU8(kClassQuestFlags, next);
+                    r.setU8(kClassQuestGuildMask, next);
                     dirty = true;
                 }
             },
-            "Class quest raw (+0x79)", [&] {
+            "Guild/quest mask (+0x79)", [&] {
                 ui::SetFieldShort();
-                uint8_t v = r.u8(kClassQuestFlags);
-                if (editByteField("##class_plus_raw", &v)) {
-                    r.setU8(kClassQuestFlags, v);
+                uint8_t v = r.u8(kClassQuestGuildMask);
+                if (editByteField("##class_quest_mask", &v)) {
+                    r.setU8(kClassQuestGuildMask, v);
+                    dirty = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(low bits gate mage guild @ 0x1E41A)");
+            });
+        flagsGrid.row2(
+            "Script work flag (+0x78)", [&] {
+                ui::SetFieldShort();
+                uint8_t v = r.u8(kScriptWorkFlag);
+                if (editByteField("##script_work", &v)) {
+                    r.setU8(kScriptWorkFlag, v);
+                    dirty = true;
+                }
+            },
+            "Temp/score word (+0x76)", [&] {
+                ui::SetFieldShort();
+                uint16_t v = r.u16(kTempScoreWord);
+                if (editWordField("##temp_score", &v)) {
+                    r.setU16(kTempScoreWord, v);
                     dirty = true;
                 }
             });
@@ -701,55 +721,28 @@ void RosterSection::drawGlobalOverlay() {
     ImGui::Separator();
 
     // Rebuild the serialized post-roster tail (slots 48..63) so we can decode known globals.
-    std::array<uint8_t, kRosterGlobalCount * kRosterRecordSize> tail{};
+    std::array<uint8_t, kRosterGlobalCount * kRosterRecordSize> saveTail{};
     for (int i = 0; i < kRosterGlobalCount; ++i) {
         const RosterRecord& rec = file_.records[kRosterGlobalStart + i];
-        std::memcpy(tail.data() + (i * kRosterRecordSize), rec.raw.data(), kRosterRecordSize);
+        std::memcpy(saveTail.data() + (i * kRosterRecordSize), rec.raw.data(), kRosterRecordSize);
     }
     auto tailU16 = [&](int off) -> uint16_t {
-        if (off < 0 || off + 1 >= static_cast<int>(tail.size())) return 0;
-        return readU16LE(tail.data() + off);
+        if (off < 0 || off + 1 >= static_cast<int>(saveTail.size())) return 0;
+        return readU16LE(saveTail.data() + off);
     };
     auto tailU8 = [&](int off) -> uint8_t {
-        if (off < 0 || off >= static_cast<int>(tail.size())) return 0;
-        return tail[off];
+        if (off < 0 || off >= static_cast<int>(saveTail.size())) return 0;
+        return saveTail[off];
     };
 
-    constexpr int kOffDayByEra = 0x000;      // 10 x u16
-    constexpr int kOffYearByEra = 0x014;     // 10 x u16
-    constexpr int kOffPartySize = 0x038;     // u16
-    constexpr int kOffEra = 0x03A;           // u16
-    constexpr int kOffSubday = 0x03C;        // u16 (256 ticks/day)
-    constexpr int kOffNewGame = 0x7EA;       // A4-$79B2
-    constexpr int kOffSounds = 0x7EB;        // A4-$79B0 bit0
-    constexpr int kOffWalkBeep = 0x7EC;      // A4-$79AF bit0
-    constexpr int kOffDisposition = 0x7ED;   // A4-$79AE (0..3)
-    constexpr int kOffDelay = 0x7EE;         // A4-$79AD (0..9)
-    constexpr int kOffQuestFlagsA = 0x7E6;   // A4-$79A4..-$79A1 (4 bytes)
-    constexpr int kOffQuestFlagsB = 0x7F5;   // A4-$79A6 / -$79A5 area
-    constexpr int kOffInputState0 = 0x7FA;   // A4-$799D
-    constexpr int kOffInputState4 = 0x7FE;   // A4-$7999
-    constexpr int kOffMoveCounter = 0x802;   // A4-$796C
-    constexpr int kOffEncounterMode = 0x803; // A4-$796B
-    constexpr int kOffEventVars00 = 0x67AD;  // A4-$798B (group 0x00 base, 0x00..0x17)
-    constexpr int kOffVar23 = 0x67CA;        // A4-$79A8 (group 0x23)
-    constexpr int kOffVar2B = 0x67C2;        // A4-$79A0 (group 0x2B)
-    constexpr int kOffVar2C = 0x67C1;        // A4-$799F (group 0x2C)
-    constexpr int kOffVar32 = 0x67B8;        // A4-$7996 (group 0x32)
-    constexpr int kOffVar33 = 0x67B2;        // A4-$7990 (group 0x33)
-    constexpr int kOffVar3B = 0x67B1;        // A4-$798F (group 0x3B)
-    constexpr int kOffVar3C = 0x67B0;        // A4-$798E (group 0x3C)
-    constexpr int kOffVar3D = 0x67AF;        // A4-$798D (group 0x3D)
-    constexpr int kOffVar3E = 0x67AE;        // A4-$798C (group 0x3E)
-    constexpr int kOffVar80_83 = 0x67B7;     // A4-$7995..-$7992 (groups 0x80..0x83)
-    constexpr int kOffVar84 = 0x7E5;         // A4-$79B5 (group 0x84 -> era byte)
+    namespace G = roster_global::tail_off;
 
-    const uint16_t era = tailU16(kOffEra);
+    const uint16_t era = tailU16(G::kEra);
     uint16_t curDay = 0;
     uint16_t curYear = 0;
     if (era < 10) {
-        curDay = tailU16(kOffDayByEra + static_cast<int>(era) * 2);
-        curYear = tailU16(kOffYearByEra + static_cast<int>(era) * 2);
+        curDay = tailU16(G::kDayByEra + static_cast<int>(era) * 2);
+        curYear = tailU16(G::kYearByEra + static_cast<int>(era) * 2);
     }
     static const char* kDispositionNames[] = {
         "Inconspicuous", "Average", "Aggressive", "Thrill Seeker"};
@@ -757,17 +750,17 @@ void RosterSection::drawGlobalOverlay() {
     char dayRow[160];
     char yearRow[160];
     std::snprintf(dayRow, sizeof(dayRow), "%u %u %u %u %u %u %u %u %u %u",
-                  tailU16(kOffDayByEra + 0), tailU16(kOffDayByEra + 2),
-                  tailU16(kOffDayByEra + 4), tailU16(kOffDayByEra + 6),
-                  tailU16(kOffDayByEra + 8), tailU16(kOffDayByEra + 10),
-                  tailU16(kOffDayByEra + 12), tailU16(kOffDayByEra + 14),
-                  tailU16(kOffDayByEra + 16), tailU16(kOffDayByEra + 18));
+                  tailU16(G::kDayByEra + 0), tailU16(G::kDayByEra + 2),
+                  tailU16(G::kDayByEra + 4), tailU16(G::kDayByEra + 6),
+                  tailU16(G::kDayByEra + 8), tailU16(G::kDayByEra + 10),
+                  tailU16(G::kDayByEra + 12), tailU16(G::kDayByEra + 14),
+                  tailU16(G::kDayByEra + 16), tailU16(G::kDayByEra + 18));
     std::snprintf(yearRow, sizeof(yearRow), "%u %u %u %u %u %u %u %u %u %u",
-                  tailU16(kOffYearByEra + 0), tailU16(kOffYearByEra + 2),
-                  tailU16(kOffYearByEra + 4), tailU16(kOffYearByEra + 6),
-                  tailU16(kOffYearByEra + 8), tailU16(kOffYearByEra + 10),
-                  tailU16(kOffYearByEra + 12), tailU16(kOffYearByEra + 14),
-                  tailU16(kOffYearByEra + 16), tailU16(kOffYearByEra + 18));
+                  tailU16(G::kYearByEra + 0), tailU16(G::kYearByEra + 2),
+                  tailU16(G::kYearByEra + 4), tailU16(G::kYearByEra + 6),
+                  tailU16(G::kYearByEra + 8), tailU16(G::kYearByEra + 10),
+                  tailU16(G::kYearByEra + 12), tailU16(G::kYearByEra + 14),
+                  tailU16(G::kYearByEra + 16), tailU16(G::kYearByEra + 18));
 
     ImGui::SeparatorText("Known decoded globals");
     ui::FormTable known("roster_globals_known");
@@ -779,87 +772,97 @@ void RosterSection::drawGlobalOverlay() {
         });
         known.row("day[0..9]", [&] { ImGui::TextUnformatted(dayRow); });
         known.row("year[0..9]", [&] { ImGui::TextUnformatted(yearRow); });
-        known.row("Party size", [&] { ImGui::Text("%u", tailU16(kOffPartySize)); });
-        known.row("Subday ticks", [&] { ImGui::Text("%u", tailU16(kOffSubday)); });
+        known.row("Party size", [&] { ImGui::Text("%u", tailU16(G::kPartySize)); });
+        known.row("Subday ticks", [&] { ImGui::Text("%u", tailU16(G::kSubday)); });
+        known.row("g=0x84 era low (A4-$79B5)", [&] {
+            ImGui::Text("0x%02X (%u)", static_cast<uint8_t>(era & 0xFF), static_cast<uint8_t>(era & 0xFF));
+        });
+        known.row("Light factor (A4-$79AB)", [&] { ImGui::Text("%u", tailU8(G::kLightFactor)); });
+        known.row("Endgame score A (A4-$79AA)", [&] { ImGui::Text("%u", tailU8(G::kEndgameScoreA)); });
+        known.row("Endgame score B (A4-$79A9)", [&] { ImGui::Text("%u", tailU8(G::kEndgameScoreB)); });
+        known.row("Achievement A / B (A4-$79A7/$79A6)", [&] {
+            ImGui::Text("%02X %02X", tailU8(G::kAchievementA), tailU8(G::kAchievementB));
+        });
+        known.row("Encounter mod (A4-$79A5)", [&] { ImGui::Text("0x%02X", tailU8(G::kEncounterMod)); });
         known.row("Sounds (A4-$79B0 bit0)", [&] {
-            ImGui::TextUnformatted((tailU8(kOffSounds) & 1) ? "ON" : "OFF");
+            ImGui::TextUnformatted((tailU8(G::kSounds) & 1) ? "ON" : "OFF");
         });
         known.row("Walk beep (A4-$79AF bit0)", [&] {
-            ImGui::TextUnformatted((tailU8(kOffWalkBeep) & 1) ? "ON" : "OFF");
+            ImGui::TextUnformatted((tailU8(G::kWalkBeep) & 1) ? "ON" : "OFF");
         });
         known.row("Disposition (A4-$79AE)", [&] {
-            uint8_t d = tailU8(kOffDisposition);
+            uint8_t d = tailU8(G::kDisposition);
             const char* nm = (d <= 3) ? kDispositionNames[d] : "Unknown";
             ImGui::Text("%u (%s)", d, nm);
         });
-        known.row("Delay (A4-$79AD)", [&] { ImGui::Text("%u", tailU8(kOffDelay)); });
-        known.row("new_game_flag (A4-$79B2)", [&] { ImGui::Text("%u", tailU8(kOffNewGame)); });
-        known.row("quest/script flags A4-$79A4..-$79A1", [&] {
-            ImGui::Text("%02X %02X %02X %02X", tailU8(kOffQuestFlagsA + 0), tailU8(kOffQuestFlagsA + 1),
-                        tailU8(kOffQuestFlagsA + 2), tailU8(kOffQuestFlagsA + 3));
+        known.row("Delay (A4-$79AD)", [&] { ImGui::Text("%u", tailU8(G::kDelay)); });
+        known.row("new_game_flag (A4-$79B2)", [&] { ImGui::Text("%u", tailU8(G::kNewGameFlag)); });
+        known.row("Elemental talismans A4-$79A4..-$79A1", [&] {
+            ImGui::Text("%02X %02X %02X %02X", tailU8(G::kTalismans + 0), tailU8(G::kTalismans + 1),
+                        tailU8(G::kTalismans + 2), tailU8(G::kTalismans + 3));
         });
-        known.row("g=0x27 A4-$79A4 (Lord Acwalandar plane)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffQuestFlagsA + 0));
+        known.row("g=0x27 A4-$79A4 (Acwalandar)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kTalismans + 0));
         });
-        known.row("g=0x28 A4-$79A3 (Lord Shalwend plane)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffQuestFlagsA + 1));
+        known.row("g=0x28 A4-$79A3 (Shalwend)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kTalismans + 1));
         });
-        known.row("g=0x29 A4-$79A2 (Lord Pyrannaste plane)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffQuestFlagsA + 2));
+        known.row("g=0x29 A4-$79A2 (Pyrannaste)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kTalismans + 2));
         });
-        known.row("g=0x2A A4-$79A1 (Lord Gralkor plane)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffQuestFlagsA + 3));
+        known.row("g=0x2A A4-$79A1 (Gralkor)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kTalismans + 3));
         });
-        known.row("g=0x84 A4-$79B5 (event era selector)", [&] {
-            ImGui::Text("0x%02X (%u)", tailU8(kOffVar84), tailU8(kOffVar84));
+        known.row("g=0x3B A4-$798F (Castle Xabran gate)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kCastleXabran));
         });
-        known.row("quest/encounter flags A4-$79A6..-$79A5", [&] {
-            ImGui::Text("%02X %02X", tailU8(kOffQuestFlagsB + 0), tailU8(kOffQuestFlagsB + 1));
+        known.row("g=0x3C A4-$798E (Dawn's Mist / resort gate)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kDawnsMistGate));
         });
-        known.row("g=0x3B A4-$798F (castle/xabran gate var)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffVar3B));
+        known.row("g=0x3D A4-$798D (calendar period flag B)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kPeriodFlagB));
         });
-        known.row("g=0x3C A4-$798E (dawn's mist / resort gate)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffVar3C));
+        known.row("g=0x3E A4-$798C (calendar period flag A)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kPeriodFlagA));
         });
-        known.row("g=0x3D A4-$798D (dungeon level-1 gate bank)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffVar3D));
+        known.row("g=0x33 A4-$7990 (Tundara cavern lever)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kTundaraLever));
         });
-        known.row("g=0x3E A4-$798C (dungeon level-2 gate bank)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffVar3E));
+        known.row("g=0x32 A4-$7996 (Guardian cave gate)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kGuardianGate));
         });
-        known.row("g=0x33 A4-$7990 (tundara cavern lever var)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffVar33));
+        known.row("g=0x13 A4-$799E (temple donation bits)", [&] {
+            ImGui::Text("0x%02X", tailU8(G::kTempleDonation));
         });
-        known.row("g=0x32 A4-$7996 (guardian cave gate var)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffVar32));
-        });
-        known.row("g=0x23 / 0x2B / 0x2C vars", [&] {
+        known.row("g=0x23 / 0x2B / 0x2C", [&] {
             ImGui::Text("0x23@-$79A8=%02X  0x2B@-$79A0=%02X  0x2C@-$799F=%02X",
-                        tailU8(kOffVar23), tailU8(kOffVar2B), tailU8(kOffVar2C));
+                        tailU8(G::kSpecialQuest), tailU8(G::kClassQuestCounter),
+                        tailU8(G::kSecondaryQuestCounter));
         });
-        known.row("g=0x80..0x83 bank A4-$7995..-$7992", [&] {
-            ImGui::Text("%02X %02X %02X %02X",
-                        tailU8(kOffVar80_83 + 0), tailU8(kOffVar80_83 + 1),
-                        tailU8(kOffVar80_83 + 2), tailU8(kOffVar80_83 + 3));
+        known.row("g=0x80..0x83 gate bank A4-$7995..-$7992", [&] {
+            ImGui::Text("%02X %02X %02X %02X", tailU8(G::kGateG80), tailU8(G::kGateG81),
+                        tailU8(G::kGateG82), tailU8(G::kGateG83));
         });
-        known.row("g=0x00..0x17 bank A4-$798B..-$7974", [&] {
+        known.row("g=0x00..0x17 event bank A4-$798B", [&] {
             ImGui::Text("%02X %02X %02X %02X %02X %02X %02X %02X ...",
-                        tailU8(kOffEventVars00 + 0), tailU8(kOffEventVars00 + 1),
-                        tailU8(kOffEventVars00 + 2), tailU8(kOffEventVars00 + 3),
-                        tailU8(kOffEventVars00 + 4), tailU8(kOffEventVars00 + 5),
-                        tailU8(kOffEventVars00 + 6), tailU8(kOffEventVars00 + 7));
+                        tailU8(G::kEventBank + 0), tailU8(G::kEventBank + 1),
+                        tailU8(G::kEventBank + 2), tailU8(G::kEventBank + 3),
+                        tailU8(G::kEventBank + 4), tailU8(G::kEventBank + 5),
+                        tailU8(G::kEventBank + 6), tailU8(G::kEventBank + 7));
         });
         known.row("input_state A4-$799D..-$7999", [&] {
-            ImGui::Text("%02X %02X %02X %02X %02X", tailU8(kOffInputState0 + 0), tailU8(kOffInputState0 + 1),
-                        tailU8(kOffInputState0 + 2), tailU8(kOffInputState0 + 3), tailU8(kOffInputState4));
+            ImGui::Text("%02X %02X %02X %02X %02X", tailU8(G::kInputState0 + 0),
+                        tailU8(G::kInputState0 + 1), tailU8(G::kInputState0 + 2),
+                        tailU8(G::kInputState0 + 3), tailU8(G::kInputState4));
         });
-        known.row("move counter (A4-$796C)", [&] { ImGui::Text("%u", tailU8(kOffMoveCounter)); });
+        known.row("move counter (A4-$796C)", [&] { ImGui::Text("%u", tailU8(G::kMoveCounter)); });
         known.row("encounter mode (A4-$796B)", [&] {
-            ImGui::Text("0x%02X", tailU8(kOffEncounterMode));
+            ImGui::Text("0x%02X", tailU8(G::kEncounterMode));
         });
     }
-    ImGui::TextDisabled("Offsets are from save/load sequence at 0x823C/0x86F6 and options logic at 0x13DEC.");
+    ImGui::TextDisabled(
+        "Tail layout from save_game_state @ 0x823C (reload timer path @ 0x86F6). "
+        "Event g-vars resolved @ 0x15620 (OP_17/OP_1A/OP_32).");
     ImGui::Separator();
 
     if (ImGui::BeginTable("roster_global_blocks", 5,

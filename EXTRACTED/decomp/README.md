@@ -12,6 +12,8 @@ This directory contains a first-pass C lifting scaffold for the Amiga `mm2` exec
   Struct-backed loader/saver for `roster.dat` (64 x 130-byte records).
 - `mm2_monsters_codec.h` / `mm2_monsters_codec.c`  
   Struct-backed loader/saver for `monsters.dat` (256 x 26-byte records).
+- `mm2_event_codec.h` / `mm2_event_codec.c`  
+  Struct-backed loader/saver for `event.dat` (71 location records).
 
 ## Goals
 

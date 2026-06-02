@@ -82,6 +82,24 @@ inline const char* areaNameRaw(int area) {
     }
 }
 
+// event.dat locations 60..70 (overlay / global banks — not map screens).
+inline const char* extraEventLocationName(int loc) {
+    switch (loc) {
+        case 60: return "Quest: Nordon/Nordonna/Corak";
+        case 61: return "Spell/hireling index tables";
+        case 62: return "Side quests (Chris, Gertrude)";
+        case 63: return "Castle blob A";
+        case 64: return "Lord Haart heirloom";
+        case 65: return "Castle blob B";
+        case 66: return "Endgame Corak/Murray/Horvath";
+        case 67: return "Hall of Spells pool";
+        case 68: return "Castle blob C";
+        case 69: return "Queen Lamanda (Luxus)";
+        case 70: return "Meta bank (HoS, bishops, puzzles)";
+        default: return "";
+    }
+}
+
 // Overland sector name for screens 5–16 and 33–40 (attrib.dat +0x15).
 inline const char* outdoorSectorName(int area) {
     switch (area) {
@@ -117,6 +135,22 @@ inline std::string areaLabel(int area) {
     char buf[16];
     snprintf(buf, sizeof(buf), "Area %d", area);
     return buf;
+}
+
+// Label for event.dat location id (0..70).
+inline std::string eventLocationLabel(int loc) {
+    if (loc >= 0 && loc < kAreaCount) return areaLabel(loc);
+    if (loc >= kAreaCount && loc < 71) {
+        const char* n = extraEventLocationName(loc);
+        if (n[0]) {
+            char buf[96];
+            snprintf(buf, sizeof(buf), "%02d  %s", loc, n);
+            return std::string(buf);
+        }
+    }
+    char buf[24];
+    snprintf(buf, sizeof(buf), "%02d  (extra area)", loc);
+    return std::string(buf);
 }
 
 // Decode environment type from an attrib.dat record's +0x03 byte.

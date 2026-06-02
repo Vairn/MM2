@@ -152,7 +152,17 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
             }
             break;
         case 0x0D: if (!args.empty()) { snprintf(buf, sizeof(buf), "engine_call(0x%02X)", args[0]); return buf; } break;
-        case 0x0E: if (!args.empty()) { snprintf(buf, sizeof(buf), "exec_selector(0x%02X)", args[0]); return buf; } break;
+        case 0x0E: if (!args.empty()) {
+            static const struct { uint8_t id; const char* name; } kSel[] = {
+                {0x01, "tavern"}, {0x03, "temple"}, {0x04, "training"},
+                {0x05, "mages_guild"}, {0x06, "blacksmith"}, {0x64, "portal"},
+            };
+            for (const auto& s : kSel) if (s.id == args[0]) {
+                snprintf(buf, sizeof(buf), "exec_selector(0x%02X)  # %s", args[0], s.name);
+                return buf;
+            }
+            snprintf(buf, sizeof(buf), "exec_selector(0x%02X)", args[0]); return buf;
+        } break;
         case 0x0F: return "end_script()";
         case 0x10: { int n = args.empty() ? 0 : args[0]; snprintf(buf, sizeof(buf), "if cond: skip_tokens(%d)", n); return buf; }
         case 0x11: { int n = args.empty() ? 0 : args[0]; snprintf(buf, sizeof(buf), "if !cond: skip_tokens(%d)", n); return buf; }

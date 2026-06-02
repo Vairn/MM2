@@ -42,8 +42,18 @@
 #define MM2_GS_NEW_GAME_FLAG    (-0x79B2)  /* byte  ($864E) */
 #define MM2_GS_LAST_MOVE_KEY    (-0x79B1)  /* byte  ($864F) N/S/E/W */
 #define MM2_GS_EVENT_PARSE_POS  (-0x7956)  /* word  ($86AA) */
+#define MM2_GS_EVENT_SCRIPT_ANCHOR (-0x7954)  /* word  ($86AC) */
+#define MM2_GS_PENDING_EVENT_LATCH (-0x7952)  /* byte  ($86AE) */
 #define MM2_GS_COND_FLAG        (-0x7951)  /* byte  ($86AF) */
 #define MM2_GS_EXIT_FLAGS       (-0x7950)  /* byte  ($86B0) */
+#define MM2_GS_EVENT_SCRIPT_START (-0x5C44)  /* word  ($A3BC) */
+#define MM2_GS_QUEUED_EVENT_ID  (-0x5D46)  /* byte  ($A2BA) */
+#define MM2_GS_SAVED_COND_FLAG  (-0x5D42)  /* byte  ($A2BE) */
+#define MM2_GS_STRING_WALK_INDEX (-0x5D44)  /* word  ($A2BC) */
+#define MM2_GS_FACING_INDEX     (-0x55D7)  /* byte  ($AA29) */
+#define MM2_GS_EVENT_BUSY_SENTINEL (-0x55C8)  /* byte  ($AA38) */
+#define MM2_GS_ATTRIB_ERA_GATE  (-0xA9F5)  /* byte  ($560B) */
+#define MM2_GS_CONTEXT_MASK_TBL (-0x6BE6)  /* byte[] ($941A) */
 #define MM2_GS_INPUT_STATE      (-0x799D)  /* byte[] ($8663..$8667) */
 #define MM2_GS_INPUT_STATE_END  (-0x7999)  /* byte  ($8667) */
 

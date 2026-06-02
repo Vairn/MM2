@@ -44,6 +44,10 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("EXTRACTED/docs/17-combat-system.md", "Combat-System"),
     ("EXTRACTED/docs/26-combat-overview.md", "Combat-Overview"),
     ("EXTRACTED/docs/25-audio-sounds-music.md", "Audio-Sounds-Music"),
+    ("EXTRACTED/docs/28-town-services.md", "Town-Services"),
+    ("EXTRACTED/docs/29-embedded-exe-strings.md", "Embedded-Exe-Strings"),
+    ("EXTRACTED/docs/30-event-to-string-path.md", "Event-to-String-Path"),
+    ("EXTRACTED/docs/31-spell-sources.md", "Spell-Sources"),
     ("EXTRACTED/docs/18-items-dat-format.md", "items-dat-Format"),
     ("EXTRACTED/docs/19-spells-and-item-use.md", "Spells-and-Item-Use"),
     ("EXTRACTED/docs/20-copy-protection-table.md", "Copy-Protection"),
@@ -284,9 +288,11 @@ def write_home(*, out: Path = OUT) -> None:
 
 <ul>
 <li><a href="{WIKI_BASE}/Combat-Overview">Combat overview</a> · <a href="{WIKI_BASE}/Combat-System">full ASM trace</a></li>
+<li><a href="{WIKI_BASE}/Town-Services">Town services</a> — pub, temple, guild, training</li>
+<li><a href="{WIKI_BASE}/Spell-Sources">Spell sources</a> — where every spell is obtained</li>
 <li><a href="{WIKI_BASE}/Audio-Sounds-Music">Audio / SFX / music</a> — <code>audio.device</code>, Controls menu</li>
 <li><a href="{WIKI_BASE}/3D-View-and-Game-Screen">3D view &amp; collision</a> — wall pages, auto-map</li>
-<li><a href="{WIKI_BASE}/Event-Script-Opcodes">Event opcodes</a> — <code>0x00…0x32</code> reference</li>
+<li><a href="{WIKI_BASE}/Event-Script-Opcodes">Event opcodes</a> · <a href="{WIKI_BASE}/Event-to-String-Path">script → text</a></li>
 <li><a href="{WIKI_BASE}/Main-Loop-and-Map">Main loop &amp; map</a> · <a href="{WIKI_BASE}/Copy-Protection">copy protection</a></li>
 </ul>
 
@@ -369,7 +375,9 @@ def write_home(*, out: Path = OUT) -> None:
 | Understand the project | [Getting Started](Getting-Started) → [Overview](Overview) → [dat Files and Formats](dat-Files-and-Formats) |
 | Edit `.dat` files | [MM2ED Editor](MM2ED-Editor) + sidebar *Data formats* |
 | Trace combat or scripts | [Combat Overview](Combat-Overview) · [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes) |
+| Town shops &amp; services | [Town Services](Town-Services) · [Spell Sources](Spell-Sources) · [Event to String Path](Event-to-String-Path) |
 | Audio / walk beep / SFX | [Audio Sounds Music](Audio-Sounds-Music) |
+| Exe-embedded UI strings | [Embedded Exe Strings](Embedded-Exe-Strings) |
 | MM1 map cross-walk | [MM1 MAZEDATA](MM1-MAZEDATA-Format) · [MM1 outdoor](MM1-to-MM2-Outdoor) |
 | Browse decoded art | [Gallery](Gallery) |
 | See what's still unknown | [Open Questions](Open-Questions) |
@@ -436,6 +444,10 @@ def write_sidebar() -> None:
 - [Audio, sounds, music](Audio-Sounds-Music)
 
 #### Game systems
+- [Town Services](Town-Services)
+- [Spell Sources](Spell-Sources)
+- [Event to String Path](Event-to-String-Path)
+- [Embedded Exe Strings](Embedded-Exe-Strings)
 - [Copy Protection](Copy-Protection)
 - [Time Era Calendar](Time-Era-Calendar)
 - [Game State Struct](Game-State-Struct)

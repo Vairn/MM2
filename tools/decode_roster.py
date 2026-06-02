@@ -141,6 +141,10 @@ def decode_record(data, slot):
     spell_lvl  = u8(data, off + 0x72)  # secondary/spell level
     end_b      = u8(data, off + 0x73)
     hp_cur     = u16le(data, off + 0x74)
+    temp_score = u16le(data, off + 0x76)
+    script_work = u8(data, off + 0x78)
+    class_quest = u8(data, off + 0x79)
+    tail_pad   = rec[0x7A:0x82]
 
     return {
         "slot": slot,
@@ -177,6 +181,11 @@ def decode_record(data, slot):
         "equip": equip,
         "backpack": backpack,
         "spells_raw": spells.hex(),
+        "temp_score": temp_score,
+        "script_work": script_work,
+        "class_quest_mask": class_quest,
+        "class_quest_plus": bool(class_quest & 0x80),
+        "tail_pad_hex": tail_pad.hex(),
     }
 
 
@@ -231,6 +240,29 @@ def main():
         print(f"         Pack:  {format_items(r['backpack'])}")
         if any(b != 0 for b in bytes.fromhex(r["spells_raw"])):
             print(f"         Spells: {r['spells_raw']}")
+        if r["class_quest_mask"] or r["temp_score"] or r["script_work"]:
+            plus = " class+'" if r["class_quest_plus"] else ""
+            print(f"         Tail: +0x76={r['temp_score']} +0x78={r['script_work']} "
+                  f"+0x79=0x{r['class_quest_mask']:02X}{plus}")
+        print()
+
+    tail = data[48 * RECORD_SIZE:]
+    if tail:
+        nz = sum(1 for b in tail if b)
+        print(f"{'='*72}")
+        print(f"  Global tail (slots 48-63) — {len(tail)} bytes, {nz} non-zero")
+        print(f"{'='*72}")
+        # Known anchors from save_game_state @ 0x823C (see RosterGlobalTail.h)
+        anchors = [
+            (0x7CC, "g=0x3D period_flag_b"),
+            (0x7CD, "g=0x3E period_flag_a"),
+            (0x7E6, "talismans"),
+            (0x7F0, "light_factor"),
+            (0x7F9, "g=0x13 temple_donation"),
+        ]
+        for off, label in anchors:
+            if off < len(tail):
+                print(f"  tail+0x{off:03X} ({label}): 0x{tail[off]:02X}")
         print()
 
 

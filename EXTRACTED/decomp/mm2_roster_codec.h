@@ -74,7 +74,10 @@ typedef struct Mm2RosterRecord {
     uint8_t endurance_base;
     uint16_t hp_current;
 
-    uint8_t unknown_76_81[12];
+    uint16_t temp_score_word;       /* +0x76: u16 LE; purpose unknown */
+    uint8_t script_work_flag;       /* +0x78: transient script/work flag */
+    uint8_t class_quest_guild_mask; /* +0x79: class-quest/guild bitmask; bit7 = in-game class '+' */
+    uint8_t tail_padding_7a_81[10]; /* +0x7A..+0x81: mostly unknown/padding */
 } Mm2RosterRecord;
 
 typedef struct Mm2RosterFile {

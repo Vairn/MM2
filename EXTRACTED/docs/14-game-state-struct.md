@@ -56,6 +56,8 @@ legacy raw-word alias so older notes cross-reference.
 | `-$79B2` | `$864E` | `$064C` | byte | `new_game_flag` | `cmpi #$1`; new-game vs load path. |
 | `-$79B1` | `$864F` | `$064D` | byte | `last_move_key` | `cmpi 'N'/'S'/'E'/'W'`; movement/facing key. |
 | `-$7956` | `$86AA` | `$06A8` | word | `event_parse_pos` | event-script cursor (`addq #3`). |
+| `-$7954` | `$86AC` | `$06A6` | word | `event_script_anchor` | String-table base; `$FFFF` = need init @ 0x1754A. |
+| `-$7952` | `$86AE` | `$06A8` | byte | `pending_event_latch` | Set on movement; cleared @ 0x1280 before scanner. |
 | `-$7951` | `$86AF` | `$06AD` | byte | `cond_flag` | event predicate result; gates `OP_10/11`. |
 | `-$7950` | `$86B0` | `$06AE` | byte | `exit_flags` | `bset/btst/clr`; ESC/exit + bit flags. |
 | `-$799D` | `$8663` | `$0661` | byte | `input_state[0]` | cleared on session enter (`..$8667`). |
@@ -89,7 +91,9 @@ legacy raw-word alias so older notes cross-reference.
 | `-$711C` | `$8EE4` | `$0EE2` | word[13] | `month_tbl` | month boundaries (`cmpi #$d`). |
 | `-$7102` | `$8EFE` | `$0EFC` | word[…] | `season_tbl_a` | season/display derivation. |
 | `-$70F5` | `$8F0B` | `$0F09` | byte[…] | `season_tbl_b` | season/display derivation. |
-| `-$6CC8` | `$9338` | `$1336` | tbl | `opcode_len_tbl` | event-script token length deltas. |
+| `-$6CC8` | `$9338` | `$1336` | tbl | `opcode_len_tbl` | event-script token length deltas (word indexed). |
+| `-$6BE6` | `$941A` | `$1428` | byte[4] | `context_mask_tbl` | Facing index → cond context byte. |
+| `-$A9F5` | `$560B` | `$5609` | byte | `attrib_era_gate_cache` | Screen `attrib+0x0F`; compared @ 0x172BC. |
 
 ### Buffers & pointers
 
@@ -98,7 +102,13 @@ legacy raw-word alias so older notes cross-reference.
 | `-$7A1A` | `$85E6` | `$05E4` | ptr | `draw_ctx` | draw context pointer. |
 | `-$5E62` | `$A19E` | `$219C` | ptr | `manx_pool` | MANX/C-runtime arena base. |
 | `-$5E5E` | `$A1A2` | `$21A0` | byte[8] | `party_slots` | 8 active party roster indices. |
+| `-$5D46` | `$A2BA` | `$2528` | byte | `queued_event_id` | `$FF` = none; secondary dispatch @ 0x176B6. |
+| `-$5D44` | `$A2BC` | `$252A` | word | `string_walk_index` | String resolver walk @ 0x15884. |
+| `-$5D42` | `$A2BE` | `$252C` | byte | `saved_cond_flag` | Saved during OP_26/27 party select. |
+| `-$5C44` | `$A3BC` | `$2626` | word | `event_script_start` | Saved at init; restored to parse pos @ 0x17628. |
+| `-$55D7` | `$AA29` | `$2A27` | byte | `facing_index` | 0/2/4/6 N/E/S/W → context table. |
 | `-$55D6` | `$AA2A` | `$2A28` | byte[…] | `tile_runtime_flags` | per-tile runtime flags (bit7 etc.). |
+| `-$55C8` | `$AA38` | `$2A36` | byte | `event_busy_sentinel` | `$FF` during active script. |
 | `-$55BA` | `$AA46` | `$2A44` | byte[…] | `tile_table_a` | tile source table (drawn). |
 | `-$54BA` | `$AB46` | `$2B44` | byte[…] | `tile_visited_flags` | visited/event bits per tile. |
 | `-$47C8` | `$B838` | `$3836` | byte[2220] | `event_work_buf` | decoded current-location event buffer. |

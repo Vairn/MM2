@@ -132,6 +132,21 @@ The manual's prose (cost / TYPE / OBJECT / description) for all 96 spells is
 transcribed into the reference tables in `editor/src/core/Spells.cpp` and
 `tools/mm2_spells.py` (`SPELL_META`).
 
+## FAQ cross-check (`Might and Magic FAQ.txt` §3-7)
+
+The Schultz FAQ item table (v2.2) matches our `items.dat` decode for almost all
+256 entries. Two use-power typos in the FAQ — trust `items.dat` bytes:
+
+| Item | FAQ lists | `0x0F` byte | Correct spell |
+|------|-----------|-------------|---------------|
+| Hourglass (`0x9A`) | S5-0 (invalid slot) | `0x9A` | S4/6 Time Distortion |
+| Cure-all Wand (`0xC3`) | C6-1 Earth Transmutation | `0xCF` | C5/5 Remove Condition |
+
+Spell names, school order (7/7/6/6/5/5/4/4/4), and class-forbidden columns in
+the FAQ align with this doc. Guild/temple **prices** in the FAQ are approximate
+and often wrong — use [`31-spell-sources.md`](31-spell-sources.md) /
+[`shop_tables.json`](../shop_tables.json) (ASM tables).
+
 ## Tools / code
 
 - `tools/mm2_spells.py` — spell tables, `decode_effect(byte)` (items), full

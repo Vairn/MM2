@@ -199,8 +199,80 @@ Each event JSON includes:
 - nearby stack push context (immediates/register pushes into the call)
 - normalized `literal_stack_args` where immediate words and `CLR.W` pushes are decoded to integers
 
+## MOD intermediate scaffold
+
+For MOD conversion prep (track patterns + short SFX extraction), use:
+
+- Merged evidence doc: `EXTRACTED/docs/26-audio-callpaths-title-death-shared.md`
+- Exporter script: `tools/export_mm2_mod_audio_intermediate.py`
+- Output JSON: `EXTRACTED/mm2_mod_audio_intermediate.json`
+
+Current schema (`schema_version: 3`) adds:
+
+- `event_families[]` with per-family confidence (`proven` / `likely` / `uncertain`)
+- dual-view targets at family and event levels:
+  - `static_target` (thunk-table/static map view)
+  - `observed_behavior_target` (runtime behavior/traced-entry view)
+- `events[]` with per-event confidence, `source_addresses[]`, and `parameter_provenance[]`
+- deterministic coverage for title start/step/poll, death tone dispatch (including `-$7BD8` as likely), walk-beep candidates (`note 0x2D` callsites), and short-note metadata buckets.
+- corrected deterministic counts in current export:
+  - `counts.families = 4`
+  - `counts.events = 18`
+  - `counts.short_note_callsites = 232` (corrected from prior overcounted inventory)
+  - `counts.walk_beep_immediate_0x2d_callsites = 7`
+
+Confidence interpretation in contradictory thunk cases:
+
+- **proven:** static and observed target agree, with direct instruction evidence.
+- **likely:** evidence is strong but static-vs-observed target differs (notably `-$7E96(A4)`).
+- **uncertain:** kept for unresolved semantics/targets not yet normalized.
+
+Usage:
+
+```bash
+python tools/export_mm2_mod_audio_intermediate.py
+```
+
+## MOD prototype builder (first working pass)
+
+Prototype script:
+
+- `tools/build_mm2_mod_prototype.py`
+
+Input/output:
+
+- Input JSON: `EXTRACTED/mm2_mod_audio_intermediate.json`
+- Output MOD: `EXTRACTED/mm2_prototype.mod`
+- Sidecar map: `EXTRACTED/mm2_prototype.pattern_map.json`
+
+What it writes (deterministic minimal ProTracker subset):
+
+- 4 channels (`M.K.` signature)
+- fixed 31 sample headers (starter bank in sample slots 1..5, rest empty)
+- pattern table + packed 64-row pattern data
+- sample payload bytes (tiny looping waveforms)
+
+Prototype mapping strategy:
+
+- **Pattern 0 (`proven` focus):**
+  - `title.song.start_blocking` at row 0/ch 0
+  - `title.loop.song_step` as stepped pulses rows 4..34/ch 1
+  - death proven dispatch/tone anchors (`pick_type_31_33`, `type32`, `type33`)
+- **Pattern 1 (`likely` focus):**
+  - title poll previews (`poll_mode0`, `poll_mode1`)
+  - `death.dispatch.type31_call_7BD8`
+  - walk-beep family (`note 0x2D`) callsites as short beeps
+
+Current limitations / assumptions:
+
+- This is a playable scaffold, not a byte-accurate reconstruction of Paula runtime behavior.
+- MM2 note/tone semantics are approximated to MOD periods with a simple deterministic mapping.
+- Title loop uses a representative step slice (first 16 pulses) rather than full game-time sequencing.
+- Proven and likely events are intentionally separated by pattern block to keep confidence explicit.
+
 ## Related docs
 
+- `EXTRACTED/docs/27-mm2-known-songs-catalog.md` — current known song/SFX catalog with confidence tags
 - `EXTRACTED/docs/06-gfx-loading.md` — filename table (`master.32` index 9)
 - `EXTRACTED/docs/14-game-state-struct.md` — `A4` workspace / thunks
 - `EXTRACTED/docs/01-startup-init.md` — `A4 = $7FFE`

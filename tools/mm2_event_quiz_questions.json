@@ -1,0 +1,314 @@
+{
+  "version": 1,
+  "source": "EXTRACTED/docs/07-event-script-opcodes.md — Gameplay confirmation quiz",
+  "questions": [
+    {
+      "id": 1,
+      "title": "Text placement opcodes (OP_04 / OP_05 / OP_06)",
+      "scenario": "You step on an outdoor arrow sign vs a building nameplate vs a long quest plaque.",
+      "options": {
+        "A": "OP_06 = framed signposts with arrows/rules; OP_05 = long borderless lore/warnings; OP_04 = door/shop labels only (never dungeon wall fluff).",
+        "B": "OP_05 and OP_06 are interchangeable; only string length differs.",
+        "C": "OP_04 is used for both doors and outdoor signs; OP_06 is dungeons only.",
+        "D": "OP_05 is the default signpost; you have seen it with arrow glyphs where we expect OP_06."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "event.dat usage (~110 OP_06 sign strings vs ~40 OP_05 plaques; OP_04 clusters on town service tiles).",
+      "example": "loc 0 Middlegate: OP_04 \"Middlegate Inn\"; loc 4 Sandsobar: OP_05 \"Beware of Eyes\" plaque, OP_06 \"The / Slums\" sign; loc 14 C3: OP_06 \"<Sandsobar / <Hillstone\" arrow signpost."
+    },
+    {
+      "id": 2,
+      "title": "Basic vs block text (OP_01 / OP_02 / OP_03)",
+      "scenario": "Nordon/Nordonna intro dialogue vs a one-line \"Travel (y/n)?\" prompt vs a multi-paragraph NPC speech box.",
+      "options": {
+        "A": "OP_01 = single-line / simple prompts; OP_02 = multi-line scroll block; OP_03 = same block as OP_02 after extra window prep.",
+        "B": "Nordon intro uses OP_01; all y/n gates use OP_02.",
+        "C": "All three look identical on screen — opcode choice is arbitrary.",
+        "D": "OP_03 is the only opcode that can show more than one paragraph."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "loc 60 Nordon strings are referenced as blocks; town y/n tiles commonly decompile to OP_01 + prompt_yes_no.",
+      "example": "loc 0 Middlegate ev 21: OP_01 \"Exit (y/n)?\"; ev 34: OP_02 Otto cartography block; loc 60 Nordon prologue blocks; loc 57 Pinehurst: OP_03 time-distortion plaque."
+    },
+    {
+      "id": 3,
+      "title": "Engine thunks (OP_0D)",
+      "scenario": "A tile runs script bytes but never opens a shop window (OP_0E).",
+      "options": {
+        "A": "Never — OP_0D is always followed by visible text you remember.",
+        "B": "Yes — e.g. cruise/arena return: engine_call(0x09) then map_transition, with no shop selector.",
+        "C": "Yes — chest/treasure UI opens directly from OP_0D alone.",
+        "D": "OP_0D only appears in overlay banks 60–70, not walkable maps."
+      },
+      "re_guess": "B",
+      "re_guess_detail": "Multiple overworld scripts call engine_call(0x09) paired with map_transition (e.g. cruise ride loc 14, Corak's Cave door loc 22); per-index table still Unknown.",
+      "example": "loc 14 C3 tile (9,6): \"Cruise to Murray's Resort Isle\" → engine_call(0x09) → map_transition — no exec_selector. Also blizzard tiles loc 5/6 and Joan's travel booking loc 0."
+    },
+    {
+      "id": 4,
+      "title": "Service title window position (OP_0B arg2)",
+      "scenario": "Same inn/blacksmith tile, different party facing or roster size.",
+      "options": {
+        "A": "Title box always appears in the same screen slot; arg2 is a mode/id, not facing math.",
+        "B": "Box shifts vertically based on party facing (like OP_05 popups).",
+        "C": "Box shifts when you have more than four live members.",
+        "D": "You have never noticed the service title box at all — only the shop UI."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "arg2 is passed to -$7FBC as a mode byte; no facing hook traced in the OP_0B handler (Partial).",
+      "example": "loc 0 Middlegate tile (14,7): set_service_context(\"Arena Entrance Only!\", mode=0x00) then exec_selector. All town OP_0B tiles use mode=0x00."
+    },
+    {
+      "id": 5,
+      "title": "Unknown OP_0E selectors (default range bins)",
+      "scenario": "Arena entrance, Monster Bowl, guild enrollment beyond mage guild (0x0D).",
+      "options": {
+        "A": "Arena combat is not OP_0E — entirely separate combat trigger; selectors 0x09–0x10 are misc shops only.",
+        "B": "Town arena tiles call unnamed selectors (e.g. Middlegate 0x10, Sandsobar 0x49) that enter combat/ticket flow inside the engine thunk.",
+        "C": "Every selector 0x09–0xFB opens the same generic shop UI with different inventory tables only.",
+        "D": "Arena entry uses selector 0x64 (portal travel)."
+      },
+      "re_guess": "B",
+      "re_guess_detail": "Arena entrance tiles decompile to exec_selector(0x10) / 0x49 / etc., not OP_12 in the visible script (Partial).",
+      "example": "Middlegate loc 0: exec_selector(0x10) on arena pit; Sandsobar loc 4: exec_selector(0x49); Vulcania: 0x3E–0x40. Contrast: blacksmith uses 0x06 open_blacksmith_shop."
+    },
+    {
+      "id": 6,
+      "title": "Special OP_0E selectors (0x64, 0xC9–0xCF, 0xE2, 0xFD)",
+      "scenario": "Mystic portal, quest milestones, endgame.",
+      "options": {
+        "A": "0x64 = long-distance portal travel; 0xC9–0xCF = quest-specific handlers; 0xFD = late-game / unused in normal play.",
+        "B": "All of these are just renamed blacksmith shops.",
+        "C": "0xE2 = arena only; 0x64 = boat ferry.",
+        "D": "You fire 0xFD regularly in early game."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "Names in SELECTOR_NAMES + portal tiles using high selectors; 0xFD seen rarely (Partial).",
+      "example": "loc 10 B2 tile (12,12): check_day_of_year(140–170) then exec_selector(0x64) circus portal. Atlantium \"The Mystic Portal\" uses normal service chain."
+    },
+    {
+      "id": 7,
+      "title": "Encounter tail bytes (OP_12 / OP_13)",
+      "scenario": "Same monster IDs, different fight feel (arena backdrop, boss tone, no escape).",
+      "options": {
+        "A": "Tail byte 1 = terrain/backdrop id; tail byte 2 = flags (escape, arena, difficulty band).",
+        "B": "Both bytes are fixed 0x00 in all real fights — purely padding.",
+        "C": "Tail bytes set party level / scaled HP only.",
+        "D": "Tail byte 1 = gold reward multiplier; byte 2 unused."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "Scripts emit varied non-zero tails (06 02, 11 5C, 05 F0, …) with stable 10-byte monster blocks (Partial, tail table not dumped).",
+      "example": "loc 8 D1 ev 10: flags=11 5C outdoor fight; loc 22 Corak's Cave: flags=1B 01 boss pack; loc 24 Ice Cavern: many varied tails (21 5A, 03 F0, 05 F0)."
+    },
+    {
+      "id": 8,
+      "title": "Party byte apply (OP_15 / masked OP_18)",
+      "scenario": "Olympic Trial skill purchase, hire restrictions, quest progress bits.",
+      "options": {
+        "A": "Sets per-member flag/field bytes (skills owned, class gates, quest bits) — not direct HP damage.",
+        "B": "Always deducts gold when OP_15 runs (same opcode as payment).",
+        "C": "Only used for alignment/reputation changes you see in a stat panel.",
+        "D": "You have never noticed any effect from these ops in play."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "Atlantium Olympic Trial uses apply_party / apply_party_masked on field 0x6D before party_effect skill grant (Partial).",
+      "example": "loc 1 Atlantium Olympic Trial ev 28: apply_party(0x6D) then apply_party_masked sets Athlete bit before party_effect teaches skill. Otto cartography uses same 0x6D pattern."
+    },
+    {
+      "id": 9,
+      "title": "Party effects (OP_1F / OP_20)",
+      "scenario": "Fountain heals, temple cure, trainer spell/skill grant, stat shrine.",
+      "options": {
+        "A": "Selector byte chooses effect class (heal, cure, teach skill/spell, buff); OP_20 is a variant mode of the same dispatcher.",
+        "B": "Only restores HP — poison/cure uses a different opcode family entirely.",
+        "C": "Purely cosmetic — no stat or HP change.",
+        "D": "Always grants a random item."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "party_effect(sel=0x09, …) follows skill prompts; party_effect(sel=0x80, …) follows shrine/fountain chains (Partial).",
+      "example": "Olympic Trial: party_effect(sel=0x09) teaches Athlete; Murray's Gym loc 16: sel=0x80 workout; Sandsobar Cavern trainer uses party_effect_b (OP_20) per class."
+    },
+    {
+      "id": 10,
+      "title": "Map tile mutation (OP_21)",
+      "scenario": "Barrier drops, door opens, wall becomes floor — still there after leaving the tile.",
+      "options": {
+        "A": "Yes — e.g. Corak's Cave barriers lowered with visible map change (set_tile on adjacent cells).",
+        "B": "Only clears the event bit (OP_14); graphics never change.",
+        "C": "Visual change is session-only — resets on town exit.",
+        "D": "You recall permanent changes but they were cut-scene transitions, not tile writes."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "loc 22 Hero's Tomb script writes collision/visual bytes via OP_21 then OP_14 (Partial).",
+      "example": "loc 22 Corak's Cave ev 5: Murray opens Hero's Tomb — set_tile on (3,7)/(3,8) and (2,7)/(2,8) then clear_current_tile_event_flag."
+    },
+    {
+      "id": 11,
+      "title": "Non-gold predicate codes (OP_25 values 0, 1, 2)",
+      "scenario": "Our decoder labels flag_clear / flag_set / flag_alt.",
+      "options": {
+        "A": "Generic script/state flags (quest done, already paid, etc.) — not item IDs.",
+        "B": "Directly encode ticket colors (0=green … 2=black).",
+        "C": "Bishop freed / arena won / goblet returned map 1:1 to codes 0/1/2.",
+        "D": "You have never hit a gate you would attribute to OP_25 — likely wrong decode."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "--predicates finds zero recoverable OP_25 hits in event.dat; small integer codes fit flag words, not items (Partial, high uncertainty).",
+      "example": "OP_25 appears zero times in decoded event.dat scripts — no recoverable in-game gate to cite. If you've never noticed one, RE may be wrong or flags live in engine RAM."
+    },
+    {
+      "id": 12,
+      "title": "Tickets/keys: check vs consume (OP_25 vs OP_28)",
+      "scenario": "Arena ticket turn-in vs bishop cage key.",
+      "options": {
+        "A": "Tickets: OP_25 check then separate OP_28 consume in the same script step.",
+        "B": "Tickets: handled inside OP_0E arena selectors (engine inventory logic); keys: explicit OP_28 in castle scripts.",
+        "C": "Both tickets and keys use only OP_25; OP_28 is for quest discs/rings.",
+        "D": "Keys check without consume — you keep the key after freeing a bishop."
+      },
+      "re_guess": "B",
+      "re_guess_detail": "OP_28 consume hits map to keys/discs/rings; no ticket item IDs (208–211) appear in OP_28 contexts; arena tiles call exec_selector instead (Partial).",
+      "example": "Arena tiles use exec_selector (no ticket IDs in script). Bishop keys: loc 55 Red Key 113, loc 57 Yellow Key 112, loc 58 Black Key 114 via OP_28 consume."
+    },
+    {
+      "id": 13,
+      "title": "Gold predicate (OP_24)",
+      "scenario": "\"Travel for 25 gold (y/n)?\" — you accept and have enough gold.",
+      "options": {
+        "A": "OP_24 is check only (gold ≥ amount); a later op/engine call deducts if you proceed.",
+        "B": "OP_24 both checks and subtracts gold immediately when true.",
+        "C": "OP_24 checks individual member gold, not party total.",
+        "D": "Failed check still deducts partial gold."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "Scripts pair check_gold_at_least(N) with if not cond: skip then map_transition / party_effect; no subtract in the OP_24 handler (Partial).",
+      "example": "Atlantium loc 1 tile (2,6): check_gold_at_least(25) → \"Not enough gold!\" or map_transition. Same pattern for Otto 10gp, Olympic 500gp, Sandsobar trader 200gp."
+    },
+    {
+      "id": 14,
+      "title": "Combat-gated token skip (OP_2B)",
+      "scenario": "When does the skip walk actually run? (A4-$77BD must be set.)",
+      "options": {
+        "A": "Primarily after combat victory / arena return cleanup (flag set @ 0x12438 and related combat paths).",
+        "B": "Any time you skip a dialog with ESC.",
+        "C": "Whenever a y/n prompt appears.",
+        "D": "You have noticed OP_2B branches firing outside combat — e.g. shops, travel."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "$77BD is set on victory (combat_victory_rewards) and cleared on many map/event exits; OP_2B no-ops when clear (Partial).",
+      "example": "Arena-town tiles loc 0/1/3/4: skip_tokens(1) → exec_selector tiered post-arena selectors (0x26–0x29, 0x4A–0x4F). Not used for ordinary shop y/n."
+    },
+    {
+      "id": 15,
+      "title": "Calendar / day gate (OP_23)",
+      "scenario": "NPCs or tiles that only work on certain days or moon phases.",
+      "options": {
+        "A": "Yes — obvious day-locked quests you can name (matches OP_23 / day-of-year table).",
+        "B": "Only subtle — benefits \"once per moon phase\" feel calendar-driven but may use vars, not OP_23.",
+        "C": "Era gates (OP_22) cover all time travel; OP_23 never matters in normal play.",
+        "D": "Unsure — never noticed any day-specific behavior."
+      },
+      "re_guess": "B",
+      "re_guess_detail": "Moon-phase shrine text uses load_var8 + store_var8, not OP_23; OP_23 reads -$79DE[era] (Partial).",
+      "example": "loc 8 \"Ground Zero!\" sign: check_day_of_year day 93 only; loc 10 B2 circus portal: days 140–170 then exec_selector(0x64). Moon shrines use vars, not OP_23."
+    },
+    {
+      "id": 16,
+      "title": "Location 60 — Nordon intro bank",
+      "scenario": "Corak prologue / Nordon / Nordonna dialogue.",
+      "options": {
+        "A": "Shown only during the opening castle/tutorial sequence — not re-triggerable from a town tile later.",
+        "B": "Re-accessible anytime by returning to Middlegate castle tiles.",
+        "C": "Random encounter text anywhere in the world.",
+        "D": "Visible only in the Hall of Spells UI."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "loc 60 is a string_bank; most event segments are missing/trigger-only placeholders, not normal map scripts (Partial).",
+      "example": "loc 60 strings: Corak prologue, Nordon \"Will you do me a service (y/n)?\", Nordonna goblet/rescue lines — castle opening bank, not a walkable town tile."
+    },
+    {
+      "id": 17,
+      "title": "Location 61 — spell / hireling tables",
+      "scenario": "% / letter garbage vs normal prose.",
+      "options": {
+        "A": "Never seen in gameplay — metadata for shop/HoS/hire UI only.",
+        "B": "Shows as garbled text if you walk the wrong tile in a town.",
+        "C": "Appears during spell purchase windows as formatting codes.",
+        "D": "Same strings as location 70, duplicated for testing."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "loc 61 decodes as encoded tables; no readable quest prose in the string list (Partial).",
+      "example": "loc 61 string_bank: \"%%%%%%%%\", \"%%%%9999\", \",,,,====\", \"YYYYZZZZ\" — bytecode fragments mixed in, not walk-up quest prose."
+    },
+    {
+      "id": 18,
+      "title": "Location 67 — Hall of Spells mixed pool",
+      "scenario": "Spell purchase / class check scripts vs dead data.",
+      "options": {
+        "A": "Dead — superseded entirely by loc 70 strings.",
+        "B": "Still executed via queued dispatch (0x176B6) for HoS/class flows; contains opcodes outside 0x00–0x32.",
+        "C": "Only runs during endgame (OP_22 era gate).",
+        "D": "You have bought spells from a tile whose script clearly lives in loc 67."
+      },
+      "re_guess": "B",
+      "re_guess_detail": "loc 67 has runnable segments (prompt_yes_no + map_transition) plus non-standard opcodes; overlay path differs from tile scanner (Partial).",
+      "example": "loc 67 mixed_pool: seg 1 prompt_yes_no → map_transition; seg 8 check_monster_present + consume_item(N-19 Capitor). Non-standard opcodes outside 0x00–0x32."
+    },
+    {
+      "id": 19,
+      "title": "Location 70 — meta bank (bishops, puzzles, HoS)",
+      "scenario": "Bishop cage text, \"Yellow Interleave\" puzzle, Triple Crown hints.",
+      "options": {
+        "A": "Pulled during castle/bishop events; all four bishops use the same key-check/consume pattern (color-matched key).",
+        "B": "Bishops use tickets; keys are Sandsobar-only.",
+        "C": "Puzzle text is shown as a normal OP_06 sign in Pinehurst overworld only.",
+        "D": "Loc 70 is never read at runtime — editor artifact."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "loc 70 strings include Green Bishop + Yellow Interleave; castle overlays consume Yellow/Red/Black keys via OP_28 matching bishop color (Partial).",
+      "example": "loc 70: \"Yellow Interleave\" puzzle, \"Bishop of Green Battle is locked in a cage\", freed-by-green-key text. Runtime OP_28 on loc 55/57/58 with color keys."
+    },
+    {
+      "id": 20,
+      "title": "Castle blobs (locations 63 / 65 / 68)",
+      "scenario": "Runtime behavior vs opaque static data.",
+      "options": {
+        "A": "Normal tile events fire from these records today (bishop cages, sieges).",
+        "B": "Partial — engine reads blob bytes directly; not via standard triplet scanner (00 00 00 missing).",
+        "C": "Completely unused on Amiga retail — dead padding.",
+        "D": "Only used if you hack event.dat — vanilla never touches them."
+      },
+      "re_guess": "B",
+      "re_guess_detail": "Flagged castle_blob in inventory; queued dispatch likely consumes bytes without normal init (Partial).",
+      "example": "loc 63/65/68: castle_blob, no 00 00 00 terminator, hundreds of triplets, 0 script bytes, 0 strings — engine reads blob directly."
+    },
+    {
+      "id": 21,
+      "title": "Olympic Trial (Atlantium, event @ \"Hurl the spear…\")",
+      "scenario": "Text-only today — ever combat later?",
+      "options": {
+        "A": "Permanently non-combat — pays 500 gp to teach Athlete skill via apply_party / party_effect.",
+        "B": "Starts combat if you refuse the y/n prompt.",
+        "C": "Becomes a combat arena after a quest flag or era change.",
+        "D": "Was combat in an earlier retail build — patch changed it."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "loc 01 event 27 decompiles to skill purchase, not encounter_setup; user already reported text-only (Partial).",
+      "example": "loc 1 Atlantium tile (4,8) \"The Olympic Trial\": 500gp y/n → apply_party_masked Athlete bit → party_effect — no encounter_setup anywhere."
+    },
+    {
+      "id": 22,
+      "title": "Arena ticket color per town",
+      "scenario": "Which colored ticket item gates each town arena? (items.dat: Green 208, Yellow 209, Red 210, Black 211 — note typo \"Yellow Tickt\".)",
+      "options": {
+        "A": "Middlegate=Green, Atlantium=Yellow, Sandsobar=Black, Vulcania=Red.",
+        "B": "Middlegate=Yellow, Atlantium=Green, Sandsobar=Red, Vulcania=Black.",
+        "C": "All four towns accept any ticket color.",
+        "D": "Tundara sells tickets but has no arena — ignore for pairing."
+      },
+      "re_guess": "A",
+      "re_guess_detail": "Vulcania=Red is user-verified; four ticket items match four arena towns; Sandsobar Triple Crown text highlights Black ticket for cross-arena quest (Partial — exact shop→color mapping not in decoded scripts).",
+      "example": "items 208–211 Green/Yellow/Red/Black tickets. loc 57 Pinehurst Triple Crown: \"take a Black Ticket to the Arena, Monster Bowl, and Colosseum\". Arena entry uses exec_selector per town, not ticket IDs in script."
+    }
+  ]
+}
