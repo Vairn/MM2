@@ -71,7 +71,8 @@ npm run dev
 | `wiki/scripts/export-github-wiki.py` | Build GitHub Wiki tree → `wiki/gh-wiki/` |
 | `wiki/scripts/publish-github-wiki.py` | Git push `gh-wiki/` → `MM2.wiki.git` |
 | `wiki/scripts/export-gfx-gallery.py` | VitePress gallery only |
-| `wiki/scripts/export-book-logo.py` | `book.32` frame 0 logo |
+| `wiki/scripts/export-wiki-diagrams.py` | PNG flowcharts → `gh-wiki/images/diagrams/` |
+| `wiki/wiki_enrichments.py` | Per-page nav, TOC, diagrams, See also footers |
 | `tools/mm2_gfx_export.py` | Core sprite decoder/exporter |
 | `tools/export_map_walker.py` | Export `maps.json` for the HTML map walker |
 

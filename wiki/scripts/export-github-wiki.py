@@ -11,8 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WIKI = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(WIKI))
 
 from mm2_gfx_export import export_all, resolve_data_dir  # noqa: E402
+from wiki_enrichments import enrich_page, getting_started_page  # noqa: E402
 
 OUT = WIKI / "gh-wiki"
 REPO = "Vairn/MM2"
@@ -81,6 +83,10 @@ def build_link_map() -> dict[str, str]:
         stem = Path(src).stem
         m[f"/docs/reverse-engineering/{stem}"] = title
         m[stem] = title
+        m[f"{stem}.md"] = title
+        # Numeric doc prefix aliases (01-startup-init → Startup-and-Init)
+        if len(stem) >= 3 and stem[2] == "-" and stem[:2].isdigit():
+            m[stem[3:]] = title
     m["/docs/tools/re-tools"] = "RE-Tools"
     m["/docs/editor/mm2ed"] = "MM2ED-Editor"
     m["/docs/decomp/readme"] = "C-Decomp-Scaffold"
@@ -97,6 +103,7 @@ def build_link_map() -> dict[str, str]:
     for title in GALLERY_PAGES.values():
         m[title] = title
     m["Map-Walker"] = "Map-Walker"
+    m["Getting-Started"] = "Getting-Started"
     return m
 
 
@@ -135,10 +142,25 @@ def rewrite_links(text: str) -> str:
     return text
 
 
+def _strip_source_h1(body: str) -> str:
+    """Drop the source markdown H1; the wiki export supplies the page title."""
+    lines = body.lstrip().split("\n")
+    if lines and lines[0].startswith("# "):
+        return "\n".join(lines[1:]).lstrip()
+    return body.lstrip()
+
+
 def convert_doc(source: Path, title: str) -> str:
+    from wiki_enrichments import BODY_REPLACEMENTS
+
+    if title in BODY_REPLACEMENTS:
+        return enrich_page(title, BODY_REPLACEMENTS[title])
+
     body = strip_frontmatter(source.read_text(encoding="utf-8"))
     body = rewrite_links(body)
-    return f"# {title.replace('-', ' ')}\n\n{body.lstrip()}"
+    body = _strip_source_h1(body)
+    heading = f"# {title.replace('-', ' ')}\n\n"
+    return enrich_page(title, heading + body)
 
 
 def _wiki_badge(label: str, page: str, *, style: str = "for-the-badge") -> str:
@@ -147,6 +169,27 @@ def _wiki_badge(label: str, page: str, *, style: str = "for-the-badge") -> str:
     return (
         f"[![{label}](https://img.shields.io/badge/{slug}-731a1a?style={style})]"
         f"({WIKI_BASE}/{page})"
+    )
+
+
+def _architecture_mermaid() -> str:
+    """Inline Mermaid map for the Home page (rendered natively by GitHub Wiki)."""
+    return (
+        "\n## How it all fits together\n\n"
+        "```mermaid\n"
+        "flowchart LR\n"
+        '  map["map.dat<br/>geometry"] --> r3d["3D view 0x2ECE"]\n'
+        '  attrib["attrib.dat<br/>environment"] -- tileset --> r3d\n'
+        '  map -- bit 0x80 --> event["event.dat<br/>scripts"]\n'
+        '  event --> vm["script VM 0x172CA"]\n'
+        '  vm -- OP_12 --> combat["combat 0x12A22"]\n'
+        '  combat --> monsters["monsters.dat"]\n'
+        '  roster["roster.dat<br/>party"] -- equips --> items["items.dat"]\n'
+        '  items -- use byte --> spells["spells.dat"]\n'
+        "```\n\n"
+        "<div align=\"center\"><sub>"
+        "<a href=\"Getting-Started\">Getting Started</a> walks each of these paths."
+        "</sub></div>\n"
     )
 
 
@@ -177,9 +220,10 @@ def _gallery_preview_row(out: Path) -> str:
 def write_home(*, out: Path = OUT) -> None:
     logo = "images/book-f00.png"
     pages_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/maze-walker/"
-    preview = _gallery_preview_row(out)
+    preview = _architecture_mermaid() + _gallery_preview_row(out)
     badges = " ".join(
         [
+            _wiki_badge("Start Here", "Getting-Started"),
             _wiki_badge("Overview", "Overview"),
             _wiki_badge("Data Formats", "dat-Files-and-Formats"),
             _wiki_badge("Gallery", "Gallery"),
@@ -307,7 +351,7 @@ def write_home(*, out: Path = OUT) -> None:
 ---
 
 > [!TIP]
-> **New here?** Read [Overview](Overview), then the [format inventory](dat-Files-and-Formats).
+> **New here?** Start with [Getting Started](Getting-Started) → [Overview](Overview) → [format inventory](dat-Files-and-Formats).
 > Editing data files? Jump to [MM2ED Editor](MM2ED-Editor).
 > Tracing combat or scripts? [Combat Overview](Combat-Overview) · [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes).
 > Audio? [Audio Sounds Music](Audio-Sounds-Music).
@@ -322,7 +366,7 @@ def write_home(*, out: Path = OUT) -> None:
 
 | If you want to… | Start here |
 |:---|:---|
-| Understand the project | [Overview](Overview) → [dat Files and Formats](dat-Files-and-Formats) |
+| Understand the project | [Getting Started](Getting-Started) → [Overview](Overview) → [dat Files and Formats](dat-Files-and-Formats) |
 | Edit `.dat` files | [MM2ED Editor](MM2ED-Editor) + sidebar *Data formats* |
 | Trace combat or scripts | [Combat Overview](Combat-Overview) · [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes) |
 | Audio / walk beep / SFX | [Audio Sounds Music](Audio-Sounds-Music) |
@@ -352,6 +396,7 @@ def write_sidebar() -> None:
 ---
 
 #### Getting started
+- [Getting Started](Getting-Started) ← **read this first**
 - [Overview](Overview)
 - [Workspace Notes](Workspace-Notes)
 - [Open Questions](Open-Questions)
@@ -440,7 +485,24 @@ def export_book_logo(dest: Path) -> None:
         shutil.copy2(out_public, dest)
 
 
+def write_getting_started() -> None:
+    (OUT / "Getting-Started.md").write_text(getting_started_page(), encoding="utf-8")
+    print("  page Getting-Started")
+
+
+def export_diagrams() -> None:
+    script = WIKI / "scripts" / "export-wiki-diagrams.py"
+    import subprocess
+
+    subprocess.run(
+        [sys.executable, str(script)],
+        cwd=ROOT,
+        check=False,
+    )
+
+
 def export_docs() -> None:
+    write_getting_started()
     for rel, title in DOC_SOURCES:
         src = ROOT / rel
         if not src.exists():
@@ -573,6 +635,8 @@ def export_github_wiki(*, skip_gallery: bool = False) -> Path:
     print(f"Exporting GitHub Wiki -> {OUT}")
     write_sidebar()
     write_footer()
+    print("Exporting diagrams…")
+    export_diagrams()
     print("Exporting docs…")
     export_docs()
     export_gallery(skip_gallery=skip_gallery or not has_game_assets())
