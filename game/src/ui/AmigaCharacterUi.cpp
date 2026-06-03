@@ -206,7 +206,7 @@ public:
             }
             if (keys.last_ascii >= 'A' && keys.last_ascii <= 'X') {
                 const int slot = (keys.last_ascii - 'A') + roster_page_offset_;
-                if (slot >= 0 && slot < kPlayableSlots && !mm2_roster_slot_is_empty(&roster_->records[slot])) {
+                if (slot >= 0 && slot < kPlayableSlots && isRosterListEntryVisible(slot)) {
                     sheet_roster_index_ = slot;
                     sheet_slot_letter_ = keys.last_ascii;
                     view_mode_ = ViewMode::CharacterSheet;
@@ -327,18 +327,19 @@ public:
             return UiResult::Continue;
         }
         if (keys.last_ascii >= 'A' && keys.last_ascii <= 'X') {
-            int display[kPartySlotCount];
-            const int count = buildPartyDisplayList(display);
-            const int idx = keys.last_ascii - 'A';
-            if (idx < count) {
-                const int slot = display[idx];
-                if (keys.ctrl) {
-                    togglePartyMember(slot);
-                } else {
-                    sheet_roster_index_ = slot;
-                    sheet_slot_letter_ = keys.last_ascii;
-                    party_sub_ = PartySub::Sheet;
-                }
+            using namespace amiga_layout;
+            const int page_offset =
+                (party_page_ == PartyPage::Hirelings) ? kRosterHirelingPageOffset : 0;
+            const int slot = rosterSlotForLetter(keys.last_ascii - 'A', page_offset);
+            if (!isPartyListEntryVisible(slot)) {
+                return UiResult::Continue;
+            }
+            if (keys.ctrl) {
+                togglePartyMember(slot);
+            } else {
+                sheet_roster_index_ = slot;
+                sheet_slot_letter_ = keys.last_ascii;
+                party_sub_ = PartySub::Sheet;
             }
             return UiResult::Continue;
         }
@@ -448,14 +449,14 @@ private:
             const char letter = static_cast<char>('A' + slot);
 
             char line[40];
-            if (roster_idx < 0 || roster_idx >= kPlayableSlots ||
-                mm2_roster_slot_is_empty(&roster_->records[roster_idx])) {
+            if (!isRosterListEntryVisible(roster_idx)) {
                 std::snprintf(line, sizeof(line), "%c-", letter);
             } else {
                 const Mm2RosterRecord &rec = roster_->records[roster_idx];
                 char name[16];
                 mm2_roster_name_to_cstr(&rec, name, sizeof(name));
-                std::snprintf(line, sizeof(line), "%c- %-10.10s %s/%u", letter, name, classAbbrev(rec.class_id), rec.level);
+                std::snprintf(line, sizeof(line), "%c-%s %s/%u", letter, name, classAbbrev(rec.class_id),
+                              rec.level);
             }
             drawCellText(c, row, col, line);
         }
@@ -576,24 +577,52 @@ private:
     // (so 0 characters allows up to 8 hirelings).
     static bool isHirelingSlot(int slot) { return slot >= amiga_layout::kRosterHirelingPageOffset; }
 
-    // Build the visible A..X list for the current page filtered by home town.
-    int buildPartyDisplayList(int *out) const
+    // Letter A..X maps 1:1 to roster slots on the current page (0..23 or 24..47).
+    static int rosterSlotForLetter(int letter_index, int page_offset)
     {
-        using namespace amiga_layout;
-        const int start = (party_page_ == PartyPage::Hirelings) ? kRosterHirelingPageOffset : 0;
-        const int end = start + kRosterHirelingPageOffset;  // 24 slots per page
-        int count = 0;
-        for (int slot = start; slot < end && slot < kPlayableSlots && count < kPartySlotCount; ++slot) {
-            const Mm2RosterRecord &rec = roster_->records[slot];
-            if (mm2_roster_slot_is_empty(&rec)) {
-                continue;
-            }
-            if ((rec.town_flags & 0x7F) != party_town_) {
-                continue;
-            }
-            out[count++] = slot;
+        if (letter_index < 0 || letter_index >= amiga_layout::kPartySlotCount) {
+            return -1;
         }
-        return count;
+        return page_offset + letter_index;
+    }
+
+    // Hirelings are pre-seeded in roster slots 24..47 but stay hidden until
+    // discovered in-game; an unset home-town byte means "not found yet".
+    static bool isHirelingDiscovered(const Mm2RosterRecord &rec)
+    {
+        return (rec.town_flags & 0x7F) != 0;
+    }
+
+    // Choose-party list: fixed A..X positions; entry visible when occupied,
+    // home town matches the current filter, and (for hirelings) discovered.
+    bool isPartyListEntryVisible(int slot) const
+    {
+        if (slot < 0 || slot >= kPlayableSlots) {
+            return false;
+        }
+        const Mm2RosterRecord &rec = roster_->records[slot];
+        if (mm2_roster_slot_is_empty(&rec)) {
+            return false;
+        }
+        if (isHirelingSlot(slot) && !isHirelingDiscovered(rec)) {
+            return false;
+        }
+        return (rec.town_flags & 0x7F) == static_cast<uint8_t>(party_town_);
+    }
+
+    bool isRosterListEntryVisible(int roster_idx) const
+    {
+        if (roster_idx < 0 || roster_idx >= kPlayableSlots) {
+            return false;
+        }
+        const Mm2RosterRecord &rec = roster_->records[roster_idx];
+        if (mm2_roster_slot_is_empty(&rec)) {
+            return false;
+        }
+        if (roster_idx >= amiga_layout::kRosterHirelingPageOffset && !isHirelingDiscovered(rec)) {
+            return false;
+        }
+        return true;
     }
 
     bool isPartyMember(int slot) const
@@ -670,8 +699,8 @@ private:
             drawCellText(c, kPartyFullRow, col, full, 0, 0, 0);
         }
 
-        int display[kPartySlotCount];
-        const int count = buildPartyDisplayList(display);
+        const int page_offset =
+            (party_page_ == PartyPage::Hirelings) ? kRosterHirelingPageOffset : 0;
 
         for (int letter = 0; letter < kPartySlotCount; ++letter) {
             const bool right = letter >= kPartySlotsPerColumn;
@@ -679,20 +708,20 @@ private:
             const int check_col = right ? kPartyListColRightCheck : kPartyListColLeftCheck;
             const int text_col = right ? kPartyListColRight : kPartyListColLeft;
             const char glyph = static_cast<char>('A' + letter);
+            const int slot = rosterSlotForLetter(letter, page_offset);
 
-            if (letter >= count) {
+            if (!isPartyListEntryVisible(slot)) {
                 char line[8];
                 std::snprintf(line, sizeof(line), "%c-", glyph);
                 drawCellText(c, row, text_col, line, 160, 160, 160);
                 continue;
             }
 
-            const int slot = display[letter];
             const Mm2RosterRecord &rec = roster_->records[slot];
             char name[16];
             mm2_roster_name_to_cstr(&rec, name, sizeof(name));
             char line[40];
-            std::snprintf(line, sizeof(line), "%c- %-10.10s %s", glyph, name, classAbbrev3(rec.class_id));
+            std::snprintf(line, sizeof(line), "%c-%s %s", glyph, name, classAbbrev3(rec.class_id));
             drawCellText(c, row, text_col, line);
             if (isPartyMember(slot)) {
                 drawCheckMark(c, row, check_col);
