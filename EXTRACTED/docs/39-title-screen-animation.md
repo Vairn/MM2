@@ -62,11 +62,10 @@ Each cel is placed so opaque pixels align with the matching hole in **`intro.32`
 | 3 | 170 | 155 | Accent |
 | 4 | 265 | 73 | Mouth |
 | 5 | 265 | 73 | Mouth alt (remake frozen/menu uses frame 4 only) |
-| 6 | 249 | 116 | Peeker |
-| 7 | 201 | 105 | Peeker |
-| 8 | 232 | 135 | Peeker |
-| 9 | 256 | 112 | Peeker |
-| 10 | 95 | 96 | Peeker |
+| 6 | 250 | 106 | Tree peeker (right) |
+| 8 | 246 | 128 | Tree peeker (right, lower) |
+| 9 | 246 | 130 | Tree peeker alt cel |
+| 10 | 95 | 96 | Tree peeker (left) |
 
 Coords tuned ±3 px per cel by minimizing RGB diff vs `intro.32` @ (3, 0)
 (retail assets in repo root). Reference composite: `game/build/intro_aligned_v2.png`.
@@ -132,9 +131,11 @@ No `introclips` blits; menu text/boxes on retained framebuffer. Handles freed @
 
 ### Grey peekers (attract only)
 
-- Frames **6–10**: exactly **one** slot drawn (`peeker_slot_`, `peeker_visible_`).
-- Visible for **120–240** ticks (2–4 s), then hidden for **`kPeekerGapTicks` (24)**
-  (~0.4 s) before a new random slot (never the same slot twice in a row; LCG `peeker_rng_`).
+- Tree hollows **6/8/9/10** only: exactly **one** active slot (`peeker_slot_`,
+  `peeker_visible_`). Inactive holes are **filled** with per-slot cover RGB (intro.32
+  otherwise shows a face in every hollow at once).
+- Visible **360–600** ticks (~6–10 s), off **120** ticks (~2 s), **300** ticks (~5 s)
+  before the first spawn; never the same slot twice in a row (LCG `peeker_rng_`).
 
 ### Frozen composite (menu)
 

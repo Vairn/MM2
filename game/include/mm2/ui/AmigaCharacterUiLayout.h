@@ -31,8 +31,8 @@ constexpr int kRosterTitleRow = 0x03;      // $008b8 "Characters"
 constexpr int kRosterUnderlineRow = 0x04;  // dashes on their own row beneath
 
 constexpr int kRosterListRowBase = 6;      // roster_slot_list_draw LAB_470 @ $0470
-constexpr int kRosterListColLeft = 4;      // indented off the left border
-constexpr int kRosterListColRight = 0x16;  // 22
+constexpr int kRosterListColLeft = 2;      // indented off the left border
+constexpr int kRosterListColRight = 20;    // 20
 constexpr int kRosterSlotsPerColumn = 12;
 constexpr int kRosterSlotCount = 24;
 constexpr int kRosterHirelingPageOffset = 0x18;
@@ -91,8 +91,8 @@ constexpr int kPartyFullRow = 0x06;           // "*** Party is Full ***" (center
 constexpr int kPartyListRowBase = 0x07;       // rows 7..18 (12 per column)
 constexpr int kPartyListColLeftCheck = 0x01;  // checkmark cell (left column)
 constexpr int kPartyListColLeft = 0x02;       // "A- Name Cls" (left column)
-constexpr int kPartyListColRightCheck = 0x14; // checkmark cell (right column)
-constexpr int kPartyListColRight = 0x15;      // 21 (right column)
+constexpr int kPartyListColRightCheck = 0x13; // 19 checkmark cell (right column)
+constexpr int kPartyListColRight = 0x14;      // 20 (right column)
 constexpr int kPartySlotsPerColumn = 12;
 constexpr int kPartySlotCount = 24;
 
