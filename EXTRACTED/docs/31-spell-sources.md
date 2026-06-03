@@ -13,7 +13,8 @@ Related docs:
 - Player FAQ cross-check: [`Might and Magic FAQ.txt`](Might%20and%20Magic%20FAQ.txt) §3-2-2 (WHERE TO FIND THEM)
 
 Overland **sector tiles** use FAQ notation **(column, row)** — e.g. C3 (1,9) north of Middlegate
-ferry line. Guild/temple prices below come from retail data tables, not FAQ dollar hints.
+ferry line. Guild/temple GP below = `decode_gold_encoding()` on data-hunk bytes (`$66CE` guild,
+`$66F6` temple) via handlers `0x1D97A` / `0x1DAC6` — matches FAQ §3-2-2 dollar amounts.
 
 ## Acquisition types
 
@@ -30,62 +31,96 @@ not acquisition paths. **Unknown** would mean no static trace; this doc marks th
 
 ## Temple cleric stock (per town)
 
-Temple **`OP_0E` `0x03`** sells **three cleric spells per town** only (`A4-$66F6`, handler **`0x1DAC6`**, loop **`cmpi #3`** @ `0x1DF1A`). Menu keys **`D` / `E` / `F`**. **No sorcerer/mage spells at temple.**
-
-- **Middlegate:** D: C1/1 Apparition, E: C1/2 Awaken, F: C1/6 Power Cure
-- **Atlantium:** D: C8/3 Mass Distortion, E: C9/3 Resurrection, F: C9/4 Uncurse Item
-- **Tundara:** D: C3/1 Cold Ray, E: C3/5 Lasting Light, F: C4/4 Restore Alignment
-- **Vulcania:** D: C4/6 Holy Bonus, E: C5/5 Remove Condition, F: C7/2 Fiery Flail
-- **Sandsobar:** D: C2/2 Heroism, E: C2/5 Protection From Elements, F: C2/7 Weaken
-
-## Mage guild (per town)
-
-Guild **`OP_0E` `0x05`** sells **four sorcerer spells per town** (`A4-$66E2[town×4+slot]`, handler **`0x1D97A`**, loop **`cmpi #4`** @ `0x1E64A`). Gold = **`A4-$6698[town×4+slot] + A4-$6686[slot]`**. Menu keys **`A` / `B` / `C` / `D`** (dispatch sub **`#$41`** @ `0x1E864`). Grant @ **`0x1D872`** sets roster spellbook bit. **No cleric spells.**
+Temple **`OP_0E` `0x03`** sells **three cleric spells per town** only (`A4-$66F6`, handler **`0x1DAC6`**, loop **`cmpi #3`** @ `0x1DF1A`). Menu keys **`D` / `E` / `F`**. Gold = **`decode_gold_encoding(A4-$66F6[town×4+slot])`** (stored in **`A4-$56BE[slot+3]`** for purchase @ **`0x1D872`**). **No sorcerer/mage spells at temple.**
 
 ### Middlegate
 
 | Key | Spell | GP |
 |-----|-------|-----|
-| A | S1/1 Awaken | 196 |
-| B | S1/3 Energy Blast | 166 |
-| C | S1/7 Sleep | 142 |
-| D | S2/3 Identify Monster | 251 |
+| D | C1/1 Apparition | 10 |
+| E | C1/2 Awaken | 10 |
+| F | C1/6 Power Cure | 1000 |
 
 ### Atlantium
 
 | Key | Spell | GP |
 |-----|-------|-----|
-| A | S8/2 Mega Volts | 243 |
-| B | S8/3 Meteor Shower | 182 |
-| C | S9/1 Implosion | 77 |
-| D | S9/2 Inferno | 218 |
+| D | C8/3 Mass Distortion | 20000 |
+| E | C9/3 Resurrection | 50000 |
+| F | C9/4 Uncurse Item | 100000 |
 
 ### Tundara
 
 | Key | Spell | GP |
 |-----|-------|-----|
-| A | S4/2 Feeble Mind | 252 |
-| B | S4/3 Fire Ball | 311 |
-| C | S5/1 Disrupt | 192 |
-| D | S5/3 Sand Storm | 271 |
+| D | C3/1 Cold Ray | 400 |
+| E | C3/5 Lasting Light | 100 |
+| F | C4/4 Restore Alignment | 500 |
 
 ### Vulcania
 
 | Key | Spell | GP |
 |-----|-------|-----|
-| A | S6/1 Disintegration | 390 |
-| B | S6/3 Fantastic Freeze | 322 |
-| C | S6/5 Super Shock | 221 |
-| D | S7/2 Duplication | 202 |
+| D | C4/6 Holy Bonus | 2000 |
+| E | C5/5 Remove Condition | 3000 |
+| F | C7/2 Fiery Flail | 10000 |
 
 ### Sandsobar
 
 | Key | Spell | GP |
 |-----|-------|-----|
-| A | S2/7 Protection from Magic | 188 |
-| B | S3/1 Acid Stream | 126 |
-| C | S3/4 Lightning Bolt | 73 |
-| D | S4/1 Cold Beam | 210 |
+| D | C2/2 Heroism | 250 |
+| E | C2/5 Protection From Elements | 300 |
+| F | C2/7 Weaken | 200 |
+
+## Mage guild (per town)
+
+Guild **`OP_0E` `0x05`** sells **four sorcerer spells per town** (`A4-$66E2[town×4+slot]`, handler **`0x1D97A`**, loop **`cmpi #4`** @ `0x1E64A`). Gold = **`decode_gold_encoding(A4-$66CE[town×4+slot])`** (stored in **`A4-$56BE[slot]`** for purchase @ **`0x1D872`**). Menu keys **`A` / `B` / `C` / `D`** (dispatch sub **`#$41`** @ `0x1E864`). **No cleric spells.**
+
+### Middlegate
+
+| Key | Spell | GP |
+|-----|-------|-----|
+| A | S1/1 Awaken | 10 |
+| B | S1/3 Energy Blast | 1000 |
+| C | S1/7 Sleep | 50 |
+| D | S2/3 Identify Monster | 100 |
+
+### Atlantium
+
+| Key | Spell | GP |
+|-----|-------|-----|
+| A | S8/2 Mega Volts | 50000 |
+| B | S8/3 Meteor Shower | 50000 |
+| C | S9/1 Implosion | 100000 |
+| D | S9/2 Inferno | 100000 |
+
+### Tundara
+
+| Key | Spell | GP |
+|-----|-------|-----|
+| A | S4/2 Feeble Mind | 600 |
+| B | S4/3 Fire Ball | 2000 |
+| C | S5/1 Disrupt | 3000 |
+| D | S5/3 Sand Storm | 3000 |
+
+### Vulcania
+
+| Key | Spell | GP |
+|-----|-------|-----|
+| A | S6/1 Disintegration | 5000 |
+| B | S6/3 Fantastic Freeze | 5000 |
+| C | S6/5 Super Shock | 5000 |
+| D | S7/2 Duplication | 25000 |
+
+### Sandsobar
+
+| Key | Spell | GP |
+|-----|-------|-----|
+| A | S2/7 Protection from Magic | 400 |
+| B | S3/1 Acid Stream | 200 |
+| C | S3/4 Lightning Bolt | 1000 |
+| D | S4/1 Cold Beam | 500 |
 
 ## Sorcerer spells
 

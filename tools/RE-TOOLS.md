@@ -39,6 +39,10 @@ Outputs:
 | `disasm_m68k.py` | `EXTRACTED/mm2.capstone.asm` | Quick grep, opcode search |
 | `extract_segments.py` | `EXTRACTED/ghidra/mm2_code_*.bin`, `mm2_segments.json` | Ghidra / IDA raw import |
 | (existing) | `EXTRACTED/mm2.asm` | Best static listing (IRA labels, `DC` for data) |
+| `harvest_symbols.py` | `EXTRACTED/mm2_symbols.yaml` | Harvest names/addresses from `EXTRACTED/docs/` |
+| `apply_symbols.py` | `EXTRACTED/mm2.annotated.asm`, `mm2.capstone.annotated.asm` | Inject symbol comments into disassembly |
+| `extract_asm_parts.py` | `EXTRACTED/asm/*.asm` | Split listing into commented subsystem files |
+| `scan_a4_jsr.py` | stdout | List `JSR d(A4)` thunks with names from yaml |
 
 ### Data codec helpers (`items.dat`, `str.dat`)
 

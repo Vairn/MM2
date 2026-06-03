@@ -145,6 +145,21 @@ def read_u16_be(blob: bytes, off: int) -> int:
     return struct.unpack_from(">H", blob, off)[0]
 
 
+def decode_gold_encoding(enc: int) -> int:
+    """Retail spell price from A4-$66CE (guild) or raw A4-$66F6 byte (temple @ 0x1D97A / 0x1DAC6).
+
+    low 5 bits = base; bit5 ×10, bit6 ×100, bit7 ×1000 (applied sequentially).
+    """
+    cost = enc & 0x1F
+    if enc & 0x20:
+        cost *= 10
+    if enc & 0x40:
+        cost *= 100
+    if enc & 0x80:
+        cost *= 1000
+    return cost
+
+
 def read_u32_be(blob: bytes, off: int) -> int:
     return struct.unpack_from(">I", blob, off)[0]
 
@@ -319,25 +334,28 @@ def temple_spells(blob: bytes, spell_names: list[str]) -> dict:
                     "number": num,
                     "name": nm,
                     "cost_encoding_byte": raw,
+                    "gold_gp": decode_gold_encoding(raw),
                 }
             )
         cleric_by_town[town] = cleric_rows
 
     return {
         "cleric_spells_by_town": cleric_by_town,
-        "gold_costs_u16_be_slots_0_5": global_costs,
+        "gold_cost_formula": "decode_gold_encoding(A4-$66F6[town*4+slot]) @ 0x1DAC6 -> A4-$56BE[slot+3]",
+        "restore_menu_costs_u16_be_slots_0_5": global_costs,
+        "restore_menu_note": "A4-$6738 — Restore Cond/Algn menu (keys A/B), not cleric spell D/E/F prices",
         "asm": {
             "town_index": "A4-$79F2 (0=Middlegate .. 4=Sandsobar)",
             "open_handler": "0x1D208 (OP_0E 0x03)",
             "cleric_handler": "0x1DAC6 reads A4-$66F6; purchase loop cmpi #3 @ 0x1DF1A",
-            "cleric_grant": "0x1D872 via temple menu dispatch (keys D/E/F)",
+            "cleric_grant": "0x1D872 via temple menu dispatch (keys D/E/F); debits A4-$56BE[slot]",
             "no_sorcerer": "0x1D97A is not called from temple; sorcerer stock is guild-only",
         },
     }
 
 
 def guild_spells(blob: bytes) -> dict:
-    """Mage guild: 4 sorcerer spells per town @ A4-$66E2; GP @ A4-$6698 + $6686."""
+    """Mage guild: 4 sorcerer spells per town @ A4-$66E2; GP from A4-$66CE encoding @ 0x1D97A."""
     id_off = a4_file_offset(A4["guild_sorc_id"])
     cost_off = a4_file_offset(A4["guild_spell_cost"])
     add_off = a4_file_offset(A4["guild_spell_add"])
@@ -349,6 +367,7 @@ def guild_spells(blob: bytes) -> dict:
         rows = []
         for slot in range(GUILD_SORCERER_SLOTS):
             raw = blob[id_off + t * 4 + slot]
+            enc = blob[enc_off + t * 4 + slot]
             base = read_u16_be(blob, cost_off + (t * GUILD_SORCERER_SLOTS + slot) * 2)
             lv, num, nm = sorcerer_level_num(raw)
             rows.append(
@@ -362,10 +381,10 @@ def guild_spells(blob: bytes) -> dict:
                     "level": lv,
                     "number": num,
                     "name": nm,
-                    "cost_encoding_byte": blob[enc_off + t * 4 + slot],
-                    "cost_base_u16_be": base,
-                    "cost_addend_u16_be": addends[slot],
-                    "gold_gp": base + addends[slot],
+                    "cost_encoding_byte": enc,
+                    "gold_gp": decode_gold_encoding(enc),
+                    "legacy_6698_u16_be": base,
+                    "legacy_6686_addend_u16_be": addends[slot],
                     "label": f"S{lv}/{num} {nm}",
                 }
             )
@@ -373,7 +392,8 @@ def guild_spells(blob: bytes) -> dict:
 
     return {
         "slots_per_town": GUILD_SORCERER_SLOTS,
-        "cost_addends_u16_be": addends,
+        "gold_cost_formula": "decode_gold_encoding(A4-$66CE[town*4+slot]) @ 0x1D97A -> A4-$56BE[slot]",
+        "legacy_cost_addends_u16_be": addends,
         "prior_re_errors": {
             "wrong_table": "A4-$669E (3 BE u16) treated as global guild stock",
             "wrong_keys": "Menu keys 9 / : / ; (slot*3+9 from 0x1EB2E alternate only)",
@@ -386,7 +406,7 @@ def guild_spells(blob: bytes) -> dict:
             "open_handler": "OP_0E 0x05 -> -$7D10 -> 0x1E3E6; init 0x1E8B0 (4 RNG name ptrs)",
             "stock_loop": "0x1E618..0x1E650 calls 0x1D97A (66E2) cmpi #4",
             "purchase_keys": "menu dispatch sub #$41 @ 0x1E864 -> A/B/C/D",
-            "cost_table": "A4-$6698[town*4+slot] + A4-$6686[slot]; enc bytes A4-$66CE",
+            "cost_table": "decode_gold_encoding(A4-$66CE[town*4+slot]); legacy 6698+6686 used only by alternate UI @ 0x1EB2E",
             "grant_handler": "0x1D872 sets roster $51 spellbook bit from 66E2 byte",
             "enroll": "OP_0E 0x0D -> -$7DA0; 0x1A1CE writes roster $0B <- A4-$79F2+1",
             "not_temple": "A4-$66F6 is cleric-only @ 0x1DAC6",

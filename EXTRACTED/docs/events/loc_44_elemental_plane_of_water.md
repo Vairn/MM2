@@ -1,0 +1,149 @@
+# Location 44 — Elemental Plane of Water
+
+- **event.dat** offset `0x00DD34`, length **790** bytes
+- **Map:** map screen **44**; Elemental Plane of Water
+- **Record kind:** `standard`
+- **Triggers:** 31; **script segments:** 8; **strings:** 11
+
+## Tile triggers
+
+| Tile (y,x) | pos | Event | Condition |
+|------------|-----|-------|-----------|
+| (0,0) | `0x00` | **6** | ANY_DIR |
+| (0,8) | `0x08` | **5** | 0x50 |
+| (1,5) | `0x15` | **3** | ANY_DIR |
+| (2,1) | `0x21` | **3** | ANY_DIR |
+| (2,6) | `0x26` | **3** | ANY_DIR |
+| (3,2) | `0x32` | **3** | ANY_DIR |
+| (3,7) | `0x37` | **3** | ANY_DIR |
+| (3,13) | `0x3D` | **3** | ANY_DIR |
+| (4,3) | `0x43` | **3** | ANY_DIR |
+| (5,8) | `0x58` | **3** | ANY_DIR |
+| (6,4) | `0x64` | **3** | ANY_DIR |
+| (6,8) | `0x68` | **3** | ANY_DIR |
+| (7,2) | `0x72` | **3** | ANY_DIR |
+| (7,5) | `0x75` | **3** | ANY_DIR |
+| (7,9) | `0x79` | **3** | ANY_DIR |
+| (7,10) | `0x7A` | **3** | ANY_DIR |
+| (8,0) | `0x80` | **4** | 0xA0 |
+| (8,6) | `0x86` | **3** | ANY_DIR |
+| (8,8) | `0x88` | **1** | ANY_DIR |
+| (8,9) | `0x89` | **3** | ANY_DIR |
+| (9,7) | `0x97` | **3** | ANY_DIR |
+| (9,8) | `0x98` | **3** | ANY_DIR |
+| (9,10) | `0x9A` | **3** | ANY_DIR |
+| (10,7) | `0xA7` | **3** | ANY_DIR |
+| (10,9) | `0xA9` | **3** | ANY_DIR |
+| (10,10) | `0xAA` | **2** | ANY_DIR |
+| (10,11) | `0xAB` | **3** | ANY_DIR |
+| (11,2) | `0xB2` | **3** | ANY_DIR |
+| (11,10) | `0xBA` | **3** | ANY_DIR |
+| (11,13) | `0xBD` | **3** | ANY_DIR |
+| (13,5) | `0xD5` | **3** | ANY_DIR |
+
+## Events
+
+**Event 01** — triggers: (8,8)/ANY_DIR
+
+```hex
+2b 02 02 01 12 e1 e1 e1 e1 e1 e1 fd e1 e1 e1 00 00 14
+```
+
+```
+00: skip_tokens(2)
+    # skip -> clear_current_tile_event_flag()
+01: show_text_block(str[1] "Lord Acwalandar gurgles, "How dare you / invade my plane! Die intruders!")
+02: encounter_setup(monsters=E1 E1 E1 E1 E1 E1 FD E1 E1 E1, flags=00 00)
+03: clear_current_tile_event_flag()
+```
+
+**Event 02** — triggers: (10,10)/ANY_DIR
+
+```hex
+28 00 e7 11 04 03 02 19 01 db 01 00 07 14 03 03 29
+```
+
+```
+00: cond = consume_item(item_id=231, name="Water Disc", probe=0)
+01: if not cond: skip_tokens(4)
+    # skip -> show_text(str[3] "A turquoise shrine with many fountains / contains a domed pedestal. A sm")
+02: show_text(str[2] "A turquoise shrine with many fountains / contains a domed pedestal. You ")
+03: add_party_entity(0x01, f3a=0xDB, f40=0x01, f46=0x00)
+04: wait_for_space()
+05: clear_current_tile_event_flag()
+06: show_text(str[3] "A turquoise shrine with many fountains / contains a domed pedestal. A sm")
+07: set_abort_and_exit()
+```
+
+**Event 03** — triggers: (1,5)/ANY_DIR, (2,1)/ANY_DIR, (2,6)/ANY_DIR, (3,2)/ANY_DIR, (3,7)/ANY_DIR, (3,13)/ANY_DIR, (4,3)/ANY_DIR, (5,8)/ANY_DIR, (6,4)/ANY_DIR, (6,8)/ANY_DIR, (7,2)/ANY_DIR, (7,5)/ANY_DIR, (7,9)/ANY_DIR, (7,10)/ANY_DIR, (8,6)/ANY_DIR, (8,9)/ANY_DIR, (9,7)/ANY_DIR, (9,8)/ANY_DIR, (9,10)/ANY_DIR, (10,7)/ANY_DIR, (10,9)/ANY_DIR, (10,11)/ANY_DIR, (11,2)/ANY_DIR, (11,10)/ANY_DIR, (11,13)/ANY_DIR, (13,5)/ANY_DIR
+
+```hex
+2b 01 12 ce e1 e1 e1 00 00 00 00 00 00 00 00 14
+```
+
+```
+00: skip_tokens(1)
+    # skip -> clear_current_tile_event_flag()
+01: encounter_setup(monsters=CE E1 E1 E1 00 00 00 00 00 00, flags=00 00)
+02: clear_current_tile_event_flag()
+```
+
+**Event 04** — triggers: (8,0)/0xA0
+
+```hex
+06 05 02 06 29
+```
+
+```
+00: show_text_popup_style_b(str[5] "Red / Message 3")
+01: show_text_block(str[6] "goneryp fena  tartn tthes a / ueeneeme de cti n ricaicfix")
+02: set_abort_and_exit()
+```
+
+**Event 05** — triggers: (0,8)/0x50
+
+```hex
+06 07 02 08 29
+```
+
+```
+00: show_text_popup_style_b(str[7] "Red / Message 8")
+01: show_text_block(str[8] "Tane seCre d  Con.lidch ay. / encCe avenb.ingtswthe tomus")
+02: set_abort_and_exit()
+```
+
+**Event 06** — triggers: (0,0)/ANY_DIR
+
+```hex
+17 27 00 11 01 14 02 09 07 0d 09 1a 84 09 0c 0f 00
+```
+
+```
+00: cond = load_var8(group=0x27, index=0x00)
+01: if not cond: skip_tokens(1)
+    # skip -> show_text_block(str[9] "You are not of this element. Be gone!")
+02: clear_current_tile_event_flag()
+03: show_text_block(str[9] "You are not of this element. Be gone!")
+04: wait_for_space()
+05: engine_call(0x09)
+06: store_var8(group=0x84, value=0x09)
+07: map_transition(0x0F, 0x00)
+```
+
+## String table
+
+- `[00]` <EMPTY>
+- `[01]` Lord Acwalandar gurgles, "How dare you / invade my plane! Die intruders!"
+- `[02]` A turquoise shrine with many fountains / contains a domed pedestal. You insert / your Water Disc into the slot. The / dome opens and you take the Water / Talon that has rested beneath it for / decades.
+- `[03]` A turquoise shrine with many fountains / contains a domed pedestal. A small / disc slot appears to be the only way / to open it. None of your items fit / into the slot.
+- `[04]` *
+- `[05]` Red / Message 3
+- `[06]` goneryp fena  tartn tthes a / ueeneeme de cti n ricaicfix
+- `[07]` Red / Message 8
+- `[08]` Tane seCre d  Con.lidch ay. / encCe avenb.ingtswthe tomus
+- `[09]` You are not of this element. Be gone!
+- `[10]` <EMPTY>
+
+---
+
+*Generated by `tools/build_event_location_docs.py` from `event.dat`. Decoder: `tools/decode_event.py`.*

@@ -66,7 +66,7 @@ runtime — it is a packed quest/calendar/combat-state blob. The editor keeps sl
 | `$74`–`$75` | 2 | **HP current** | Word (LE). Display code: `MOVE.W $74(A0)` |
 | `$76`–`$77` | 2 | **Temp/score word** | u16 LE; purpose unknown |
 | `$78` | 1 | **Script/work flag** | Transient script/work flag |
-| `$79` | 1 | **Class-quest / guild mask** | Bit 7: in-game class **'+'** display; low bits AND `A4-$66A9[town]` for mage-guild purchase gate @ `0x1E41A`; OR'd on quest completion @ `0x9FE0` |
+| `$79` | 1 | **Class-quest / guild mask** | Bit 7: in-game class **'+'** display; low bits AND `A4-$66A9[town]` for mage-guild purchase gate @ `0x1E41A`; OR'd on quest completion @ `0x9FE0`. **Bug:** @ `0x9FBE` the reward handler uses table **`A4-$7154`** as a roster **offset** before `$79`, so the OR often hits **`$7E`** (padding) or the next record — see [`36-class-quest-hp-bug.md`](36-class-quest-hp-bug.md). |
 | `$7A`–`$81` | 10 | *Padding / unknown* | Mostly zero |
 
 ## Global save stream (file `$1860`, runtime via `0x823C`)

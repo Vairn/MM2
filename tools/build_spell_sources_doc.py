@@ -123,6 +123,16 @@ def acquisition_parts(record_index: int, shop: dict, item_map: dict[int, list[st
     return parts
 
 
+def temple_table(shop: dict, town: str) -> list[str]:
+    rows = shop["static_by_town"]["temple_spells"]["cleric_spells_by_town"][town]
+    lines = ["| Key | Spell | GP |", "|-----|-------|-----|"]
+    keys = ["D", "E", "F"]
+    for slot in rows:
+        idx = slot["spells_dat_index"]
+        lines.append(f"| {keys[slot['slot']]} | {spell_label(idx)} | {slot.get('gold_gp', '?')} |")
+    return lines
+
+
 def guild_table(shop: dict, town: str) -> list[str]:
     rows = shop["static_by_town"]["mage_guild_spells"]["mage_guild_spells_by_town"][town]
     lines = ["| Key | Spell | GP |", "|-----|-------|-----|"]
@@ -131,16 +141,6 @@ def guild_table(shop: dict, town: str) -> list[str]:
         idx = slot["spells_dat_index"]
         lines.append(f"| {keys[slot['slot']]} | {spell_label(idx)} | {slot.get('gold_gp', slot.get('gold', ''))} |")
     return lines
-
-
-def temple_bullet(shop: dict, town: str) -> str:
-    rows = shop["static_by_town"]["temple_spells"]["cleric_spells_by_town"][town]
-    keys = ["D", "E", "F"]
-    bits = []
-    for slot in rows:
-        idx = slot["spells_dat_index"]
-        bits.append(f"{keys[slot['slot']]}: {spell_label(idx)}")
-    return f"- **{town}:** " + ", ".join(bits)
 
 
 def world_appendix_rows() -> list[str]:
@@ -209,7 +209,8 @@ def build_markdown(shop: dict, item_map: dict[int, list[str]]) -> str:
     out.append("- Player FAQ cross-check: [`Might and Magic FAQ.txt`](Might%20and%20Magic%20FAQ.txt) §3-2-2 (WHERE TO FIND THEM)")
     out.append("")
     out.append("Overland **sector tiles** use FAQ notation **(column, row)** — e.g. C3 (1,9) north of Middlegate")
-    out.append("ferry line. Guild/temple prices below come from retail data tables, not FAQ dollar hints.")
+    out.append("ferry line. Guild/temple GP below = `decode_gold_encoding()` on data-hunk bytes (`$66CE` guild,")
+    out.append("`$66F6` temple) via handlers `0x1D97A` / `0x1DAC6` — matches FAQ §3-2-2 dollar amounts.")
     out.append("")
     out.append("## Acquisition types")
     out.append("")
@@ -226,14 +227,16 @@ def build_markdown(shop: dict, item_map: dict[int, list[str]]) -> str:
     out.append("")
     out.append("## Temple cleric stock (per town)")
     out.append("")
-    out.append("Temple **`OP_0E` `0x03`** sells **three cleric spells per town** only (`A4-$66F6`, handler **`0x1DAC6`**, loop **`cmpi #3`** @ `0x1DF1A`). Menu keys **`D` / `E` / `F`**. **No sorcerer/mage spells at temple.**")
+    out.append("Temple **`OP_0E` `0x03`** sells **three cleric spells per town** only (`A4-$66F6`, handler **`0x1DAC6`**, loop **`cmpi #3`** @ `0x1DF1A`). Menu keys **`D` / `E` / `F`**. Gold = **`decode_gold_encoding(A4-$66F6[town×4+slot])`** (stored in **`A4-$56BE[slot+3]`** for purchase @ **`0x1D872`**). **No sorcerer/mage spells at temple.**")
     out.append("")
     for town in shop["towns"]:
-        out.append(temple_bullet(shop, town))
-    out.append("")
+        out.append(f"### {town}")
+        out.append("")
+        out.extend(temple_table(shop, town))
+        out.append("")
     out.append("## Mage guild (per town)")
     out.append("")
-    out.append("Guild **`OP_0E` `0x05`** sells **four sorcerer spells per town** (`A4-$66E2[town×4+slot]`, handler **`0x1D97A`**, loop **`cmpi #4`** @ `0x1E64A`). Gold = **`A4-$6698[town×4+slot] + A4-$6686[slot]`**. Menu keys **`A` / `B` / `C` / `D`** (dispatch sub **`#$41`** @ `0x1E864`). Grant @ **`0x1D872`** sets roster spellbook bit. **No cleric spells.**")
+    out.append("Guild **`OP_0E` `0x05`** sells **four sorcerer spells per town** (`A4-$66E2[town×4+slot]`, handler **`0x1D97A`**, loop **`cmpi #4`** @ `0x1E64A`). Gold = **`decode_gold_encoding(A4-$66CE[town×4+slot])`** (stored in **`A4-$56BE[slot]`** for purchase @ **`0x1D872`**). Menu keys **`A` / `B` / `C` / `D`** (dispatch sub **`#$41`** @ `0x1E864`). **No cleric spells.**")
     out.append("")
     for town in shop["towns"]:
         out.append(f"### {town}")

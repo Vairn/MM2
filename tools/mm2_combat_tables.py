@@ -67,6 +67,12 @@ def stat_effect(stat: int) -> int:
     return stat_tier(stat)
 
 
+# Encounter globals @ A4-$718A / -$6FC0 / -$6FCA (doc 35, arena + random picker).
+ENCOUNTER_AREA_INDEX = list(_slice(0x718A, 60))
+DISPOSITION_MOD = list(_slice(0x6FC0, 4))
+PARTY_XP_BUDGET_INIT = int.from_bytes(_slice(0x6FCA, 4), "big")
+
+
 # Item-id bands @ 0xF5F4..0xF68E (used when rebuilding $4C-$4F @ 0xF36C).
 def _item_melee_a(item_id: int) -> bool:
     return 1 <= item_id <= 0x41

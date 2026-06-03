@@ -27,6 +27,8 @@ Quick memory aid for where core reverse-engineering assets live in this workspac
 ## Tools
 
 - `tools/decode_event.py` - **event.dat decoder** (tile events, scripts, strings).
+- `tools/build_event_location_docs.py` - regenerate `EXTRACTED/docs/events/loc_*.md` (71 locations).
+- `tools/build_doc37.py` - regenerate class-quest doc 37 from `_doc37_front.md`.
 - `tools/disasm_m68k.py` - disassembly helper.
 - `tools/extract_segments.py` - segment extraction helper.
 - `tools/inspect_hunk.py` - binary hunk inspection helper.
@@ -57,6 +59,9 @@ otherwise default to LE and validate with round-trip on real files.
   - 71-entry header (4B offset + 2B length, big-endian)
   - Per-location: triplet table → string offset → script bytecodes → string table
   - Loader at asm `0x92F2`, init at `0x1754A`, interpreter at `0x172CA`
+  - Class quests (guides + quest-event decodes only): `EXTRACTED/docs/37-mount-farview-class-quest-event.md` — regenerate `python tools/build_doc37.py`
+  - Per-location event reference (all 71): `EXTRACTED/docs/events/` — regenerate `python tools/build_event_location_docs.py`
+  - Juror turn-in **loc 34** event **12** (`OP_0E` **`0x97`** → **`0x9D76`**)
 - **map.dat**: 60 screens × 512 bytes (2 × 256-byte tile pages), flat read into A4-$EEF4
  - **page 0 (visual)**: four **2-bit wall fields** per cell (N/E/S/W @ bits 0-1/2-3/4-5/6-7):
  `0` open, `1` wall, `2` wall+torch, `3` door — **no event bit**. Used by 3D hood @`0x2900`.
@@ -102,6 +107,7 @@ otherwise default to LE and validate with round-trip on real files.
     `SPELL_META`. Codec: `tools/decode_spells.py`, `core/SpellsFile.{h,cpp}`.
 - **character mechanics** (FAQ-sourced): race modifiers, HP/SP/AC formulas, XP tables,
   extra-attacks divisors, spell-level gain, thievery — see `EXTRACTED/docs/32-character-mechanics.md`.
+- **character UI (view/create)**: title **P**/**C** and character sheet @ `$39B4` — see `EXTRACTED/docs/39-character-ui-view-create.md`.
 - **skills + hirelings** (FAQ-sourced): 15-skill seller table with town/coords/cost; 24-hireling
   roster A-X with full stats — see `EXTRACTED/docs/33-skills-and-hirelings.md`.
 - **commerce + world services** (FAQ-sourced): training/healing cost formulas, 30-day item-bonus
@@ -236,6 +242,42 @@ stream of 5 concatenated bitplanes per frame (`rassize = h*(((w+15)>>3)&0xFFFE)`
 "TV" prelude via an `FF 00` marker. `depth` is a mode value — plane count is
 always 5 (32 colors). **`globe.32` / `disk.32` are not image chunks** — they are
 XOR-obfuscated data blobs in the resource table (`globe.32` = copy-protection
-string tables, `tools/decode_globe_amiga.py`). Decoder validated against real
-tile sheets with `editor/tests/gfx_dump.cpp` (castle/cave wall tiles). The 60
+string tables, `tools/decode_globe_amiga.py`). Title-only tilesets **`intro.32`**
+(320×200) and **`introclips.32`** (11×17×12) load from embedded strings, not the
+main filename table — see `EXTRACTED/docs/38-title-screen-and-intro-assets.md` and
+`EXTRACTED/docs/39-title-screen-animation.md` (overlay coords, timing, remake).
+Decoder validated against real tile sheets with `editor/tests/gfx_dump.cpp` (castle/cave wall tiles). The 60
 map/area names live in `core/AreaNames.h` (transcribed from `b3dmm2/mm2ed.bb`).
+
+## ASM symbol table
+
+RE names and addresses are centralized in **`EXTRACTED/mm2_symbols.yaml`**
+(functions, `A4` fields, `A4` thunks). Harvest from docs + regenerate listings:
+
+```powershell
+python tools\harvest_symbols.py --merge
+python tools\apply_symbols.py
+python tools\extract_asm_parts.py
+python tools\scan_a4_jsr.py
+```
+
+Outputs: `EXTRACTED/mm2.annotated.asm` (IRA, hunk 0 only),
+`EXTRACTED/mm2.capstone.annotated.asm` (full code),
+`EXTRACTED/asm/` (subsystem splits with headers — start here for readability).
+Pairs with `EXTRACTED/decomp/mm2_gamestate.h` for `A4` field constants.
+
+## Game remake (`game/`)
+
+**100% ASM fidelity — non-negotiable.** The C++ port in `game/` must replicate
+original Amiga behavior **exactly** as traced from
+`EXTRACTED/mm2.capstone.annotated.asm` and RE docs in `EXTRACTED/docs/`. No
+interpretation, no modernized UX, unless behind an explicitly alternate UI backend.
+
+- **Never invent** UI layout, keys, timing, strings, or flows. If ASM is unclear,
+  document the gap and stub — **do not guess**.
+- **Pluggable UI** (`ICharacterUi`, etc.) is allowed only as **swappable backends**.
+  `AmigaClassic` is the canonical faithful path; any "modern" UI is opt-in and must
+  not replace ASM trace as source of truth.
+- Character/view/create UI: `EXTRACTED/docs/38-title-screen-and-intro-assets.md` and
+  general RE docs (`EXTRACTED/docs/`, `EXTRACTED/mm2-ANALYSIS.md`) until
+  `EXTRACTED/docs/39-character-ui-view-create.md` exists.
