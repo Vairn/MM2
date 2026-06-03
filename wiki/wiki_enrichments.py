@@ -22,6 +22,11 @@ SECTIONS: dict[str, str] = {
     "GFX-Loading": "Graphics",
     "ANM-TV-Format": "Graphics",
     "3D-View-and-Game-Screen": "Graphics",
+    "Title-Screen-Assets": "Title screen & UI",
+    "Title-Screen-Animation": "Title screen & UI",
+    "Character-UI-View-Create": "Title screen & UI",
+    "Game-Remake": "Title screen & UI",
+    "Docs-Wiki-Hub": "Getting started",
     "dat-Files-and-Formats": "Data formats",
     "items-dat-Format": "Data formats",
     "monsters-dat-Format": "Data formats",
@@ -30,15 +35,29 @@ SECTIONS: dict[str, str] = {
     "map-dat-Format": "Data formats",
     "Spells-and-Item-Use": "Data formats",
     "event-dat-Format": "Data formats",
+    "Events-by-Location": "Data formats",
+    "Events-By-Location-Hub": "Data formats",
     "Event-Script-Opcodes": "Data formats",
     "Combat-Overview": "Combat",
     "Combat-System": "Combat",
+    "Encounter-Tables": "Combat",
+    "Spell-Cast-ASM": "Combat",
     "Audio-Sounds-Music": "Audio",
+    "MM2-Music-Format": "Audio",
+    "Audio-Title-Death-Paths": "Audio",
+    "Known-Songs-Catalog": "Audio",
     "Copy-Protection": "Game systems",
     "Town-Services": "Game systems",
     "Spell-Sources": "Game systems",
     "Event-to-String-Path": "Game systems",
     "Embedded-Exe-Strings": "Game systems",
+    "Event-Runtime": "Game systems",
+    "Character-Mechanics": "Game systems",
+    "Skills-and-Hirelings": "Game systems",
+    "Commerce-Formulas": "Game systems",
+    "Commerce-World-Services": "Game systems",
+    "Mount-Farview-Class-Quest": "Game systems",
+    "Class-Quest-HP-Bug": "Game systems",
     "MM1-MAZEDATA-Format": "MM1 cross-walk",
     "MM1-to-MM2-Outdoor": "MM1 cross-walk",
     "MM1-Outdoor-WALLPIX": "MM1 cross-walk",
@@ -49,14 +68,32 @@ SECTIONS: dict[str, str] = {
 
 RELATED: dict[str, list[tuple[str, str]]] = {
     "Overview": [
+        ("Docs-Wiki-Hub", "Full documentation index"),
         ("Getting-Started", "Reading roadmap with diagrams"),
         ("dat-Files-and-Formats", "All .dat layouts"),
         ("Full-Analysis", "Complete narrative"),
     ],
+    "Title-Screen-Animation": [
+        ("Title-Screen-Assets", "Boot graph and ASM blit traces"),
+        ("Character-UI-View-Create", "P/C keys and character sheet"),
+        ("Game-Remake", "Build and run the C++ port"),
+        ("GFX-Loading", ".32 loader path"),
+    ],
+    "Title-Screen-Assets": [
+        ("Title-Screen-Animation", "Overlay coords and peekers"),
+        ("Copy-Protection", "Logo fade A4-$6476 table"),
+        ("Audio-Title-Death-Paths", "Title music 0x12D"),
+    ],
+    "Character-UI-View-Create": [
+        ("Title-Screen-Animation", "Title menu flow"),
+        ("roster-dat-Format", "Party record layout"),
+        ("Game-Remake", "AmigaClassic vs Stub UI"),
+    ],
     "dat-Files-and-Formats": [
         ("items-dat-Format", "256 items"),
         ("map-dat-Format", "Visual + collision pages"),
-        ("event-dat-Format", "71 script locations"),
+        ("Events-by-Location", "71 per-map script pages"),
+        ("event-dat-Format", "event.dat container"),
         ("MM2ED-Editor", "Edit in GUI"),
     ],
     "items-dat-Format": [
@@ -81,9 +118,22 @@ RELATED: dict[str, list[tuple[str, str]]] = {
         ("Map-Walker", "Interactive explorer"),
     ],
     "event-dat-Format": [
+        ("Events-by-Location", "All 71 location scripts"),
         ("Event-Script-Opcodes", "0x00..0x32 reference"),
         ("map-dat-Format", "Collision triggers"),
         ("MM2ED-Editor", "Node-graph editor"),
+    ],
+    "Events-by-Location": [
+        ("Events-By-Location-Hub", "Numbered doc series entry"),
+        ("event-dat-Format", "Container layout"),
+        ("Event-Script-Opcodes", "Opcode reference"),
+        ("map-dat-Format", "60 map screens"),
+        ("Mount-Farview-Class-Quest", "Class quests (loc 34)"),
+    ],
+    "Events-By-Location-Hub": [
+        ("Events-by-Location", "Full index + 71 pages"),
+        ("event-dat-Format", "event.dat format"),
+        ("Event-Runtime", "Collision 0x80 → VM"),
     ],
     "Combat-Overview": [
         ("Combat-System", "Full ASM trace"),
@@ -433,9 +483,10 @@ flowchart LR
 
 1. [Main Loop and Map](Main-Loop-and-Map) - scheduler
 2. [Combat Overview](Combat-Overview) -> [Combat System](Combat-System)
-3. [Event Script Opcodes](Event-Script-Opcodes) - script VM
-4. [Town Services](Town-Services) - pub, temple, guild, training
-5. [3D View and Game Screen](3D-View-and-Game-Screen) - renderer
+3. [Events by location](Events-by-Location) - all 71 map scripts
+4. [Event Script Opcodes](Event-Script-Opcodes) - script VM
+5. [Town Services](Town-Services) - pub, temple, guild, training
+6. [3D View and Game Screen](3D-View-and-Game-Screen) - renderer
 
 </td>
 </tr>

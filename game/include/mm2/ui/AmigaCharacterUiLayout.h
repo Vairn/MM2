@@ -26,7 +26,7 @@ constexpr int kRosterBorderH = 23;   // rows 1..24 -> y 8..192 (8px bottom margi
 // Header sits ABOVE the slot list (centered on the 40-col NTSC grid), matching
 // the WinUAE screenshot: "(View All)" / "Characters" + underline at the top.
 constexpr int kRosterTextCols = 40;        // NTSC text columns (320/8) for centering
-constexpr int kRosterViewAllRow = 0x02;    // $00892
+constexpr int kRosterViewAllRow = 0x01;    // "(View All)" embedded in top border row
 constexpr int kRosterTitleRow = 0x03;      // $008b8 "Characters"
 constexpr int kRosterUnderlineRow = 0x04;  // dashes on their own row beneath
 
@@ -46,7 +46,7 @@ constexpr int kSheetBorderCol = 1;
 constexpr int kSheetBorderW = 38;
 constexpr int kSheetBorderH = 23;   // rows 1..24 -> y 8..192 (NTSC 320x200)
 
-constexpr int kSheetHeaderRow = 0x01;
+constexpr int kSheetHeaderRow = 0x01;      // character name embedded in top border row
 constexpr int kSheetHeaderCol = 0x02;
 
 // Three-column stat block (title sheet path; matches WinUAE screenshot).
@@ -65,7 +65,7 @@ constexpr int kSheetBackpackHeaderCol = kSheetBackpackCol;
 
 constexpr int kSheetFooterRow1 = 0x14;     // 20
 constexpr int kSheetFooterRow2 = 0x15;     // 21
-constexpr int kSheetFooterRow3 = 0x16;     // 22
+constexpr int kSheetFooterRow3 = 0x18;     // 24 — bottom border row for ESC prompt
 constexpr int kSheetFooterCol = 0x02;
 
 // In-game party panel (book.32) — NOT title P; kept for create confirm / combat paths.
@@ -101,11 +101,54 @@ constexpr int kPartyFooterAddRow = 0x15;      // 21 "(Ctrl) 'A' - 'X' to Add/Rem
 constexpr int kPartyFooterHireRow = 0x16;     // 22 "'Space' for Hirelings" / "'Z' to exit"
 constexpr int kPartyFooterHireCol = 0x03;
 constexpr int kPartyFooterExitCol = 0x1a;     // "'Z' to exit"
-constexpr int kPartyFooterEscRow = 0x17;      // 23 "( 'ESC' to exit game )"
+constexpr int kPartyFooterEscRow = 0x18;      // 24 — bottom border row for ESC prompt
 
 // Highlight (inverse-video) colors for "*** Party is Full ***".
 constexpr uint8_t kPartyHiliteR = 220;
 constexpr uint8_t kPartyHiliteG = 220;
 constexpr uint8_t kPartyHiliteB = 220;
+
+// ---- Create-character stat roll (WinUAE reference @ ASM $01BC8A / $01C494) ----
+// Full-screen red frame; header breaks top border; throw.32 tableau (304×72) centered
+// under header; stats + class list below the graphic.
+constexpr int kCreateBorderRow = 1;
+constexpr int kCreateBorderCol = 1;
+constexpr int kCreateBorderW = 38;
+constexpr int kCreateBorderH = 23;
+
+constexpr int kCreateHeaderRow = 0x01;       // "( Create New Characters )"
+constexpr int kCreateTableauY = 0x10;        // px y=16 (row 2), below header
+constexpr int kCreateTableauW = 304;         // throw.32 frame 0 width
+
+constexpr int kCreateStatRowBase = 0x0c;     // row 12 — below 72px tableau (y=16..88)
+constexpr int kCreateStatColLetter = 0x02;   // "A -"
+constexpr int kCreateStatColName = 0x06;     // stat name
+constexpr int kCreateStatColEquals = 0x14;   // fixed "=" column
+constexpr int kCreateStatColValue = 0x16;    // rolled value (cols 22-23)
+
+// Right panel — stat-roll class list (digit / " - " / name at fixed cols).
+constexpr int kCreateClassDigitCol = 0x1a;   // col 26 — class digit when eligible
+constexpr int kCreateClassSepCol = 0x1b;     // col 27 — " - " on every class row
+constexpr int kCreateClassNameCol = 0x1e;    // col 30 — class names align here
+
+// Progress + name entry (labels col 26, values aligned col 33 — WinUAE name screen).
+constexpr int kCreateProgressLabelCol = 0x1a; // col 26 — "Class=", "Name :", etc.
+constexpr int kCreateProgressValueCol = 0x21; // col 33 — Knight, Human, typed name
+
+constexpr int kCreateTextCols = 40;          // NTSC 320/8 — for centered prompts
+
+constexpr int kCreatePromptRow1 = 0x14;      // step prompt line 1
+constexpr int kCreatePromptRow2 = 0x15;      // step prompt line 2 (stat roll only)
+constexpr int kCreatePromptRow3 = 0x16;      // step prompt line 3 (stat roll only)
+constexpr int kCreateEscRow = 0x18;          // bottom border row for ESC prompt
+constexpr int kCreatePromptCol = 0x02;
+
+// throw.32: frame 0 = 304×72 tableau; frames 1–10 = partial hand/die sprites (variable width).
+// Blit anchor @ ASM $00610A: col $27 right edge, tableau y=$10 px, anim overlay y=$12 px.
+constexpr int kCreateThrowBlitCol = 0x27;
+constexpr int kCreateThrowRestY = 0x10;
+constexpr int kCreateThrowAnimY = 0x12;
+
+constexpr int kCreateThrowAnimStepTicks = 4; // ~15 Hz frame advance @ 60 Hz game tick
 
 }  // namespace mm2::ui::amiga_layout

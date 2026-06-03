@@ -1,5 +1,7 @@
 # MM2 Workspace Notes
 
+**Documentation wiki:** [`EXTRACTED/docs/README.md`](EXTRACTED/docs/README.md) — full index of RE docs, tools, and regeneration commands.
+
 ## Purpose
 
 Quick memory aid for where core reverse-engineering assets live in this workspace.
@@ -278,6 +280,9 @@ interpretation, no modernized UX, unless behind an explicitly alternate UI backe
 - **Pluggable UI** (`ICharacterUi`, etc.) is allowed only as **swappable backends**.
   `AmigaClassic` is the canonical faithful path; any "modern" UI is opt-in and must
   not replace ASM trace as source of truth.
-- Character/view/create UI: `EXTRACTED/docs/38-title-screen-and-intro-assets.md` and
-  general RE docs (`EXTRACTED/docs/`, `EXTRACTED/mm2-ANALYSIS.md`) until
-  `EXTRACTED/docs/39-character-ui-view-create.md` exists.
+- **Title screen** (`game/src/TitleScreen.cpp`): **320×200** display; `intro.32` @ (3,0);
+  pegasus overlays frames 0–4 one-at-a-time (`kOverlayStepTicks=20`); peekers **6/8/9/10**
+  only (not frame 7); cover-fill inactive hollows then one active peeker; menu = **black +
+  book.32** (no intro under boxes); logo = centered `nwcp.32`; font = `Mm2Font8x8.inc`.
+  See `EXTRACTED/docs/39-title-screen-animation.md`.
+- Character/view/create UI: `EXTRACTED/docs/39-character-ui-view-create.md`.

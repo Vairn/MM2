@@ -7,7 +7,8 @@ Documentation for **Might and Magic II (Amiga)** reverse engineering. Two target
 | **[GitHub Wiki](https://github.com/Vairn/MM2/wiki)** | Hosted on GitHub — no build step |
 | **VitePress** (`npm run dev`) | Local preview with MM2 font/theme |
 
-Source of truth stays in `EXTRACTED/docs/`, `tools/`, and `editor/README.md`.
+Source of truth stays in [`EXTRACTED/docs/README.md`](../EXTRACTED/docs/README.md),
+`EXTRACTED/docs/`, `tools/`, and `editor/README.md`.
 
 ---
 

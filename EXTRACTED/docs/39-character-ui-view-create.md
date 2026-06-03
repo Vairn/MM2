@@ -145,16 +145,70 @@ Field index → row/col tables: **`A4-$8AF8` / `A4-$8AE0`** (`$38EA`).
 
 ---
 
-## 5. Create Character (partial)
+## 5. Create Character (ASM trace)
 
-| Address | Role |
-|---------|------|
-| `$13C4` | Title **C** → `JSR -$82A2` |
-| `$944C` | Slot picker (portraits `A4-$AA2C`, N/E/S/W) |
-| `$5724` | Confirm → `$944C` then **`$5940`** (8-slot book panel) |
-| `$6520+` | Race/class/sex/alignment (str.dat indices **pending**) |
+### Entry paths
 
-SDL: slot picker stub only; **no roster writes**.
+| Path | Address | Notes |
+|------|---------|-------|
+| Title menu **C** | `$1482` → `$1394` | Save-game branch in annotated listing; title **create** session enters at **`$01C684`** after slot setup (`-$5A38`, `-$5A3E`). |
+| Inn / party assembly | **`$0826`** `char_create_party_assemble` | Era/town filter, roster **A–X** picker, good/evil mix check — **not** the dice-roll stat screen. |
+| Step driver | **`$01C25A`** | Main input loop; step mode in **`A4-$5AD0`** (values 1–6 via menu @ `$01C714`). |
+
+**Gap:** title **C** thunk in older notes (`JSR -$82A2` @ `$13C4`) does **not** match the current annotated dispatch (`$13C4` → `$14F2`). Treat **`$01C684`** as the verified stat-create session entry.
+
+### Stat roll — **`$01C00E`**
+
+| Item | ASM | Notes |
+|------|-----|-------|
+| Roll loop | `$01C0E2`–`$01C13C` | Seven stats (`cmpi #6` → indices 0..6). |
+| RNG | `$01C10C` `moveq #$14,d1` + **`JSR -$7B54`** | **1d20** per stat (confirmed). |
+| Source tables | **`A4-$68EE` / `-$68D0`** (+ jump table @ `$01C09E`) | Per-step table pair; race re-roll path @ **`$01B646`**. |
+| Eligibility byte | `$01C244` `move.b $d(a1)` → **`A4-$5A12[]`** | Stored from rolled-stat block +0x0D. |
+| Class mask AND | **`$01BC8A`** | **`A4-$67F9[class]`** (`data_hunk` @ file **`0x1805`**: `80 40 20 10 08 04 02 01 …`) AND **`A4-$5A12[stat]`**; ineligible → `'-'`. |
+| Display | **`$01BC8A`** | Stat names/values + class digit column. |
+
+SDL logic: `mm2_create_roll_stats()` + `mm2_create_class_eligible()` in `EXTRACTED/decomp/mm2_create_character.c` (minimum-stat rules FAQ-cross-checked vs retail `roster.dat`).
+
+### Main input loop — **`$01C25A`**
+
+| Key | ASCII | Handler |
+|-----|-------|---------|
+| **A–F** | `$41`–`$46` | Exchange-stat family (`$01BE44` / `$01BC26` / `$01B6E0` by step). |
+| **G** | `$47` | Proceed / pay (`JSR -$7E0C`, then **`$01BDD6`** gold @ roster **`+$66`**). |
+| **1–8** | `$31`–`$38` | Class pick → **`$01C3DE`** (sets **`A4-$5A3E`**, **`A4-$5A3A`**). |
+| **Esc** | `$1B` | Exit loop. |
+| Reroll | (step **`A4-$5AD0==2`**) | **`$01B646`** re-applies race-adjusted rolls. |
+
+Post-class steps ( **`A4-$5AD0`**: 5=race **`$01BC26`**, 6=sex/name **`$01B6E0`**, 4=alignment copy @ **`$01C1C0`**) then name entry @ **`$01BBEE`** → **`$01C3DE`** + save.
+
+### Dice hand / border
+
+| Item | ASM | Cells (row, col, w, h) |
+|------|-----|-------------------------|
+| Red frame | **`JSR -$809E`** @ **`$01BE06`** | **(19, 14, 19, 7)** |
+| Asset | **`throw.32`** | Loaded via resource table; SDL blit @ `AmigaCharacterUiLayout.h` **`kCreateDice*`** |
+
+### Obfuscated name tables
+
+| Table | A4 offset | Use |
+|-------|-----------|-----|
+| Class abbrev | **`-$86D8`** | Roster list (`$0552`); create screen uses longer strings via **`JSR -$7BE4`** / **`-$5ACE`**. |
+| Race | **`-$86F8`** | Runtime decode (**exact XOR/not pinned**). |
+| Alignment | **`-$870C`** | Same. |
+
+SDL port uses plain ASCII enum names until decode is traced.
+
+### Record write + save
+
+| Step | Address | Fields |
+|------|---------|--------|
+| Build roster ptr | **`$01C3DE`** | **`JSR -$7F20`** → **`A4-$5A3E`**. |
+| Finalize stats | **`$01B646`**, **`$01BE44`** | Copies into record bytes **`$10`–`$15`**, **`$27`**, **`$6B`–`$73`**. |
+| Defaults | retail `roster.dat` | Age **18**, food **10**, gold **200**, town **1**, level **1**, HP/SP from class + END / INT\|PER tables. |
+| Persist | **`JSR -$823C`** family | SDL: `mm2_roster_save_file(data_dir/roster.dat, …)`. |
+
+Implementation: `game/src/ui/AmigaCharacterUi.cpp` + `mm2_create_character.c`.
 
 ---
 
@@ -183,6 +237,6 @@ SDL: `drawRedBorder()` — 2 px `fillRect` outline, RGB (255,0,0).
 | Title sheet (`LAB_675A` layout) | **Done** (skills str.dat **pending**) |
 | `$39B4` book composite sheet | **Not wired** (combat **V** path) |
 | Ctrl-N / Ctrl-D rename/delete | **Stub** (keys detected) |
-| Create flow / str.dat | **Stub** |
+| Create flow (stat roll → race → align → sex → name) | **Done** (plain names; str.dat decode pending) |
 
 Regenerate symbols: `python tools/harvest_symbols.py --merge && python tools/apply_symbols.py`

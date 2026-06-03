@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from event_doc_common import (  # noqa: E402
+    AREA_NAMES,
+    OUTDOOR_SECTOR,
     default_event_dat,
     location_label,
     location_slug,
@@ -26,34 +28,68 @@ from decode_event import read_header  # noqa: E402
 OUT_DIR = ROOT / "EXTRACTED" / "docs" / "events"
 README = OUT_DIR / "README.md"
 
+# Grouped index sections (loc id ranges / lists).
+_INDEX_GROUPS: list[tuple[str, list[int]]] = [
+    ("Towns (map 0–4)", list(range(0, 5))),
+    ("Overland sectors (map 5–16)", list(range(5, 17))),
+    ("Wilderness & dungeons (map 17–32)", list(range(17, 33))),
+    ("Overland sectors (map 33–40)", list(range(33, 41))),
+    ("Elemental planes (map 41–44)", list(range(41, 45))),
+    ("Castle basements (map 45–52)", list(range(45, 53))),
+    ("Ancients & castles (map 53–59)", list(range(53, 60))),
+    ("Overlay banks (loc 60–70, not map screens)", list(range(60, 71))),
+]
+
+
+def map_screen_cell(loc_id: int) -> str:
+    if loc_id >= 60:
+        return "—"
+    if loc_id in OUTDOOR_SECTOR:
+        return f"{loc_id} · {OUTDOOR_SECTOR[loc_id]}"
+    if loc_id in AREA_NAMES:
+        return str(loc_id)
+    return str(loc_id)
+
 
 def build_index(rows: list[tuple[int, str, str]]) -> str:
+    by_loc = {loc_id: (label, fname) for loc_id, label, fname in rows}
     lines = [
         "# event.dat — per-location reference",
         "",
-        "71 **event.dat** location records (indices **0..70**). Each file lists tile triggers,",
-        "event script hex + pseudo-code (`tools/decode_event.py`), and strings referenced by those events.",
+        "Decoded script pages for all **71** `event.dat` locations (indices **0..70**).",
+        "Each file lists tile triggers, bytecode segments, and string table entries.",
         "",
-        "**Class quests only:** [`37-mount-farview-class-quest-event.md`](../37-mount-farview-class-quest-event.md)",
-        "",
-        "Regenerate all location files:",
-        "",
-        "```bash",
-        "python tools/build_event_location_docs.py",
-        "```",
-        "",
-        "| Loc | Area | Doc |",
-        "|-----|------|-----|",
-    ]
-    for loc_id, label, fname in rows:
-        lines.append(f"| {loc_id:02d} | {label} | [{fname}]({fname}) |")
-    lines += [
+        "| Resource | Doc |",
+        "|----------|-----|",
+        "| `event.dat` container | [`06-event-dat-format.md`](../06-event-dat-format.md) |",
+        "| Opcode reference | [`07-event-script-opcodes.md`](../07-event-script-opcodes.md) |",
+        "| Runtime / collision `0x80` | [`08-event-runtime.md`](../08-event-runtime.md) |",
+        "| 60 `map.dat` screens | [`21-map-dat-format.md`](../21-map-dat-format.md) |",
+        "| Wiki hub (numbered) | [`40-events-by-location.md`](../40-events-by-location.md) |",
+        "| Class quests | [`37-mount-farview-class-quest-event.md`](../37-mount-farview-class-quest-event.md) |",
         "",
         "Map screen names follow `editor/src/core/AreaNames.h`. Locations **60..70** are",
-        "overlay banks (quests, HoS, castle blobs, meta) — not the 60 `map.dat` screens.",
+        "overlay banks (quests, HoS, castle blobs, meta) — not `map.dat` screens.",
+        "",
+        "## Regenerate",
+        "",
+        "```powershell",
+        "python tools\\build_event_location_docs.py",
+        "```",
+        "",
+        "Decoder: `tools/decode_event.py` · Editor: [`editor/README.md`](../../editor/README.md) (Events section)",
         "",
     ]
-    return "\n".join(lines)
+    for heading, loc_ids in _INDEX_GROUPS:
+        lines += ["", f"### {heading}", "", "| Loc | Map | Area | Doc |", "|-----|-----|------|-----|"]
+        for loc_id in loc_ids:
+            if loc_id not in by_loc:
+                continue
+            label, fname = by_loc[loc_id]
+            lines.append(
+                f"| {loc_id:02d} | {map_screen_cell(loc_id)} | {label} | [{fname}]({fname}) |"
+            )
+    return "\n".join(lines) + "\n"
 
 
 def main() -> int:

@@ -23,6 +23,7 @@ WIKI_BASE = f"https://github.com/{REPO}/wiki"
 
 # Source markdown → GitHub Wiki page title (becomes Page-Title.md)
 DOC_SOURCES: list[tuple[str, str]] = [
+    ("EXTRACTED/docs/README.md", "Docs-Wiki-Hub"),
     ("EXTRACTED/docs/00-overview.md", "Overview"),
     ("EXTRACTED/docs/01-startup-init.md", "Startup-and-Init"),
     ("EXTRACTED/docs/02-runtime-memory-map.md", "Runtime-Memory-Map"),
@@ -35,6 +36,7 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("EXTRACTED/docs/07-anm-tv-format.md", "ANM-TV-Format"),
     ("EXTRACTED/docs/07-dat-files-and-formats.md", "dat-Files-and-Formats"),
     ("EXTRACTED/docs/07-event-script-opcodes.md", "Event-Script-Opcodes"),
+    ("EXTRACTED/docs/08-event-runtime.md", "Event-Runtime"),
     ("EXTRACTED/docs/12-attrib-dat-format.md", "attrib-dat-Format"),
     ("EXTRACTED/docs/21-map-dat-format.md", "map-dat-Format"),
     ("EXTRACTED/docs/13-time-era-calendar.md", "Time-Era-Calendar"),
@@ -43,23 +45,42 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("EXTRACTED/docs/16-monster-ability-format.md", "monsters-dat-Format"),
     ("EXTRACTED/docs/17-combat-system.md", "Combat-System"),
     ("EXTRACTED/docs/26-combat-overview.md", "Combat-Overview"),
+    ("EXTRACTED/docs/26-spell-cast-asm.md", "Spell-Cast-ASM"),
+    ("EXTRACTED/docs/35-encounter-tables.md", "Encounter-Tables"),
     ("EXTRACTED/docs/25-audio-sounds-music.md", "Audio-Sounds-Music"),
+    ("EXTRACTED/docs/25-mm2-music-format.md", "MM2-Music-Format"),
+    ("EXTRACTED/docs/26-audio-callpaths-title-death-shared.md", "Audio-Title-Death-Paths"),
+    ("EXTRACTED/docs/27-mm2-known-songs-catalog.md", "Known-Songs-Catalog"),
     ("EXTRACTED/docs/28-town-services.md", "Town-Services"),
     ("EXTRACTED/docs/29-embedded-exe-strings.md", "Embedded-Exe-Strings"),
     ("EXTRACTED/docs/30-event-to-string-path.md", "Event-to-String-Path"),
     ("EXTRACTED/docs/31-spell-sources.md", "Spell-Sources"),
+    ("EXTRACTED/docs/32-character-mechanics.md", "Character-Mechanics"),
+    ("EXTRACTED/docs/33-skills-and-hirelings.md", "Skills-and-Hirelings"),
+    ("EXTRACTED/docs/34-commerce-formulas.md", "Commerce-Formulas"),
+    ("EXTRACTED/docs/34-commerce-and-world-services.md", "Commerce-World-Services"),
+    ("EXTRACTED/docs/36-class-quest-hp-bug.md", "Class-Quest-HP-Bug"),
+    ("EXTRACTED/docs/37-mount-farview-class-quest-event.md", "Mount-Farview-Class-Quest"),
+    ("EXTRACTED/docs/38-title-screen-and-intro-assets.md", "Title-Screen-Assets"),
+    ("EXTRACTED/docs/39-title-screen-animation.md", "Title-Screen-Animation"),
+    ("EXTRACTED/docs/39-character-ui-view-create.md", "Character-UI-View-Create"),
+    ("EXTRACTED/docs/40-events-by-location.md", "Events-By-Location-Hub"),
     ("EXTRACTED/docs/18-items-dat-format.md", "items-dat-Format"),
     ("EXTRACTED/docs/19-spells-and-item-use.md", "Spells-and-Item-Use"),
     ("EXTRACTED/docs/20-copy-protection-table.md", "Copy-Protection"),
     ("EXTRACTED/docs/22-mm1-mazedata-format.md", "MM1-MAZEDATA-Format"),
     ("EXTRACTED/docs/23-mm1-to-mm2-outdoor.md", "MM1-to-MM2-Outdoor"),
     ("EXTRACTED/docs/24-mm1-outdoor-wallpix-by-sector.md", "MM1-Outdoor-WALLPIX"),
+    ("game/README.md", "Game-Remake"),
     ("EXTRACTED/mm2-ANALYSIS.md", "Full-Analysis"),
     ("tools/RE-TOOLS.md", "RE-Tools"),
     ("editor/README.md", "MM2ED-Editor"),
     ("EXTRACTED/decomp/README.md", "C-Decomp-Scaffold"),
     ("CLAUDE.md", "Workspace-Notes"),
 ]
+
+EVENTS_HUB_TITLE = "Events-by-Location"
+EVENTS_SRC_DIR = "EXTRACTED/docs/events"
 
 GALLERY_PAGES = {
     "index": "Gallery",
@@ -80,9 +101,40 @@ class PageRef:
     source: str | None = None
 
 
+def event_loc_wiki_title(stem: str) -> str:
+    """loc_34_d2 → Event-Loc-34-D2 (GitHub Wiki page name)."""
+    m = re.match(r"loc_(\d+)_(.+)$", stem)
+    if not m:
+        return f"Event-{stem.replace('_', '-')}"
+    num, slug = m.group(1), m.group(2)
+    part = "-".join(s.capitalize() for s in slug.split("_"))
+    return f"Event-Loc-{num}-{part}"
+
+
+def build_event_link_map() -> dict[str, str]:
+    """Map events/README and loc_*.md paths → wiki page titles."""
+    m: dict[str, str] = {}
+    events_dir = ROOT / EVENTS_SRC_DIR
+    hub = f"{EVENTS_SRC_DIR}/README.md"
+    m[hub] = EVENTS_HUB_TITLE
+    m["events/README.md"] = EVENTS_HUB_TITLE
+    m["events"] = EVENTS_HUB_TITLE
+    m["40-events-by-location"] = "Events-By-Location-Hub"
+    m["40-events-by-location.md"] = "Events-By-Location-Hub"
+    for path in sorted(events_dir.glob("loc_*.md")):
+        title = event_loc_wiki_title(path.stem)
+        rel = f"{EVENTS_SRC_DIR}/{path.name}"
+        m[rel] = title
+        m[f"events/{path.name}"] = title
+        m[path.name] = title
+        m[path.stem] = title
+    return m
+
+
 def build_link_map() -> dict[str, str]:
     """Map VitePress-style paths and source stems → GitHub Wiki page names."""
     m: dict[str, str] = {}
+    m.update(build_event_link_map())
     for src, title in DOC_SOURCES:
         stem = Path(src).stem
         m[f"/docs/reverse-engineering/{stem}"] = title
@@ -93,6 +145,8 @@ def build_link_map() -> dict[str, str]:
             m[stem[3:]] = title
     m["/docs/tools/re-tools"] = "RE-Tools"
     m["/docs/editor/mm2ed"] = "MM2ED-Editor"
+    m["editor/README.md"] = "MM2ED-Editor"
+    m["../../editor/README.md"] = "MM2ED-Editor"
     m["/docs/decomp/readme"] = "C-Decomp-Scaffold"
     m["/docs/reference/workspace-notes"] = "Workspace-Notes"
     m["/docs/reverse-engineering/mm2-ANALYSIS"] = "Full-Analysis"
@@ -273,7 +327,8 @@ def write_home(*, out: Path = OUT) -> None:
 <li><a href="{WIKI_BASE}/items-dat-Format">items.dat</a> — 256 items, class masks, use spells</li>
 <li><a href="{WIKI_BASE}/monsters-dat-Format">monsters.dat</a> — abilities, attacks, sprites</li>
 <li><a href="{WIKI_BASE}/map-dat-Format">map.dat</a> — 60 screens × 512 bytes</li>
-<li><a href="{WIKI_BASE}/event-dat-Format">event.dat</a> — 71 locations, script VM</li>
+<li><a href="{WIKI_BASE}/event-dat-Format">event.dat</a> — container format</li>
+<li><a href="{WIKI_BASE}/Events-by-Location">Events by location</a> — all 71 scripts</li>
 <li><a href="{WIKI_BASE}/roster-dat-Format">roster.dat</a> · <a href="{WIKI_BASE}/Spells-and-Item-Use">spells</a> · <a href="{WIKI_BASE}/attrib-dat-Format">attrib.dat</a></li>
 </ul>
 
@@ -292,8 +347,9 @@ def write_home(*, out: Path = OUT) -> None:
 <li><a href="{WIKI_BASE}/Spell-Sources">Spell sources</a> — where every spell is obtained</li>
 <li><a href="{WIKI_BASE}/Audio-Sounds-Music">Audio / SFX / music</a> — <code>audio.device</code>, Controls menu</li>
 <li><a href="{WIKI_BASE}/3D-View-and-Game-Screen">3D view &amp; collision</a> — wall pages, auto-map</li>
-<li><a href="{WIKI_BASE}/Event-Script-Opcodes">Event opcodes</a> · <a href="{WIKI_BASE}/Event-to-String-Path">script → text</a></li>
+<li><a href="{WIKI_BASE}/Events-by-Location">Events per map</a> · <a href="{WIKI_BASE}/Event-Script-Opcodes">opcodes</a> · <a href="{WIKI_BASE}/Event-to-String-Path">script → text</a></li>
 <li><a href="{WIKI_BASE}/Main-Loop-and-Map">Main loop &amp; map</a> · <a href="{WIKI_BASE}/Copy-Protection">copy protection</a></li>
+<li><a href="{WIKI_BASE}/Title-Screen-Animation">Title screen</a> · <a href="{WIKI_BASE}/Character-UI-View-Create">character UI</a></li>
 </ul>
 
 <p><b><a href="{WIKI_BASE}/Full-Analysis">→ Full analysis</a></b></p>
@@ -374,7 +430,7 @@ def write_home(*, out: Path = OUT) -> None:
 |:---|:---|
 | Understand the project | [Getting Started](Getting-Started) → [Overview](Overview) → [dat Files and Formats](dat-Files-and-Formats) |
 | Edit `.dat` files | [MM2ED Editor](MM2ED-Editor) + sidebar *Data formats* |
-| Trace combat or scripts | [Combat Overview](Combat-Overview) · [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes) |
+| Trace combat or scripts | [Combat Overview](Combat-Overview) · [Events by location](Events-by-Location) · [Event Script Opcodes](Event-Script-Opcodes) |
 | Town shops &amp; services | [Town Services](Town-Services) · [Spell Sources](Spell-Sources) · [Event to String Path](Event-to-String-Path) |
 | Audio / walk beep / SFX | [Audio Sounds Music](Audio-Sounds-Music) |
 | Exe-embedded UI strings | [Embedded Exe Strings](Embedded-Exe-Strings) |
@@ -404,11 +460,13 @@ def write_sidebar() -> None:
 ---
 
 #### Getting started
+- [Docs Wiki Hub](Docs-Wiki-Hub) ← **full doc index**
 - [Getting Started](Getting-Started) ← **read this first**
 - [Overview](Overview)
 - [Workspace Notes](Workspace-Notes)
 - [Open Questions](Open-Questions)
 - [Full Analysis](Full-Analysis)
+- [Game Remake](Game-Remake)
 
 #### Runtime & engine
 - [Startup and Init](Startup-and-Init)
@@ -422,6 +480,11 @@ def write_sidebar() -> None:
 - [GFX Loading](GFX-Loading)
 - [ANM TV Format](ANM-TV-Format)
 - [3D View and Game Screen](3D-View-and-Game-Screen)
+- [Title Screen Assets](Title-Screen-Assets)
+- [Title Screen Animation](Title-Screen-Animation)
+
+#### UI
+- [Character UI View Create](Character-UI-View-Create)
 
 #### Data formats (.dat)
 - [Format inventory](dat-Files-and-Formats)
@@ -432,20 +495,34 @@ def write_sidebar() -> None:
 - [map.dat](map-dat-Format)
 - [spells & item use](Spells-and-Item-Use)
 - [event.dat](event-dat-Format)
+- [Events by location](Events-by-Location) ← **71 maps**
+- [Events hub (numbered)](Events-By-Location-Hub)
 - [Event Script Opcodes](Event-Script-Opcodes)
 
 #### Combat
 - [Combat Overview](Combat-Overview)
 - [Combat System](Combat-System)
+- [Encounter Tables](Encounter-Tables)
+- [Spell Cast ASM](Spell-Cast-ASM)
 - [monsters.dat abilities](monsters-dat-Format)
 - [Spells and item use](Spells-and-Item-Use)
 
 #### Audio
 - [Audio, sounds, music](Audio-Sounds-Music)
+- [MM2 music format](MM2-Music-Format)
+- [Title/death audio paths](Audio-Title-Death-Paths)
+- [Known songs catalog](Known-Songs-Catalog)
 
 #### Game systems
 - [Town Services](Town-Services)
 - [Spell Sources](Spell-Sources)
+- [Character Mechanics](Character-Mechanics)
+- [Skills and Hirelings](Skills-and-Hirelings)
+- [Commerce Formulas](Commerce-Formulas)
+- [Commerce World Services](Commerce-World-Services)
+- [Mount Farview Class Quest](Mount-Farview-Class-Quest)
+- [Class Quest HP Bug](Class-Quest-HP-Bug)
+- [Event Runtime](Event-Runtime)
 - [Event to String Path](Event-to-String-Path)
 - [Embedded Exe Strings](Embedded-Exe-Strings)
 - [Copy Protection](Copy-Protection)
@@ -523,6 +600,27 @@ def export_docs() -> None:
         page = convert_doc(src, title)
         (OUT / f"{title}.md").write_text(page, encoding="utf-8")
         print(f"  doc {title}")
+
+
+def export_event_locations() -> None:
+    """Export events/README hub + all 71 loc_*.md pages to GitHub Wiki."""
+    events_dir = ROOT / EVENTS_SRC_DIR
+    if not events_dir.is_dir():
+        print(f"skip events: missing {EVENTS_SRC_DIR}")
+        return
+
+    hub = events_dir / "README.md"
+    if hub.is_file():
+        page = convert_doc(hub, EVENTS_HUB_TITLE)
+        (OUT / f"{EVENTS_HUB_TITLE}.md").write_text(page, encoding="utf-8")
+        print(f"  events hub {EVENTS_HUB_TITLE}")
+
+    loc_files = sorted(events_dir.glob("loc_*.md"))
+    for path in loc_files:
+        title = event_loc_wiki_title(path.stem)
+        page = convert_doc(path, title)
+        (OUT / f"{title}.md").write_text(page, encoding="utf-8")
+    print(f"  events {len(loc_files)} location pages")
 
 
 def clear_output_dir(path: Path) -> None:
@@ -651,6 +749,8 @@ def export_github_wiki(*, skip_gallery: bool = False) -> Path:
     export_diagrams()
     print("Exporting docs…")
     export_docs()
+    print("Exporting event locations…")
+    export_event_locations()
     export_gallery(skip_gallery=skip_gallery or not has_game_assets())
     export_book_logo(OUT / "images" / "book-f00.png")
     export_maze_walker(OUT)

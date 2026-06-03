@@ -16,8 +16,8 @@ In DATA hunk 0, offset `0x07B0..0x0838` is a contiguous array of relocated longw
 - `disk.32`
 - `book.32`
 - `throw.32`
-- `intro.32` (title background — see `38-title-screen-and-intro-assets.md`)
-- `introclips.32` (title animated clips)
+- `intro.32` (title background — see [`38-title-screen-and-intro-assets.md`](38-title-screen-and-intro-assets.md), animation [`39-title-screen-animation.md`](39-title-screen-animation.md))
+- `introclips.32` (title animated clips — pegasus overlays + peekers)
 - `xfer.32`
 - `sky.32`
 - `event.dat`

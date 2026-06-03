@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 
 namespace mm2 {
 
@@ -312,6 +313,61 @@ void TitleScreen::drawLogoSplash()
     }
 }
 
+void TitleScreen::drawControls()
+{
+    compositor_.clear(0, 0, 0, 255);
+    drawRedFrame(compositor_, 8, 8, 304, 184);
+
+    int y = 20;
+    compositor_.drawTextShadow(centerX("COMMAND REFERENCE", 0, 320), y, "COMMAND REFERENCE", 255, 255, 100);
+    y += 24;
+
+    const char* controls[] = {
+        "A - Attack",
+        "B - Block",
+        "C - Cast",
+        "D - Defend",
+        "E - Exchange",
+        "F - Flee",
+        "H - Hide",
+        "M - Move",
+        "Q - Quit",
+        "S - Shoot",
+        "U - Use",
+        "V - View",
+        "W - Wait",
+        "X - Exit"
+    };
+
+    int x1 = 40;
+    int x2 = 180;
+    for (size_t i = 0; i < std::size(controls); ++i) {
+        int x = (i % 2 == 0) ? x1 : x2;
+        compositor_.drawTextShadow(x, y, controls[i], 200, 200, 200);
+        if (i % 2 != 0) y += 12;
+    }
+
+    y += 24;
+    compositor_.drawTextShadow(centerX("( 'ESC' to go back )", 0, 320), y, "( 'ESC' to go back )", 150, 150, 150);
+}
+
+void TitleScreen::drawOptions()
+{
+    compositor_.clear(0, 0, 0, 255);
+    drawRedFrame(compositor_, 40, 40, 240, 120);
+
+    int y = 56;
+    compositor_.drawTextShadow(centerX("GAME OPTIONS", 0, 320), y, "GAME OPTIONS", 255, 255, 100);
+    y += 24;
+
+    compositor_.drawTextShadow(centerX("S - Sound (On/Off)", 0, 320), y, "S - Sound (On/Off)", 200, 200, 200);
+    y += 16;
+    compositor_.drawTextShadow(centerX("D - Delay (1-9)", 0, 320), y, "D - Delay (1-9)", 200, 200, 200);
+    y += 24;
+
+    compositor_.drawTextShadow(centerX("( 'ESC' to go back )", 0, 320), y, "( 'ESC' to go back )", 150, 150, 150);
+}
+
 void TitleScreen::drawTitleMenu()
 {
     // Menu is book + text on black (ASM keeps frozen intro.32 underneath; avoid
@@ -406,6 +462,12 @@ void TitleScreen::render()
     case TitleState::TitleMenu:
         drawTitleMenu();
         break;
+    case TitleState::Controls:
+        drawControls();
+        break;
+    case TitleState::Options:
+        drawOptions();
+        break;
     case TitleState::CharacterUi:
         character_ui_.render(compositor_);
         break;
@@ -475,6 +537,14 @@ void TitleScreen::tick(const platform::KeyState &keys)
         return;
     }
 
+    if (state_ == TitleState::Controls || state_ == TitleState::Options) {
+        if (keys.escape) {
+            state_ = TitleState::TitleMenu;
+            return;
+        }
+        return;
+    }
+
     if (state_ == TitleState::TitleMenu) {
         tickBookAnimation();
         if (keys.escape) {
@@ -507,8 +577,8 @@ void TitleScreen::tick(const platform::KeyState &keys)
             character_ui_.startChooseParty(roster_);
             return;
         }
-        if (keys.key_m || keys.key_o) {
-            // ASM @ $13E4 (M) / $13F0 (O) — controls/options panels; not implemented yet.
+        if (keys.key_m) { state_ = TitleState::Controls; return; } if (keys.key_o) {
+            state_ = TitleState::Options;
             return;
         }
     }

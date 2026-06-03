@@ -6,6 +6,9 @@
 
 #include "mm2/platform/Platform.h"
 
+#include "mm2_create_character.h"
+#include "mm2_image32_codec.h"
+
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -25,6 +28,32 @@ constexpr int kItemNameLen = 12;
 constexpr int kMaxParty = 8;
 constexpr int kMaxCharacters = 6;
 
+static const char *kRaceNames[] = {"Human", "Elf", "Dwarf", "Gnome", "Half-Orc"};
+static const char *kAlignNames[] = {"Good", "Neutral", "Evil"};
+static const char *kSexNames[] = {"Male", "Female"};
+static const char *kStatKeys[] = {"A", "B", "C", "D", "E", "F", "G"};
+static const char *kStatLongNames[] = {"Might", "Intellect", "Personality", "Endurance", "Speed", "Accuracy",
+                                       "Luck"};
+
+int statIndexFromKey(char key)
+{
+    if (key >= 'A' && key <= 'G') {
+        return key - 'A';
+    }
+    return -1;
+}
+
+void statValues(const Mm2CreateStats &stats, uint8_t out[MM2_CREATE_STAT_COUNT])
+{
+    out[0] = stats.might;
+    out[1] = stats.intelligence;
+    out[2] = stats.personality;
+    out[3] = stats.endurance;
+    out[4] = stats.speed;
+    out[5] = stats.accuracy;
+    out[6] = stats.luck;
+}
+
 static const char *kClassNames[] = {
     "Knight", "Paladin", "Archer", "Cleric", "Sorcerer", "Robber", "Ninja", "Barbarian",
 };
@@ -33,7 +62,7 @@ static const char *kClassAbbrevs[] = {"K", "P", "A", "C", "S", "R", "N", "B"};
 // original "Kni/Pal/Arc/Cle/Sor/Rob/Nin/Bar" column in the WinUAE screenshot).
 static const char *kClassAbbrev3[] = {"Kni", "Pal", "Arc", "Cle", "Sor", "Rob", "Nin", "Bar"};
 // Home-town byte ($0B & 0x7F): 1..5. See EXTRACTED/docs/06-roster-format.md.
-static const char *kTownNames[] = {"?", "Middlegate", "Sandsobar", "Vulcania", "Atlantium", "Tundara"};
+static const char *kTownNames[] = {"?", "Middlegate", "Atlantium", "Tundara", "Vulcania", "Sandsobar"};
 static const char *kAlignHeaderNames[] = {
     "Good", "Neut", "Evil",
 };
@@ -127,6 +156,14 @@ void drawCellHorizRule(gfx::ScreenCompositor &c, int row, int col, int len, uint
     }
 }
 
+void drawCellDotLeader(gfx::ScreenCompositor &c, int row, int col, int len, uint8_t r = 255, uint8_t g = 255,
+                       uint8_t b = 255)
+{
+    for (int i = 0; i < len; ++i) {
+        drawCellText(c, row, col + i, (i & 1) ? " " : ".", r, g, b);
+    }
+}
+
 void drawCenteredHorizRule(gfx::ScreenCompositor &c, int row, int total_cols, int len, uint8_t r = 255,
                            uint8_t g = 255, uint8_t b = 255)
 {
@@ -163,12 +200,67 @@ void drawRedBorder(gfx::ScreenCompositor &c, int row, int col, int width_cells, 
     c.drawConsoleBox(row, col, width_cells, height_cells, kBorderR, kBorderG, kBorderB);
 }
 
+int borderBottomRow(int border_row, int border_h) { return border_row + border_h - 1; }
+
+// Label embedded in a console-box border row: black-out the red bar segment, then draw text.
+void drawBorderIntegratedText(gfx::ScreenCompositor &c, int row, int border_col, int border_w_cells,
+                              const char *text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255)
+{
+    using namespace amiga_layout;
+    const int len = static_cast<int>(std::strlen(text));
+    if (len <= 0 || len > border_w_cells - 2) {
+        return;
+    }
+    const int text_col = border_col + (border_w_cells - len) / 2;
+    c.fillRect(cellX(text_col), cellY(row), len * kCellW, kCellH, 0, 0, 0);
+    drawCellText(c, row, text_col, text, r, g, b);
+}
+
+void drawBorderIntegratedTextAt(gfx::ScreenCompositor &c, int row, int col, const char *text, uint8_t r = 255,
+                                uint8_t g = 255, uint8_t b = 255)
+{
+    using namespace amiga_layout;
+    const int len = static_cast<int>(std::strlen(text));
+    if (len <= 0) {
+        return;
+    }
+    c.fillRect(cellX(col), cellY(row), len * kCellW, kCellH, 0, 0, 0);
+    drawCellText(c, row, col, text, r, g, b);
+}
+
+// Two section labels on one horizontal rule row, e.g. "-----( Equipped )-------( Backpack )-----".
+void drawDoubleSectionHeader(gfx::ScreenCompositor &c, int row, int col, int width_cells, const char *label1,
+                             const char *label2, uint8_t r = 200, uint8_t g = 200, uint8_t b = 200)
+{
+    const int l1 = static_cast<int>(std::strlen(label1));
+    const int l2 = static_cast<int>(std::strlen(label2));
+    if (width_cells <= l1 + l2) {
+        drawCellText(c, row, col, label1, r, g, b);
+        return;
+    }
+    const int pad = width_cells - l1 - l2;
+    const int left_rule = pad / 4;
+    const int right_rule = pad / 4;
+    const int mid_rule = pad - left_rule - right_rule;
+    int cx = col;
+    drawCellHorizRule(c, row, cx, left_rule, r, g, b);
+    cx += left_rule;
+    drawCellText(c, row, cx, label1, r, g, b);
+    cx += l1;
+    drawCellHorizRule(c, row, cx, mid_rule, r, g, b);
+    cx += mid_rule;
+    drawCellText(c, row, cx, label2, r, g, b);
+    cx += l2;
+    drawCellHorizRule(c, row, cx, right_rule, r, g, b);
+}
+
 class AmigaCharacterUi final : public ICharacterUi {
 public:
     bool init(const char *data_dir) override
     {
         data_dir_ = data_dir;
         loadItems();
+        loadThrowAsset();
         return true;
     }
 
@@ -178,6 +270,8 @@ public:
             platform::freeFileBuffer(item_names_);
             item_names_ = nullptr;
         }
+        mm2_image32_free(&throw_);
+        has_throw_ = false;
     }
 
     void beginViewParty(Mm2RosterFile &roster) override
@@ -238,59 +332,68 @@ public:
     void beginCreateCharacter(Mm2RosterFile &roster, int slot) override
     {
         roster_ = &roster;
-        create_mode_ = CreateMode::SlotPicker;
-        if (slot >= 0 && slot < kPlayableSlots) {
+        if (slot >= 0 && slot < kPlayableSlots && mm2_roster_slot_is_empty(&roster_->records[slot])) {
             create_slot_ = slot;
         } else {
             create_slot_ = findFirstEmptySlot();
         }
-        create_pick_index_ = 0;
+        if (create_slot_ < 0 || !mm2_roster_slot_is_empty(&roster_->records[create_slot_])) {
+            create_active_ = false;
+            return;
+        }
+        create_active_ = true;
+        create_step_ = CreateStep::StatRoll;
+        create_exchange_first_ = -1;
+        create_rng_ = 0xC0FFEE01u;
+        mm2_create_pending_init(&pending_);
+        pending_.class_id = -1;
+        startThrowAnimation(true);
     }
 
     UiResult tickCreateCharacter(const platform::KeyState &keys) override
     {
-        if (keys.escape) {
-            if (create_mode_ == CreateMode::PendingSteps) {
-                create_mode_ = CreateMode::SlotPicker;
-                return UiResult::Continue;
-            }
+        if (!create_active_) {
             return UiResult::Cancel;
         }
 
-        if (create_mode_ == CreateMode::SlotPicker) {
-            if (keys.key_c || keys.up) {
-                advanceCreateSlot(-1);
+        if (create_step_ == CreateStep::StatRoll) {
+            tickThrowAnimation();
+        }
+
+        if (keys.escape) {
+            if (create_step_ == CreateStep::StatRoll) {
+                return UiResult::Cancel;
             }
-            if (keys.down) {
-                advanceCreateSlot(1);
-            }
-            if (keys.left) {
-                create_pick_index_ = (create_pick_index_ + 3) % 4;
-            }
-            if (keys.right) {
-                create_pick_index_ = (create_pick_index_ + 1) % 4;
-            }
-            if (keys.enter && mm2_roster_slot_is_empty(&roster_->records[create_slot_])) {
-                create_mode_ = CreateMode::PendingSteps;
-            }
+            rewindCreateStep(create_step_, pending_);
+            create_step_ = previousCreateStep(create_step_);
+            create_exchange_first_ = -1;
+            return UiResult::Continue;
+        }
+
+        switch (create_step_) {
+        case CreateStep::StatRoll:
+            return tickCreateStatRoll(keys);
+        case CreateStep::Race:
+            return tickCreateRace(keys);
+        case CreateStep::Alignment:
+            return tickCreateAlignment(keys);
+        case CreateStep::Sex:
+            return tickCreateSex(keys);
+        case CreateStep::Name:
+            return tickCreateName(keys);
         }
         return UiResult::Continue;
     }
 
     void renderCreateCharacter(gfx::ScreenCompositor &compositor) override
     {
-        using namespace amiga_layout;
         compositor.clear(0, 0, 0, 255);
-        drawRedBorder(compositor, kRosterBorderRow, kRosterBorderCol, kRosterBorderW, kRosterBorderH);
-        drawCellText(compositor, 4, 4, "CREATE CHARACTER (ASM $944C)");
-        char line[48];
-        std::snprintf(line, sizeof(line), "Slot %2d [empty=%d]", create_slot_,
-                      mm2_roster_slot_is_empty(&roster_->records[create_slot_]) ? 1 : 0);
-        drawCellText(compositor, 6, 4, line, 255, 255, 128);
-        if (create_mode_ == CreateMode::PendingSteps) {
-            drawCellText(compositor, 8, 4, "CREATE — steps not implemented", 255, 200, 128);
+        if (!create_active_) {
+            drawCellText(compositor, 4, 4, "No empty roster slots.");
+            return;
         }
-        drawCellText(compositor, kRosterFooterRow, kRosterFooterCol, "( 'ESC' to go back )", 180, 180, 180);
+        renderCreateBase(compositor);
+        renderCreateRightPanel(compositor);
     }
 
     void beginChooseParty(Mm2RosterFile &roster) override
@@ -358,7 +461,7 @@ public:
 
 private:
     enum class ViewMode { RosterList, CharacterSheet };
-    enum class CreateMode { SlotPicker, PendingSteps };
+    enum class CreateStep { StatRoll, Race, Alignment, Sex, Name };
     enum class PartyPage { Characters, Hirelings };
     enum class PartySub { List, Sheet };
 
@@ -416,18 +519,459 @@ private:
                 return i;
             }
         }
-        return 0;
+        return -1;
     }
 
-    void advanceCreateSlot(int delta)
+    static CreateStep previousCreateStep(CreateStep step)
     {
-        int slot = create_slot_;
-        for (int step = 0; step < kPlayableSlots; ++step) {
-            slot = (slot + delta + kPlayableSlots) % kPlayableSlots;
-            if (mm2_roster_slot_is_empty(&roster_->records[slot])) {
-                create_slot_ = slot;
-                return;
+        switch (step) {
+        case CreateStep::Race:
+            return CreateStep::StatRoll;
+        case CreateStep::Alignment:
+            return CreateStep::Race;
+        case CreateStep::Sex:
+            return CreateStep::Alignment;
+        case CreateStep::Name:
+            return CreateStep::Sex;
+        default:
+            return CreateStep::StatRoll;
+        }
+    }
+
+    static void rewindCreateStep(CreateStep step, Mm2PendingCharacter &pending)
+    {
+        switch (step) {
+        case CreateStep::Name:
+            pending.name[0] = '\0';
+            pending.sex = -1;
+            break;
+        case CreateStep::Sex:
+            pending.sex = -1;
+            break;
+        case CreateStep::Alignment:
+            pending.alignment = -1;
+            break;
+        case CreateStep::Race:
+            pending.race = -1;
+            break;
+        default:
+            break;
+        }
+    }
+
+    void loadThrowAsset()
+    {
+        has_throw_ = false;
+        mm2_image32_free(&throw_);
+        if (!data_dir_) {
+            return;
+        }
+        char path[512];
+        if (!joinPath(path, sizeof(path), data_dir_, "throw.32")) {
+            return;
+        }
+        mm2_image32_set_preview_opaque(0);
+        if (mm2_image32_load_file(path, &throw_) != MM2_IMAGE32_OK || throw_.frame_count <= 0
+            || !throw_.frames[0].rgba) {
+            mm2_image32_free(&throw_);
+            return;
+        }
+        has_throw_ = true;
+    }
+
+    UiResult saveCreatedCharacter()
+    {
+        if (!roster_ || create_slot_ < 0) {
+            return UiResult::Cancel;
+        }
+        mm2_create_build_record(&pending_, &roster_->records[create_slot_]);
+        char path[512];
+        if (!data_dir_ || !joinPath(path, sizeof(path), data_dir_, "roster.dat")) {
+            return UiResult::Cancel;
+        }
+        if (mm2_roster_save_file(path, roster_) != MM2_ROSTER_OK) {
+            return UiResult::Cancel;
+        }
+        create_active_ = false;
+        return UiResult::Done;
+    }
+
+    UiResult tickCreateStatRoll(const platform::KeyState &keys)
+    {
+        if (throw_anim_playing_) {
+            return UiResult::Continue;
+        }
+        if (keys.enter) {
+            startThrowAnimation(true);
+            return UiResult::Continue;
+        }
+        if (keys.last_ascii == 'G') {
+            if (create_exchange_first_ < 0) {
+                create_exchange_first_ = 6;
+            } else {
+                mm2_create_swap_stats(&pending_.rolled, create_exchange_first_, 6);
+                create_exchange_first_ = -1;
             }
+            return UiResult::Continue;
+        }
+        const int stat_key = statIndexFromKey(keys.last_ascii);
+        if (stat_key >= 0 && stat_key < 6) {
+            if (create_exchange_first_ < 0) {
+                create_exchange_first_ = stat_key;
+            } else {
+                mm2_create_swap_stats(&pending_.rolled, create_exchange_first_, stat_key);
+                create_exchange_first_ = -1;
+            }
+            return UiResult::Continue;
+        }
+        if (keys.last_ascii >= '1' && keys.last_ascii <= '8') {
+            const int class_id = keys.last_ascii - '1';
+            if (mm2_create_class_eligible(class_id, &pending_.rolled)) {
+                pending_.class_id = static_cast<int8_t>(class_id);
+                pending_.race = -1;
+                pending_.alignment = -1;
+                pending_.sex = -1;
+                create_exchange_first_ = -1;
+                create_step_ = CreateStep::Race;
+            }
+            return UiResult::Continue;
+        }
+        return UiResult::Continue;
+    }
+
+    void startThrowAnimation(bool roll_when_done)
+    {
+        if (!has_throw_ || throw_.frame_count <= 1) {
+            if (roll_when_done) {
+                mm2_create_roll_stats(&pending_.rolled, &create_rng_);
+                pending_.class_id = -1;
+                create_exchange_first_ = -1;
+            }
+            throw_anim_playing_ = false;
+            throw_anim_frame_ = 0;
+            return;
+        }
+        throw_anim_playing_ = true;
+        throw_anim_frame_ = 1;
+        throw_anim_gate_ = 0;
+        throw_roll_when_done_ = roll_when_done;
+    }
+
+    void tickThrowAnimation()
+    {
+        if (!throw_anim_playing_ || !has_throw_) {
+            return;
+        }
+        if (throw_anim_gate_ < amiga_layout::kCreateThrowAnimStepTicks) {
+            ++throw_anim_gate_;
+            return;
+        }
+        throw_anim_gate_ = 0;
+        if (throw_anim_frame_ + 1 < static_cast<int>(throw_.frame_count)) {
+            ++throw_anim_frame_;
+            return;
+        }
+        throw_anim_playing_ = false;
+        throw_anim_frame_ = 0;
+        if (throw_roll_when_done_) {
+            mm2_create_roll_stats(&pending_.rolled, &create_rng_);
+            pending_.class_id = -1;
+            create_exchange_first_ = -1;
+            throw_roll_when_done_ = false;
+        }
+    }
+
+    void blitThrowFrame(gfx::ScreenCompositor &c, int frame_index) const
+    {
+        if (!has_throw_ || frame_index < 0 || frame_index >= static_cast<int>(throw_.frame_count)) {
+            return;
+        }
+        const mm2_image32_frame &frame = throw_.frames[frame_index];
+        if (!frame.rgba) {
+            return;
+        }
+        using namespace amiga_layout;
+        const int anchor_x = kCreateThrowBlitCol * kCellW;
+        int x;
+        int y;
+        if (frame_index == 0) {
+            x = (gfx::ScreenCompositor::kWidth - kCreateTableauW) / 2;
+            y = kCreateThrowRestY;
+        } else {
+            x = anchor_x - frame.width;
+            y = kCreateThrowAnimY;
+        }
+        c.blitRgba(frame.rgba, frame.width, frame.height, x, y);
+    }
+
+    int createProgressLineCount() const
+    {
+        int n = 0;
+        if (create_step_ >= CreateStep::Race && pending_.class_id >= 0) {
+            ++n;
+        }
+        if (create_step_ >= CreateStep::Alignment && pending_.race >= 0) {
+            ++n;
+        }
+        if (create_step_ >= CreateStep::Sex && pending_.alignment >= 0) {
+            ++n;
+        }
+        if (create_step_ >= CreateStep::Name && pending_.sex >= 0) {
+            ++n;
+        }
+        return n;
+    }
+
+    void drawCreateProgressLine(gfx::ScreenCompositor &c, int cell_row, const char *label, const char *value)
+    {
+        using namespace amiga_layout;
+        char lbl[16];
+        std::snprintf(lbl, sizeof(lbl), "%s=", label);
+        drawCellText(c, cell_row, kCreateProgressLabelCol, lbl);
+        drawCellText(c, cell_row, kCreateProgressValueCol, value);
+    }
+
+    void drawCreateNameLine(gfx::ScreenCompositor &c, int cell_row)
+    {
+        using namespace amiga_layout;
+        drawCellText(c, cell_row, kCreateProgressLabelCol, "Name :");
+        drawCellText(c, cell_row, kCreateProgressValueCol, pending_.name);
+        const int cursor_col =
+            kCreateProgressValueCol + static_cast<int>(std::strlen(pending_.name));
+        drawCellText(c, cell_row, cursor_col, "|");
+    }
+
+    void renderCreateProgress(gfx::ScreenCompositor &c)
+    {
+        using namespace amiga_layout;
+        int row = kCreateStatRowBase;
+        if (create_step_ >= CreateStep::Race && pending_.class_id >= 0) {
+            drawCreateProgressLine(c, row++, "Class", kClassNames[pending_.class_id]);
+        }
+        if (create_step_ >= CreateStep::Alignment && pending_.race >= 0) {
+            drawCreateProgressLine(c, row++, "Race", kRaceNames[pending_.race]);
+        }
+        if (create_step_ >= CreateStep::Sex && pending_.alignment >= 0) {
+            drawCreateProgressLine(c, row++, "Align", kAlignNames[pending_.alignment]);
+        }
+        if (create_step_ >= CreateStep::Name && pending_.sex >= 0) {
+            drawCreateProgressLine(c, row++, "Sex", kSexNames[pending_.sex]);
+        }
+        if (create_step_ == CreateStep::Name) {
+            drawCreateNameLine(c, row);
+        }
+    }
+
+    void renderCreateFooter(gfx::ScreenCompositor &c)
+    {
+        using namespace amiga_layout;
+        switch (create_step_) {
+        case CreateStep::StatRoll:
+            drawCellText(c, kCreatePromptRow1, kCreatePromptCol, "Select Class (1-8)", 180, 180, 180);
+            drawCellText(c, kCreatePromptRow2, kCreatePromptCol, "Exchange Stat (A-G) (ENT) to Reroll", 180, 180,
+                         180);
+            break;
+        case CreateStep::Race:
+            drawCellText(c, kCreatePromptRow1, kCreatePromptCol, "Select Race (1-5)", 180, 180, 180);
+            break;
+        case CreateStep::Alignment:
+            drawCellText(c, kCreatePromptRow1, kCreatePromptCol, "Select Alignment (1-3)", 180, 180, 180);
+            break;
+        case CreateStep::Sex:
+            drawCellText(c, kCreatePromptRow1, kCreatePromptCol, "Select Sex (1-2)", 180, 180, 180);
+            break;
+        case CreateStep::Name:
+            drawCenteredCellText(c, kCreatePromptRow1, kCreateTextCols,
+                                 "Type Name of Character and", 180, 180, 180);
+            drawCenteredCellText(c, kCreatePromptRow2, kCreateTextCols, "Press 'Return' to Save", 180, 180,
+                                 180);
+            break;
+        }
+        drawBorderIntegratedText(c, borderBottomRow(kCreateBorderRow, kCreateBorderH), kCreateBorderCol, kCreateBorderW,
+                                 "( 'ESC' to go back )", 180, 180, 180);
+    }
+
+    UiResult tickCreateRace(const platform::KeyState &keys)
+    {
+        if (keys.last_ascii >= '1' && keys.last_ascii <= '5') {
+            pending_.race = static_cast<int8_t>(keys.last_ascii - '1');
+            mm2_create_apply_race(pending_.race, &pending_.rolled, &pending_.modified);
+            create_step_ = CreateStep::Alignment;
+        }
+        return UiResult::Continue;
+    }
+
+    UiResult tickCreateAlignment(const platform::KeyState &keys)
+    {
+        if (keys.last_ascii >= '1' && keys.last_ascii <= '3') {
+            pending_.alignment = static_cast<int8_t>(keys.last_ascii - '1');
+            create_step_ = CreateStep::Sex;
+        }
+        return UiResult::Continue;
+    }
+
+    UiResult tickCreateSex(const platform::KeyState &keys)
+    {
+        if (keys.last_ascii >= '1' && keys.last_ascii <= '2') {
+            pending_.sex = static_cast<int8_t>(keys.last_ascii - '1');
+            pending_.name[0] = '\0';
+            create_step_ = CreateStep::Name;
+        }
+        return UiResult::Continue;
+    }
+
+    UiResult tickCreateName(const platform::KeyState &keys)
+    {
+        if (keys.backspace) {
+            const std::size_t len = std::strlen(pending_.name);
+            if (len > 0) {
+                pending_.name[len - 1] = '\0';
+            }
+            return UiResult::Continue;
+        }
+        if (keys.enter) {
+            if (pending_.name[0] != '\0') {
+                return saveCreatedCharacter();
+            }
+            return UiResult::Continue;
+        }
+        if (keys.last_ascii >= 'A' && keys.last_ascii <= 'Z') {
+            const std::size_t len = std::strlen(pending_.name);
+            if (len < MM2_CREATE_NAME_MAX) {
+                pending_.name[len] = keys.last_ascii;
+                pending_.name[len + 1] = '\0';
+            }
+        } else if (keys.last_ascii >= '0' && keys.last_ascii <= '9') {
+            const std::size_t len = std::strlen(pending_.name);
+            if (len < MM2_CREATE_NAME_MAX) {
+                pending_.name[len] = keys.last_ascii;
+                pending_.name[len + 1] = '\0';
+            }
+        } else if (keys.space) {
+            const std::size_t len = std::strlen(pending_.name);
+            if (len > 0 && len < MM2_CREATE_NAME_MAX) {
+                pending_.name[len] = ' ';
+                pending_.name[len + 1] = '\0';
+            }
+        }
+        return UiResult::Continue;
+    }
+
+    const Mm2CreateStats &createDisplayStats() const
+    {
+        if (create_step_ >= CreateStep::Alignment && pending_.race >= 0) {
+            return pending_.modified;
+        }
+        return pending_.rolled;
+    }
+
+    void renderCreateBase(gfx::ScreenCompositor &c)
+    {
+        using namespace amiga_layout;
+
+        drawRedBorder(c, kCreateBorderRow, kCreateBorderCol, kCreateBorderW, kCreateBorderH);
+        drawBorderIntegratedText(c, kCreateBorderRow, kCreateBorderCol, kCreateBorderW, "( Create New Characters )");
+
+        const int throw_frame =
+            (create_step_ == CreateStep::StatRoll && throw_anim_playing_) ? throw_anim_frame_ : 0;
+        blitThrowFrame(c, 0);
+        if (throw_frame > 0) {
+            blitThrowFrame(c, throw_frame);
+        }
+
+        uint8_t vals[MM2_CREATE_STAT_COUNT];
+        statValues(createDisplayStats(), vals);
+
+        for (int row = 0; row < MM2_CREATE_STAT_COUNT; ++row) {
+            const int cell_row = kCreateStatRowBase + row;
+            char letter_line[8];
+            std::snprintf(letter_line, sizeof(letter_line), "%c -", kStatKeys[row][0]);
+            drawCellText(c, cell_row, kCreateStatColLetter, letter_line);
+
+            const bool exchange_pick = create_step_ == CreateStep::StatRoll && create_exchange_first_ == row;
+            if (exchange_pick) {
+                drawCellText(c, cell_row, kCreateStatColName, kStatLongNames[row], 255, 255, 128);
+            } else {
+                drawCellText(c, cell_row, kCreateStatColName, kStatLongNames[row]);
+            }
+
+            const int dots_col = kCreateStatColName + static_cast<int>(std::strlen(kStatLongNames[row])) + 1;
+            const int dots_len = kCreateStatColEquals - dots_col;
+            if (dots_len > 0) {
+                drawCellDotLeader(c, cell_row, dots_col, dots_len);
+            }
+            drawCellText(c, cell_row, kCreateStatColEquals, "= ");
+            char val_buf[8];
+            std::snprintf(val_buf, sizeof(val_buf), "%2u", vals[row]);
+            drawCellText(c, cell_row, kCreateStatColValue, val_buf);
+        }
+
+        renderCreateFooter(c);
+    }
+
+    void drawCreateClassRow(gfx::ScreenCompositor &c, int cell_row, int cls)
+    {
+        using namespace amiga_layout;
+        const bool picked = pending_.class_id == cls;
+        const bool eligible = mm2_create_class_eligible(cls, &pending_.rolled);
+        const uint8_t r = picked ? 255 : 220;
+        const uint8_t g = picked ? 220 : 220;
+        const uint8_t b = picked ? 128 : 220;
+
+        if (eligible) {
+            char digit[4];
+            std::snprintf(digit, sizeof(digit), "%d", cls + 1);
+            drawCellText(c, cell_row, kCreateClassDigitCol, digit, r, g, b);
+        }
+        // Fixed " - " separator on every row; digit only when eligible (WinUAE stat-roll layout).
+        drawCellText(c, cell_row, kCreateClassSepCol, " - ", r, g, b);
+        drawCellText(c, cell_row, kCreateClassNameCol, kClassNames[cls], r, g, b);
+    }
+
+    void drawCreateNumberChoiceRow(gfx::ScreenCompositor &c, int cell_row, int choice_index, const char *label)
+    {
+        using namespace amiga_layout;
+        char prefix[8];
+        std::snprintf(prefix, sizeof(prefix), "%d) ", choice_index + 1);
+        drawCellText(c, cell_row, kCreateClassDigitCol, prefix);
+        drawCellText(c, cell_row, kCreateClassNameCol, label);
+    }
+
+    void renderCreateRightPanel(gfx::ScreenCompositor &c)
+    {
+        using namespace amiga_layout;
+
+        if (create_step_ == CreateStep::StatRoll) {
+            for (int cls = 0; cls < MM2_CREATE_CLASS_COUNT; ++cls) {
+                drawCreateClassRow(c, kCreateStatRowBase + cls, cls);
+            }
+            return;
+        }
+
+        renderCreateProgress(c);
+        const int choice_base = kCreateStatRowBase + createProgressLineCount();
+        if (create_step_ == CreateStep::Name) {
+            return;
+        }
+
+        switch (create_step_) {
+        case CreateStep::Race:
+            for (int i = 0; i < MM2_CREATE_RACE_COUNT; ++i) {
+                drawCreateNumberChoiceRow(c, choice_base + i, i, kRaceNames[i]);
+            }
+            break;
+        case CreateStep::Alignment:
+            for (int i = 0; i < MM2_CREATE_ALIGN_COUNT; ++i) {
+                drawCreateNumberChoiceRow(c, choice_base + i, i, kAlignNames[i]);
+            }
+            break;
+        case CreateStep::Sex:
+            for (int i = 0; i < MM2_CREATE_SEX_COUNT; ++i) {
+                drawCreateNumberChoiceRow(c, choice_base + i, i, kSexNames[i]);
+            }
+            break;
+        default:
+            break;
         }
     }
 
@@ -438,7 +982,7 @@ private:
         drawRedBorder(c, kRosterBorderRow, kRosterBorderCol, kRosterBorderW, kRosterBorderH);
 
         const char *header = (roster_page_offset_ == 0) ? "(View All)" : "(Hirelings)";
-        drawCenteredCellText(c, kRosterViewAllRow, kRosterTextCols, header);
+        drawBorderIntegratedText(c, kRosterBorderRow, kRosterBorderCol, kRosterBorderW, header);
         drawCenteredCellText(c, kRosterTitleRow, kRosterTextCols, "Characters");
         drawCenteredHorizRule(c, kRosterUnderlineRow, kRosterTextCols, 12);
 
@@ -455,8 +999,9 @@ private:
                 const Mm2RosterRecord &rec = roster_->records[roster_idx];
                 char name[16];
                 mm2_roster_name_to_cstr(&rec, name, sizeof(name));
-                std::snprintf(line, sizeof(line), "%c-%s %s/%u", letter, name, classAbbrev(rec.class_id),
-                              rec.level);
+                // Original LAB_470: "A- " + 11-byte space-padded name + " K/level".
+                std::snprintf(line, sizeof(line), "%c- %-*s %s/%u", letter, MM2_ROSTER_NAME_SIZE, name,
+                              classAbbrev(rec.class_id), rec.level);
             }
             drawCellText(c, row, col, line);
         }
@@ -465,7 +1010,8 @@ private:
         drawCenteredCellText(c, kRosterFooterRow + 1, kRosterTextCols,
                              roster_page_offset_ == 0 ? "'Space' for Hirelings" : "'Space' for Characters", 180,
                              180, 180);
-        drawCenteredCellText(c, kRosterFooterRow + 2, kRosterTextCols, "( 'ESC' to go back )", 180, 180, 180);
+        drawBorderIntegratedText(c, borderBottomRow(kRosterBorderRow, kRosterBorderH), kRosterBorderCol,
+                                 kRosterBorderW, "( 'ESC' to go back )", 180, 180, 180);
     }
 
     void renderCharacterSheet(gfx::ScreenCompositor &c)
@@ -486,10 +1032,7 @@ private:
         std::snprintf(header, sizeof(header), "%c) %s: %s %s %s %s%s", sheet_slot_letter_, name,
                       rec.sex ? "F" : "M", alignHeaderName(rec.alignment_base), raceHeaderName(rec.race),
                       className(rec.class_id), (rec.class_quest_guild_mask & 0x80) ? "+" : "");
-                      
-        // Clear the background behind the header text so it breaks the top border
-        c.fillRect(cellX(kSheetHeaderCol), cellY(kSheetHeaderRow), std::strlen(header) * kCellW, kCellH, 0, 0, 0);
-        drawCellText(c, kSheetHeaderRow, kSheetHeaderCol, header);
+        drawBorderIntegratedTextAt(c, kSheetBorderRow, kSheetHeaderCol, header);
 
         char buf[48];
         const int r0 = kSheetStatRowBase;
@@ -538,10 +1081,8 @@ private:
         std::snprintf(buf, sizeof(buf), "Lck=%u", rec.luck_base);
         drawCellText(c, r0 + 7, kSheetStatColLeft, buf);
 
-        drawSectionHeader(c, kSheetDividerRow, kSheetEquipCol, kSheetBackpackCol - kSheetEquipCol, " Equipped ",
-                          200, 200, 200);
-        drawSectionHeader(c, kSheetDividerRow, kSheetBackpackCol,
-                          kSheetBorderCol + kSheetBorderW - 2 - kSheetBackpackCol + 1, " Backpack ", 200, 200, 200);
+        const int divider_w = kSheetBorderCol + kSheetBorderW - 2 - kSheetEquipCol + 1;
+        drawDoubleSectionHeader(c, kSheetDividerRow, kSheetEquipCol, divider_w, " Equipped ", " Backpack ");
 
         static const char kPackLetters[] = "ABCDEF";
         for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
@@ -567,7 +1108,8 @@ private:
 
         drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "( Ctrl )-'N' Re-Name Character", 180, 180, 180);
         drawCellText(c, kSheetFooterRow2, kSheetFooterCol, "( Ctrl )-'D' Delete Character", 180, 180, 180);
-        drawCellText(c, kSheetFooterRow3, kSheetFooterCol, "( 'ESC' to go back )", 180, 180, 180);
+        drawBorderIntegratedText(c, borderBottomRow(kSheetBorderRow, kSheetBorderH), kSheetBorderCol, kSheetBorderW,
+                                 "( 'ESC' to go back )", 180, 180, 180);
     }
 
     // ---- Choose-party helpers ------------------------------------------------
@@ -674,7 +1216,7 @@ private:
 
         char title[32];
         std::snprintf(title, sizeof(title), "( %d-%s )", party_town_, townName(static_cast<uint8_t>(party_town_)));
-        drawCenteredCellText(c, kPartyTitleRow, kPartyTextCols, title);
+        drawBorderIntegratedText(c, kRosterBorderRow, kRosterBorderCol, kRosterBorderW, title);
 
         drawCellText(c, kPartyOtherTownsRow, kPartyOtherTownsCol, "Other Towns");
         drawCellText(c, kPartyTownKeysRow, kPartyTownKeysCol, "'1' - '5'");
@@ -720,8 +1262,10 @@ private:
             const Mm2RosterRecord &rec = roster_->records[slot];
             char name[16];
             mm2_roster_name_to_cstr(&rec, name, sizeof(name));
-            char line[40];
-            std::snprintf(line, sizeof(line), "%c-%s %s", glyph, name, classAbbrev3(rec.class_id));
+            char line[48];
+            // Inn party list: same 11-char name field, then 3-letter class abbrev.
+            std::snprintf(line, sizeof(line), "%c- %-*s %s", glyph, MM2_ROSTER_NAME_SIZE, name,
+                          classAbbrev3(rec.class_id));
             drawCellText(c, row, text_col, line);
             if (isPartyMember(slot)) {
                 drawCheckMark(c, row, check_col);
@@ -734,7 +1278,8 @@ private:
                      (party_page_ == PartyPage::Hirelings) ? "'Space' for Characters" : "'Space' for Hirelings", 200,
                      200, 200);
         drawCellText(c, kPartyFooterHireRow, kPartyFooterExitCol, "'Z' to exit", 200, 200, 200);
-        drawCenteredCellText(c, kPartyFooterEscRow, kPartyTextCols, "( 'ESC' to exit game )", 180, 180, 180);
+        drawBorderIntegratedText(c, borderBottomRow(kRosterBorderRow, kRosterBorderH), kRosterBorderCol, kRosterBorderW,
+                                 "( 'ESC' to exit game )", 180, 180, 180);
     }
 
     const char *data_dir_ = nullptr;
@@ -748,9 +1293,18 @@ private:
     int sheet_roster_index_ = -1;
     char sheet_slot_letter_ = 'A';
 
-    CreateMode create_mode_ = CreateMode::SlotPicker;
+    CreateStep create_step_ = CreateStep::StatRoll;
     int create_slot_ = 0;
-    int create_pick_index_ = 0;
+    bool create_active_ = false;
+    int create_exchange_first_ = -1;
+    uint32_t create_rng_ = 1;
+    Mm2PendingCharacter pending_{};
+    mm2_image32_file throw_{};
+    bool has_throw_ = false;
+    bool throw_anim_playing_ = false;
+    bool throw_roll_when_done_ = false;
+    int throw_anim_frame_ = 0;
+    int throw_anim_gate_ = 0;
 
     PartyPage party_page_ = PartyPage::Characters;
     PartySub party_sub_ = PartySub::List;

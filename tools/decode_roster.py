@@ -39,8 +39,8 @@ CLASSES = [
 RACES = ["Human", "Elf", "Dwarf", "Gnome", "Half-Orc"]
 ALIGNMENTS = ["Good", "Neutral", "Evil"]
 SEXES = {0: "Male", 1: "Female"}
-TOWNS = {0: "(none)", 1: "Middlegate", 2: "Sandsobar",
-          3: "Vulcania", 4: "Atlantium", 5: "Tundara"}
+TOWNS = {0: "(none)", 1: "Middlegate", 2: "Atlantium",
+          3: "Tundara", 4: "Vulcania", 5: "Sandsobar"}
 
 
 def decode_name(data, off):

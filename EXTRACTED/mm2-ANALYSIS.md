@@ -2,7 +2,7 @@
 
 Working notes for `mm2.capstone.asm` (Capstone 68000 listing) cross-checked with `mm2.asm` (IRA) and the raw `mm2` hunk binary.
 
-> Split docs are now under `EXTRACTED/docs/` and first-pass C lift scaffolding is under `EXTRACTED/decomp/`.
+> Split docs are now under `EXTRACTED/docs/` ([wiki hub](docs/README.md)) and first-pass C lift scaffolding is under `EXTRACTED/decomp/`.
 
 **Status:** Parts 1–12 documented (startup → main loop → map view → party setup). Part 13 lists next traces.
 

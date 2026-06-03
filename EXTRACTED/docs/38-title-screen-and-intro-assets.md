@@ -141,11 +141,14 @@ frozen**; the menu does not cycle them.
 
 See **[`39-title-screen-animation.md`](39-title-screen-animation.md)** for full detail.
 
-- Pegasus: **`intro.32` @ (3,0)** + **one** `introclips` cel at a time, phases **0–4**
-  at per-part **screen** coordinates (not `A4-$632E`/`-$6344`).
-- Peekers: frames **6–10**, **one** random slot at a time.
-- Menu: **frozen** composite; no overlay cycle (`0x1062`).
-- Logo: **black + `nwcp.32`**, vertically centered on **200**px height.
+- Display **320×200**; pegasus: **`intro.32` @ (3,0)** + **one** `introclips` cel at a
+  time, phases **0–4** at per-part screen coords (not `A4-$632E`/`-$6344`).
+- Peekers: frames **6, 8, 9, 10** only (frame **7** = letter-hole cel, not used);
+  **one** random slot; inactive hollows cover-filled before active cel (see doc 39).
+- **TitleMenu:** **black** + `book.32` / menu text — **no** `intro.32` under boxes
+  (Amiga @ `0x1062` keeps frozen VRAM; remake clears black explicitly).
+- Logo: **black + `nwcp.32`**, X = 10, Y centered on **200** px height.
+- Font: `Mm2Font8x8.inc` via `ScreenCompositor`; menu strings plain ASCII.
 
 ---
 
@@ -215,7 +218,8 @@ sheet pointers inside **`0x26BC4`**, not the Y=166 HUD placement.
 
 | 4 | 48×36 | Larger art fragment |
 
-| 5–10 | varies | Used only by attract path **`0x27096`** |
+| 5 | 48×36 | Mouth alt — not in mod-5 loop |
+| 6–10 | varies | Peekers (6,8,9,10) + letter-hole frame 7; **`0x27096`** blits all 11 |
 
 
 

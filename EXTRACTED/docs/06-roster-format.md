@@ -160,10 +160,10 @@ Tail byte indices used by the editor mirror the memcpy order in that routine; se
 | Value | Town |
 |-------|------|
 | 1 | Middlegate |
-| 2 | Sandsobar |
-| 3 | Vulcania |
-| 4 | Atlantium |
-| 5 | Tundara |
+| 2 | Atlantium |
+| 3 | Tundara |
+| 4 | Vulcania |
+| 5 | Sandsobar |
 
 ## ASM Cross-References
 

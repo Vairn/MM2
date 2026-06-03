@@ -2,22 +2,17 @@
 
 This directory splits the big `mm2-ANALYSIS.md` into focused documents that are easier to evolve while reversing and decompiling.
 
-## Document Map
+**Wiki hub:** [`README.md`](README.md) — full index with sections, regeneration commands, and links to all numbered docs.
 
-- `01-startup-init.md`  
-  Boot path, hunk entry, DOS/Exec setup, MANX heap bring-up.
-- `02-runtime-memory-map.md`  
-  `A4` workspace map, thunk tables, and key runtime wrappers.
-- `03-main-loop-and-map.md`  
-  Main scheduler (`LAB_1280`) and overland map renderer (`LAB_24C4`).
-- `04-party-and-session.md`  
-  New game / party copy flow and session restart (`LAB_545E`).
-- `05-open-questions.md`  
-  Unknowns, next trace targets, and TODOs.
-- `06-gfx-loading.md`  
-  Confirmed `.32`/`.dat` asset table and the current loader call path.
-- `07-dat-files-and-formats.md`  
-  MM2-local `.dat` inventory plus confirmed and in-progress format decoding notes.
+## Document Map (core runtime)
+
+- `01-startup-init.md` — Boot path, hunk entry, DOS/Exec setup, MANX heap bring-up.
+- `02-runtime-memory-map.md` — `A4` workspace map, thunk tables, and key runtime wrappers.
+- `03-main-loop-and-map.md` — Main scheduler (`LAB_1280`) and overland map renderer (`LAB_24C4`).
+- `04-party-and-session.md` — New game / party copy flow and session restart (`LAB_545E`).
+- `05-open-questions.md` — Unknowns, next trace targets, and TODOs.
+- `06-gfx-loading.md` — Confirmed `.32`/`.dat` asset table and the current loader call path.
+- `07-dat-files-and-formats.md` — MM2-local `.dat` inventory plus confirmed format decoding notes.
 
 ## Address Rules
 
@@ -30,4 +25,3 @@ This directory splits the big `mm2-ANALYSIS.md` into focused documents that are 
 - `EXTRACTED/mm2.capstone.asm`
 - `EXTRACTED/mm2.asm`
 - `EXTRACTED/mm2-ANALYSIS.md` (full running narrative)
-
