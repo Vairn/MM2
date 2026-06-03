@@ -347,3 +347,11 @@ void mm2_roster_set_name(Mm2RosterRecord *record, const char *name)
         record->name[i] = name[i];
     }
 }
+
+void mm2_roster_clear_record(Mm2RosterRecord *record)
+{
+    if (!record) {
+        return;
+    }
+    memset(record, 0, sizeof(*record));
+}

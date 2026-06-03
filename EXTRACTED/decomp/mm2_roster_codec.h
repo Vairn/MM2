@@ -99,6 +99,7 @@ Mm2RosterError mm2_roster_save_file(const char *path, const Mm2RosterFile *roste
 int mm2_roster_slot_is_empty(const Mm2RosterRecord *record);
 void mm2_roster_name_to_cstr(const Mm2RosterRecord *record, char *out, size_t out_size);
 void mm2_roster_set_name(Mm2RosterRecord *record, const char *name);
+void mm2_roster_clear_record(Mm2RosterRecord *record);
 
 #ifdef __cplusplus
 }

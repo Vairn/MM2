@@ -110,6 +110,210 @@ const char *conditionName(uint8_t c)
     }
 }
 
+// FAQ save-state note: skill nibbles 1..15 map to these names (alphabetical).
+static const char *kSkillNames[] = {
+    "",
+    "Arms Master",
+    "Athlete",
+    "Cartographer",
+    "Crusader",
+    "Diplomat",
+    "Gambler",
+    "Gladiator",
+    "Hero",
+    "Linguist",
+    "Merchant",
+    "Mountaineering",
+    "Navigator",
+    "Pathfinder",
+    "Pickpocket",
+    "Soldier",
+};
+
+struct HirelingMeta {
+    uint32_t base_cost;
+    uint8_t start_level;
+    const char *skills; // space-separated FAQ abbreviations, or nullptr
+};
+
+// FAQ §3-4-1: hireling base cost, starting level, and preset skills (A–X).
+static const HirelingMeta kHirelingMeta[] = {
+    {2, 1, nullptr},       {2, 1, nullptr},       {2, 1, nullptr},
+    {10, 3, "Cru"},        {12, 3, "Car"},        {35, 5, "Lin"},
+    {35, 5, "Ath"},        {25, 6, "Arm"},        {55, 6, "Cru"},
+    {55, 7, "Mou Pat"},    {45, 7, "Gam Pic"},    {200, 9, "Dip Nav"},
+    {250, 9, "Lin Mer"},   {500, 11, "Cru Sol"},  {600, 11, "Arm Pat"},
+    {700, 13, "Dip Her"},  {1200, 13, "Cru Mer"},  {2000, 14, "Gla Sol"},
+    {2000, 16, "Ath Gam"}, {4000, 15, "Arm Gla"}, {6000, 15, "Arm Mou"},
+    {15000, 19, "Dip Gam"}, {25000, 25, "Gam Nav"}, {50000, 21, "Lin Mer"},
+};
+
+static const char *skillNameFromId(uint8_t id)
+{
+    if (id >= 1 && id <= 15) {
+        return kSkillNames[id];
+    }
+    return nullptr;
+}
+
+static const char *skillAbbrevToName(const char *abbrev)
+{
+    if (!abbrev || !abbrev[0]) {
+        return nullptr;
+    }
+    if (std::strncmp(abbrev, "Arm", 3) == 0) {
+        return "Arms Master";
+    }
+    if (std::strncmp(abbrev, "Ath", 3) == 0) {
+        return "Athlete";
+    }
+    if (std::strncmp(abbrev, "Car", 3) == 0) {
+        return "Cartographer";
+    }
+    if (std::strncmp(abbrev, "Cru", 3) == 0) {
+        return "Crusader";
+    }
+    if (std::strncmp(abbrev, "Dip", 3) == 0) {
+        return "Diplomat";
+    }
+    if (std::strncmp(abbrev, "Gam", 3) == 0) {
+        return "Gambler";
+    }
+    if (std::strncmp(abbrev, "Gla", 3) == 0) {
+        return "Gladiator";
+    }
+    if (std::strncmp(abbrev, "Her", 3) == 0) {
+        return "Hero";
+    }
+    if (std::strncmp(abbrev, "Lin", 3) == 0) {
+        return "Linguist";
+    }
+    if (std::strncmp(abbrev, "Mer", 3) == 0) {
+        return "Merchant";
+    }
+    if (std::strncmp(abbrev, "Mou", 3) == 0) {
+        return "Mountaineering";
+    }
+    if (std::strncmp(abbrev, "Nav", 3) == 0) {
+        return "Navigator";
+    }
+    if (std::strncmp(abbrev, "Pat", 3) == 0) {
+        return "Pathfinder";
+    }
+    if (std::strncmp(abbrev, "Pic", 3) == 0) {
+        return "Pickpocket";
+    }
+    if (std::strncmp(abbrev, "Sol", 3) == 0) {
+        return "Soldier";
+    }
+    return nullptr;
+}
+
+static bool isRosterSkillTemplate(const Mm2RosterRecord &rec)
+{
+    const uint8_t a = rec.secondary_skills[0];
+    const uint8_t b = rec.secondary_skills[1];
+    const uint8_t c = rec.secondary_skills[2];
+    if (a != b || b != c) {
+        return false;
+    }
+    return a == 0x05 || a == 0x0A;
+}
+
+static int collectRosterSkillNames(const Mm2RosterRecord &rec, const char **names, int max_names)
+{
+    if (isRosterSkillTemplate(rec)) {
+        return 0;
+    }
+    int count = 0;
+    for (int i = 0; i < 3 && count < max_names; ++i) {
+        const uint8_t byte = rec.secondary_skills[i];
+        const uint8_t lo = byte & 0x0F;
+        const uint8_t hi = (byte >> 4) & 0x0F;
+        for (int n = 0; n < 2; ++n) {
+            const uint8_t id = (n == 0) ? lo : hi;
+            const char *name = skillNameFromId(id);
+            if (!name) {
+                continue;
+            }
+            bool dup = false;
+            for (int j = 0; j < count; ++j) {
+                if (std::strcmp(names[j], name) == 0) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (!dup) {
+                names[count++] = name;
+            }
+        }
+    }
+    return count;
+}
+
+static int collectHirelingSkillNames(int hireling_index, const char **names, int max_names)
+{
+    if (hireling_index < 0 || hireling_index >= static_cast<int>(sizeof(kHirelingMeta) / sizeof(kHirelingMeta[0]))) {
+        return 0;
+    }
+    const char *skills = kHirelingMeta[hireling_index].skills;
+    if (!skills || !skills[0]) {
+        return 0;
+    }
+    int count = 0;
+    const char *p = skills;
+    while (*p && count < max_names) {
+        while (*p == ' ') {
+            ++p;
+        }
+        if (!*p) {
+            break;
+        }
+        const char *start = p;
+        while (*p && *p != ' ') {
+            ++p;
+        }
+        char abbrev[8];
+        const std::size_t len = static_cast<std::size_t>(p - start);
+        if (len >= sizeof(abbrev)) {
+            continue;
+        }
+        std::memcpy(abbrev, start, len);
+        abbrev[len] = '\0';
+        const char *name = skillAbbrevToName(abbrev);
+        if (name) {
+            names[count++] = name;
+        }
+    }
+    return count;
+}
+
+static uint32_t hirelingDailyCost(int hireling_index, uint8_t level)
+{
+    if (hireling_index < 0 || hireling_index >= static_cast<int>(sizeof(kHirelingMeta) / sizeof(kHirelingMeta[0]))) {
+        return 0;
+    }
+    const HirelingMeta &meta = kHirelingMeta[hireling_index];
+    uint32_t cost = meta.base_cost;
+    int gained = static_cast<int>(level) - static_cast<int>(meta.start_level);
+    if (gained < 0) {
+        gained = 0;
+    }
+    for (int i = 0; i < gained; ++i) {
+        cost += cost / 2;
+        if (cost >= 50000u) {
+            return 50000u;
+        }
+    }
+    return cost;
+}
+
+static uint8_t rosterDisplayThievery(const Mm2RosterRecord &rec)
+{
+    // Character sheet draw reads roster+$1E (see character_sheet_draw @ $3C42).
+    return rec.unknown_1a_20[4];
+}
+
 void drawCellText(gfx::ScreenCompositor &c, int row, int col, const char *text, uint8_t r = 255, uint8_t g = 255,
                   uint8_t b = 255)
 {
@@ -281,15 +485,16 @@ public:
         roster_page_offset_ = 0;
         sheet_roster_index_ = -1;
         sheet_slot_letter_ = 'A';
+        sheet_mode_ = SheetMode::View;
     }
 
     UiResult tickViewParty(const platform::KeyState &keys) override
     {
+        if (view_mode_ == ViewMode::CharacterSheet) {
+            return tickCharacterSheet(keys, false);
+        }
+
         if (keys.escape) {
-            if (view_mode_ == ViewMode::CharacterSheet) {
-                view_mode_ = ViewMode::RosterList;
-                return UiResult::Continue;
-            }
             return UiResult::Cancel;
         }
 
@@ -303,18 +508,11 @@ public:
                 if (slot >= 0 && slot < kPlayableSlots && isRosterListEntryVisible(slot)) {
                     sheet_roster_index_ = slot;
                     sheet_slot_letter_ = keys.last_ascii;
+                    sheet_mode_ = SheetMode::View;
                     view_mode_ = ViewMode::CharacterSheet;
                 }
                 return UiResult::Continue;
             }
-            return UiResult::Continue;
-        }
-
-        if (keys.ctrl && keys.key_n) {
-            return UiResult::Continue;
-        }
-        if (keys.ctrl && keys.key_d) {
-            return UiResult::Continue;
         }
         return UiResult::Continue;
     }
@@ -409,10 +607,7 @@ public:
     {
         using namespace amiga_layout;
         if (party_sub_ == PartySub::Sheet) {
-            if (keys.escape || keys.last_ascii == 'Z') {
-                party_sub_ = PartySub::List;
-            }
-            return UiResult::Continue;
+            return tickCharacterSheet(keys, true);
         }
 
         if (keys.escape) {
@@ -461,6 +656,7 @@ public:
 
 private:
     enum class ViewMode { RosterList, CharacterSheet };
+    enum class SheetMode { View, Rename };
     enum class CreateStep { StatRoll, Race, Alignment, Sex, Name };
     enum class PartyPage { Characters, Hirelings };
     enum class PartySub { List, Sheet };
@@ -577,6 +773,127 @@ private:
             return;
         }
         has_throw_ = true;
+    }
+
+    UiResult saveRoster()
+    {
+        if (!roster_ || !data_dir_) {
+            return UiResult::Cancel;
+        }
+        char path[512];
+        if (!joinPath(path, sizeof(path), data_dir_, "roster.dat")) {
+            return UiResult::Cancel;
+        }
+        return (mm2_roster_save_file(path, roster_) == MM2_ROSTER_OK) ? UiResult::Continue : UiResult::Cancel;
+    }
+
+    void removeFromParty(int roster_idx)
+    {
+        for (int i = 0; i < party_count_; ++i) {
+            if (party_members_[i] == roster_idx) {
+                togglePartyMember(roster_idx);
+                return;
+            }
+        }
+    }
+
+    void startSheetRename()
+    {
+        if (sheet_roster_index_ < 0 || sheet_roster_index_ >= kPlayableSlots) {
+            return;
+        }
+        mm2_roster_name_to_cstr(&roster_->records[sheet_roster_index_], rename_buf_, sizeof(rename_buf_));
+        sheet_mode_ = SheetMode::Rename;
+    }
+
+    UiResult tickSheetRename(const platform::KeyState &keys)
+    {
+        if (keys.escape) {
+            sheet_mode_ = SheetMode::View;
+            return UiResult::Continue;
+        }
+        if (keys.backspace) {
+            const std::size_t len = std::strlen(rename_buf_);
+            if (len > 0) {
+                rename_buf_[len - 1] = '\0';
+            }
+            return UiResult::Continue;
+        }
+        if (keys.enter) {
+            if (rename_buf_[0] != '\0') {
+                mm2_roster_set_name(&roster_->records[sheet_roster_index_], rename_buf_);
+                saveRoster();
+            }
+            sheet_mode_ = SheetMode::View;
+            return UiResult::Continue;
+        }
+        if (keys.last_ascii >= 'A' && keys.last_ascii <= 'Z') {
+            const std::size_t len = std::strlen(rename_buf_);
+            if (len < MM2_ROSTER_NAME_SIZE) {
+                rename_buf_[len] = keys.last_ascii;
+                rename_buf_[len + 1] = '\0';
+            }
+        } else if (keys.last_ascii >= '0' && keys.last_ascii <= '9') {
+            const std::size_t len = std::strlen(rename_buf_);
+            if (len < MM2_ROSTER_NAME_SIZE) {
+                rename_buf_[len] = keys.last_ascii;
+                rename_buf_[len + 1] = '\0';
+            }
+        } else if (keys.space) {
+            const std::size_t len = std::strlen(rename_buf_);
+            if (len > 0 && len < MM2_ROSTER_NAME_SIZE) {
+                rename_buf_[len] = ' ';
+                rename_buf_[len + 1] = '\0';
+            }
+        }
+        return UiResult::Continue;
+    }
+
+    void deleteSheetCharacter(bool from_party)
+    {
+        if (sheet_roster_index_ < 0 || sheet_roster_index_ >= kPlayableSlots) {
+            return;
+        }
+        if (mm2_roster_slot_is_empty(&roster_->records[sheet_roster_index_])) {
+            return;
+        }
+        removeFromParty(sheet_roster_index_);
+        mm2_roster_clear_record(&roster_->records[sheet_roster_index_]);
+        saveRoster();
+        sheet_mode_ = SheetMode::View;
+        sheet_roster_index_ = -1;
+        if (from_party) {
+            party_sub_ = PartySub::List;
+        } else {
+            view_mode_ = ViewMode::RosterList;
+        }
+    }
+
+    UiResult tickCharacterSheet(const platform::KeyState &keys, bool from_party)
+    {
+        if (sheet_mode_ == SheetMode::Rename) {
+            return tickSheetRename(keys);
+        }
+
+        if (keys.escape || (from_party && keys.last_ascii == 'Z')) {
+            sheet_mode_ = SheetMode::View;
+            if (from_party) {
+                party_sub_ = PartySub::List;
+            } else {
+                view_mode_ = ViewMode::RosterList;
+            }
+            return UiResult::Continue;
+        }
+
+        if (keys.ctrl && keys.key_n) {
+            startSheetRename();
+            return UiResult::Continue;
+        }
+        if (keys.ctrl && keys.key_d) {
+            deleteSheetCharacter(from_party);
+            return UiResult::Continue;
+        }
+        return UiResult::Continue;
     }
 
     UiResult saveCreatedCharacter()
@@ -1023,6 +1340,9 @@ private:
         }
 
         const Mm2RosterRecord &rec = roster_->records[sheet_roster_index_];
+        const bool hireling = isHirelingSlot(sheet_roster_index_);
+        const int hireling_index = hireling ? (sheet_roster_index_ - kRosterHirelingPageOffset) : -1;
+
         drawRedBorder(c, kSheetBorderRow, kSheetBorderCol, kSheetBorderW, kSheetBorderH);
 
         char name[16];
@@ -1034,52 +1354,65 @@ private:
                       className(rec.class_id), (rec.class_quest_guild_mask & 0x80) ? "+" : "");
         drawBorderIntegratedTextAt(c, kSheetBorderRow, kSheetHeaderCol, header);
 
+        const char *skill_names[6] = {};
+        const int skill_count =
+            hireling ? collectHirelingSkillNames(hireling_index, skill_names, 6)
+                     : collectRosterSkillNames(rec, skill_names, 6);
+
         char buf[48];
         const int r0 = kSheetStatRowBase;
 
+        // Left column
         std::snprintf(buf, sizeof(buf), "Lvl=%u", rec.level);
         drawCellText(c, r0 + 0, kSheetStatColLeft, buf);
-        std::snprintf(buf, sizeof(buf), "HP=%u /%u", rec.hp_current, rec.hp_max);
-        drawCellText(c, r0 + 0, kSheetStatColMid, buf);
-        std::snprintf(buf, sizeof(buf), "Age=%u", rec.age);
-        drawCellText(c, r0 + 0, kSheetStatColRight, buf);
-
         std::snprintf(buf, sizeof(buf), "Mgt=%u", rec.might_base);
         drawCellText(c, r0 + 1, kSheetStatColLeft, buf);
-        std::snprintf(buf, sizeof(buf), "SP=%u /%u", rec.sp_current, rec.sp_max);
-        drawCellText(c, r0 + 1, kSheetStatColMid, buf);
-        std::snprintf(buf, sizeof(buf), "Exp=%lu", static_cast<unsigned long>(rec.experience));
-        drawCellText(c, r0 + 1, kSheetStatColRight, buf);
-
         std::snprintf(buf, sizeof(buf), "Int=%u", rec.intelligence_base);
         drawCellText(c, r0 + 2, kSheetStatColLeft, buf);
-        std::snprintf(buf, sizeof(buf), "AC=%u SL=%u", rec.armor_class, rec.spell_level);
-        drawCellText(c, r0 + 2, kSheetStatColMid, buf);
-        std::snprintf(buf, sizeof(buf), "Gold=%lu", static_cast<unsigned long>(rec.gold));
-        drawCellText(c, r0 + 2, kSheetStatColRight, buf);
-
         std::snprintf(buf, sizeof(buf), "Per=%u", rec.personality_base);
         drawCellText(c, r0 + 3, kSheetStatColLeft, buf);
-        std::snprintf(buf, sizeof(buf), "Thievery %u%%", rec.thievery_percent);
-        drawCellText(c, r0 + 3, kSheetStatColMid, buf);
-        std::snprintf(buf, sizeof(buf), "Gems=%u", rec.gems);
-        drawCellText(c, r0 + 3, kSheetStatColRight, buf);
-
         std::snprintf(buf, sizeof(buf), "End=%u", rec.endurance_base);
         drawCellText(c, r0 + 4, kSheetStatColLeft, buf);
-        std::snprintf(buf, sizeof(buf), "Food=%u", rec.food);
-        drawCellText(c, r0 + 4, kSheetStatColRight, buf);
-
         std::snprintf(buf, sizeof(buf), "Spd=%u", rec.speed_base);
         drawCellText(c, r0 + 5, kSheetStatColLeft, buf);
-        std::snprintf(buf, sizeof(buf), "Cond= %s", conditionName(rec.condition));
-        drawCellText(c, r0 + 5, kSheetStatColRight, buf);
-
         std::snprintf(buf, sizeof(buf), "Acy=%u", rec.accuracy_base);
         drawCellText(c, r0 + 6, kSheetStatColLeft, buf);
-
         std::snprintf(buf, sizeof(buf), "Lck=%u", rec.luck_base);
         drawCellText(c, r0 + 7, kSheetStatColLeft, buf);
+
+        // Middle column — HP/SP/AC+SL/thievery/skills/dotted rule (WinUAE layout)
+        std::snprintf(buf, sizeof(buf), "HP=%u /%u", rec.hp_current, rec.hp_max);
+        drawCellText(c, r0 + 0, kSheetStatColMid, buf);
+        std::snprintf(buf, sizeof(buf), "SP=%u /%u", rec.sp_current, rec.sp_max);
+        drawCellText(c, r0 + 1, kSheetStatColMid, buf);
+        std::snprintf(buf, sizeof(buf), "AC=%u SL=%u", rec.armor_class, rec.spell_level);
+        drawCellText(c, r0 + 2, kSheetStatColMid, buf);
+        std::snprintf(buf, sizeof(buf), "Thievery %u%%", rosterDisplayThievery(rec));
+        drawCellText(c, r0 + 3, kSheetStatColMid, buf);
+        for (int i = 0; i < skill_count && i < 2; ++i) {
+            drawCellText(c, r0 + 4 + i, kSheetStatColMid, skill_names[i]);
+        }
+        const int dot_row = r0 + 5;
+        drawCellDotLeader(c, dot_row, kSheetStatColMid, 16);
+
+        // Right column
+        std::snprintf(buf, sizeof(buf), "Age=%u", rec.age);
+        drawCellText(c, r0 + 0, kSheetStatColRight, buf);
+        std::snprintf(buf, sizeof(buf), "Exp=%lu", static_cast<unsigned long>(rec.experience));
+        drawCellText(c, r0 + 1, kSheetStatColRight, buf);
+        if (hireling) {
+            const uint32_t cost = hirelingDailyCost(hireling_index, rec.level);
+            std::snprintf(buf, sizeof(buf), "Cost=%u /Day", cost);
+        } else {
+            std::snprintf(buf, sizeof(buf), "Gold=%lu", static_cast<unsigned long>(rec.gold));
+        }
+        drawCellText(c, r0 + 2, kSheetStatColRight, buf);
+        std::snprintf(buf, sizeof(buf), "Gems=%u", rec.gems);
+        drawCellText(c, r0 + 3, kSheetStatColRight, buf);
+        std::snprintf(buf, sizeof(buf), "Food=%u", rec.food);
+        drawCellText(c, r0 + 4, kSheetStatColRight, buf);
+        std::snprintf(buf, sizeof(buf), "Cond= %s", conditionName(rec.condition));
+        drawCellText(c, r0 + 5, kSheetStatColRight, buf);
 
         const int divider_w = kSheetBorderCol + kSheetBorderW - 2 - kSheetEquipCol + 1;
         drawDoubleSectionHeader(c, kSheetDividerRow, kSheetEquipCol, divider_w, " Equipped ", " Backpack ");
@@ -1106,8 +1439,16 @@ private:
             drawCellText(c, row, kSheetBackpackCol, eline, 220, 220, 220);
         }
 
-        drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "( Ctrl )-'N' Re-Name Character", 180, 180, 180);
-        drawCellText(c, kSheetFooterRow2, kSheetFooterCol, "( Ctrl )-'D' Delete Character", 180, 180, 180);
+        if (sheet_mode_ == SheetMode::Rename) {
+            char line[32];
+            std::snprintf(line, sizeof(line), "Name: %s_", rename_buf_);
+            drawCellText(c, kSheetFooterRow1, kSheetFooterCol, line, 255, 255, 128);
+            drawCellText(c, kSheetFooterRow2, kSheetFooterCol,
+                           "Type name   BACKSPACE erase   ENTER save   ESC cancel", 180, 180, 180);
+        } else {
+            drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "( Ctrl )-'N' Re-Name Character", 180, 180, 180);
+            drawCellText(c, kSheetFooterRow2, kSheetFooterCol, "( Ctrl )-'D' Delete Character", 180, 180, 180);
+        }
         drawBorderIntegratedText(c, borderBottomRow(kSheetBorderRow, kSheetBorderH), kSheetBorderCol, kSheetBorderW,
                                  "( 'ESC' to go back )", 180, 180, 180);
     }
@@ -1292,6 +1633,8 @@ private:
     int roster_page_offset_ = 0;
     int sheet_roster_index_ = -1;
     char sheet_slot_letter_ = 'A';
+    SheetMode sheet_mode_ = SheetMode::View;
+    char rename_buf_[MM2_ROSTER_NAME_SIZE + 1] = {};
 
     CreateStep create_step_ = CreateStep::StatRoll;
     int create_slot_ = 0;
