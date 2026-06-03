@@ -8,6 +8,7 @@
 
 #include "mm2_create_character.h"
 #include "mm2_image32_codec.h"
+#include "mm2_party_launch.h"
 
 #include <cstdio>
 #include <cstring>
@@ -601,6 +602,7 @@ public:
         party_page_ = PartyPage::Characters;
         party_sub_ = PartySub::List;
         party_count_ = 0;
+        has_party_launch_ = false;
     }
 
     UiResult tickChooseParty(const platform::KeyState &keys) override
@@ -614,7 +616,14 @@ public:
             return UiResult::Quit;  // "( 'ESC' to exit game )"
         }
         if (keys.last_ascii == 'Z') {
-            return UiResult::Cancel;  // "'Z' to exit" → back to title menu
+            // ASM @ 0x0E06: Z with party → spawn at town inn (requires members).
+            if (party_count_ <= 0) {
+                return UiResult::Continue;
+            }
+            mm2_party_launch_build(&party_launch_, static_cast<uint8_t>(party_town_), party_members_,
+                                   party_count_);
+            has_party_launch_ = true;
+            return UiResult::Done;
         }
         if (keys.space) {
             party_page_ = (party_page_ == PartyPage::Characters) ? PartyPage::Hirelings : PartyPage::Characters;
@@ -652,6 +661,16 @@ public:
             return;
         }
         renderPartyChooser(compositor);
+    }
+
+    bool takePartyLaunch(Mm2PartyLaunch *out) override
+    {
+        if (!has_party_launch_ || !out) {
+            return false;
+        }
+        *out = party_launch_;
+        has_party_launch_ = false;
+        return true;
     }
 
 private:
@@ -1618,7 +1637,7 @@ private:
         drawCellText(c, kPartyFooterHireRow, kPartyFooterHireCol,
                      (party_page_ == PartyPage::Hirelings) ? "'Space' for Characters" : "'Space' for Hirelings", 200,
                      200, 200);
-        drawCellText(c, kPartyFooterHireRow, kPartyFooterExitCol, "'Z' to exit", 200, 200, 200);
+        drawCellText(c, kPartyFooterHireRow, kPartyFooterExitCol, "'Z' to begin", 200, 200, 200);
         drawBorderIntegratedText(c, borderBottomRow(kRosterBorderRow, kRosterBorderH), kRosterBorderCol, kRosterBorderW,
                                  "( 'ESC' to exit game )", 180, 180, 180);
     }
@@ -1654,6 +1673,8 @@ private:
     int party_town_ = 1;                  // current home-town filter (1..5)
     int party_members_[kMaxParty] = {0};  // roster indices, in party order (A4-$8696)
     int party_count_ = 0;
+    Mm2PartyLaunch party_launch_{};
+    bool has_party_launch_ = false;
 };
 
 }  // namespace

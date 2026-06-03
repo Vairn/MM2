@@ -584,4 +584,14 @@ void TitleScreen::tick(const platform::KeyState &keys)
     }
 }
 
+bool TitleScreen::takePartyLaunch(Mm2PartyLaunch *out)
+{
+    return character_ui_.takePartyLaunch(out);
+}
+
+void TitleScreen::returnToMenu()
+{
+    state_ = TitleState::TitleMenu;
+}
+
 }  // namespace mm2
