@@ -364,8 +364,9 @@ void drawCellHorizRule(gfx::ScreenCompositor &c, int row, int col, int len, uint
 void drawCellDotLeader(gfx::ScreenCompositor &c, int row, int col, int len, uint8_t r = 255, uint8_t g = 255,
                        uint8_t b = 255)
 {
+    // create stat rows @ $01BD9E: -$7BFC fills with '.' (0x2E) via -$7C62 — no spaces.
     for (int i = 0; i < len; ++i) {
-        drawCellText(c, row, col + i, (i & 1) ? " " : ".", r, g, b);
+        drawCellGlyph(c, row, col + i, static_cast<uint8_t>('.'), r, g, b);
     }
 }
 
@@ -555,8 +556,10 @@ public:
             return UiResult::Cancel;
         }
 
-        if (create_step_ == CreateStep::StatRoll) {
+        if (throw_anim_playing_) {
             tickThrowAnimation();
+        } else if (create_step_ == CreateStep::Name) {
+            tickCreateNameCursor();
         }
 
         if (keys.escape) {
@@ -985,10 +988,12 @@ private:
             }
             throw_anim_playing_ = false;
             throw_anim_frame_ = 0;
+            throw_anim_step_ = 0;
             return;
         }
         throw_anim_playing_ = true;
         throw_anim_frame_ = 1;
+        throw_anim_step_ = 0;
         throw_anim_gate_ = 0;
         throw_roll_when_done_ = roll_when_done;
     }
@@ -1003,12 +1008,21 @@ private:
             return;
         }
         throw_anim_gate_ = 0;
-        if (throw_anim_frame_ + 1 < static_cast<int>(throw_.frame_count)) {
-            ++throw_anim_frame_;
+        ++throw_anim_step_;
+        const int anim_frames = static_cast<int>(throw_.frame_count) - 1;
+        if (anim_frames <= 0) {
+            throw_anim_playing_ = false;
+            throw_anim_frame_ = 0;
+            return;
+        }
+        // A4-$7A51 throw sprite index 1..N during reroll; not composited with frame 0.
+        throw_anim_frame_ = ((throw_anim_step_ - 1) % anim_frames) + 1;
+        if (throw_anim_step_ < amiga_layout::kCreateThrowAnimSteps) {
             return;
         }
         throw_anim_playing_ = false;
         throw_anim_frame_ = 0;
+        throw_anim_step_ = 0;
         if (throw_roll_when_done_) {
             mm2_create_roll_stats(&pending_.rolled, &create_rng_);
             pending_.class_id = -1;
@@ -1017,7 +1031,33 @@ private:
         }
     }
 
-    void blitThrowFrame(gfx::ScreenCompositor &c, int frame_index) const
+    void tickCreateNameCursor()
+    {
+        using namespace amiga_layout;
+        if (create_name_cursor_gate_ < kCreateNameCursorStepTicks) {
+            ++create_name_cursor_gate_;
+            return;
+        }
+        create_name_cursor_gate_ = 0;
+        create_name_cursor_frame_ =
+            (create_name_cursor_frame_ + 1) % kCreateNameCursorFrameCount;
+    }
+
+    void drawThrowOrangeBars(gfx::ScreenCompositor &c) const
+    {
+        using namespace amiga_layout;
+        const int anchor_x = kCreateThrowBlitCol * kCellW;
+        // LAB_60B6 @ $0060B6: three right-anchored fills @ y=$10 during throw anim only.
+        constexpr uint8_t kBarR = 255;
+        constexpr uint8_t kBarG = 136;
+        constexpr uint8_t kBarB = 119;
+        constexpr int kBarH = 18;
+        c.fillRect(anchor_x - 12, kCreateThrowBarY, 12, kBarH, kBarR, kBarG, kBarB);
+        c.fillRect(anchor_x - 21, kCreateThrowBarY, 21, kBarH, kBarR, kBarG, kBarB);
+        c.fillRect(anchor_x - 31, kCreateThrowBarY, 31, kBarH, kBarR, kBarG, kBarB);
+    }
+
+    void blitThrowFrame(gfx::ScreenCompositor &c, int frame_index, int y) const
     {
         if (!has_throw_ || frame_index < 0 || frame_index >= static_cast<int>(throw_.frame_count)) {
             return;
@@ -1028,16 +1068,26 @@ private:
         }
         using namespace amiga_layout;
         const int anchor_x = kCreateThrowBlitCol * kCellW;
-        int x;
-        int y;
-        if (frame_index == 0) {
-            x = (gfx::ScreenCompositor::kWidth - kCreateTableauW) / 2;
-            y = kCreateThrowRestY;
-        } else {
-            x = anchor_x - frame.width;
-            y = kCreateThrowAnimY;
-        }
+        const int x = anchor_x - static_cast<int>(frame.width);
         c.blitRgba(frame.rgba, frame.width, frame.height, x, y);
+    }
+
+    void renderThrowTableau(gfx::ScreenCompositor &c) const
+    {
+        using namespace amiga_layout;
+        if (!has_throw_) {
+            return;
+        }
+        // ASM $0054F2: one blit of A4-$7A51 at y=$12, x=$27 per frame.
+        const int frame_index =
+            (throw_anim_playing_ && throw_anim_frame_ > 0) ? throw_anim_frame_ : 0;
+        if (frame_index > 0) {
+            // Reroll path ($00560A / $0060F4): LAB_60B6 bar fills, then hand sprite.
+            const int tableau_x = kCreateThrowBlitCol * kCellW - kCreateTableauW;
+            c.clearRect(tableau_x, kCreateThrowBarY, kCreateTableauW, 72, 0, 0, 0, 255);
+            drawThrowOrangeBars(c);
+        }
+        blitThrowFrame(c, frame_index, kCreateThrowBlitY);
     }
 
     int createProgressLineCount() const
@@ -1061,20 +1111,23 @@ private:
     void drawCreateProgressLine(gfx::ScreenCompositor &c, int cell_row, const char *label, const char *value)
     {
         using namespace amiga_layout;
-        char lbl[16];
-        std::snprintf(lbl, sizeof(lbl), "%s=", label);
-        drawCellText(c, cell_row, kCreateProgressLabelCol, lbl);
+        drawCellText(c, cell_row, kCreateProgressLabelCol, label);
         drawCellText(c, cell_row, kCreateProgressValueCol, value);
     }
 
     void drawCreateNameLine(gfx::ScreenCompositor &c, int cell_row)
     {
         using namespace amiga_layout;
-        drawCellText(c, cell_row, kCreateProgressLabelCol, "Name :");
-        drawCellText(c, cell_row, kCreateProgressValueCol, pending_.name);
-        const int cursor_col =
-            kCreateProgressValueCol + static_cast<int>(std::strlen(pending_.name));
-        drawCellText(c, cell_row, cursor_col, "|");
+        drawCellText(c, cell_row, kCreateProgressLabelCol, " Name:");
+        const std::size_t name_len = std::strlen(pending_.name);
+        const int scroll =
+            name_len > static_cast<std::size_t>(kCreateNameVisibleChars)
+                ? static_cast<int>(name_len - static_cast<std::size_t>(kCreateNameVisibleChars))
+                : 0;
+        drawCellText(c, cell_row, kCreateProgressValueCol, pending_.name + scroll);
+        const int cursor_col = kCreateProgressValueCol + static_cast<int>(name_len - static_cast<std::size_t>(scroll));
+        char cursor[2] = {kCreateNameCursorChars[create_name_cursor_frame_], '\0'};
+        drawCellText(c, cell_row, cursor_col, cursor);
     }
 
     void renderCreateProgress(gfx::ScreenCompositor &c)
@@ -1082,16 +1135,16 @@ private:
         using namespace amiga_layout;
         int row = kCreateStatRowBase;
         if (create_step_ >= CreateStep::Race && pending_.class_id >= 0) {
-            drawCreateProgressLine(c, row++, "Class", kClassNames[pending_.class_id]);
+            drawCreateProgressLine(c, row++, "Class=", kClassNames[pending_.class_id]);
         }
         if (create_step_ >= CreateStep::Alignment && pending_.race >= 0) {
-            drawCreateProgressLine(c, row++, "Race", kRaceNames[pending_.race]);
+            drawCreateProgressLine(c, row++, " Race=", kRaceNames[pending_.race]);
         }
         if (create_step_ >= CreateStep::Sex && pending_.alignment >= 0) {
-            drawCreateProgressLine(c, row++, "Align", kAlignNames[pending_.alignment]);
+            drawCreateProgressLine(c, row++, "Align=", kAlignNames[pending_.alignment]);
         }
         if (create_step_ >= CreateStep::Name && pending_.sex >= 0) {
-            drawCreateProgressLine(c, row++, "Sex", kSexNames[pending_.sex]);
+            drawCreateProgressLine(c, row++, "  Sex=", kSexNames[pending_.sex]);
         }
         if (create_step_ == CreateStep::Name) {
             drawCreateNameLine(c, row);
@@ -1151,6 +1204,8 @@ private:
         if (keys.last_ascii >= '1' && keys.last_ascii <= '2') {
             pending_.sex = static_cast<int8_t>(keys.last_ascii - '1');
             pending_.name[0] = '\0';
+            create_name_cursor_frame_ = 0;
+            create_name_cursor_gate_ = 0;
             create_step_ = CreateStep::Name;
         }
         return UiResult::Continue;
@@ -1208,12 +1263,7 @@ private:
         drawRedBorder(c, kCreateBorderRow, kCreateBorderCol, kCreateBorderW, kCreateBorderH);
         drawBorderIntegratedText(c, kCreateBorderRow, kCreateBorderCol, kCreateBorderW, "( Create New Characters )");
 
-        const int throw_frame =
-            (create_step_ == CreateStep::StatRoll && throw_anim_playing_) ? throw_anim_frame_ : 0;
-        blitThrowFrame(c, 0);
-        if (throw_frame > 0) {
-            blitThrowFrame(c, throw_frame);
-        }
+        renderThrowTableau(c);
 
         uint8_t vals[MM2_CREATE_STAT_COUNT];
         statValues(createDisplayStats(), vals);
@@ -1666,7 +1716,10 @@ private:
     bool throw_anim_playing_ = false;
     bool throw_roll_when_done_ = false;
     int throw_anim_frame_ = 0;
+    int throw_anim_step_ = 0;
     int throw_anim_gate_ = 0;
+    int create_name_cursor_frame_ = 0;
+    int create_name_cursor_gate_ = 0;
 
     PartyPage party_page_ = PartyPage::Characters;
     PartySub party_sub_ = PartySub::List;

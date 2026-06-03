@@ -123,17 +123,25 @@ constexpr int kCreateTableauW = 304;         // throw.32 frame 0 width
 constexpr int kCreateStatRowBase = 0x0c;     // row 12 — below 72px tableau (y=16..88)
 constexpr int kCreateStatColLetter = 0x02;   // "A -"
 constexpr int kCreateStatColName = 0x06;     // stat name
-constexpr int kCreateStatColEquals = 0x14;   // fixed "=" column
-constexpr int kCreateStatColValue = 0x16;    // rolled value (cols 22-23)
+// Left panel only — must stay left of kCreateClassDigitCol (26). ASM $01BC8A prints
+// stat value via -$7BDE at col $22, but the right class column starts at $1A on the
+// same rows; WinUAE keeps stat '=' / value in cols 20–22 so the two panels don't collide.
+constexpr int kCreateStatColEquals = 0x14;   // col 20
+constexpr int kCreateStatColValue = 0x16;    // col 22
 
-// Right panel — stat-roll class list (digit / " - " / name at fixed cols).
-constexpr int kCreateClassDigitCol = 0x1a;   // col 26 — class digit when eligible
-constexpr int kCreateClassSepCol = 0x1b;     // col 27 — " - " on every class row
-constexpr int kCreateClassNameCol = 0x1e;    // col 30 — class names align here
+// Right panel — stat-roll class list (digit / " - " / name); ASM digit path $01BD66
+// uses col $1F for eligibility marker on stat rows, full class names at $01BD70+.
+constexpr int kCreateClassDigitCol = 0x1a;   // col 26
+constexpr int kCreateClassSepCol = 0x1b;     // col 27 — " - "
+constexpr int kCreateClassNameCol = 0x1e;    // col 30
 
-// Progress + name entry (labels col 26, values aligned col 33 — WinUAE name screen).
-constexpr int kCreateProgressLabelCol = 0x1a; // col 26 — "Class=", "Name :", etc.
-constexpr int kCreateProgressValueCol = 0x21; // col 33 — Knight, Human, typed name
+// Progress + name entry (post class pick): same right panel cols as class list.
+// Labels are 6 chars right-padded so '=' / ':' align (WinUAE name screen).
+constexpr int kCreateProgressLabelCol = 0x1a; // col 26 — "Class=", " Race=", …
+constexpr int kCreateProgressValueCol = 0x21; // col 33 — value after "= "
+// Name field scrolls: roster allows 11 chars but only 5 fit before the cursor at col 38.
+constexpr int kCreateNameCursorMaxCol = kCreateBorderCol + kCreateBorderW - 1; // col 38
+constexpr int kCreateNameVisibleChars = kCreateNameCursorMaxCol - kCreateProgressValueCol; // 5
 
 constexpr int kCreateTextCols = 40;          // NTSC 320/8 — for centered prompts
 
@@ -143,12 +151,20 @@ constexpr int kCreatePromptRow3 = 0x16;      // step prompt line 3 (stat roll on
 constexpr int kCreateEscRow = 0x18;          // bottom border row for ESC prompt
 constexpr int kCreatePromptCol = 0x02;
 
-// throw.32: frame 0 = 304×72 tableau; frames 1–10 = partial hand/die sprites (variable width).
-// Blit anchor @ ASM $00610A: col $27 right edge, tableau y=$10 px, anim overlay y=$12 px.
+// throw.32: frame 0 = 304×72 rest tableau (bar + fist); frames 1–10 = right-anchored throw sprites.
+// Create-char draw @ ASM $0054F2: one blit of A4-$7A51 at y=$12, x=$27 (col 39).
+// During reroll anim: LAB_60B6 orange bar fills @ y=$10 only (no frame-0 underlay); A4-$7A52
+// indexes die text, not a second sprite layer.
 constexpr int kCreateThrowBlitCol = 0x27;
-constexpr int kCreateThrowRestY = 0x10;
-constexpr int kCreateThrowAnimY = 0x12;
+constexpr int kCreateThrowBlitY = 0x12;       // px y=18 — sole sprite blit row ($54F2)
+constexpr int kCreateThrowBarY = 0x10;        // px y=16 — LAB_60B6 fill rects during anim
 
-constexpr int kCreateThrowAnimStepTicks = 4; // ~15 Hz frame advance @ 60 Hz game tick
+constexpr int kCreateThrowAnimStepTicks = 4;  // ~15 Hz hand advance @ 60 Hz tick
+constexpr int kCreateThrowAnimSteps = 15;     // A4-$7A52 runs 0..$0F during reroll ($01C02)
+
+// Name-entry cursor @ read_key_with_spinner / A4-$77BC table (4-char spin).
+constexpr int kCreateNameCursorStepTicks = 4; // ~15 Hz @ 60 Hz tick
+constexpr char kCreateNameCursorChars[] = {'-', '\\', '|', '/'};
+constexpr int kCreateNameCursorFrameCount = 4;
 
 }  // namespace mm2::ui::amiga_layout
