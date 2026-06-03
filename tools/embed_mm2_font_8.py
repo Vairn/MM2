@@ -122,7 +122,7 @@ def glyph_comment(cp: int) -> str:
         return f"ctrl-{cp:02x}"
     ch = chr(cp)
     if ch == "\\":
-        return "\\\\"
+        return "backslash"
     if ch == '"':
         return '\\"'
     return ch
