@@ -455,7 +455,7 @@ private:
                 const Mm2RosterRecord &rec = roster_->records[roster_idx];
                 char name[16];
                 mm2_roster_name_to_cstr(&rec, name, sizeof(name));
-                std::snprintf(line, sizeof(line), "%c- %s %s/%u", letter, name, classAbbrev(rec.class_id), rec.level);
+                std::snprintf(line, sizeof(line), "%c- %-10.10s %s/%u", letter, name, classAbbrev(rec.class_id), rec.level);
             }
             drawCellText(c, row, col, line);
         }
