@@ -15,6 +15,9 @@ constexpr int kScreenW = gfx::ScreenCompositor::kWidth;   // 320
 // trailing transparent padding in the 300×90 frame does not skew the logo left.
 int logoSplashCenterX(const mm2_image32_frame &frame)
 {
+#if MM2_HOST_AMIGA
+    return (kScreenW - static_cast<int>(frame.width)) / 2;
+#else
     if (!frame.rgba) {
         return (kScreenW - frame.width) / 2;
     }
@@ -34,6 +37,7 @@ int logoSplashCenterX(const mm2_image32_frame &frame)
     }
     const int content_w = max_x - min_x + 1;
     return (kScreenW - content_w) / 2 - min_x;
+#endif
 }
 
 // Title menu reuses the Amiga manual/password screen layout (book.32 two-box
@@ -143,7 +147,14 @@ bool TitleScreen::loadImage(const char *name, mm2_image32_file *out)
         return false;
     }
     ::memset(out, 0, sizeof(*out));
-    return mm2_image32_load_file(path, out) == MM2_IMAGE32_OK && out->frame_count > 0 && out->frames[0].rgba;
+    if (mm2_image32_load_file(path, out) != MM2_IMAGE32_OK || out->frame_count == 0) {
+        return false;
+    }
+#if MM2_HOST_AMIGA
+    return out->frames[0].bitmap != nullptr;
+#else
+    return out->frames[0].rgba != nullptr;
+#endif
 }
 
 bool TitleScreen::init(const char *data_dir, ui::CharacterUiKind ui_kind)
@@ -249,20 +260,31 @@ void TitleScreen::blitIntroClipFrame(int frame_index, int x, int y)
     if (!has_introclips_ || frame_index < 0 || frame_index >= introclips_.frame_count) {
         return;
     }
+#if MM2_HOST_AMIGA
+    platform::blitImage32(&introclips_, frame_index, x, y);
+#else
     const mm2_image32_frame &frame = introclips_.frames[frame_index];
     if (!frame.rgba) {
         return;
     }
     compositor_.blitRgba(frame.rgba, frame.width, frame.height, x, y);
+#endif
 }
 
 void TitleScreen::drawIntroPegasus(bool animate_overlays)
 {
+#if MM2_HOST_AMIGA
+    platform::clearScreen();
+    if (has_intro_) {
+        platform::blitImage32(&intro_, 0, kIntroBgX, kIntroBgY);
+    }
+#else
     compositor_.clear(0, 0, 0, 255);
     if (has_intro_ && intro_.frames[0].rgba) {
         compositor_.blitRgba(intro_.frames[0].rgba, intro_.frames[0].width, intro_.frames[0].height, kIntroBgX,
                              kIntroBgY);
     }
+#endif
     if (!has_introclips_) {
         return;
     }
@@ -322,6 +344,13 @@ void TitleScreen::drawAttract()
 
 void TitleScreen::drawLogoSplash()
 {
+#if MM2_HOST_AMIGA
+    platform::clearScreen();
+    if (has_nwcp_ && nwcp_.frames[0].bitmap && logo_alpha_ > 0) {
+        const int logo_y = (gfx::ScreenCompositor::kHeight - static_cast<int>(nwcp_.frames[0].height)) / 2;
+        platform::blitImage32(&nwcp_, 0, logo_splash_x_, logo_y);
+    }
+#else
     compositor_.clear(0, 0, 0, 255);
     if (has_nwcp_ && nwcp_.frames[0].rgba && logo_alpha_ > 0) {
         const int logo_h = nwcp_.frames[0].height;
@@ -329,6 +358,7 @@ void TitleScreen::drawLogoSplash()
         compositor_.blitRgba(nwcp_.frames[0].rgba, nwcp_.frames[0].width, logo_h, logo_splash_x_, logo_y, true,
                              logo_alpha_);
     }
+#endif
 }
 
 void TitleScreen::drawControls()
@@ -390,7 +420,11 @@ void TitleScreen::drawTitleMenu()
 {
     // Menu is book + text on black (ASM keeps frozen intro.32 underneath; avoid
     // double-drawing pegasus/title art under the red boxes).
+#if MM2_HOST_AMIGA
+    platform::clearScreen();
+#else
     compositor_.clear(0, 0, 0, 255);
+#endif
 
     // --- Top box: open-book art flanking the centered game title ---------
     drawRedFrame(compositor_, kTopBoxX, kTopBoxY, kTopBoxW, kTopBoxH);
@@ -400,6 +434,16 @@ void TitleScreen::drawTitleMenu()
     if (has_book_ && book_.frame_count > 0 && book_.frames) {
         const int fi = (book_frame_ < book_.frame_count) ? book_frame_ : 0;
         const mm2_image32_frame &bk = book_.frames[fi];
+#if MM2_HOST_AMIGA
+        if (bk.bitmap) {
+            book_w = bk.width;
+            const int left_x = kBookLeftX;
+            const int right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
+            platform::blitImage32(&book_, fi, left_x, kBookY);
+            platform::blitImage32(&book_, fi, right_x, kBookY);
+            book_right_x = right_x;
+        }
+#else
         if (bk.rgba) {
             book_w = bk.width;
             const int left_x = kBookLeftX;
@@ -408,6 +452,7 @@ void TitleScreen::drawTitleMenu()
             compositor_.blitRgba(bk.rgba, bk.width, bk.height, right_x, kBookY);
             book_right_x = right_x;
         }
+#endif
     }
 
     // Title lines centered in the gap between the two books.

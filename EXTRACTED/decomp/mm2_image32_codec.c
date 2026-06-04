@@ -124,17 +124,57 @@ static mm2_image32_error decode_palette(const uint8_t *data, size_t pal_off, mm2
 
     for (i = 0; i < MM2_IMAGE32_PALETTE_COLORS; ++i) {
         uint16_t w = read_be16(data + pal_off + (size_t)i * 2u);
-        img->palette_rgba[i][0] = (uint8_t)(((w >> 8) & 0x0Fu) * 17u);
-        img->palette_rgba[i][1] = (uint8_t)(((w >> 4) & 0x0Fu) * 17u);
-        img->palette_rgba[i][2] = (uint8_t)((w & 0x0Fu) * 17u);
+        const uint8_t r = (uint8_t)(((w >> 8) & 0x0Fu) * 17u);
+        const uint8_t g = (uint8_t)(((w >> 4) & 0x0Fu) * 17u);
+        const uint8_t b = (uint8_t)((w & 0x0Fu) * 17u);
+        img->palette_rgba[i][0] = r;
+        img->palette_rgba[i][1] = g;
+        img->palette_rgba[i][2] = b;
         img->palette_rgba[i][3] = g_preview_opaque_mask ? 255u : ((i == 0) ? 0u : 255u);
+#if defined(MM2_CODEC_AMIGA)
+        img->palette_pen[i] =
+            ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+#endif
     }
     return MM2_IMAGE32_OK;
 }
 
+#if defined(MM2_CODEC_AMIGA)
+
+#include <ace/utils/bitmap.h>
+
+static mm2_image32_error planar_frame(const uint8_t *planes, uint16_t w, uint16_t h,
+                                      mm2_image32_frame *frame)
+{
+    size_t rs = mm2_image32_rassize(w, h);
+    UBYTE pl;
+
+    frame->width = w;
+    frame->height = h;
+    frame->rgba = NULL;
+    frame->rgba_size = 0;
+    frame->bitmap = bitmapCreate(w, h, MM2_IMAGE32_PLANES, BMF_CLEAR | BMF_DISPLAYABLE);
+    if (!frame->bitmap) {
+        return MM2_IMAGE32_ERR_NOMEM;
+    }
+    {
+        tBitMap *bm = (tBitMap *)frame->bitmap;
+        for (pl = 0; pl < MM2_IMAGE32_PLANES; ++pl) {
+            memcpy(bm->Planes[pl], planes + (size_t)pl * rs, rs);
+        }
+    }
+    return MM2_IMAGE32_OK;
+}
+
+#endif
+
 static mm2_image32_error rasterize_frame(const mm2_image32_file *img, const uint8_t *planes,
                                          uint16_t w, uint16_t h, mm2_image32_frame *frame)
 {
+#if defined(MM2_CODEC_AMIGA)
+    (void)img;
+    return planar_frame(planes, w, h, frame);
+#else
     size_t rs = mm2_image32_rassize(w, h);
     int bpr = (int)((((w) + 15u) >> 3) & 0xFFFEu);
     size_t rgba_size = (size_t)w * (size_t)h * 4u;
@@ -169,6 +209,7 @@ static mm2_image32_error rasterize_frame(const mm2_image32_file *img, const uint
         }
     }
     return MM2_IMAGE32_OK;
+#endif
 }
 
 void mm2_image32_free(mm2_image32_file *img)
@@ -180,6 +221,12 @@ void mm2_image32_free(mm2_image32_file *img)
     }
     if (img->frames) {
         for (i = 0; i < (size_t)img->frame_count; ++i) {
+#if defined(MM2_CODEC_AMIGA)
+            if (img->frames[i].bitmap) {
+                bitmapDestroy((tBitMap *)img->frames[i].bitmap);
+                img->frames[i].bitmap = NULL;
+            }
+#endif
             free(img->frames[i].rgba);
         }
         free(img->frames);

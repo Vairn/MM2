@@ -45,3 +45,11 @@ void delayMs(int ms);
 const char *hostName();
 
 }  // namespace mm2::platform
+
+#if MM2_HOST_AMIGA
+#include "mm2_image32_codec.h"
+namespace mm2::platform {
+void clearScreen();
+void blitImage32(const ::mm2_image32_file *img, int frame_index, int x, int y);
+}
+#endif

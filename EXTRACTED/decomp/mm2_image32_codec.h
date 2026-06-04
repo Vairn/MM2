@@ -15,8 +15,11 @@ typedef struct mm2_image32_frame {
     uint16_t width;
     uint16_t height;
     uint16_t flags;
-    uint8_t *rgba; /* width*height*4, owned */
+    uint8_t *rgba; /* width*height*4, owned (PC / editor preview) */
     size_t rgba_size;
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+    void *bitmap; /* tBitMap* — 5-plane .32 data in chip/fast RAM, no RGBA */
+#endif
 } mm2_image32_frame;
 
 typedef struct mm2_image32_file {
@@ -24,6 +27,9 @@ typedef struct mm2_image32_file {
     uint16_t depth_or_mode;
     mm2_image32_frame *frames;
     uint8_t palette_rgba[MM2_IMAGE32_PALETTE_COLORS][4];
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+    uint32_t palette_pen[MM2_IMAGE32_PALETTE_COLORS]; /* ACE 0x00RRGGBB pens */
+#endif
 } mm2_image32_file;
 
 typedef enum mm2_image32_error {

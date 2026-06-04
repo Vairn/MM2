@@ -141,6 +141,7 @@ if(AMIGA)
   list(APPEND MM2_GAME_SOURCES
     ${MM2_CODEC_SOURCES}
     src/platform/amiga/mm2_amiga_display.c
+    src/platform/amiga/mm2_amiga_planar.c
   )
 endif()
 

@@ -4,6 +4,9 @@
 
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
 #include "mm2/platform/amiga/Mm2AmigaDisplay.h"
+#include "mm2/platform/amiga/Mm2AmigaPlanar.h"
+
+#include "mm2_image32_codec.h"
 
 #include <ace/managers/blit.h>
 #include <ace/managers/copper.h>
@@ -165,8 +168,19 @@ void presentFrame(const uint8_t *rgba, int width, int height)
         return;
     }
 
-    /* Chunky RGBA → 6-plane blit (c2p) will land here; for now refresh the copper list. */
+    /* Drawing is planar blits into pBack during render; here we only end the frame. */
     mm2AmigaDisplayFrameEnd();
+}
+
+void clearScreen() { mm2_amiga_clear_screen(); }
+
+void blitImage32(const ::mm2_image32_file *img, int frame_index, int x, int y)
+{
+    if (!g_ace_ready || !img || frame_index < 0) {
+        return;
+    }
+    mm2_amiga_blit_frame(img, static_cast<uint16_t>(frame_index), static_cast<UWORD>(x),
+                         static_cast<UWORD>(y));
 }
 
 void setWindowTitle(const char *title) { (void)title; }
