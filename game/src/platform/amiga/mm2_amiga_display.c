@@ -44,12 +44,6 @@ static void mm2AmigaDisplayInitPalette(tVPort *pVp)
         const UBYTE v = (UBYTE)((i * 255u) / (MM2_IMAGE32_PALETTE_COLORS - 1u));
         pPal[i] = ((ULONG)v << 16) | ((ULONG)v << 8) | (ULONG)v;
     }
-    /* 6bpp viewport: second ACE palette bank mirrors bank 0 until a .32 sheet loads. */
-    if (MM2_AGA_PALETTE_PENS > MM2_IMAGE32_PALETTE_COLORS) {
-        for (i = 0; i < MM2_IMAGE32_PALETTE_COLORS; ++i) {
-            pPal[MM2_IMAGE32_PALETTE_COLORS + i] = pPal[i];
-        }
-    }
 }
 
 UBYTE mm2AmigaDisplayCreate(UWORD uwWidth, UWORD uwHeight, UBYTE ubDoubleBuffer)
@@ -123,17 +117,10 @@ UBYTE mm2AmigaDisplayCreate(UWORD uwWidth, UWORD uwHeight, UBYTE ubDoubleBuffer)
 #endif
 
     mm2AmigaDisplayInitPalette(s_display.pVp);
-    MM2_DBG("MM2 DBG: SetPalette boot grey ramp (%u pens)\n", (unsigned)MM2_AGA_PALETTE_PENS);
-#ifdef ACE_DEBUG
-    mm2_amiga_dbg_dump_vport_palette("boot");
-#endif
     s_display.pFade = mm2_fade_create(
         s_display.pView, s_display.pVp->pPalette, MM2_AGA_PALETTE_PENS);
     if (s_display.pView) {
         viewUpdateGlobalPalette(s_display.pView);
-#ifdef ACE_DEBUG
-        mm2_amiga_dbg_dump_hw_palette("boot-activate");
-#endif
     }
     return 1;
 }
@@ -143,11 +130,7 @@ void mm2AmigaDisplayActivate(void)
     if (s_display.pView) {
         viewLoad(s_display.pView);
         viewUpdateGlobalPalette(s_display.pView);
-        MM2_DBG("MM2 DBG: viewLoad + PushPalette (activate)\n");
-#ifdef ACE_DEBUG
-        mm2_amiga_dbg_dump_vport_palette("activate");
-        mm2_amiga_dbg_dump_hw_palette("activate");
-#endif
+        MM2_DBG("MM2 DBG: viewLoad (activate)\n");
     }
 }
 

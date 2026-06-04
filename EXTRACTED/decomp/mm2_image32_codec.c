@@ -202,6 +202,44 @@ static void mm2_image32_destroy_bitmap(tBitMap *pBitMap)
     systemUnuse();
 }
 
+/* ACE blitCopyMask: 1 = draw pixel. Width is CEIL16(visible w) to match bitmapCreate. */
+static mm2_image32_error build_pen0_mask(const tBitMap *bm, UWORD uwVisW, UWORD uwVisH, tBitMap **out_mask)
+{
+    const UWORD uwMaskW = (UWORD)(((ULONG)uwVisW + 15UL) & ~15UL);
+    UWORD y;
+    UWORD x;
+    UBYTE pl;
+    tBitMap *msk;
+
+    *out_mask = NULL;
+    if (!bm || uwVisW == 0 || uwVisH == 0) {
+        return MM2_IMAGE32_ERR_BAD_FORMAT;
+    }
+    msk = bitmapCreate(uwMaskW, uwVisH, 1, BMF_CLEAR);
+    if (!msk) {
+        return MM2_IMAGE32_ERR_NOMEM;
+    }
+    for (y = 0; y < uwVisH; ++y) {
+        for (x = 0; x < uwVisW; ++x) {
+            UBYTE idx = 0;
+            const UBYTE bit = (UBYTE)(0x80 >> (x & 7));
+            const UWORD byte_x = x >> 3;
+            for (pl = 0; pl < bm->Depth; ++pl) {
+                const UBYTE *row = bm->Planes[pl] + (ULONG)y * (ULONG)bm->BytesPerRow;
+                if (row[byte_x] & bit) {
+                    idx |= (UBYTE)(1u << pl);
+                }
+            }
+            if (idx != 0) {
+                UBYTE *mrow = msk->Planes[0] + (ULONG)y * (ULONG)msk->BytesPerRow;
+                mrow[byte_x] |= bit;
+            }
+        }
+    }
+    *out_mask = msk;
+    return MM2_IMAGE32_OK;
+}
+
 static mm2_image32_error planar_frame(const uint8_t *planes, uint16_t w, uint16_t h,
                                       mm2_image32_frame *frame)
 {
@@ -243,6 +281,16 @@ static mm2_image32_error planar_frame(const uint8_t *planes, uint16_t w, uint16_
             bm->Planes[MM2_IMAGE32_PLANES], 0,
             (size_t)bm->Rows * (size_t)bm->BytesPerRow
         );
+    }
+    {
+        mm2_image32_error merr;
+        frame->mask = NULL;
+        merr = build_pen0_mask(bm, w, h, (tBitMap **)&frame->mask);
+        if (merr != MM2_IMAGE32_OK) {
+            mm2_image32_destroy_bitmap(bm);
+            frame->bitmap = NULL;
+            return merr;
+        }
     }
     return MM2_IMAGE32_OK;
 }
@@ -306,6 +354,10 @@ void mm2_image32_free(mm2_image32_file *img)
 #endif
         for (i = 0; i < (size_t)img->frame_count; ++i) {
 #if defined(MM2_CODEC_AMIGA)
+            if (img->frames[i].mask) {
+                mm2_image32_destroy_bitmap((tBitMap *)img->frames[i].mask);
+                img->frames[i].mask = NULL;
+            }
             if (img->frames[i].bitmap) {
                 mm2_image32_destroy_bitmap((tBitMap *)img->frames[i].bitmap);
                 img->frames[i].bitmap = NULL;

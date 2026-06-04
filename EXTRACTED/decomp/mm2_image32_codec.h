@@ -18,7 +18,8 @@ typedef struct mm2_image32_frame {
     uint8_t *rgba; /* width*height*4, owned (PC / editor preview) */
     size_t rgba_size;
 #if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
-    void *bitmap; /* tBitMap* — 6-plane on AGA playfield (5 from .32 + zero bp5) */
+    void *bitmap; /* tBitMap* — playfield depth (5 from .32 + zero high plane) */
+    void *mask;   /* tBitMap* 1bpp, width CEIL16(visible w); pen 0 = transparent for blitCopyMask */
 #ifndef MM2_AGA_SCREEN_BPP
 #define MM2_AGA_SCREEN_BPP 6
 #endif

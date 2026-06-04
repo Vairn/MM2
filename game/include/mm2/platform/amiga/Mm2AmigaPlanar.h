@@ -18,7 +18,7 @@ void mm2_amiga_apply_ui_palette(void);
 /** Plot one pen index into the ACE pBack buffer (6bpp planar). */
 void mm2_amiga_put_pixel_rgb(UWORD uwX, UWORD uwY, UBYTE ubR, UBYTE ubG, UBYTE ubB, UBYTE ubA);
 
-/** Load ECS .32 pens 0-31 into viewport; mirror to bank 1 when playfield bpp > 5. */
+/** Load ECS .32 pens 0-31 into AGA viewport palette (ULONG 0x00RRGGBB). */
 void mm2_amiga_apply_palette(const mm2_image32_file *img);
 
 /**
@@ -32,14 +32,8 @@ void mm2_amiga_blit_frame(const mm2_image32_file *img, uint16_t frame_index, UWO
 /** Wait for blitter, then push dirty viewport palette to hardware COLORx. */
 void mm2_amiga_present_end(void);
 
-/** Push viewport pPalette -> COLORx (called from present_end when dirty). */
+/** Push viewport pPalette -> COLORx (called from frame end when dirty). */
 void mm2_amiga_push_palette(void);
-
-#if defined(ACE_DEBUG)
-/** WinUAE log: full viewport + hardware COLOR registers (debug builds only). */
-void mm2_amiga_dbg_dump_vport_palette(const char *tag);
-void mm2_amiga_dbg_dump_hw_palette(const char *tag);
-#endif
 
 #ifdef __cplusplus
 }
