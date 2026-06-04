@@ -1,10 +1,14 @@
 /**
- * AGA 6bpp playfield — patterned on LandsOfLore src/misc/screen.c (CreateNewScreenWithBounds).
- * LoL uses TAG_VPORT_BPP 8 (256-colour chunky); MM2 uses 6 (64 pens per 41-aga-port-plan.md).
+ * AGA playfield via ACE — patterned on LandsOfLore src/misc/screen.c.
+ * AGA palette hardware applies at any bpp (4bp on AGA is still AGA palettes).
+ * MM2 uses TAG_VPORT_BPP 6 (64 indices) per 41-aga-port-plan.md; retail .32 is ECS on disk.
  * ACE extview sets BPLCON2 KillEHB when ubBpp == 6 on AGA (see ACE src/ace/utils/extview.c).
  */
 
 #include "mm2/platform/amiga/Mm2AmigaDisplay.h"
+#include "mm2/Mm2Dbg.h"
+#include "mm2/platform/amiga/Mm2AmigaPlanar.h"
+#include "mm2_image32_codec.h"
 #include "mm2/platform/amiga/mm2_fade.h"
 
 #ifdef AMIGA
@@ -26,12 +30,6 @@
 
 static Mm2AmigaDisplay s_display;
 
-/* When TAG_SIMPLEBUFFER_IS_DBLBUF is set, AmigaPorts ACE only allocates a second
- * bitmap if pBack already equals pFront at create time; with the default tag
- * list pBack is still NULL so we get a single buffer while the camera is DB. */
-static tBitMap *s_pOwnedFront;
-static tBitMap *s_pOwnedBack;
-
 static void mm2AmigaDisplayInitPalette(tVPort *pVp)
 {
     ULONG *pPal;
@@ -42,9 +40,15 @@ static void mm2AmigaDisplayInitPalette(tVPort *pVp)
     }
     pPal = (ULONG *)pVp->pPalette;
     pPal[0] = 0x00000000UL;
-    for (i = 1; i < MM2_AGA_PALETTE_PENS; ++i) {
-        const UBYTE v = (UBYTE)((i * 255u) / (MM2_AGA_PALETTE_PENS - 1u));
+    for (i = 1; i < MM2_IMAGE32_PALETTE_COLORS; ++i) {
+        const UBYTE v = (UBYTE)((i * 255u) / (MM2_IMAGE32_PALETTE_COLORS - 1u));
         pPal[i] = ((ULONG)v << 16) | ((ULONG)v << 8) | (ULONG)v;
+    }
+    /* 6bpp viewport: second ACE palette bank mirrors bank 0 until a .32 sheet loads. */
+    if (MM2_AGA_PALETTE_PENS > MM2_IMAGE32_PALETTE_COLORS) {
+        for (i = 0; i < MM2_IMAGE32_PALETTE_COLORS; ++i) {
+            pPal[MM2_IMAGE32_PALETTE_COLORS + i] = pPal[i];
+        }
     }
 }
 
@@ -84,59 +88,16 @@ UBYTE mm2AmigaDisplayCreate(UWORD uwWidth, UWORD uwHeight, UBYTE ubDoubleBuffer)
         return 0;
     }
 
-    s_pOwnedFront = NULL;
-    s_pOwnedBack = NULL;
-
-    if (ubDoubleBuffer) {
-        s_pOwnedFront = bitmapCreate(uwWidth, uwHeight, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
-        s_pOwnedBack = bitmapCreate(uwWidth, uwHeight, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
-        if (!s_pOwnedFront || !s_pOwnedBack) {
-#ifdef ACE_DEBUG
-            logWrite("MM2: ERR playfield bitmap alloc failed\n");
-#endif
-            if (s_pOwnedFront) {
-                bitmapDestroy(s_pOwnedFront);
-                s_pOwnedFront = NULL;
-            }
-            if (s_pOwnedBack) {
-                bitmapDestroy(s_pOwnedBack);
-                s_pOwnedBack = NULL;
-            }
-            viewDestroy(s_display.pView);
-            s_display.pView = NULL;
-            s_display.pVp = NULL;
-            return 0;
-        }
-        s_display.pBfr = simpleBufferCreate(
-            0,
-            TAG_SIMPLEBUFFER_FRONT_BITMAP, s_pOwnedFront,
-            TAG_SIMPLEBUFFER_BACK_BITMAP, s_pOwnedBack,
-            TAG_SIMPLEBUFFER_VPORT, s_display.pVp,
-            TAG_SIMPLEBUFFER_IS_DBLBUF, 1,
-            TAG_SIMPLEBUFFER_USE_X_SCROLLING, 0,
-            TAG_SIMPLEBUFFER_BOUND_WIDTH, uwWidth,
-            TAG_SIMPLEBUFFER_BOUND_HEIGHT, uwHeight,
-            TAG_END);
-    } else {
-        s_display.pBfr = simpleBufferCreate(
-            0,
-            TAG_SIMPLEBUFFER_BITMAP_FLAGS, BMF_CLEAR,
-            TAG_SIMPLEBUFFER_VPORT, s_display.pVp,
-            TAG_SIMPLEBUFFER_IS_DBLBUF, 0,
-            TAG_SIMPLEBUFFER_USE_X_SCROLLING, 0,
-            TAG_SIMPLEBUFFER_BOUND_WIDTH, uwWidth,
-            TAG_SIMPLEBUFFER_BOUND_HEIGHT, uwHeight,
-            TAG_END);
-    }
+    s_display.pBfr = simpleBufferCreate(
+        0,
+        TAG_SIMPLEBUFFER_BITMAP_FLAGS, BMF_CLEAR,
+        TAG_SIMPLEBUFFER_VPORT, s_display.pVp,
+        TAG_SIMPLEBUFFER_IS_DBLBUF, ubDoubleBuffer ? 1 : 0,
+        TAG_SIMPLEBUFFER_USE_X_SCROLLING, 0,
+        TAG_SIMPLEBUFFER_BOUND_WIDTH, uwWidth,
+        TAG_SIMPLEBUFFER_BOUND_HEIGHT, uwHeight,
+        TAG_END);
     if (!s_display.pBfr) {
-        if (s_pOwnedFront) {
-            bitmapDestroy(s_pOwnedFront);
-            s_pOwnedFront = NULL;
-        }
-        if (s_pOwnedBack) {
-            bitmapDestroy(s_pOwnedBack);
-            s_pOwnedBack = NULL;
-        }
         viewDestroy(s_display.pView);
         s_display.pView = NULL;
         s_display.pVp = NULL;
@@ -162,10 +123,17 @@ UBYTE mm2AmigaDisplayCreate(UWORD uwWidth, UWORD uwHeight, UBYTE ubDoubleBuffer)
 #endif
 
     mm2AmigaDisplayInitPalette(s_display.pVp);
+    MM2_DBG("MM2 DBG: SetPalette boot grey ramp (%u pens)\n", (unsigned)MM2_AGA_PALETTE_PENS);
+#ifdef ACE_DEBUG
+    mm2_amiga_dbg_dump_vport_palette("boot");
+#endif
     s_display.pFade = mm2_fade_create(
         s_display.pView, s_display.pVp->pPalette, MM2_AGA_PALETTE_PENS);
     if (s_display.pView) {
         viewUpdateGlobalPalette(s_display.pView);
+#ifdef ACE_DEBUG
+        mm2_amiga_dbg_dump_hw_palette("boot-activate");
+#endif
     }
     return 1;
 }
@@ -175,6 +143,11 @@ void mm2AmigaDisplayActivate(void)
     if (s_display.pView) {
         viewLoad(s_display.pView);
         viewUpdateGlobalPalette(s_display.pView);
+        MM2_DBG("MM2 DBG: viewLoad + PushPalette (activate)\n");
+#ifdef ACE_DEBUG
+        mm2_amiga_dbg_dump_vport_palette("activate");
+        mm2_amiga_dbg_dump_hw_palette("activate");
+#endif
     }
 }
 
@@ -193,6 +166,7 @@ void mm2AmigaDisplayFrameEnd(void)
     viewProcessManagers(s_display.pView);
     copProcessBlocks();
     vPortWaitForEnd(s_display.pVp);
+    mm2_amiga_push_palette();
 }
 
 void mm2AmigaDisplayDispose(void)
@@ -205,18 +179,13 @@ void mm2AmigaDisplayDispose(void)
         mm2_fade_destroy(s_display.pFade);
         s_display.pFade = NULL;
     }
+    if (s_display.pBfr) {
+        simpleBufferDestroy(s_display.pBfr);
+        s_display.pBfr = NULL;
+    }
     viewDestroy(s_display.pView);
     s_display.pView = NULL;
     s_display.pVp = NULL;
-    s_display.pBfr = NULL;
-    if (s_pOwnedFront) {
-        bitmapDestroy(s_pOwnedFront);
-        s_pOwnedFront = NULL;
-    }
-    if (s_pOwnedBack) {
-        bitmapDestroy(s_pOwnedBack);
-        s_pOwnedBack = NULL;
-    }
 }
 
 void mm2AmigaFadeCapturePalette(void)

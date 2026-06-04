@@ -4,6 +4,31 @@
 
 static int g_preview_opaque_mask = 0;
 
+static void image32_set_debug_label(mm2_image32_file *img, const char *path)
+{
+    const char *base = path;
+    size_t n;
+
+    if (!img) {
+        return;
+    }
+    img->debug_label[0] = '\0';
+    if (!path) {
+        return;
+    }
+    for (const char *p = path; *p; ++p) {
+        if (*p == '/' || *p == '\\') {
+            base = p + 1;
+        }
+    }
+    n = 0;
+    while (base[n] && n < sizeof(img->debug_label) - 1u) {
+        img->debug_label[n] = base[n];
+        ++n;
+    }
+    img->debug_label[n] = '\0';
+}
+
 void mm2_image32_set_preview_opaque(int enabled)
 {
     g_preview_opaque_mask = enabled ? 1 : 0;
@@ -142,7 +167,40 @@ static mm2_image32_error decode_palette(const uint8_t *data, size_t pal_off, mm2
 #if defined(MM2_CODEC_AMIGA)
 
 #include <ace/managers/blit.h>
+#include <ace/managers/memory.h>
+#include <ace/managers/system.h>
 #include <ace/utils/bitmap.h>
+
+/* Shallow-stack teardown: avoid ACE bitmapDestroy() (logBlockBegin + memCheckIntegrity). */
+static void mm2_image32_destroy_bitmap(tBitMap *pBitMap)
+{
+    UBYTE i;
+    ULONG ulPlaneBytes;
+
+    if (!pBitMap) {
+        return;
+    }
+    blitWait();
+    systemUse();
+    ulPlaneBytes = (ULONG)pBitMap->BytesPerRow * (ULONG)pBitMap->Rows;
+    if (bitmapIsInterleaved(pBitMap)) {
+        if (pBitMap->Planes[0]) {
+            memFree(pBitMap->Planes[0], ulPlaneBytes);
+        }
+    } else if (pBitMap->Flags & BMF_CONTIGUOUS) {
+        if (pBitMap->Planes[0]) {
+            memFree(pBitMap->Planes[0], ulPlaneBytes * (ULONG)pBitMap->Depth);
+        }
+    } else {
+        for (i = pBitMap->Depth; i--;) {
+            if (pBitMap->Planes[i]) {
+                memFree(pBitMap->Planes[i], ulPlaneBytes);
+            }
+        }
+    }
+    memFree(pBitMap, sizeof(tBitMap));
+    systemUnuse();
+}
 
 static mm2_image32_error planar_frame(const uint8_t *planes, uint16_t w, uint16_t h,
                                       mm2_image32_frame *frame)
@@ -158,10 +216,8 @@ static mm2_image32_error planar_frame(const uint8_t *planes, uint16_t w, uint16_
     frame->height = h;
     frame->rgba = NULL;
     frame->rgba_size = 0;
-    /* ACE bitmapCreate requires width multiple of 16; keep frame->width for blit bounds. */
-    /* On Amiga, ACE bitmapCreate only understands OS/ACE layout flags — not the
-     * stub BMF_CLEAR|BMF_DISPLAYABLE (3). Planes are filled by memcpy below. */
-    frame->bitmap = bitmapCreate(uwBmW, h, MM2_IMAGE32_PLANES, 0);
+    /* Promote ECS 5-plane RLE to AGA-depth bitmap (6th plane cleared → indices 0-31). */
+    frame->bitmap = bitmapCreate(uwBmW, h, MM2_AGA_SCREEN_BPP, 0);
     if (!frame->bitmap) {
         return MM2_IMAGE32_ERR_NOMEM;
     }
@@ -173,9 +229,20 @@ static mm2_image32_error planar_frame(const uint8_t *planes, uint16_t w, uint16_
             uint8_t *row = dst_plane + (ULONG)y * (ULONG)bm->BytesPerRow;
             memcpy(row, src_plane + (ULONG)y * (ULONG)uwRowBytesSrc, uwRowBytesSrc);
             if (bm->BytesPerRow > uwRowBytesSrc) {
-                memset(row + uwRowBytesSrc, 0, (size_t)bm->BytesPerRow - (size_t)uwRowBytesSrc);
+                const size_t pad = (size_t)bm->BytesPerRow - (size_t)uwRowBytesSrc;
+                UBYTE *tail = row + uwRowBytesSrc;
+                size_t n = pad;
+                while (n--) {
+                    tail[n] = 0;
+                }
             }
         }
+    }
+    if (bm->Depth > MM2_IMAGE32_PLANES && bm->Planes[MM2_IMAGE32_PLANES]) {
+        memset(
+            bm->Planes[MM2_IMAGE32_PLANES], 0,
+            (size_t)bm->Rows * (size_t)bm->BytesPerRow
+        );
     }
     return MM2_IMAGE32_OK;
 }
@@ -240,7 +307,7 @@ void mm2_image32_free(mm2_image32_file *img)
         for (i = 0; i < (size_t)img->frame_count; ++i) {
 #if defined(MM2_CODEC_AMIGA)
             if (img->frames[i].bitmap) {
-                bitmapDestroy((tBitMap *)img->frames[i].bitmap);
+                mm2_image32_destroy_bitmap((tBitMap *)img->frames[i].bitmap);
                 img->frames[i].bitmap = NULL;
             }
 #endif
@@ -403,5 +470,8 @@ mm2_image32_error mm2_image32_load_file(const char *path, mm2_image32_file *out)
 
     err = mm2_image32_decode_buffer(buf, fsize, out);
     free(buf);
+    if (err == MM2_IMAGE32_OK) {
+        image32_set_debug_label(out, path);
+    }
     return err;
 }

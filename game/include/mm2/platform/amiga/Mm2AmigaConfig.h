@@ -17,7 +17,14 @@
 #define ACE_USE_ECS_FEATURES 1
 #endif
 
-/* --- MM2 AGA playfield (6 bitplanes → 64 colour indices) --- */
+/*
+ * AGA chipset palette (12-bit COLOR, BPLCON3 banks) is independent of playfield depth:
+ * a 4bpp screen on AGA still uses AGA palettes, not "ECS palette mode".
+ *
+ * MM2 playfield depth is 6bpp (64 indices) per 41-aga-port-plan.md — a port choice,
+ * not a requirement of AGA colour hardware. Retail .32/.anm remain ECS on disk:
+ * 5 planes, 32-word 0RGB sheets; decode promotes to playfield depth (bp5 cleared).
+ */
 #ifndef MM2_AGA_SCREEN_BPP
 #define MM2_AGA_SCREEN_BPP 6
 #endif
@@ -38,6 +45,5 @@
 #define MM2_AGA_VPORT_TAG_BPP TAG_VPORT_BPP
 #define MM2_AGA_VPORT_TAG_USES_AGA TAG_VPORT_USES_AGA
 #define MM2_AGA_VPORT_TAG_FMODE TAG_VPORT_FMODE
-/* LoL uses FMODE 1 with TAG_VPORT_BPP 8 (chunky). 6-plane 64-colour AGA needs FMODE 3
- * (see ACE fetchmode.c + LoL screen.c comment on VPort height vs fetch garbage). */
-#define MM2_AGA_VPORT_FMODE_VALUE 3
+/* LoL uses FMODE 1 with TAG_VPORT_BPP 8 (chunky). MM2 title/playfield: FMODE 0 (classic fetch). */
+#define MM2_AGA_VPORT_FMODE_VALUE 0

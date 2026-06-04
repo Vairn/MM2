@@ -1,28 +1,24 @@
 #include "mm2/ui/ICharacterUi.h"
-
 #include "mm2/Config.h"
 #include "mm2/CppStdCompat.h"
 #include "mm2/DataPath.h"
 #include "mm2/gfx/Mm2FontGlyphs.h"
 #include "mm2/ui/AmigaCharacterUiLayout.h"
 #include "mm2/ui/CharacterUiFactory.h"
-
+#include "mm2/Mm2Dbg.h"
 #include "mm2/platform/Platform.h"
-
+#include "mm2/runtime/PathScratch.h"
 #include "mm2_create_character.h"
 #include "mm2_image32_codec.h"
 #include "mm2_party_launch.h"
 
-
 namespace mm2::ui {
 
 namespace {
-
 constexpr int kPlayableSlots = 48;
 constexpr int kItemRecordSize = 0x14;
 constexpr int kItemCount = 256;
 constexpr int kItemNameLen = 12;
-
 // Party limits (per the original inn party-assembly screen): up to 8 members
 // total, of which at most 6 may be normal characters; the rest may be hirelings
 // (so a party may hold up to 8 hirelings when it has 0 characters).
@@ -35,7 +31,6 @@ static const char *kSexNames[] = {"Male", "Female"};
 static const char *kStatKeys[] = {"A", "B", "C", "D", "E", "F", "G"};
 static const char *kStatLongNames[] = {"Might", "Intellect", "Personality", "Endurance", "Speed", "Accuracy",
                                        "Luck"};
-
 int statIndexFromKey(char key)
 {
     key = static_cast<char>(std::toupper(static_cast<unsigned char>(key)));
@@ -70,13 +65,11 @@ static const char *kAlignHeaderNames[] = {
 };
 
 const char *raceHeaderName(uint8_t id) { return id < MM2_CREATE_RACE_COUNT ? kRaceNames[id] : "?"; }
-
 const char *classAbbrev(uint8_t id) { return id < 8 ? kClassAbbrevs[id] : "?"; }
 const char *classAbbrev3(uint8_t id) { return id < 8 ? kClassAbbrev3[id] : "?"; }
 const char *className(uint8_t id) { return id < 8 ? kClassNames[id] : "?"; }
 const char *townName(uint8_t id) { return id >= 1 && id <= 5 ? kTownNames[id] : "?"; }
 const char *alignHeaderName(uint8_t id) { return id < 3 ? kAlignHeaderNames[id] : "?"; }
-
 const char *conditionName(uint8_t c)
 {
     if (c >= 0x80) {
@@ -394,7 +387,6 @@ void drawRedBorder(gfx::ScreenCompositor &c, int row, int col, int width_cells, 
 }
 
 int borderBottomRow(int border_row, int border_h) { return border_row + border_h - 1; }
-
 // Label embedded in a console-box border row: black-out the red bar segment, then draw text.
 void drawBorderIntegratedText(gfx::ScreenCompositor &c, int row, int border_col, int border_w_cells,
                               const char *text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255)
@@ -452,6 +444,7 @@ public:
     bool init(const char *data_dir) override
     {
         data_dir_ = data_dir;
+        MM2_DBG("MM2 DBG: CharacterUi init\n");
         loadItems();
         return true;
     }
@@ -468,6 +461,7 @@ public:
 
     void beginViewParty(Mm2RosterFile &roster) override
     {
+        MM2_DBG("MM2 DBG: CharacterUi ViewParty\n");
         roster_ = &roster;
         view_mode_ = ViewMode::RosterList;
         roster_page_offset_ = 0;
@@ -518,6 +512,7 @@ public:
 
     void beginCreateCharacter(Mm2RosterFile &roster, int slot) override
     {
+        MM2_DBG("MM2 DBG: CharacterUi CreateCharacter\n");
         roster_ = &roster;
         if (slot >= 0 && slot < kPlayableSlots && mm2_roster_slot_is_empty(&roster_->records[slot])) {
             create_slot_ = slot;
@@ -671,15 +666,14 @@ private:
     enum class CreateStep { StatRoll, Race, Alignment, Sex, Name };
     enum class PartyPage { Characters, Hirelings };
     enum class PartySub { List, Sheet };
-
     void loadItems()
     {
         has_items_ = false;
         if (!data_dir_) {
             return;
         }
-        char path[512];
-        if (!joinDataPath(path, sizeof(path), data_dir_, "items.dat")) {
+        char *const path = mm2_path_scratch_a();
+        if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "items.dat")) {
             return;
         }
         std::size_t size = 0;
@@ -689,9 +683,11 @@ private:
         if (size < static_cast<std::size_t>(kItemRecordSize * kItemCount)) {
             platform::freeFileBuffer(item_names_);
             item_names_ = nullptr;
+            MM2_DBG("MM2 DBG: Loading items.dat FAIL (size %lu)\n", (unsigned long)size);
             return;
         }
         has_items_ = true;
+        MM2_DBG("MM2 DBG: Loading items.dat ok (%lu bytes)\n", (unsigned long)size);
     }
 
     void itemName(uint8_t id, char *out, std::size_t out_cap) const
@@ -773,27 +769,33 @@ private:
         if (!data_dir_) {
             return;
         }
-        char path[512];
-        if (!joinDataPath(path, sizeof(path), data_dir_, "throw.32")) {
+        char *const path = mm2_path_scratch_a();
+        if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "throw.32")) {
+            MM2_DBG("MM2 DBG: Loading throw.32 FAIL (path)\n");
             return;
         }
+        MM2_DBG("MM2 DBG: Loading throw.32 from '%s'\n", path);
         mm2_image32_set_preview_opaque(0);
         if (mm2_image32_load_file(path, &throw_) != MM2_IMAGE32_OK || throw_.frame_count <= 0) {
             mm2_image32_free(&throw_);
+            MM2_DBG("MM2 DBG: Loading throw.32 FAIL (decode)\n");
             return;
         }
 #if MM2_HOST_AMIGA
         if (!throw_.frames[0].bitmap) {
             mm2_image32_free(&throw_);
+            MM2_DBG("MM2 DBG: Loading throw.32 FAIL (no bitmap)\n");
             return;
         }
 #else
         if (!throw_.frames[0].rgba) {
             mm2_image32_free(&throw_);
+            MM2_DBG("MM2 DBG: Loading throw.32 FAIL (no rgba)\n");
             return;
         }
 #endif
         has_throw_ = true;
+        MM2_DBG("MM2 DBG: Loading throw.32 ok (%u frames)\n", (unsigned)throw_.frame_count);
     }
 
     UiResult saveRoster()
@@ -801,8 +803,8 @@ private:
         if (!roster_ || !data_dir_) {
             return UiResult::Cancel;
         }
-        char path[512];
-        if (!joinDataPath(path, sizeof(path), data_dir_, "roster.dat")) {
+        char *const path = mm2_path_scratch_a();
+        if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
             return UiResult::Cancel;
         }
         return (mm2_roster_save_file(path, roster_) == MM2_ROSTER_OK) ? UiResult::Continue : UiResult::Cancel;
@@ -925,8 +927,8 @@ private:
             return UiResult::Cancel;
         }
         mm2_create_build_record(&pending_, &roster_->records[create_slot_]);
-        char path[512];
-        if (!data_dir_ || !joinDataPath(path, sizeof(path), data_dir_, "roster.dat")) {
+        char *const path = mm2_path_scratch_a();
+        if (!data_dir_ || !joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
             return UiResult::Cancel;
         }
         if (mm2_roster_save_file(path, roster_) != MM2_ROSTER_OK) {
@@ -1046,7 +1048,6 @@ private:
     }
 
     // ---- throw.32 tableau (rewritten from asset + ASM LAB_551A / LAB_5632 / LAB_60DE) ----
-
     int throwBlitX(int frame_index, int frame_width) const
     {
         using namespace amiga_layout;
@@ -1127,7 +1128,6 @@ private:
             return;
         }
         using namespace amiga_layout;
-
         if (!throw_anim_playing_) {
             // LAB_551A rest path: blit frame 0, print rolled stats on tableau.
             blitThrowFrame(c, kCreateThrowRestFrame);
@@ -1318,21 +1318,16 @@ private:
     void renderCreateBase(gfx::ScreenCompositor &c)
     {
         using namespace amiga_layout;
-
         drawRedBorder(c, kCreateBorderRow, kCreateBorderCol, kCreateBorderW, kCreateBorderH);
         drawBorderIntegratedText(c, kCreateBorderRow, kCreateBorderCol, kCreateBorderW, "( Create New Characters )");
-
         renderThrowTableau(c);
-
         uint8_t vals[MM2_CREATE_STAT_COUNT];
         statValues(createDisplayStats(), vals);
-
         for (int row = 0; row < MM2_CREATE_STAT_COUNT; ++row) {
             const int cell_row = kCreateStatRowBase + row;
             char letter_line[8];
             std::snprintf(letter_line, sizeof(letter_line), "%c -", kStatKeys[row][0]);
             drawCellText(c, cell_row, kCreateStatColLetter, letter_line);
-
             const bool exchange_pick = create_step_ == CreateStep::StatRoll && create_exchange_first_ == row;
             if (exchange_pick) {
                 drawCellText(c, cell_row, kCreateStatColName, kStatLongNames[row], 255, 255, 128);
@@ -1365,7 +1360,6 @@ private:
         const uint8_t r = picked ? 255 : 220;
         const uint8_t g = picked ? 220 : 220;
         const uint8_t b = picked ? 128 : 220;
-
         if (eligible) {
             char digit[4];
             std::snprintf(digit, sizeof(digit), "%d", cls + 1);
@@ -1401,7 +1395,6 @@ private:
     void renderCreateRightPanel(gfx::ScreenCompositor &c)
     {
         using namespace amiga_layout;
-
         if (create_step_ == CreateStep::StatRoll) {
             for (int cls = 0; cls < MM2_CREATE_CLASS_COUNT; ++cls) {
                 drawCreateClassRow(c, kCreateStatRowBase + cls, cls);
@@ -1433,20 +1426,16 @@ private:
     void renderRosterList(gfx::ScreenCompositor &c)
     {
         using namespace amiga_layout;
-
         drawRedBorder(c, kRosterBorderRow, kRosterBorderCol, kRosterBorderW, kRosterBorderH);
-
         const char *header = (roster_page_offset_ == 0) ? "(View All)" : "(Hirelings)";
         drawBorderIntegratedText(c, kRosterBorderRow, kRosterBorderCol, kRosterBorderW, header);
         drawCenteredCellText(c, kRosterTitleRow, kRosterTextCols, "Characters");
         drawCenteredHorizRule(c, kRosterUnderlineRow, kRosterTextCols, 12);
-
         for (int slot = 0; slot < kRosterSlotCount; ++slot) {
             const int roster_idx = slot + roster_page_offset_;
             const int col = (slot >= kRosterSlotsPerColumn) ? kRosterListColRight : kRosterListColLeft;
             const int row = (slot % kRosterSlotsPerColumn) + kRosterListRowBase;
             const char letter = static_cast<char>('A' + slot);
-
             char line[40];
             if (!isRosterListEntryVisible(roster_idx)) {
                 std::snprintf(line, sizeof(line), "%c-", letter);
@@ -1480,26 +1469,20 @@ private:
         const Mm2RosterRecord &rec = roster_->records[sheet_roster_index_];
         const bool hireling = isHirelingSlot(sheet_roster_index_);
         const int hireling_index = hireling ? (sheet_roster_index_ - kRosterHirelingPageOffset) : -1;
-
         drawRedBorder(c, kSheetBorderRow, kSheetBorderCol, kSheetBorderW, kSheetBorderH);
-
         char name[16];
         mm2_roster_name_to_cstr(&rec, name, sizeof(name));
-
         char header[80];
         std::snprintf(header, sizeof(header), "%c) %s: %s %s %s %s%s", sheet_slot_letter_, name,
                       rec.sex ? "F" : "M", alignHeaderName(rec.alignment_base), raceHeaderName(rec.race),
                       className(rec.class_id), (rec.class_quest_guild_mask & 0x80) ? "+" : "");
         drawBorderIntegratedTextAt(c, kSheetBorderRow, kSheetHeaderCol, header);
-
         const char *skill_names[6] = {};
         const int skill_count =
             hireling ? collectHirelingSkillNames(hireling_index, skill_names, 6)
                      : collectRosterSkillNames(rec, skill_names, 6);
-
         char buf[48];
         const int r0 = kSheetStatRowBase;
-
         // Left column
         std::snprintf(buf, sizeof(buf), "Lvl=%u", rec.level);
         drawCellText(c, r0 + 0, kSheetStatColLeft, buf);
@@ -1517,7 +1500,6 @@ private:
         drawCellText(c, r0 + 6, kSheetStatColLeft, buf);
         std::snprintf(buf, sizeof(buf), "Lck=%u", rec.luck_base);
         drawCellText(c, r0 + 7, kSheetStatColLeft, buf);
-
         // Middle column — HP/SP/AC+SL/thievery/skills/dotted rule (WinUAE layout).
         // Each row: label+current at kSheetStatColMid, companion value at kSheetStatColSlash.
         // Row 2 (Int= row) has no mid/right content — natural gap.
@@ -1525,24 +1507,18 @@ private:
         drawCellText(c, r0 + 0, kSheetStatColMid, buf);
         std::snprintf(buf, sizeof(buf), "/%u", rec.hp_max);
         drawCellText(c, r0 + 0, kSheetStatColSlash, buf);
-
         std::snprintf(buf, sizeof(buf), "SP=%u", rec.sp_current);
         drawCellText(c, r0 + 1, kSheetStatColMid, buf);
         std::snprintf(buf, sizeof(buf), "/%u", rec.sp_max);
         drawCellText(c, r0 + 1, kSheetStatColSlash, buf);
-
         // r0+2 intentionally empty (aligns with Int= left-only row)
-
         std::snprintf(buf, sizeof(buf), "AC=%u", rec.armor_class);
         drawCellText(c, r0 + 3, kSheetStatColMid, buf);
         std::snprintf(buf, sizeof(buf), "SL=%u", rec.spell_level);
         drawCellText(c, r0 + 3, kSheetStatColSlash, buf);
-
         std::snprintf(buf, sizeof(buf), "Thievery %u%%", rosterDisplayThievery(rec));
         drawCellText(c, r0 + 4, kSheetStatColMid, buf);
-
         static const char kEmptySkillSlot[] = ". . . . . . . . . . . . ";
-
         if (skill_count >= 1) {
             drawCellText(c, r0 + 5, kSheetStatColMid, skill_names[0]);
         } else {
@@ -1556,7 +1532,6 @@ private:
         }
         std::snprintf(buf, sizeof(buf), "Cond= %s", conditionName(rec.condition));
         drawCellText(c, r0 + 6, kSheetStatColRight, buf);
-
         // Right column — Age/Exp stay at kSheetStatColRight (col 26).
         // Cost/Gems/Food sit at kSheetStatColCost (col 24), 2 left of Age/Exp.
         std::snprintf(buf, sizeof(buf), "Age=%u", rec.age);
@@ -1574,10 +1549,8 @@ private:
         drawCellText(c, r0 + 4, kSheetStatColCost, buf);
         std::snprintf(buf, sizeof(buf), "Food=%u", rec.food);
         drawCellText(c, r0 + 5, kSheetStatColCost, buf);
-
         const int divider_w = kSheetBorderCol + kSheetBorderW - 2 - kSheetEquipCol + 1;
         drawDoubleSectionHeader(c, kSheetDividerRow, kSheetEquipCol, divider_w, " Equipped ", " Backpack ");
-
         static const char kPackLetters[] = "ABCDEF";
         for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
             const int row = kSheetEquipRowBase + i;
@@ -1590,7 +1563,6 @@ private:
                 std::snprintf(eline, sizeof(eline), "%d)", i + 1);
             }
             drawCellText(c, row, kSheetEquipCol, eline, 220, 220, 220);
-
             itemName(rec.backpack[i].item_id, iname, sizeof(iname));
             if (iname[0]) {
                 std::snprintf(eline, sizeof(eline), "%c) %s", kPackLetters[i], iname);
@@ -1615,12 +1587,10 @@ private:
     }
 
     // ---- Choose-party helpers ------------------------------------------------
-
     // A roster slot belongs to the hireling pool when it sits in the second
     // roster page (offset 0x18). Party totals: max 6 characters, max 8 total
     // (so 0 characters allows up to 8 hirelings).
     static bool isHirelingSlot(int slot) { return slot >= amiga_layout::kRosterHirelingPageOffset; }
-
     // Letter A..X maps 1:1 to roster slots on the current page (0..23 or 24..47).
     static int rosterSlotForLetter(int letter_index, int page_offset)
     {
@@ -1713,27 +1683,21 @@ private:
     void renderPartyChooser(gfx::ScreenCompositor &c)
     {
         using namespace amiga_layout;
-
         drawRedBorder(c, kRosterBorderRow, kRosterBorderCol, kRosterBorderW, kRosterBorderH);
-
         char title[32];
         std::snprintf(title, sizeof(title), "( %d-%s )", party_town_, townName(static_cast<uint8_t>(party_town_)));
         drawBorderIntegratedText(c, kRosterBorderRow, kRosterBorderCol, kRosterBorderW, title);
-
         drawCellText(c, kPartyOtherTownsRow, kPartyOtherTownsCol, "Other Towns");
         drawCellText(c, kPartyTownKeysRow, kPartyTownKeysCol, "'1' - '5'");
-
         const char *header = (party_page_ == PartyPage::Hirelings) ? "Hirelings" : "Characters";
         drawCenteredCellText(c, kPartyHeaderRow, kPartyTextCols, header);
         drawCenteredHorizRule(c, kPartyUnderlineRow, kPartyTextCols, 12);
-
         const int char_count = partyCharacterCount();
         const int hire_count = party_count_ - char_count;
         drawCellText(c, kPartyPartyLabelRow, kPartyRightCol + 2, "PARTY");
         char counts[24];
         std::snprintf(counts, sizeof(counts), "C=%d / H=%d", char_count, hire_count);
         drawCellText(c, kPartyCountRow, kPartyRightCol, counts);
-
         if (party_count_ >= kMaxParty) {
             const char *full = "*** Party is Full ***";
             const int len = static_cast<int>(std::strlen(full));
@@ -1745,7 +1709,6 @@ private:
 
         const int page_offset =
             (party_page_ == PartyPage::Hirelings) ? kRosterHirelingPageOffset : 0;
-
         for (int letter = 0; letter < kPartySlotCount; ++letter) {
             const bool right = letter >= kPartySlotsPerColumn;
             const int row = (letter % kPartySlotsPerColumn) + kPartyListRowBase;
@@ -1753,7 +1716,6 @@ private:
             const int text_col = right ? kPartyListColRight : kPartyListColLeft;
             const char glyph = static_cast<char>('A' + letter);
             const int slot = rosterSlotForLetter(letter, page_offset);
-
             if (!isPartyListEntryVisible(slot)) {
                 char line[8];
                 std::snprintf(line, sizeof(line), "%c-", glyph);
@@ -1786,17 +1748,14 @@ private:
 
     const char *data_dir_ = nullptr;
     Mm2RosterFile *roster_ = nullptr;
-
     uint8_t *item_names_ = nullptr;
     bool has_items_ = false;
-
     ViewMode view_mode_ = ViewMode::RosterList;
     int roster_page_offset_ = 0;
     int sheet_roster_index_ = -1;
     char sheet_slot_letter_ = 'A';
     SheetMode sheet_mode_ = SheetMode::View;
     char rename_buf_[MM2_ROSTER_NAME_SIZE + 1] = {};
-
     CreateStep create_step_ = CreateStep::StatRoll;
     int create_slot_ = 0;
     bool create_active_ = false;
@@ -1812,7 +1771,6 @@ private:
     int throw_anim_gate_ = 0;
     int create_name_cursor_frame_ = 0;
     int create_name_cursor_gate_ = 0;
-
     PartyPage party_page_ = PartyPage::Characters;
     PartySub party_sub_ = PartySub::List;
     int party_town_ = 1;                  // current home-town filter (1..5)
@@ -1823,7 +1781,6 @@ private:
 };
 
 }  // namespace
-
 std::unique_ptr<ICharacterUi> makeAmigaCharacterUi()
 {
     return std::make_unique<AmigaCharacterUi>();

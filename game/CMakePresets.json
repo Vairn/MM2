@@ -13,8 +13,7 @@
         "AMIGA": "ON",
         "M68K_CPU": "68020",
         "ACE_USE_AGA_FEATURES": "ON",
-        "ACE_USE_ECS_FEATURES": "ON",
-        "M68K_LDFLAGS": "-Wl,--stack=32768"
+        "ACE_USE_ECS_FEATURES": "ON"
       }
     },
     {
@@ -25,8 +24,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ACE_DEBUG": "ON",
-        "ACE_DEBUG_UAE": "ON",
-        "M68K_LDFLAGS": "-Wl,--stack=32768"
+        "ACE_DEBUG_UAE": "ON"
       }
     },
     {

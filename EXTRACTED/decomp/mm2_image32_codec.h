@@ -29,6 +29,7 @@ typedef struct mm2_image32_file {
     uint16_t frame_count;
     uint16_t depth_or_mode;
     mm2_image32_frame *frames;
+    char debug_label[32]; /* basename for ACE_DEBUG logs (copied at load) */
     uint8_t palette_rgba[MM2_IMAGE32_PALETTE_COLORS][4];
 #if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
     uint32_t palette_pen[MM2_IMAGE32_PALETTE_COLORS]; /* ACE 0x00RRGGBB pens */

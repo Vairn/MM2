@@ -44,7 +44,7 @@ if(AMIGA)
   FetchContent_Declare(
     amigaports_ace
     GIT_REPOSITORY https://github.com/AmigaPorts/ACE.git
-    GIT_TAG main
+    GIT_TAG d2cc8d2
     GIT_SHALLOW TRUE
   )
   FetchContent_MakeAvailable(amigaports_ace)
@@ -125,6 +125,7 @@ set(MM2_GAME_SOURCES
   src/gfx/View3D.cpp
   src/gfx/PlayScreenChrome.cpp
   src/runtime/Mm2Alloc.cpp
+  src/runtime/PathScratch.cpp
   src/ui/CharacterUiKind.cpp
   src/ui/CharacterUiFactory.cpp
   src/ui/CharacterUiController.cpp
@@ -193,6 +194,9 @@ if(AMIGA)
   # (last flag wins) keeps those symbols externally visible through the LTO unit.
   target_link_options(${_mm2_target} PRIVATE -fno-whole-program)
   target_link_options(${_mm2_target} PUBLIC -Wl,-Map=mm2.map)
+  if(M68K_LDFLAGS)
+    target_link_options(${_mm2_target} PRIVATE ${M68K_LDFLAGS})
+  endif()
 else()
   target_link_libraries(${_mm2_target} PRIVATE mm2_codecs SDL2::SDL2main SDL2::SDL2)
 endif()
