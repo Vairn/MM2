@@ -1,6 +1,10 @@
 #include "mm2_party_launch.h"
 
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+#include "mm2_codec_platform.h"
+#else
 #include <string.h>
+#endif
 
 /*
  * Verified from EXTRACTED/ghidra/mm2_data_00.bin (lea -$7670/$766b/$7666, a4)).

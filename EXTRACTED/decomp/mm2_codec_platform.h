@@ -3,15 +3,21 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
 #if defined(MM2_HOST_AMIGA) || defined(MM2_CODEC_AMIGA)
 
 #include <mini_std/stdio.h>
 #include <mini_std/stdlib.h>
+#include <string.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void *mm2_malloc(size_t size);
 extern void mm2_free(void *ptr);
+#ifdef __cplusplus
+}
+#endif
 
 static inline void *codec_malloc(size_t size) { return mm2_malloc(size); }
 
@@ -50,6 +56,7 @@ static inline int fgetc(FILE *stream)
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #endif
 
