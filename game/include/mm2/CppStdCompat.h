@@ -268,6 +268,7 @@ inline int toupper(int c) { return mm2_freestanding::toupper_ascii(static_cast<u
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <array>
 #include <memory>
 #include <vector>
 

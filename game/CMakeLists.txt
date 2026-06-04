@@ -173,6 +173,7 @@ if(AMIGA)
   target_compile_options(${_mm2_target} PRIVATE -ffreestanding -fno-exceptions -fno-rtti)
   target_compile_options(${_mm2_target} PUBLIC -Wall -Wextra)
   target_include_directories(${_mm2_target} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/freestanding_stl
     ${MM2_DECOMP}
     ${ace_engine_SOURCE_DIR}/include/mini_std
     ${ace_engine_SOURCE_DIR}/include

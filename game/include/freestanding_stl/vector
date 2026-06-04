@@ -1,0 +1,3 @@
+#pragma once
+/* Amiga / MM2_NO_STL: libstdc++ has no <vector>; std::vector lives in CppStdCompat.h */
+#include "mm2/CppStdCompat.h"
