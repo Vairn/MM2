@@ -12,6 +12,7 @@
 #include <mini_std/string.h>
 
 #include <ace/managers/blit.h>
+#include <ace/managers/log.h>
 #include <ace/utils/bitmap.h>
 #include <ace/utils/extview.h>
 
@@ -78,6 +79,12 @@ void mm2_amiga_blit_frame(const mm2_image32_file *img, uint16_t frame_index, UWO
     }
     pDst = pBfr->pBack;
 
+#ifdef ACE_DEBUG
+    if (pSrc->Depth != pDst->Depth) {
+        logWrite("MM2 blit: depth mismatch src=%u dst=%u (%ux%u)\n", pSrc->Depth, pDst->Depth,
+                 frame->width, frame->height);
+    }
+#endif
     blitCopy(
         pSrc, 0, 0,
         pDst, uwDstX, uwDstY,

@@ -11,6 +11,7 @@
 #include <ace/managers/blit.h>
 #include <ace/managers/copper.h>
 #include <ace/managers/key.h>
+#include <ace/managers/log.h>
 #include <ace/managers/memory.h>
 #include <ace/managers/system.h>
 #include <ace/managers/timer.h>
@@ -39,6 +40,10 @@ bool init(int *argc, char ***argv)
     (void)argv;
 
     systemCreate();
+#ifdef ACE_DEBUG
+    logOpen(nullptr);
+    logWrite("MM2: systemCreate ok\n");
+#endif
     memCreate();
     timerCreate();
     blitManagerCreate();
@@ -46,6 +51,9 @@ bool init(int *argc, char ***argv)
     keyCreate();
 
     if (!mm2AmigaDisplayCreate(MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, 1)) {
+#ifdef ACE_DEBUG
+        logWrite("MM2: mm2AmigaDisplayCreate failed\n");
+#endif
         keyDestroy();
         copDestroy();
         blitManagerDestroy();
@@ -57,6 +65,10 @@ bool init(int *argc, char ***argv)
 
     mm2AmigaDisplayActivate();
     g_ace_ready = true;
+#ifdef ACE_DEBUG
+    logWrite("MM2: platform init ok (AGA %ux%u %ubpp)\n", MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT,
+             MM2_AGA_SCREEN_BPP);
+#endif
     return true;
 }
 
