@@ -1,8 +1,6 @@
 #include "mm2_monsters_codec.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "mm2_codec_platform.h"
 
 const char *const mm2_single_effect_names[MM2_SINGLE_EFFECT_COUNT] = {
     "nothing", "loose gold", "loose gems", "Poison", "Disease", "Sleep",

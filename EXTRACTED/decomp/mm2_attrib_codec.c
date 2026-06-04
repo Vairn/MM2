@@ -1,8 +1,6 @@
 #include "mm2_attrib_codec.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "mm2_codec_platform.h"
 
 Mm2AttribError mm2_attrib_decode(const uint8_t *bytes, size_t bytes_size, Mm2AttribFile *out)
 {

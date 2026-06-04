@@ -286,3 +286,5 @@ interpretation, no modernized UX, unless behind an explicitly alternate UI backe
   book.32** (no intro under boxes); logo = centered `nwcp.32`; font = `Mm2Font8x8.inc`.
   See `EXTRACTED/docs/39-title-screen-animation.md`.
 - Character/view/create UI: `EXTRACTED/docs/39-character-ui-view-create.md`.
+- **AGA port plan** (6bp, extension palette, multi-combat sprites, future UI, new dungeons/art):
+  `EXTRACTED/docs/41-aga-port-plan.md` — presentation/extensions; classic logic still ASM-traced.

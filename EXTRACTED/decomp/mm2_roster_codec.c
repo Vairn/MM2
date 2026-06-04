@@ -1,8 +1,6 @@
 #include "mm2_roster_codec.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "mm2_codec_platform.h"
 
 enum {
     MM2_ROSTER_FILE_SIZE = MM2_ROSTER_RECORD_SIZE * MM2_ROSTER_RECORD_COUNT

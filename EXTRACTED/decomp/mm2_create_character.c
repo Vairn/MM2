@@ -4,6 +4,8 @@
 
 enum {
     MM2_CREATE_D20 = 20,
+    MM2_CREATE_STAT_MIN = 3,
+    MM2_CREATE_STAT_MAX = 21,
     MM2_CREATE_START_GOLD = 200,
     MM2_CREATE_START_FOOD = 10,
     MM2_CREATE_START_AGE = 18,
@@ -15,14 +17,36 @@ uint32_t mm2_create_rng_next(uint32_t *state)
     if (!state) {
         return 0;
     }
-    *state = *state * 1664525u + 1013904223u;
+    /* Low word = roll counter (A4-$795a increments per RNG draw in the original).
+     * High word = mixed seed. Not a byte-perfect -$7BB4 trace yet, but uniform
+     * 1..n draws for create stat rolls. */
+    uint16_t counter = (uint16_t)(*state & 0xFFFFu);
+    uint16_t mix = (uint16_t)(*state >> 16);
+    counter++;
+    mix = (uint16_t)(mix * 214013u + 2531011u);
+    *state = ((uint32_t)mix << 16) | counter;
     return *state;
 }
 
-static uint8_t roll_d20(uint32_t *rng_state)
+static unsigned mm2_rng_range_1_to_n(uint32_t *rng_state, unsigned n)
 {
+    if (!rng_state || n == 0) {
+        return 1;
+    }
     const uint32_t r = mm2_create_rng_next(rng_state);
-    return (uint8_t)((r >> 16) % MM2_CREATE_D20 + 1u);
+    return (unsigned)((r >> 16) % n) + 1u;
+}
+
+static uint8_t roll_create_stat(uint32_t *rng_state)
+{
+    /* Manual + ASM $01C10C: JSR -$7B54 with d1=20 (1d20). Ratings are 3..21
+     * (Appendix A / p.7), i.e. d20 + 2 with 22 clamped to 21. */
+    const unsigned d20 = mm2_rng_range_1_to_n(rng_state, MM2_CREATE_D20);
+    unsigned rating = d20 + 2u;
+    if (rating > MM2_CREATE_STAT_MAX) {
+        rating = MM2_CREATE_STAT_MAX;
+    }
+    return (uint8_t)rating;
 }
 
 static int bonus_tier(uint8_t stat)
@@ -149,7 +173,7 @@ void mm2_create_roll_stats(Mm2CreateStats *out, uint32_t *rng_state)
     for (i = 0; i < MM2_CREATE_STAT_COUNT; i++) {
         uint8_t *p = stat_ptr(out, i);
         if (p) {
-            *p = roll_d20(rng_state);
+            *p = roll_create_stat(rng_state);
         }
     }
 }

@@ -183,6 +183,7 @@ Outputs: `EXTRACTED/mm2.annotated.asm`, `EXTRACTED/asm/` splits.
 | Doc | Description |
 |-----|-------------|
 | [`game/README.md`](../../game/README.md) | Build targets (SDL2 / Amiga ACE), phases |
+| [`41-aga-port-plan.md`](41-aga-port-plan.md) | **AGA 6bp port** — palette zones, ACE planar, multi-combat sprites, future UI, extension dungeons/art |
 | [`39-title-screen-animation.md`](39-title-screen-animation.md) | Title screen fidelity reference |
 | [`39-character-ui-view-create.md`](39-character-ui-view-create.md) | Character UI backends |
 

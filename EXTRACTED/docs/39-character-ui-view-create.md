@@ -162,7 +162,7 @@ Field index → row/col tables: **`A4-$8AF8` / `A4-$8AE0`** (`$38EA`).
 | Item | ASM | Notes |
 |------|-----|-------|
 | Roll loop | `$01C0E2`–`$01C13C` | Seven stats (`cmpi #6` → indices 0..6). |
-| RNG | `$01C10C` `moveq #$14,d1` + **`JSR -$7B54`** | **1d20** per stat (confirmed). |
+| RNG | `$01C10C` `moveq #$14,d1` + **`JSR -$7B54`** | **1d20** per stat (confirmed); manual ratings **3..21** = roll + 2, cap 21. |
 | Source tables | **`A4-$68EE` / `-$68D0`** (+ jump table @ `$01C09E`) | Per-step table pair; race re-roll path @ **`$01B646`**. |
 | Eligibility byte | `$01C244` `move.b $d(a1)` → **`A4-$5A12[]`** | Stored from rolled-stat block +0x0D. |
 | Class mask AND | **`$01BC8A`** | **`A4-$67F9[class]`** (`data_hunk` @ file **`0x1805`**: `80 40 20 10 08 04 02 01 …`) AND **`A4-$5A12[stat]`**; ineligible → `'-'`. |

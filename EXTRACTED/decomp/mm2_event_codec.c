@@ -1,8 +1,6 @@
 #include "mm2_event_codec.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "mm2_codec_platform.h"
 
 static uint32_t read_be32(const uint8_t *p)
 {

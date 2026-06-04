@@ -53,6 +53,8 @@ constexpr int kSheetHeaderCol = 0x02;
 constexpr int kSheetStatRowBase = 0x03;
 constexpr int kSheetStatColLeft = 0x02;
 constexpr int kSheetStatColMid = 0x0e;
+constexpr int kSheetStatColSlash = 0x16;   // "/max" companion column
+constexpr int kSheetStatColCost = 0x18;    // Gold/Gems/Food (2 left of Age/Exp)
 constexpr int kSheetStatColRight = 0x1a;
 
 // Equipped/backpack block + footer compressed to fit the NTSC 25-row grid
@@ -126,8 +128,9 @@ constexpr int kCreateStatColName = 0x06;     // stat name
 // Left panel only — must stay left of kCreateClassDigitCol (26). ASM $01BC8A prints
 // stat value via -$7BDE at col $22, but the right class column starts at $1A on the
 // same rows; WinUAE keeps stat '=' / value in cols 20–22 so the two panels don't collide.
-constexpr int kCreateStatColEquals = 0x14;   // col 20
-constexpr int kCreateStatColValue = 0x16;    // col 22
+constexpr int kCreateStatColEquals = 0x14;       // col 20
+constexpr int kCreateStatColValueSpace = 0x15;   // col 21 — ' ' after '='
+constexpr int kCreateStatColValue = 0x16;        // col 22
 
 // Right panel — stat-roll class list (digit / " - " / name); ASM digit path $01BD66
 // uses col $1F for eligibility marker on stat rows, full class names at $01BD70+.
@@ -139,7 +142,10 @@ constexpr int kCreateClassNameCol = 0x1e;    // col 30
 // Labels are 6 chars right-padded so '=' / ':' align (WinUAE name screen).
 constexpr int kCreateProgressLabelCol = 0x1a; // col 26 — "Class=", " Race=", …
 constexpr int kCreateProgressValueCol = 0x21; // col 33 — value after "= "
+constexpr int kCreateRightPanelCol = kCreateProgressLabelCol;
+constexpr int kCreateRightPanelWidth = 16;
 // Name field scrolls: roster allows 11 chars but only 5 fit before the cursor at col 38.
+constexpr int kCreateNameMaxLen = 10;            // create flow name entry (roster holds 11)
 constexpr int kCreateNameCursorMaxCol = kCreateBorderCol + kCreateBorderW - 1; // col 38
 constexpr int kCreateNameVisibleChars = kCreateNameCursorMaxCol - kCreateProgressValueCol; // 5
 
@@ -151,16 +157,41 @@ constexpr int kCreatePromptRow3 = 0x16;      // step prompt line 3 (stat roll on
 constexpr int kCreateEscRow = 0x18;          // bottom border row for ESC prompt
 constexpr int kCreatePromptCol = 0x02;
 
-// throw.32: frame 0 = 304×72 rest tableau (bar + fist); frames 1–10 = right-anchored throw sprites.
-// Create-char draw @ ASM $0054F2: one blit of A4-$7A51 at y=$12, x=$27 (col 39).
-// During reroll anim: LAB_60B6 orange bar fills @ y=$10 only (no frame-0 underlay); A4-$7A52
-// indexes die text, not a second sprite layer.
-constexpr int kCreateThrowBlitCol = 0x27;
-constexpr int kCreateThrowBlitY = 0x12;       // px y=18 — sole sprite blit row ($54F2)
-constexpr int kCreateThrowBarY = 0x10;        // px y=16 — LAB_60B6 fill rects during anim
+// throw.32 dice tableau — measured from decoded asset + ASM LAB_551A / LAB_5632 / LAB_60DE.
+//   frame 0: 304×72 full rest (fist + table); frames 1–10: 96,144,80,64,80,64,48,48,64,48 px
+//   sprite rows 0–43 = hand art; rows 44–71 = table (255,170,0) → screen y=62..89 when blit y=18
+// BlitBob @ $0054F2: col 39, y=18. Anim @ $005632: LAB_60DE highlights + LAB_62F0 die text.
+constexpr int kCreateThrowBlitCol = 0x27;     // x anchor = 312
+constexpr int kCreateThrowBlitY = 0x12;       // px y=18
+constexpr int kCreateThrowSpriteH = 72;
+constexpr int kCreateThrowTableauW = 304;
+constexpr int kCreateThrowTableauX = kCreateThrowBlitCol * kCellW - kCreateThrowTableauW; // 8
+constexpr int kCreateThrowOrangeRow = 44;       // first orange row inside sprite
+constexpr int kCreateThrowOrangeH = 28;
+constexpr int kCreateThrowOrangeY = kCreateThrowBlitY + kCreateThrowOrangeRow; // 62
+constexpr int kCreateThrowRestFrame = 0;
+constexpr int kCreateThrowAnimFrameFirst = 1;
+constexpr int kCreateThrowAnimFrameCount = 10;
+// LAB_60DE FillBox triplet (y=$10): highlight widths 12/21/31 px at die cols 12/21/31.
+constexpr int kCreateThrowHighlightY = 0x10;
+constexpr int kCreateThrowHighlightH = 0x10;
+constexpr int kCreateThrowHighlightW0 = 12;
+constexpr int kCreateThrowHighlightW1 = 21;
+constexpr int kCreateThrowHighlightW2 = 31;
+constexpr int kCreateThrowDieCol0 = 0x0C;
+constexpr int kCreateThrowDieCol1 = 0x15;
+constexpr int kCreateThrowDieCol2 = 0x1F;
+constexpr int kCreateThrowDieRowTop = 0x10;    // might / int / per (rest, LAB_551A)
+constexpr int kCreateThrowDieRowBot = 0x12;    // end / spd / acc
+constexpr uint8_t kCreateThrowOrangeR = 255;
+constexpr uint8_t kCreateThrowOrangeG = 170;
+constexpr uint8_t kCreateThrowOrangeB = 0;
+constexpr uint8_t kCreateThrowHighlightR = 255;
+constexpr uint8_t kCreateThrowHighlightG = 136;
+constexpr uint8_t kCreateThrowHighlightB = 119;
 
 constexpr int kCreateThrowAnimStepTicks = 4;  // ~15 Hz hand advance @ 60 Hz tick
-constexpr int kCreateThrowAnimSteps = 15;     // A4-$7A52 runs 0..$0F during reroll ($01C02)
+constexpr int kCreateThrowAnimSteps = 15;     // A4-$7A52 runs 0..$0F during reroll ($05E12)
 
 // Name-entry cursor @ read_key_with_spinner / A4-$77BC table (4-char spin).
 constexpr int kCreateNameCursorStepTicks = 4; // ~15 Hz @ 60 Hz tick

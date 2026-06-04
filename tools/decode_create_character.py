@@ -67,8 +67,10 @@ def main() -> None:
 
         def roll():
             nonlocal rng
-            rng = (rng * 1664525 + 1013904223) & 0xFFFFFFFF
-            return (rng >> 16) % 20 + 1
+            rng = (rng * 214013 + 2531011) & 0xFFFFFFFF
+            d20 = (rng >> 16) % 20 + 1
+            rating = min(21, d20 + 2)
+            return rating
 
         stats = [roll() for _ in range(7)]
         print("rolled", dict(zip(STATS, stats)))

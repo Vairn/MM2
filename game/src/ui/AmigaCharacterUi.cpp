@@ -1,5 +1,6 @@
 #include "mm2/ui/ICharacterUi.h"
 
+#include "mm2/CppStdCompat.h"
 #include "mm2/gfx/Mm2FontGlyphs.h"
 #include "mm2/ui/AmigaCharacterUiLayout.h"
 #include "mm2/ui/CharacterUiFactory.h"
@@ -10,9 +11,6 @@
 #include "mm2_image32_codec.h"
 #include "mm2_party_launch.h"
 
-#include <cstdio>
-#include <cstring>
-#include <memory>
 
 namespace mm2::ui {
 
@@ -38,6 +36,7 @@ static const char *kStatLongNames[] = {"Might", "Intellect", "Personality", "End
 
 int statIndexFromKey(char key)
 {
+    key = static_cast<char>(std::toupper(static_cast<unsigned char>(key)));
     if (key >= 'A' && key <= 'G') {
         return key - 'A';
     }
@@ -67,9 +66,8 @@ static const char *kTownNames[] = {"?", "Middlegate", "Atlantium", "Tundara", "V
 static const char *kAlignHeaderNames[] = {
     "Good", "Neut", "Evil",
 };
-static const char *kRaceHeaderNames[] = {
-    "Human", "Elf", "Dwarf", "Gnome", "H-Orc",
-};
+
+const char *raceHeaderName(uint8_t id) { return id < MM2_CREATE_RACE_COUNT ? kRaceNames[id] : "?"; }
 
 bool joinPath(char *out, std::size_t out_cap, const char *dir, const char *name)
 {
@@ -87,7 +85,6 @@ const char *classAbbrev(uint8_t id) { return id < 8 ? kClassAbbrevs[id] : "?"; }
 const char *classAbbrev3(uint8_t id) { return id < 8 ? kClassAbbrev3[id] : "?"; }
 const char *className(uint8_t id) { return id < 8 ? kClassNames[id] : "?"; }
 const char *townName(uint8_t id) { return id >= 1 && id <= 5 ? kTownNames[id] : "?"; }
-const char *raceHeaderName(uint8_t id) { return id < 5 ? kRaceHeaderNames[id] : "?"; }
 const char *alignHeaderName(uint8_t id) { return id < 3 ? kAlignHeaderNames[id] : "?"; }
 
 const char *conditionName(uint8_t c)
@@ -279,7 +276,7 @@ static int collectHirelingSkillNames(int hireling_index, const char **names, int
         if (len >= sizeof(abbrev)) {
             continue;
         }
-        std::memcpy(abbrev, start, len);
+        ::memcpy(abbrev, start, len);
         abbrev[len] = '\0';
         const char *name = skillAbbrevToName(abbrev);
         if (name) {
@@ -505,11 +502,12 @@ public:
                 roster_page_offset_ = (roster_page_offset_ == 0) ? amiga_layout::kRosterHirelingPageOffset : 0;
                 return UiResult::Continue;
             }
-            if (keys.last_ascii >= 'A' && keys.last_ascii <= 'X') {
-                const int slot = (keys.last_ascii - 'A') + roster_page_offset_;
+            const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+            if (ch >= 'A' && ch <= 'X') {
+                const int slot = (ch - 'A') + roster_page_offset_;
                 if (slot >= 0 && slot < kPlayableSlots && isRosterListEntryVisible(slot)) {
                     sheet_roster_index_ = slot;
-                    sheet_slot_letter_ = keys.last_ascii;
+                    sheet_slot_letter_ = ch;
                     sheet_mode_ = SheetMode::View;
                     view_mode_ = ViewMode::CharacterSheet;
                 }
@@ -618,7 +616,8 @@ public:
         if (keys.escape) {
             return UiResult::Quit;  // "( 'ESC' to exit game )"
         }
-        if (keys.last_ascii == 'Z') {
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (ch == 'Z') {
             // ASM @ 0x0E06: Z with party → spawn at town inn (requires members).
             if (party_count_ <= 0) {
                 return UiResult::Continue;
@@ -636,11 +635,11 @@ public:
             party_town_ = keys.last_ascii - '0';
             return UiResult::Continue;
         }
-        if (keys.last_ascii >= 'A' && keys.last_ascii <= 'X') {
+        if (ch >= 'A' && ch <= 'X') {
             using namespace amiga_layout;
             const int page_offset =
                 (party_page_ == PartyPage::Hirelings) ? kRosterHirelingPageOffset : 0;
-            const int slot = rosterSlotForLetter(keys.last_ascii - 'A', page_offset);
+            const int slot = rosterSlotForLetter(ch - 'A', page_offset);
             if (!isPartyListEntryVisible(slot)) {
                 return UiResult::Continue;
             }
@@ -648,7 +647,7 @@ public:
                 togglePartyMember(slot);
             } else {
                 sheet_roster_index_ = slot;
-                sheet_slot_letter_ = keys.last_ascii;
+                sheet_slot_letter_ = ch;
                 party_sub_ = PartySub::Sheet;
             }
             return UiResult::Continue;
@@ -821,7 +820,7 @@ private:
 
     void startSheetRename()
     {
-        if (sheet_roster_index_ < 0 || sheet_roster_index_ >= kPlayableSlots) {
+        if (sheet_roster_index_ < 0 || isHirelingSlot(sheet_roster_index_)) {
             return;
         }
         mm2_roster_name_to_cstr(&roster_->records[sheet_roster_index_], rename_buf_, sizeof(rename_buf_));
@@ -849,7 +848,8 @@ private:
             sheet_mode_ = SheetMode::View;
             return UiResult::Continue;
         }
-        if (keys.last_ascii >= 'A' && keys.last_ascii <= 'Z') {
+        if ((keys.last_ascii >= 'A' && keys.last_ascii <= 'Z') ||
+            (keys.last_ascii >= 'a' && keys.last_ascii <= 'z')) {
             const std::size_t len = std::strlen(rename_buf_);
             if (len < MM2_ROSTER_NAME_SIZE) {
                 rename_buf_[len] = keys.last_ascii;
@@ -873,7 +873,7 @@ private:
 
     void deleteSheetCharacter(bool from_party)
     {
-        if (sheet_roster_index_ < 0 || sheet_roster_index_ >= kPlayableSlots) {
+        if (sheet_roster_index_ < 0 || isHirelingSlot(sheet_roster_index_)) {
             return;
         }
         if (mm2_roster_slot_is_empty(&roster_->records[sheet_roster_index_])) {
@@ -897,7 +897,8 @@ private:
             return tickSheetRename(keys);
         }
 
-        if (keys.escape || (from_party && keys.last_ascii == 'Z')) {
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (keys.escape || (from_party && ch == 'Z')) {
             sheet_mode_ = SheetMode::View;
             if (from_party) {
                 party_sub_ = PartySub::List;
@@ -944,7 +945,8 @@ private:
             startThrowAnimation(true);
             return UiResult::Continue;
         }
-        if (keys.last_ascii == 'G') {
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (ch == 'G') {
             if (create_exchange_first_ < 0) {
                 create_exchange_first_ = 6;
             } else {
@@ -953,7 +955,7 @@ private:
             }
             return UiResult::Continue;
         }
-        const int stat_key = statIndexFromKey(keys.last_ascii);
+        const int stat_key = statIndexFromKey(ch);
         if (stat_key >= 0 && stat_key < 6) {
             if (create_exchange_first_ < 0) {
                 create_exchange_first_ = stat_key;
@@ -992,7 +994,7 @@ private:
             return;
         }
         throw_anim_playing_ = true;
-        throw_anim_frame_ = 1;
+        throw_anim_frame_ = amiga_layout::kCreateThrowAnimFrameFirst;
         throw_anim_step_ = 0;
         throw_anim_gate_ = 0;
         throw_roll_when_done_ = roll_when_done;
@@ -1009,19 +1011,19 @@ private:
         }
         throw_anim_gate_ = 0;
         ++throw_anim_step_;
-        const int anim_frames = static_cast<int>(throw_.frame_count) - 1;
+        const int anim_frames = amiga_layout::kCreateThrowAnimFrameCount;
         if (anim_frames <= 0) {
             throw_anim_playing_ = false;
             throw_anim_frame_ = 0;
             return;
         }
-        // A4-$7A51 throw sprite index 1..N during reroll; not composited with frame 0.
-        throw_anim_frame_ = ((throw_anim_step_ - 1) % anim_frames) + 1;
+        throw_anim_frame_ =
+            amiga_layout::kCreateThrowAnimFrameFirst + ((throw_anim_step_ - 1) % anim_frames);
         if (throw_anim_step_ < amiga_layout::kCreateThrowAnimSteps) {
             return;
         }
         throw_anim_playing_ = false;
-        throw_anim_frame_ = 0;
+        throw_anim_frame_ = amiga_layout::kCreateThrowRestFrame;
         throw_anim_step_ = 0;
         if (throw_roll_when_done_) {
             mm2_create_roll_stats(&pending_.rolled, &create_rng_);
@@ -1043,21 +1045,9 @@ private:
             (create_name_cursor_frame_ + 1) % kCreateNameCursorFrameCount;
     }
 
-    void drawThrowOrangeBars(gfx::ScreenCompositor &c) const
-    {
-        using namespace amiga_layout;
-        const int anchor_x = kCreateThrowBlitCol * kCellW;
-        // LAB_60B6 @ $0060B6: three right-anchored fills @ y=$10 during throw anim only.
-        constexpr uint8_t kBarR = 255;
-        constexpr uint8_t kBarG = 136;
-        constexpr uint8_t kBarB = 119;
-        constexpr int kBarH = 18;
-        c.fillRect(anchor_x - 12, kCreateThrowBarY, 12, kBarH, kBarR, kBarG, kBarB);
-        c.fillRect(anchor_x - 21, kCreateThrowBarY, 21, kBarH, kBarR, kBarG, kBarB);
-        c.fillRect(anchor_x - 31, kCreateThrowBarY, 31, kBarH, kBarR, kBarG, kBarB);
-    }
+    // ---- throw.32 tableau (rewritten from asset + ASM LAB_551A / LAB_5632 / LAB_60DE) ----
 
-    void blitThrowFrame(gfx::ScreenCompositor &c, int frame_index, int y) const
+    void blitThrowFrame(gfx::ScreenCompositor &c, int frame_index) const
     {
         if (!has_throw_ || frame_index < 0 || frame_index >= static_cast<int>(throw_.frame_count)) {
             return;
@@ -1067,27 +1057,82 @@ private:
             return;
         }
         using namespace amiga_layout;
-        const int anchor_x = kCreateThrowBlitCol * kCellW;
-        const int x = anchor_x - static_cast<int>(frame.width);
-        c.blitRgba(frame.rgba, frame.width, frame.height, x, y);
+        const int x = kCreateThrowBlitCol * kCellW - static_cast<int>(frame.width);
+        c.blitRgba(frame.rgba, frame.width, frame.height, x, kCreateThrowBlitY);
+    }
+
+    void paintThrowTable(gfx::ScreenCompositor &c) const
+    {
+        using namespace amiga_layout;
+        c.fillRect(kCreateThrowTableauX, kCreateThrowOrangeY, kCreateThrowTableauW, kCreateThrowOrangeH,
+                   kCreateThrowOrangeR, kCreateThrowOrangeG, kCreateThrowOrangeB);
+    }
+
+    void eraseThrowHandLayer(gfx::ScreenCompositor &c) const
+    {
+        using namespace amiga_layout;
+        c.clearRect(kCreateThrowTableauX, kCreateThrowBlitY, kCreateThrowTableauW, kCreateThrowOrangeRow, 0,
+                    0, 0, 255);
+    }
+
+    void drawThrowAnimHighlights(gfx::ScreenCompositor &c) const
+    {
+        using namespace amiga_layout;
+        const int cols[3] = {kCreateThrowDieCol0, kCreateThrowDieCol1, kCreateThrowDieCol2};
+        const int widths[3] = {kCreateThrowHighlightW0, kCreateThrowHighlightW1, kCreateThrowHighlightW2};
+        for (int i = 0; i < 3; ++i) {
+            c.fillRect(cols[i] * kCellW, kCreateThrowHighlightY, widths[i], kCreateThrowHighlightH,
+                       kCreateThrowHighlightR, kCreateThrowHighlightG, kCreateThrowHighlightB);
+        }
+    }
+
+    void drawThrowTableauDieValues(gfx::ScreenCompositor &c, const uint8_t vals[6]) const
+    {
+        using namespace amiga_layout;
+        const int cols[3] = {kCreateThrowDieCol0, kCreateThrowDieCol1, kCreateThrowDieCol2};
+        char buf[8];
+        for (int i = 0; i < 3; ++i) {
+            std::snprintf(buf, sizeof(buf), "%u", vals[i]);
+            c.drawText(cols[i] * kCellW, kCreateThrowDieRowTop, buf);
+        }
+        for (int i = 0; i < 3; ++i) {
+            std::snprintf(buf, sizeof(buf), "%u", vals[3 + i]);
+            c.drawText(cols[i] * kCellW, kCreateThrowDieRowBot, buf);
+        }
+    }
+
+    void drawThrowAnimDieValues(gfx::ScreenCompositor &c) const
+    {
+        uint8_t flicker[6];
+        for (int i = 0; i < 6; ++i) {
+            const uint32_t mix = create_rng_ ^ static_cast<uint32_t>(throw_anim_step_ * 17 + i * 3);
+            flicker[i] = static_cast<uint8_t>((mix % 20u) + 1u);
+        }
+        drawThrowTableauDieValues(c, flicker);
     }
 
     void renderThrowTableau(gfx::ScreenCompositor &c) const
     {
-        using namespace amiga_layout;
         if (!has_throw_) {
             return;
         }
-        // ASM $0054F2: one blit of A4-$7A51 at y=$12, x=$27 per frame.
-        const int frame_index =
-            (throw_anim_playing_ && throw_anim_frame_ > 0) ? throw_anim_frame_ : 0;
-        if (frame_index > 0) {
-            // Reroll path ($00560A / $0060F4): LAB_60B6 bar fills, then hand sprite.
-            const int tableau_x = kCreateThrowBlitCol * kCellW - kCreateTableauW;
-            c.clearRect(tableau_x, kCreateThrowBarY, kCreateTableauW, 72, 0, 0, 0, 255);
-            drawThrowOrangeBars(c);
+        using namespace amiga_layout;
+
+        if (!throw_anim_playing_) {
+            // LAB_551A rest path: blit frame 0, print rolled stats on tableau.
+            blitThrowFrame(c, kCreateThrowRestFrame);
+            uint8_t vals[MM2_CREATE_STAT_COUNT];
+            statValues(createDisplayStats(), vals);
+            drawThrowTableauDieValues(c, vals);
+            return;
         }
-        blitThrowFrame(c, frame_index, kCreateThrowBlitY);
+
+        // LAB_5632 anim path: clear hand art, full-width table, blit slice, highlights, die text.
+        eraseThrowHandLayer(c);
+        paintThrowTable(c);
+        blitThrowFrame(c, throw_anim_frame_);
+        drawThrowAnimHighlights(c);
+        drawThrowAnimDieValues(c);
     }
 
     int createProgressLineCount() const
@@ -1112,20 +1157,23 @@ private:
     {
         using namespace amiga_layout;
         drawCellText(c, cell_row, kCreateProgressLabelCol, label);
-        drawCellText(c, cell_row, kCreateProgressValueCol, value);
+        const int value_col = kCreateProgressLabelCol + static_cast<int>(std::strlen(label)) + 1;
+        drawCellText(c, cell_row, value_col, value);
     }
 
     void drawCreateNameLine(gfx::ScreenCompositor &c, int cell_row)
     {
         using namespace amiga_layout;
-        drawCellText(c, cell_row, kCreateProgressLabelCol, " Name:");
+        constexpr const char *kNameLabel = " Name:";
+        drawCellText(c, cell_row, kCreateProgressLabelCol, kNameLabel);
+        const int value_col = kCreateProgressLabelCol + static_cast<int>(std::strlen(kNameLabel));
         const std::size_t name_len = std::strlen(pending_.name);
         const int scroll =
-            name_len > static_cast<std::size_t>(kCreateNameVisibleChars)
-                ? static_cast<int>(name_len - static_cast<std::size_t>(kCreateNameVisibleChars))
+            name_len > static_cast<std::size_t>(kCreateNameMaxLen)
+                ? static_cast<int>(name_len - static_cast<std::size_t>(kCreateNameMaxLen))
                 : 0;
-        drawCellText(c, cell_row, kCreateProgressValueCol, pending_.name + scroll);
-        const int cursor_col = kCreateProgressValueCol + static_cast<int>(name_len - static_cast<std::size_t>(scroll));
+        drawCellText(c, cell_row, value_col, pending_.name + scroll);
+        const int cursor_col = value_col + static_cast<int>(name_len - static_cast<std::size_t>(scroll));
         char cursor[2] = {kCreateNameCursorChars[create_name_cursor_frame_], '\0'};
         drawCellText(c, cell_row, cursor_col, cursor);
     }
@@ -1135,13 +1183,13 @@ private:
         using namespace amiga_layout;
         int row = kCreateStatRowBase;
         if (create_step_ >= CreateStep::Race && pending_.class_id >= 0) {
-            drawCreateProgressLine(c, row++, "Class=", kClassNames[pending_.class_id]);
+            drawCreateProgressLine(c, row++, " Class=", kClassNames[pending_.class_id]);
         }
         if (create_step_ >= CreateStep::Alignment && pending_.race >= 0) {
             drawCreateProgressLine(c, row++, " Race=", kRaceNames[pending_.race]);
         }
         if (create_step_ >= CreateStep::Sex && pending_.alignment >= 0) {
-            drawCreateProgressLine(c, row++, "Align=", kAlignNames[pending_.alignment]);
+            drawCreateProgressLine(c, row++, " Align=", kAlignNames[pending_.alignment]);
         }
         if (create_step_ >= CreateStep::Name && pending_.sex >= 0) {
             drawCreateProgressLine(c, row++, "  Sex=", kSexNames[pending_.sex]);
@@ -1226,21 +1274,22 @@ private:
             }
             return UiResult::Continue;
         }
-        if (keys.last_ascii >= 'A' && keys.last_ascii <= 'Z') {
+        if ((keys.last_ascii >= 'A' && keys.last_ascii <= 'Z') ||
+            (keys.last_ascii >= 'a' && keys.last_ascii <= 'z')) {
             const std::size_t len = std::strlen(pending_.name);
-            if (len < MM2_CREATE_NAME_MAX) {
+            if (len < static_cast<std::size_t>(amiga_layout::kCreateNameMaxLen)) {
                 pending_.name[len] = keys.last_ascii;
                 pending_.name[len + 1] = '\0';
             }
         } else if (keys.last_ascii >= '0' && keys.last_ascii <= '9') {
             const std::size_t len = std::strlen(pending_.name);
-            if (len < MM2_CREATE_NAME_MAX) {
+            if (len < static_cast<std::size_t>(amiga_layout::kCreateNameMaxLen)) {
                 pending_.name[len] = keys.last_ascii;
                 pending_.name[len + 1] = '\0';
             }
         } else if (keys.space) {
             const std::size_t len = std::strlen(pending_.name);
-            if (len > 0 && len < MM2_CREATE_NAME_MAX) {
+            if (len > 0 && len < static_cast<std::size_t>(amiga_layout::kCreateNameMaxLen)) {
                 pending_.name[len] = ' ';
                 pending_.name[len + 1] = '\0';
             }
@@ -1281,12 +1330,15 @@ private:
                 drawCellText(c, cell_row, kCreateStatColName, kStatLongNames[row]);
             }
 
-            const int dots_col = kCreateStatColName + static_cast<int>(std::strlen(kStatLongNames[row])) + 1;
+            const int dots_col =
+                kCreateStatColName + static_cast<int>(std::strlen(kStatLongNames[row]));
+            // Last '.' @ col (equals-1); '=' @ kCreateStatColEquals — no blank between them.
             const int dots_len = kCreateStatColEquals - dots_col;
             if (dots_len > 0) {
                 drawCellDotLeader(c, cell_row, dots_col, dots_len);
             }
-            drawCellText(c, cell_row, kCreateStatColEquals, "= ");
+            drawCellGlyph(c, cell_row, kCreateStatColEquals, static_cast<uint8_t>('='));
+            drawCellGlyph(c, cell_row, kCreateStatColValueSpace, static_cast<uint8_t>(' '));
             char val_buf[8];
             std::snprintf(val_buf, sizeof(val_buf), "%2u", vals[row]);
             drawCellText(c, cell_row, kCreateStatColValue, val_buf);
@@ -1314,13 +1366,26 @@ private:
         drawCellText(c, cell_row, kCreateClassNameCol, kClassNames[cls], r, g, b);
     }
 
-    void drawCreateNumberChoiceRow(gfx::ScreenCompositor &c, int cell_row, int choice_index, const char *label)
+    void drawCreateChoiceList(gfx::ScreenCompositor &c, int first_row, int count, const char *const *labels)
     {
         using namespace amiga_layout;
-        char prefix[8];
-        std::snprintf(prefix, sizeof(prefix), "%d) ", choice_index + 1);
-        drawCellText(c, cell_row, kCreateClassDigitCol, prefix);
-        drawCellText(c, cell_row, kCreateClassNameCol, label);
+        char line[24];
+        int max_len = 0;
+        for (int i = 0; i < count; ++i) {
+            std::snprintf(line, sizeof(line), "%d) %s", i + 1, labels[i]);
+            const int len = static_cast<int>(std::strlen(line));
+            if (len > max_len) {
+                max_len = len;
+            }
+        }
+        int col = kCreateRightPanelCol + (kCreateRightPanelWidth - max_len) / 2;
+        if (col < kCreateRightPanelCol) {
+            col = kCreateRightPanelCol;
+        }
+        for (int i = 0; i < count; ++i) {
+            std::snprintf(line, sizeof(line), "%d) %s", i + 1, labels[i]);
+            drawCellText(c, first_row + i, col, line);
+        }
     }
 
     void renderCreateRightPanel(gfx::ScreenCompositor &c)
@@ -1335,26 +1400,20 @@ private:
         }
 
         renderCreateProgress(c);
-        const int choice_base = kCreateStatRowBase + createProgressLineCount();
+        const int choice_base = kCreateStatRowBase + createProgressLineCount() + 1;
         if (create_step_ == CreateStep::Name) {
             return;
         }
 
         switch (create_step_) {
         case CreateStep::Race:
-            for (int i = 0; i < MM2_CREATE_RACE_COUNT; ++i) {
-                drawCreateNumberChoiceRow(c, choice_base + i, i, kRaceNames[i]);
-            }
+            drawCreateChoiceList(c, choice_base, MM2_CREATE_RACE_COUNT, kRaceNames);
             break;
         case CreateStep::Alignment:
-            for (int i = 0; i < MM2_CREATE_ALIGN_COUNT; ++i) {
-                drawCreateNumberChoiceRow(c, choice_base + i, i, kAlignNames[i]);
-            }
+            drawCreateChoiceList(c, choice_base, MM2_CREATE_ALIGN_COUNT, kAlignNames);
             break;
         case CreateStep::Sex:
-            for (int i = 0; i < MM2_CREATE_SEX_COUNT; ++i) {
-                drawCreateNumberChoiceRow(c, choice_base + i, i, kSexNames[i]);
-            }
+            drawCreateChoiceList(c, choice_base, MM2_CREATE_SEX_COUNT, kSexNames);
             break;
         default:
             break;
@@ -1386,7 +1445,7 @@ private:
                 char name[16];
                 mm2_roster_name_to_cstr(&rec, name, sizeof(name));
                 // Original LAB_470: "A- " + 11-byte space-padded name + " K/level".
-                std::snprintf(line, sizeof(line), "%c- %-*s %s/%u", letter, MM2_ROSTER_NAME_SIZE, name,
+                std::snprintf(line, sizeof(line), "%c- %-*s%s/%u", letter, MM2_ROSTER_NAME_SIZE, name,
                               classAbbrev(rec.class_id), rec.level);
             }
             drawCellText(c, row, col, line);
@@ -1449,22 +1508,47 @@ private:
         std::snprintf(buf, sizeof(buf), "Lck=%u", rec.luck_base);
         drawCellText(c, r0 + 7, kSheetStatColLeft, buf);
 
-        // Middle column — HP/SP/AC+SL/thievery/skills/dotted rule (WinUAE layout)
-        std::snprintf(buf, sizeof(buf), "HP=%u /%u", rec.hp_current, rec.hp_max);
+        // Middle column — HP/SP/AC+SL/thievery/skills/dotted rule (WinUAE layout).
+        // Each row: label+current at kSheetStatColMid, companion value at kSheetStatColSlash.
+        // Row 2 (Int= row) has no mid/right content — natural gap.
+        std::snprintf(buf, sizeof(buf), "HP=%u", rec.hp_current);
         drawCellText(c, r0 + 0, kSheetStatColMid, buf);
-        std::snprintf(buf, sizeof(buf), "SP=%u /%u", rec.sp_current, rec.sp_max);
-        drawCellText(c, r0 + 1, kSheetStatColMid, buf);
-        std::snprintf(buf, sizeof(buf), "AC=%u SL=%u", rec.armor_class, rec.spell_level);
-        drawCellText(c, r0 + 2, kSheetStatColMid, buf);
-        std::snprintf(buf, sizeof(buf), "Thievery %u%%", rosterDisplayThievery(rec));
-        drawCellText(c, r0 + 3, kSheetStatColMid, buf);
-        for (int i = 0; i < skill_count && i < 2; ++i) {
-            drawCellText(c, r0 + 4 + i, kSheetStatColMid, skill_names[i]);
-        }
-        const int dot_row = r0 + 5;
-        drawCellDotLeader(c, dot_row, kSheetStatColMid, 16);
+        std::snprintf(buf, sizeof(buf), "/%u", rec.hp_max);
+        drawCellText(c, r0 + 0, kSheetStatColSlash, buf);
 
-        // Right column
+        std::snprintf(buf, sizeof(buf), "SP=%u", rec.sp_current);
+        drawCellText(c, r0 + 1, kSheetStatColMid, buf);
+        std::snprintf(buf, sizeof(buf), "/%u", rec.sp_max);
+        drawCellText(c, r0 + 1, kSheetStatColSlash, buf);
+
+        // r0+2 intentionally empty (aligns with Int= left-only row)
+
+        std::snprintf(buf, sizeof(buf), "AC=%u", rec.armor_class);
+        drawCellText(c, r0 + 3, kSheetStatColMid, buf);
+        std::snprintf(buf, sizeof(buf), "SL=%u", rec.spell_level);
+        drawCellText(c, r0 + 3, kSheetStatColSlash, buf);
+
+        std::snprintf(buf, sizeof(buf), "Thievery %u%%", rosterDisplayThievery(rec));
+        drawCellText(c, r0 + 4, kSheetStatColMid, buf);
+
+        if (skill_count >= 1) {
+            drawCellText(c, r0 + 5, kSheetStatColMid, skill_names[0]);
+        } else {
+            drawCellText(c, r0 + 5, kSheetStatColMid, ". . . . . . . . ");
+        }
+
+        // Row r0+6: second skill slot OR dots, then Cond= at kSheetStatColRight.
+        // Both skill slots show the same dot fill when empty.
+        if (skill_count >= 2) {
+            drawCellText(c, r0 + 6, kSheetStatColMid, skill_names[1]);
+        } else {
+            drawCellText(c, r0 + 6, kSheetStatColMid, ". . . . . . . . ");
+        }
+        std::snprintf(buf, sizeof(buf), "Cond= %s", conditionName(rec.condition));
+        drawCellText(c, r0 + 6, kSheetStatColRight, buf);
+
+        // Right column — Age/Exp stay at kSheetStatColRight (col 26).
+        // Cost/Gems/Food sit at kSheetStatColCost (col 24), 2 left of Age/Exp.
         std::snprintf(buf, sizeof(buf), "Age=%u", rec.age);
         drawCellText(c, r0 + 0, kSheetStatColRight, buf);
         std::snprintf(buf, sizeof(buf), "Exp=%lu", static_cast<unsigned long>(rec.experience));
@@ -1475,13 +1559,11 @@ private:
         } else {
             std::snprintf(buf, sizeof(buf), "Gold=%lu", static_cast<unsigned long>(rec.gold));
         }
-        drawCellText(c, r0 + 2, kSheetStatColRight, buf);
+        drawCellText(c, r0 + 3, kSheetStatColCost, buf);
         std::snprintf(buf, sizeof(buf), "Gems=%u", rec.gems);
-        drawCellText(c, r0 + 3, kSheetStatColRight, buf);
+        drawCellText(c, r0 + 4, kSheetStatColCost, buf);
         std::snprintf(buf, sizeof(buf), "Food=%u", rec.food);
-        drawCellText(c, r0 + 4, kSheetStatColRight, buf);
-        std::snprintf(buf, sizeof(buf), "Cond= %s", conditionName(rec.condition));
-        drawCellText(c, r0 + 5, kSheetStatColRight, buf);
+        drawCellText(c, r0 + 5, kSheetStatColCost, buf);
 
         const int divider_w = kSheetBorderCol + kSheetBorderW - 2 - kSheetEquipCol + 1;
         drawDoubleSectionHeader(c, kSheetDividerRow, kSheetEquipCol, divider_w, " Equipped ", " Backpack ");
@@ -1514,7 +1596,7 @@ private:
             drawCellText(c, kSheetFooterRow1, kSheetFooterCol, line, 255, 255, 128);
             drawCellText(c, kSheetFooterRow2, kSheetFooterCol,
                            "Type name   BACKSPACE erase   ENTER save   ESC cancel", 180, 180, 180);
-        } else {
+        } else if (!hireling) {
             drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "( Ctrl )-'N' Re-Name Character", 180, 180, 180);
             drawCellText(c, kSheetFooterRow2, kSheetFooterCol, "( Ctrl )-'D' Delete Character", 180, 180, 180);
         }
@@ -1674,7 +1756,7 @@ private:
             mm2_roster_name_to_cstr(&rec, name, sizeof(name));
             char line[48];
             // Inn party list: same 11-char name field, then 3-letter class abbrev.
-            std::snprintf(line, sizeof(line), "%c- %-*s %s", glyph, MM2_ROSTER_NAME_SIZE, name,
+            std::snprintf(line, sizeof(line), "%c- %-*s%s", glyph, MM2_ROSTER_NAME_SIZE, name,
                           classAbbrev3(rec.class_id));
             drawCellText(c, row, text_col, line);
             if (isPartyMember(slot)) {

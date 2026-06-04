@@ -1,11 +1,7 @@
 #include "mm2/TitleScreen.h"
 
+#include "mm2/CppStdCompat.h"
 #include "mm2/platform/Platform.h"
-#include <algorithm>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
-#include <iterator>
 
 namespace mm2 {
 
@@ -13,13 +9,36 @@ namespace {
 
 constexpr int kIntroBgX = 3;
 constexpr int kIntroBgY = 0;
-// nwcp.32 is 300×90; X=10 centers on 320. Y is computed at draw time for kHeight.
-constexpr int kLogoSplashX = 10;
+constexpr int kScreenW = gfx::ScreenCompositor::kWidth;   // 320
+
+// Center nwcp splash on the 320px field using visible (non-transparent) pixels so
+// trailing transparent padding in the 300×90 frame does not skew the logo left.
+int logoSplashCenterX(const mm2_image32_frame &frame)
+{
+    if (!frame.rgba) {
+        return (kScreenW - frame.width) / 2;
+    }
+    int min_x = frame.width;
+    int max_x = -1;
+    for (int y = 0; y < frame.height; ++y) {
+        const uint8_t *row = frame.rgba + static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.width) * 4;
+        for (int x = 0; x < frame.width; ++x) {
+            if (row[x * 4 + 3] != 0) {
+                min_x = std::min(min_x, x);
+                max_x = std::max(max_x, x);
+            }
+        }
+    }
+    if (max_x < min_x) {
+        return (kScreenW - frame.width) / 2;
+    }
+    const int content_w = max_x - min_x + 1;
+    return (kScreenW - content_w) / 2 - min_x;
+}
 
 // Title menu reuses the Amiga manual/password screen layout (book.32 two-box
 // frame). Two red-bordered boxes: TOP holds the open-book art flanking the
 // centered game title; BOTTOM holds the selectable menu options.
-constexpr int kScreenW = gfx::ScreenCompositor::kWidth;   // 320
 constexpr int kBorderThickness = 2;
 constexpr uint8_t kBorderR = 255, kBorderG = 0, kBorderB = 0;
 
@@ -123,7 +142,7 @@ bool TitleScreen::loadImage(const char *name, mm2_image32_file *out)
     if (!joinPath(path, sizeof(path), data_dir_, name)) {
         return false;
     }
-    std::memset(out, 0, sizeof(*out));
+    ::memset(out, 0, sizeof(*out));
     return mm2_image32_load_file(path, out) == MM2_IMAGE32_OK && out->frame_count > 0 && out->frames[0].rgba;
 }
 
@@ -136,6 +155,9 @@ bool TitleScreen::init(const char *data_dir, ui::CharacterUiKind ui_kind)
     has_introclips_ = loadImage("introclips.32", &introclips_);
     mm2_image32_set_preview_opaque(0);  // nwcp: index 0 must stay transparent (not a black rect)
     has_nwcp_ = loadImage("nwcp.32", &nwcp_);
+    if (has_nwcp_) {
+        logo_splash_x_ = logoSplashCenterX(nwcp_.frames[0]);
+    }
     // book.32 = 5-frame open-book art (89x61); frame 0 flanks the title menu boxes.
     mm2_image32_set_preview_opaque(0);
     has_book_ = loadImage("book.32", &book_);
@@ -146,17 +168,13 @@ bool TitleScreen::init(const char *data_dir, ui::CharacterUiKind ui_kind)
     }
 
     if (!character_ui_.init(data_dir, ui_kind)) {
-        std::fprintf(stderr, "mm2: character UI init failed\n");
         return false;
     }
 
     if (!has_intro_ && !has_nwcp_) {
-        std::fprintf(stderr, "mm2: need intro.32 or nwcp.32 in %s\n", data_dir_);
         return false;
     }
-    if (has_intro_ && !has_introclips_) {
-        std::fprintf(stderr, "mm2: warning: introclips.32 missing in %s — pegasus overlays disabled\n", data_dir_);
-    }
+    (void)has_introclips_;
 
     state_ = has_nwcp_ ? TitleState::LogoFadeIn : TitleState::TitleAttract;
     logo_alpha_ = 0;
@@ -308,7 +326,7 @@ void TitleScreen::drawLogoSplash()
     if (has_nwcp_ && nwcp_.frames[0].rgba && logo_alpha_ > 0) {
         const int logo_h = nwcp_.frames[0].height;
         const int logo_y = (gfx::ScreenCompositor::kHeight - logo_h) / 2;
-        compositor_.blitRgba(nwcp_.frames[0].rgba, nwcp_.frames[0].width, logo_h, kLogoSplashX, logo_y, true,
+        compositor_.blitRgba(nwcp_.frames[0].rgba, nwcp_.frames[0].width, logo_h, logo_splash_x_, logo_y, true,
                              logo_alpha_);
     }
 }
@@ -562,20 +580,23 @@ void TitleScreen::tick(const platform::KeyState &keys)
             quit_ = true;
             return;
         }
-        if (keys.last_ascii == 'V' && has_roster_) {
-            state_ = TitleState::CharacterUi;
-            character_ui_.startViewParty(roster_);
-            return;
-        }
-        if (keys.key_c && has_roster_) {
-            state_ = TitleState::CharacterUi;
-            character_ui_.startCreateCharacter(roster_);
-            return;
-        }
-        if (keys.last_ascii == 'G' && has_roster_) {
-            state_ = TitleState::CharacterUi;
-            character_ui_.startChooseParty(roster_);
-            return;
+        {
+            const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+            if (ch == 'V' && has_roster_) {
+                state_ = TitleState::CharacterUi;
+                character_ui_.startViewParty(roster_);
+                return;
+            }
+            if ((keys.key_c || ch == 'C') && has_roster_) {
+                state_ = TitleState::CharacterUi;
+                character_ui_.startCreateCharacter(roster_);
+                return;
+            }
+            if (ch == 'G' && has_roster_) {
+                state_ = TitleState::CharacterUi;
+                character_ui_.startChooseParty(roster_);
+                return;
+            }
         }
         if (keys.key_m) { state_ = TitleState::Controls; return; } if (keys.key_o) {
             state_ = TitleState::Options;

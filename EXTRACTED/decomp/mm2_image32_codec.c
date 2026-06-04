@@ -1,8 +1,6 @@
 #include "mm2_image32_codec.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "mm2_codec_platform.h"
 
 static int g_preview_opaque_mask = 0;
 
