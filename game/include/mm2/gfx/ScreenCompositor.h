@@ -13,6 +13,7 @@ public:
     static constexpr int kCellH = 8;
 
     ScreenCompositor();
+    ~ScreenCompositor();
 
     void clear(uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t a = 255);
     void clearRect(int x, int y, int w, int h, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t a = 255);
@@ -44,7 +45,9 @@ private:
     void drawChar(int x, int y, char ch, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
     void putPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
-    uint8_t rgba_[kWidth * kHeight * 4];
+    /* On Amiga the ACE simpleBuffer owns the bitplanes — no RGBA buffer needed.
+     * On PC we heap-allocate so the 250 KB doesn't land on the stack. */
+    uint8_t *rgba_ = nullptr;
 };
 
 }  // namespace mm2::gfx
