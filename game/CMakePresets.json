@@ -13,7 +13,8 @@
         "AMIGA": "ON",
         "M68K_CPU": "68020",
         "ACE_USE_AGA_FEATURES": "ON",
-        "ACE_USE_ECS_FEATURES": "ON"
+        "ACE_USE_ECS_FEATURES": "ON",
+        "M68K_LDFLAGS": "-Wl,--stack=32768"
       }
     },
     {
@@ -24,7 +25,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ACE_DEBUG": "ON",
-        "ACE_DEBUG_UAE": "ON"
+        "ACE_DEBUG_UAE": "ON",
+        "M68K_LDFLAGS": "-Wl,--stack=32768"
       }
     },
     {
@@ -36,11 +38,22 @@
         "CMAKE_BUILD_TYPE": "Release",
         "AMIGA": "OFF"
       }
+    },
+    {
+      "name": "sdl-debug",
+      "displayName": "Desktop SDL Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/sdl-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "AMIGA": "OFF"
+      }
     }
   ],
   "buildPresets": [
     { "name": "m68k-bartman-1.8.2", "configurePreset": "m68k-bartman-1.8.2" },
     { "name": "m68k-bartman-1.8.2-debug", "configurePreset": "m68k-bartman-1.8.2-debug" },
-    { "name": "sdl-release", "configurePreset": "sdl-release" }
+    { "name": "sdl-release", "configurePreset": "sdl-release" },
+    { "name": "sdl-debug", "configurePreset": "sdl-debug" }
   ]
 }

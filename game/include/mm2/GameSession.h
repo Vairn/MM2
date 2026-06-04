@@ -14,6 +14,8 @@
 
 #include "mm2_image32_codec.h"
 
+#include "mm2_gamestate.h"
+
 
 
 namespace mm2 {
@@ -98,11 +100,10 @@ private:
 
     mm2_image32_file sky_{};
 
-
-
-    uint8_t gs_image_[MM2_A4_ANCHOR + 0x8000]{};
-
-
+    /* A4+$7FFE game-state mirror — allocated on start(), not in Game heap (saves ~64 KiB
+     * MEMF_CLEAR at title boot when UAE has little CHIP after the playfield). */
+    static constexpr std::size_t kGsImageBytes = static_cast<std::size_t>(MM2_A4_ANCHOR) + 0x8000u;
+    uint8_t *gs_image_ = nullptr;
 
     int game_day_ = 83;
 

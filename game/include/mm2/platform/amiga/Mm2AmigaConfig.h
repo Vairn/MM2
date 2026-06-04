@@ -1,7 +1,7 @@
 #pragma once
 
 /**
- * Amiga / ACE configuration for MM2 (mirrors LandsOfLore + EXTRACTED/docs/41-aga-port-plan.md).
+ * Amiga / ACE configuration for MM2 (AmigaPorts/ACE + EXTRACTED/docs/41-aga-port-plan.md).
  *
  * CMake must set the ACE_* cache variables before FetchContent(ace_engine), and the game
  * target must define ACE_USE_AGA_FEATURES / ACE_USE_ECS_FEATURES so headers match the
@@ -38,3 +38,6 @@
 #define MM2_AGA_VPORT_TAG_BPP TAG_VPORT_BPP
 #define MM2_AGA_VPORT_TAG_USES_AGA TAG_VPORT_USES_AGA
 #define MM2_AGA_VPORT_TAG_FMODE TAG_VPORT_FMODE
+/* LoL uses FMODE 1 with TAG_VPORT_BPP 8 (chunky). 6-plane 64-colour AGA needs FMODE 3
+ * (see ACE fetchmode.c + LoL screen.c comment on VPort height vs fetch garbage). */
+#define MM2_AGA_VPORT_FMODE_VALUE 3

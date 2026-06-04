@@ -1,5 +1,6 @@
 #include "mm2/Game.h"
 
+#include "mm2/Config.h"
 #include "mm2/CppStdCompat.h"
 
 #include "mm2/gfx/ScreenCompositor.h"
@@ -13,6 +14,7 @@ bool Game::init(const char *data_dir, ui::CharacterUiKind ui_kind)
     data_dir_ = data_dir;
 
     if (!title_.init(data_dir, ui_kind)) {
+        title_.shutdown();
         return false;
     }
 
@@ -80,7 +82,9 @@ void Game::tick()
                              session_.compositor().height());
     }
 
+#if !MM2_HOST_AMIGA
     platform::delayMs(16);
+#endif
 }
 
 }  // namespace mm2

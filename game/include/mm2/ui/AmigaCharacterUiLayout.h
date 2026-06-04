@@ -50,12 +50,12 @@ constexpr int kSheetHeaderRow = 0x01;      // character name embedded in top bor
 constexpr int kSheetHeaderCol = 0x02;
 
 // Three-column stat block (title sheet path; matches WinUAE screenshot).
-constexpr int kSheetStatRowBase = 0x03;
+constexpr int kSheetStatRowBase = 0x04;    // one row down from border (8px)
 constexpr int kSheetStatColLeft = 0x02;
-constexpr int kSheetStatColMid = 0x0e;
-constexpr int kSheetStatColSlash = 0x16;   // "/max" companion column
-constexpr int kSheetStatColCost = 0x18;    // Gold/Gems/Food (2 left of Age/Exp)
-constexpr int kSheetStatColRight = 0x1a;
+constexpr int kSheetStatColMid = 0x09;     // HP=/SP=/AC=/Thievery/skills
+constexpr int kSheetStatColSlash = 0x12;   // /max, SL=
+constexpr int kSheetStatColCost = 0x18;    // Cost/Gold, Gems, Food
+constexpr int kSheetStatColRight = 0x1a;   // Age, Exp, Cond=
 
 // Equipped/backpack block + footer compressed to fit the NTSC 25-row grid
 // (stats end at row 11; footer must stay inside the row-24 border bottom).
@@ -172,6 +172,8 @@ constexpr int kCreateThrowOrangeY = kCreateThrowBlitY + kCreateThrowOrangeRow; /
 constexpr int kCreateThrowRestFrame = 0;
 constexpr int kCreateThrowAnimFrameFirst = 1;
 constexpr int kCreateThrowAnimFrameCount = 10;
+// WinUAE 174..205: toss frames 1–5 blit at tableau left; die-roll frames 6–10 right-anchored.
+constexpr int kCreateThrowAnimRightAnchorFrameFirst = 6;
 // LAB_60DE FillBox triplet (y=$10): highlight widths 12/21/31 px at die cols 12/21/31.
 constexpr int kCreateThrowHighlightY = 0x10;
 constexpr int kCreateThrowHighlightH = 0x10;

@@ -1,7 +1,13 @@
 #include "mm2/TitleScreen.h"
 
 #include "mm2/CppStdCompat.h"
+#include "mm2/DataPath.h"
 #include "mm2/platform/Platform.h"
+
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+#include <ace/managers/log.h>
+#include <ace/managers/memory.h>
+#endif
 
 namespace mm2 {
 
@@ -109,18 +115,6 @@ uint32_t titleRngNext(uint32_t &state) {
 constexpr int kFadeTicks = 60;
 constexpr int kLogoHoldTicks = 312;
 
-bool joinPath(char *out, std::size_t out_cap, const char *dir, const char *name)
-{
-    const std::size_t dir_len = std::strlen(dir);
-    const std::size_t name_len = std::strlen(name);
-    const bool need_sep = dir_len > 0 && dir[dir_len - 1] != '/' && dir[dir_len - 1] != '\\';
-    if (dir_len + name_len + (need_sep ? 1u : 0u) + 1u > out_cap) {
-        return false;
-    }
-    std::snprintf(out, out_cap, "%s%s%s", dir, need_sep ? "/" : "", name);
-    return true;
-}
-
 int textPixelWidth(const char *s) { return static_cast<int>(std::strlen(s)) * 8; }
 
 // Centered text x for the whole screen (or a sub-span when w0/x0 given).
@@ -143,52 +137,114 @@ void drawRedFrame(gfx::ScreenCompositor &c, int x, int y, int w, int h)
 bool TitleScreen::loadImage(const char *name, mm2_image32_file *out)
 {
     char path[512];
-    if (!joinPath(path, sizeof(path), data_dir_, name)) {
-        return false;
-    }
     ::memset(out, 0, sizeof(*out));
-    if (mm2_image32_load_file(path, out) != MM2_IMAGE32_OK || out->frame_count == 0) {
-        return false;
+
+    auto tryPath = [&](const char *dir) -> bool {
+        if (!joinDataPath(path, sizeof(path), dir, name)) {
+            return false;
+        }
+        if (mm2_image32_load_file(path, out) != MM2_IMAGE32_OK || out->frame_count == 0) {
+            return false;
+        }
+#if MM2_HOST_AMIGA
+        return out->frames[0].bitmap != nullptr;
+#else
+        return out->frames[0].rgba != nullptr;
+#endif
+    };
+
+    if (tryPath(data_dir_)) {
+        return true;
     }
 #if MM2_HOST_AMIGA
-    return out->frames[0].bitmap != nullptr;
-#else
-    return out->frames[0].rgba != nullptr;
+    if (data_dir_ && data_dir_[0] && tryPath("")) {
+        return true;
+    }
+    if (tryPath("dh1:")) {
+        return true;
+    }
+    if (tryPath("dh0:")) {
+        return true;
+    }
 #endif
+    return false;
 }
 
 bool TitleScreen::init(const char *data_dir, ui::CharacterUiKind ui_kind)
 {
     data_dir_ = data_dir;
+    ui_kind_ = ui_kind;
+    character_ui_ready_ = false;
     // Palette index 0 = transparent for all title assets (masked blit skips index 0).
     mm2_image32_set_preview_opaque(0);
     has_intro_ = loadImage("intro.32", &intro_);
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+    logWrite("MM2 title: load intro.32 %s\n", has_intro_ ? "ok" : "FAIL");
+#endif
     has_introclips_ = loadImage("introclips.32", &introclips_);
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+    logWrite("MM2 title: load introclips.32 %s\n", has_introclips_ ? "ok" : "FAIL");
+#endif
     mm2_image32_set_preview_opaque(0);  // nwcp: index 0 must stay transparent (not a black rect)
     has_nwcp_ = loadImage("nwcp.32", &nwcp_);
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+    logWrite("MM2 title: load nwcp.32 %s\n", has_nwcp_ ? "ok" : "FAIL");
+#endif
     if (has_nwcp_) {
         logo_splash_x_ = logoSplashCenterX(nwcp_.frames[0]);
     }
     // book.32 = 5-frame open-book art (89x61); frame 0 flanks the title menu boxes.
     mm2_image32_set_preview_opaque(0);
     has_book_ = loadImage("book.32", &book_);
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+    logWrite("MM2 title: load book.32 %s\n", has_book_ ? "ok" : "FAIL");
+#endif
 
     char roster_path[512];
-    if (joinPath(roster_path, sizeof(roster_path), data_dir_, "roster.dat")) {
-        has_roster_ = (mm2_roster_load_file(roster_path, &roster_) == MM2_ROSTER_OK);
+    auto tryRoster = [&](const char *dir) -> bool {
+        if (!joinDataPath(roster_path, sizeof(roster_path), dir, "roster.dat")) {
+            return false;
+        }
+        return mm2_roster_load_file(roster_path, &roster_) == MM2_ROSTER_OK;
+    };
+    has_roster_ = tryRoster(data_dir_);
+#if MM2_HOST_AMIGA
+    if (!has_roster_ && data_dir_ && data_dir_[0]) {
+        has_roster_ = tryRoster("");
     }
-
-    if (!character_ui_.init(data_dir, ui_kind)) {
-        return false;
+    if (!has_roster_) {
+        has_roster_ = tryRoster("dh1:");
     }
+    if (!has_roster_) {
+        has_roster_ = tryRoster("dh0:");
+    }
+#endif
 
     if (!has_intro_ && !has_nwcp_) {
         return false;
     }
     (void)has_introclips_;
 
-    state_ = has_nwcp_ ? TitleState::LogoFadeIn : TitleState::TitleAttract;
+    if (has_nwcp_) {
+        state_ = TitleState::LogoHold;
+    } else if (has_intro_) {
+        state_ = TitleState::TitleAttract;
+    } else {
+        return false;
+    }
     logo_alpha_ = 0;
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+    logWrite("MM2 title: intro=%d clips=%d nwcp=%d book=%d roster=%d\n", has_intro_ ? 1 : 0,
+             has_introclips_ ? 1 : 0, has_nwcp_ ? 1 : 0, has_book_ ? 1 : 0, has_roster_ ? 1 : 0);
+    if (has_intro_ && intro_.frames && intro_.frames[0].bitmap) {
+        logWrite("MM2 title: intro frame0 %ux%u bitmap ok\n", intro_.frames[0].width,
+                 intro_.frames[0].height);
+    } else if (has_intro_) {
+        logWrite("MM2 title: WARN intro loaded but no planar bitmap\n");
+    }
+    logWrite("MM2 title: boot assets done, chip free %lu (char UI deferred)\n",
+             (unsigned long)memGetFreeChipSize());
+#endif
     state_ticks_ = 0;
     overlay_gate_ = 0;
     overlay_phase_ = 0;
@@ -198,15 +254,36 @@ bool TitleScreen::init(const char *data_dir, ui::CharacterUiKind ui_kind)
     peeker_visible_ = false;
     peeker_gap_ticks_ = kPeekerInitialGapTicks;
     pickRandomPeekerSlot();
+#if MM2_HOST_AMIGA
+    invalidatePegasusPaint();
+#endif
+    return true;
+}
+
+bool TitleScreen::ensureCharacterUi()
+{
+    if (character_ui_ready_) {
+        return true;
+    }
+    if (!character_ui_.init(data_dir_, ui_kind_)) {
+        return false;
+    }
+    character_ui_ready_ = true;
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+    logWrite("MM2 title: character UI ready, chip free %lu\n", (unsigned long)memGetFreeChipSize());
+#endif
     return true;
 }
 
 void TitleScreen::shutdown()
 {
-    character_ui_.shutdown();
+    if (character_ui_ready_) {
+        character_ui_.shutdown();
+        character_ui_ready_ = false;
+    }
     mm2_image32_free(&intro_);
     releaseIntroClips();
-    mm2_image32_free(&nwcp_);
+    releaseLogoAsset();
     mm2_image32_free(&book_);
 }
 
@@ -216,9 +293,30 @@ void TitleScreen::releaseIntroClips()
     has_introclips_ = false;
 }
 
+void TitleScreen::releaseLogoAsset()
+{
+    if (!has_nwcp_) {
+        return;
+    }
+    mm2_image32_free(&nwcp_);
+    has_nwcp_ = false;
+}
+
+#if MM2_HOST_AMIGA
+void TitleScreen::invalidatePegasusPaint()
+{
+    pegasus_painted_overlay_phase_ = -1;
+    pegasus_painted_peeker_slot_ = -1;
+    pegasus_painted_peeker_visible_ = false;
+}
+#endif
+
 void TitleScreen::skipLogoToTitle()
 {
     state_ = TitleState::TitleAttract;
+#if MM2_HOST_AMIGA
+    invalidatePegasusPaint();
+#endif
     logo_alpha_ = 0;
     state_ticks_ = 0;
     overlay_gate_ = 0;
@@ -261,7 +359,7 @@ void TitleScreen::blitIntroClipFrame(int frame_index, int x, int y)
         return;
     }
 #if MM2_HOST_AMIGA
-    platform::blitImage32(&introclips_, frame_index, x, y);
+    platform::blitImage32(&introclips_, frame_index, x, y, 0);
 #else
     const mm2_image32_frame &frame = introclips_.frames[frame_index];
     if (!frame.rgba) {
@@ -274,9 +372,20 @@ void TitleScreen::blitIntroClipFrame(int frame_index, int x, int y)
 void TitleScreen::drawIntroPegasus(bool animate_overlays)
 {
 #if MM2_HOST_AMIGA
-    platform::clearScreen();
+    if (animate_overlays && has_intro_ && overlay_phase_ == pegasus_painted_overlay_phase_
+        && peeker_visible_ == pegasus_painted_peeker_visible_
+        && peeker_slot_ == pegasus_painted_peeker_slot_) {
+        /* ACE simpleBuffer DB: composite already in the alternating buffers. */
+        return;
+    }
+    pegasus_painted_overlay_phase_ = overlay_phase_;
+    pegasus_painted_peeker_visible_ = peeker_visible_;
+    pegasus_painted_peeker_slot_ = peeker_slot_;
+
     if (has_intro_) {
-        platform::blitImage32(&intro_, 0, kIntroBgX, kIntroBgY);
+        platform::blitImage32(&intro_, 0, kIntroBgX, kIntroBgY, 1);
+    } else {
+        platform::clearScreen();
     }
 #else
     compositor_.clear(0, 0, 0, 255);
@@ -346,9 +455,10 @@ void TitleScreen::drawLogoSplash()
 {
 #if MM2_HOST_AMIGA
     platform::clearScreen();
-    if (has_nwcp_ && nwcp_.frames[0].bitmap && logo_alpha_ > 0) {
+    if (has_nwcp_ && nwcp_.frames[0].bitmap) {
         const int logo_y = (gfx::ScreenCompositor::kHeight - static_cast<int>(nwcp_.frames[0].height)) / 2;
-        platform::blitImage32(&nwcp_, 0, logo_splash_x_, logo_y);
+        platform::blitImage32(&nwcp_, 0, logo_splash_x_, logo_y, 0);
+        platform::logoFadeCapturePalette();
     }
 #else
     compositor_.clear(0, 0, 0, 255);
@@ -422,6 +532,8 @@ void TitleScreen::drawTitleMenu()
     // double-drawing pegasus/title art under the red boxes).
 #if MM2_HOST_AMIGA
     platform::clearScreen();
+    platform::applyUiPalette();
+    invalidatePegasusPaint();
 #else
     compositor_.clear(0, 0, 0, 255);
 #endif
@@ -532,7 +644,9 @@ void TitleScreen::render()
         drawOptions();
         break;
     case TitleState::CharacterUi:
-        character_ui_.render(compositor_);
+        if (character_ui_ready_) {
+            character_ui_.render(compositor_);
+        }
         break;
     }
 }
@@ -550,6 +664,16 @@ void TitleScreen::tick(const platform::KeyState &keys)
             return;
         }
 
+#if MM2_HOST_AMIGA
+        /* Fades off: static nwcp logo at full palette, then attract (or key to skip). */
+        if (state_ == TitleState::LogoHold) {
+            ++state_ticks_;
+            if (state_ticks_ >= 90) {
+                skipLogoToTitle();
+            }
+        }
+        return;
+#else
         ++state_ticks_;
         switch (state_) {
         case TitleState::LogoFadeIn:
@@ -577,9 +701,14 @@ void TitleScreen::tick(const platform::KeyState &keys)
             break;
         }
         return;
+#endif
     }
 
     if (state_ == TitleState::CharacterUi) {
+        if (!character_ui_ready_) {
+            state_ = TitleState::TitleMenu;
+            return;
+        }
         character_ui_.tick(keys);
         if (!character_ui_.active()) {
             if (character_ui_.quitRequested()) {
@@ -595,6 +724,9 @@ void TitleScreen::tick(const platform::KeyState &keys)
         tickPegasusAnimation();
         if (keys.any_key) {
             state_ = TitleState::TitleMenu;
+#if MM2_HOST_AMIGA
+            invalidatePegasusPaint();
+#endif
             return;
         }
         return;
@@ -627,17 +759,17 @@ void TitleScreen::tick(const platform::KeyState &keys)
         }
         {
             const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
-            if (ch == 'V' && has_roster_) {
+            if (ch == 'V' && has_roster_ && ensureCharacterUi()) {
                 state_ = TitleState::CharacterUi;
                 character_ui_.startViewParty(roster_);
                 return;
             }
-            if ((keys.key_c || ch == 'C') && has_roster_) {
+            if ((keys.key_c || ch == 'C') && has_roster_ && ensureCharacterUi()) {
                 state_ = TitleState::CharacterUi;
                 character_ui_.startCreateCharacter(roster_);
                 return;
             }
-            if (ch == 'G' && has_roster_) {
+            if (ch == 'G' && has_roster_ && ensureCharacterUi()) {
                 state_ = TitleState::CharacterUi;
                 character_ui_.startChooseParty(roster_);
                 return;

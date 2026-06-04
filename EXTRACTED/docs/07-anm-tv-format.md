@@ -26,6 +26,12 @@ Then:
      - frame `0` = base sprite
      - frame `N>0` = patch sprite drawn at `prelude[N-1].(x_offset,y_offset)`
      - `width/height` can act as patch crop bounds
+   - **Runtime draw (game + editor):** never blit stored frame `N>0` directly. Always
+     composite: blit frame `0` as the canvas, **clear** the prelude rect, then blit the
+     patch (cropped by prelude w/h). Sequence-stream frame indices refer to these
+     **composed** states. Implementation: `editor/src/core/Gfx.cpp`
+     `gfxAnmCompositeFrame()` — the game port must call the same logic when drawing
+     combat/world `.anm` sprites.
 2. **Sequence header bytes** at `0x30..0x32`
    - `seq_header_b & 0x7F` ~= sequence-count hint (can under-report)
    - high bit in `seq_header_b` is often set (unknown flag)
@@ -61,6 +67,36 @@ Decoded output for one frame is:
 - `5 * RASSIZE(width, height)` bytes
 - `RASSIZE(w,h) = h * ((((w) + 15) >> 3) & 0xFFFE)`
 - Payload is 5 planar bitplanes concatenated (`plane0..plane4`)
+
+## Runtime composition
+
+The on-disk image frames are **not** a flat flipbook of full sprites:
+
+| Stored frame | Meaning at draw time |
+|--------------|----------------------|
+| `0` | Full base bitmap |
+| `N > 0` | Patch only — composite over frame `0` at `prelude[N-1]` |
+
+Draw algorithm (matches original blitter behavior):
+
+1. Blit frame `0` onto the destination canvas (bounds = union of base + all prelude rects).
+2. For composed state `N > 0`: clear `(x, y, w, h)` from prelude slot `N-1`, then blit
+   patch frame `N` (crop to prelude w/h when smaller than the patch bitmap).
+3. Pen `0` is transparent (mask colour); opaque pixels overwrite; cleared rects erase
+   previous pixels in that region before the patch blit.
+
+**Sequence playback:** bytes at `0x33..` list `(frame_index, delay)` pairs grouped by
+`0xFF` delimiters. Each `frame_index` is a **composed** state index (0 = base only),
+not a raw patch sheet index. Multiple sequences per file = idle / attack / hurt / etc.
+
+**Editor:** Animations (`.anm`) section → **Composed frames** tab shows every runtime
+state with a live preview when **Play** is on. **Play mode → Flipbook** cycles composed
+frames 0..N-1; **Sequence** uses the embedded `(frame,delay)` stream (combat clips).
+**Raw patches** tab shows decoded bitmaps before composition (debug only).
+
+**Game port (`game/`):** use `gfxAnmCompositeFrame()` semantics (port from
+`editor/src/core/Gfx.cpp` or share the module) for any `.anm` draw — do not upload
+raw patch frames as sprites.
 
 ## Loader/Saver Roundtrip Strategy
 

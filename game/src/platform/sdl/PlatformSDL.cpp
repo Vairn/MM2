@@ -102,7 +102,7 @@ bool init(int *argc, char ***argv)
 
 }
 
-
+bool beginDisplay() { return true; }
 
 void shutdown()
 

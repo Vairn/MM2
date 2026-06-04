@@ -6,6 +6,7 @@
 
 #if defined(MM2_HOST_AMIGA) || defined(MM2_CODEC_AMIGA)
 
+#include <ace/managers/system.h>
 #include <mini_std/stdio.h>
 #include <mini_std/stdlib.h>
 #include <string.h>
@@ -14,11 +15,14 @@
 extern "C" {
 #endif
 extern void *mm2_malloc(size_t size);
+extern void *mm2_malloc_fast(size_t size);
 extern void mm2_free(void *ptr);
 #ifdef __cplusplus
 }
 #endif
 
+/* Short-lived .32 read/decode scratch (freed before bitmapCreate). CHIP is fine;
+ * WinUAE often has no FAST RAM — avoid a failed FAST alloc + WARN per file. */
 static inline void *codec_malloc(size_t size) { return mm2_malloc(size); }
 
 static inline void codec_free(void *ptr) { mm2_free(ptr); }

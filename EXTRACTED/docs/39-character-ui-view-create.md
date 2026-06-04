@@ -187,7 +187,10 @@ Post-class steps ( **`A4-$5AD0`**: 5=race **`$01BC26`**, 6=sex/name **`$01B6E0`*
 | Item | ASM | Cells (row, col, w, h) |
 |------|-----|-------------------------|
 | Red frame | **`JSR -$809E`** @ **`$01BE06`** | **(19, 14, 19, 7)** |
-| Asset | **`throw.32`** | Loaded via resource table; SDL blit @ `AmigaCharacterUiLayout.h` **`kCreateDice*`** |
+| Asset | **`throw.32`** | Loaded via resource table; SDL blit @ `AmigaCharacterUiLayout.h` **`kCreateThrow*`** |
+| Rest blit | **`LAB_551A`** @ `$00551A` | `SelectBob` **A4-$7A51**, `BlitBob` col **39**, y **$12** (18 px); if **A4-$79E5==0**, `Locate`+`Print` die stats cols **12/21/31** rows **16/18** |
+| Anim tick | **`LAB_5632`** @ `$005632` | `SelectBob` hand frame, **`LAB_60DE`** highlight fills, **`LAB_62F0`** die text — **no hand re-blit** (BOB/ANIMATE keeps tableau) |
+| SDL composite | `preview_throw_anim.py` | **Orange bar + slice**; frames **1–5** blit @ tableau **x=8**, **6–10** right-anchored @ col 39; validate `--ref-dir` → `refs_validation.png` |
 
 ### Obfuscated name tables
 

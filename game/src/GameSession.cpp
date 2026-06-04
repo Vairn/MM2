@@ -1,6 +1,8 @@
 #include "mm2/GameSession.h"
 
 #include "mm2/CppStdCompat.h"
+#include "mm2/DataPath.h"
+#include "mm2/runtime/Alloc.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 
 #include "mm2/gfx/PlayScreenChrome.h"
@@ -21,32 +23,6 @@ namespace {
 
 
 const char *kTownNames[] = {"?", "Middlegate", "Atlantium", "Tundara", "Vulcania", "Sandsobar"};
-
-
-
-bool joinPath(char *out, std::size_t out_cap, const char *dir, const char *name)
-
-{
-
-    const std::size_t dir_len = std::strlen(dir);
-
-    const std::size_t name_len = std::strlen(name);
-
-    const bool need_sep = dir_len > 0 && dir[dir_len - 1] != '/' && dir[dir_len - 1] != '\\';
-
-    if (dir_len + name_len + (need_sep ? 1u : 0u) + 1u > out_cap) {
-
-        return false;
-
-    }
-
-    std::snprintf(out, out_cap, "%s%s%s", dir, need_sep ? "/" : "", name);
-
-    return true;
-
-}
-
-
 
 void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int frame, int dst_x, int dst_y)
 
@@ -142,7 +118,7 @@ bool GameSession::loadImage(const char *name, mm2_image32_file *out)
 
     char path[512];
 
-    if (!joinPath(path, sizeof(path), data_dir_, name)) {
+    if (!joinDataPath(path, sizeof(path), data_dir_, name)) {
 
         return false;
 
@@ -162,7 +138,7 @@ bool GameSession::loadMapVisualPage(int screen_idx, uint8_t *out_page)
 
     char path[512];
 
-    if (!joinPath(path, sizeof(path), data_dir_, "map.dat")) {
+    if (!joinDataPath(path, sizeof(path), data_dir_, "map.dat")) {
 
         return false;
 
@@ -212,9 +188,13 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
 
     assets_ok_ = false;
 
-
-
-    ::memset(gs_image_, 0, sizeof(gs_image_));
+    if (!gs_image_) {
+        gs_image_ = static_cast<uint8_t *>(mm2::runtime::allocate(kGsImageBytes));
+        if (!gs_image_) {
+            return false;
+        }
+    }
+    ::memset(gs_image_, 0, kGsImageBytes);
 
     mm2_party_launch_apply(mm2_gs_base_from_image(gs_image_), &launch_);
 
@@ -265,6 +245,11 @@ void GameSession::shutdown()
     mm2_image32_free(&floor_);
 
     mm2_image32_free(&sky_);
+
+    if (gs_image_) {
+        mm2::runtime::deallocate(gs_image_, kGsImageBytes);
+        gs_image_ = nullptr;
+    }
 
     data_dir_ = nullptr;
 

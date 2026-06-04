@@ -1,6 +1,8 @@
 #include "mm2/ui/ICharacterUi.h"
 
+#include "mm2/Config.h"
 #include "mm2/CppStdCompat.h"
+#include "mm2/DataPath.h"
 #include "mm2/gfx/Mm2FontGlyphs.h"
 #include "mm2/ui/AmigaCharacterUiLayout.h"
 #include "mm2/ui/CharacterUiFactory.h"
@@ -68,18 +70,6 @@ static const char *kAlignHeaderNames[] = {
 };
 
 const char *raceHeaderName(uint8_t id) { return id < MM2_CREATE_RACE_COUNT ? kRaceNames[id] : "?"; }
-
-bool joinPath(char *out, std::size_t out_cap, const char *dir, const char *name)
-{
-    const std::size_t dir_len = std::strlen(dir);
-    const std::size_t name_len = std::strlen(name);
-    const bool need_sep = dir_len > 0 && dir[dir_len - 1] != '/' && dir[dir_len - 1] != '\\';
-    if (dir_len + name_len + (need_sep ? 1u : 0u) + 1u > out_cap) {
-        return false;
-    }
-    std::snprintf(out, out_cap, "%s%s%s", dir, need_sep ? "/" : "", name);
-    return true;
-}
 
 const char *classAbbrev(uint8_t id) { return id < 8 ? kClassAbbrevs[id] : "?"; }
 const char *classAbbrev3(uint8_t id) { return id < 8 ? kClassAbbrev3[id] : "?"; }
@@ -463,7 +453,6 @@ public:
     {
         data_dir_ = data_dir;
         loadItems();
-        loadThrowAsset();
         return true;
     }
 
@@ -545,6 +534,7 @@ public:
         create_rng_ = 0xC0FFEE01u;
         mm2_create_pending_init(&pending_);
         pending_.class_id = -1;
+        loadThrowAsset();
         startThrowAnimation(true);
     }
 
@@ -689,7 +679,7 @@ private:
             return;
         }
         char path[512];
-        if (!joinPath(path, sizeof(path), data_dir_, "items.dat")) {
+        if (!joinDataPath(path, sizeof(path), data_dir_, "items.dat")) {
             return;
         }
         std::size_t size = 0;
@@ -784,15 +774,25 @@ private:
             return;
         }
         char path[512];
-        if (!joinPath(path, sizeof(path), data_dir_, "throw.32")) {
+        if (!joinDataPath(path, sizeof(path), data_dir_, "throw.32")) {
             return;
         }
         mm2_image32_set_preview_opaque(0);
-        if (mm2_image32_load_file(path, &throw_) != MM2_IMAGE32_OK || throw_.frame_count <= 0
-            || !throw_.frames[0].rgba) {
+        if (mm2_image32_load_file(path, &throw_) != MM2_IMAGE32_OK || throw_.frame_count <= 0) {
             mm2_image32_free(&throw_);
             return;
         }
+#if MM2_HOST_AMIGA
+        if (!throw_.frames[0].bitmap) {
+            mm2_image32_free(&throw_);
+            return;
+        }
+#else
+        if (!throw_.frames[0].rgba) {
+            mm2_image32_free(&throw_);
+            return;
+        }
+#endif
         has_throw_ = true;
     }
 
@@ -802,7 +802,7 @@ private:
             return UiResult::Cancel;
         }
         char path[512];
-        if (!joinPath(path, sizeof(path), data_dir_, "roster.dat")) {
+        if (!joinDataPath(path, sizeof(path), data_dir_, "roster.dat")) {
             return UiResult::Cancel;
         }
         return (mm2_roster_save_file(path, roster_) == MM2_ROSTER_OK) ? UiResult::Continue : UiResult::Cancel;
@@ -926,7 +926,7 @@ private:
         }
         mm2_create_build_record(&pending_, &roster_->records[create_slot_]);
         char path[512];
-        if (!data_dir_ || !joinPath(path, sizeof(path), data_dir_, "roster.dat")) {
+        if (!data_dir_ || !joinDataPath(path, sizeof(path), data_dir_, "roster.dat")) {
             return UiResult::Cancel;
         }
         if (mm2_roster_save_file(path, roster_) != MM2_ROSTER_OK) {
@@ -1047,6 +1047,16 @@ private:
 
     // ---- throw.32 tableau (rewritten from asset + ASM LAB_551A / LAB_5632 / LAB_60DE) ----
 
+    int throwBlitX(int frame_index, int frame_width) const
+    {
+        using namespace amiga_layout;
+        if (frame_index == kCreateThrowRestFrame ||
+            frame_index < kCreateThrowAnimRightAnchorFrameFirst) {
+            return kCreateThrowTableauX;
+        }
+        return kCreateThrowBlitCol * kCellW - frame_width;
+    }
+
     void blitThrowFrame(gfx::ScreenCompositor &c, int frame_index) const
     {
         if (!has_throw_ || frame_index < 0 || frame_index >= static_cast<int>(throw_.frame_count)) {
@@ -1057,7 +1067,7 @@ private:
             return;
         }
         using namespace amiga_layout;
-        const int x = kCreateThrowBlitCol * kCellW - static_cast<int>(frame.width);
+        const int x = throwBlitX(frame_index, static_cast<int>(frame.width));
         c.blitRgba(frame.rgba, frame.width, frame.height, x, kCreateThrowBlitY);
     }
 
@@ -1127,8 +1137,8 @@ private:
             return;
         }
 
-        // LAB_5632 anim path: clear hand art, full-width table, blit slice, highlights, die text.
-        eraseThrowHandLayer(c);
+        // LAB_5632 anim path: full-width orange table, then right-anchored anim slice only.
+        // WinUAE refs (174..205) show frame-0 left fist must NOT stay under anim slices.
         paintThrowTable(c);
         blitThrowFrame(c, throw_anim_frame_);
         drawThrowAnimHighlights(c);
@@ -1531,18 +1541,18 @@ private:
         std::snprintf(buf, sizeof(buf), "Thievery %u%%", rosterDisplayThievery(rec));
         drawCellText(c, r0 + 4, kSheetStatColMid, buf);
 
+        static const char kEmptySkillSlot[] = ". . . . . . . . . . . . ";
+
         if (skill_count >= 1) {
             drawCellText(c, r0 + 5, kSheetStatColMid, skill_names[0]);
         } else {
-            drawCellText(c, r0 + 5, kSheetStatColMid, ". . . . . . . . ");
+            drawCellText(c, r0 + 5, kSheetStatColMid, kEmptySkillSlot);
         }
 
-        // Row r0+6: second skill slot OR dots, then Cond= at kSheetStatColRight.
-        // Both skill slots show the same dot fill when empty.
         if (skill_count >= 2) {
             drawCellText(c, r0 + 6, kSheetStatColMid, skill_names[1]);
         } else {
-            drawCellText(c, r0 + 6, kSheetStatColMid, ". . . . . . . . ");
+            drawCellText(c, r0 + 6, kSheetStatColMid, kEmptySkillSlot);
         }
         std::snprintf(buf, sizeof(buf), "Cond= %s", conditionName(rec.condition));
         drawCellText(c, r0 + 6, kSheetStatColRight, buf);

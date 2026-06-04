@@ -82,4 +82,33 @@ struct GfxImage {
 GfxImage gfxDecode(const Bytes& bytes, bool isAnm);
 bool gfxLoad(const std::string& path, bool isAnm, GfxImage& out);
 
+// --- .anm TV-prelude composition (runtime-accurate; game must use this path) ---
+//
+// Stored image frames are NOT what the game blits for N>0:
+//   frame 0  = full base sprite
+//   frame N  = patch bitmap; draw at prelude[N-1] over frame 0 after clearing that rect
+// Sequence stream indices refer to these composed states, not raw patch sheets.
+
+struct GfxAnmCanvas {
+    int minX = 0;
+    int minY = 0;
+    int width = 0;
+    int height = 0;
+    bool valid = false;
+};
+
+enum class AnmPlayMode {
+    Flipbook,  // composed frames 0..N-1
+    Sequence,  // game (frame,delay) stream
+};
+
+GfxAnmCanvas gfxAnmCompositeCanvas(const GfxImage& img);
+// Writes width*height*4 RGBA into `rgba` (resized as needed). Returns false if unsupported.
+bool gfxAnmCompositeFrame(const GfxImage& img, int frameIdx, std::vector<uint8_t>& rgba,
+                          const GfxAnmCanvas* canvas = nullptr);
+
+bool gfxAnmHasSequencePlayback(const GfxImage& img);
+int gfxAnmSequenceFrameAt(const GfxImage& img, int seqIndex, int step);
+float gfxAnmSequenceStepDurationSec(const GfxImage& img, int seqIndex, int step, float speed);
+
 }  // namespace mm2

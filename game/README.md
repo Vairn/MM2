@@ -136,9 +136,13 @@ cmake --build build/m68k-bartman-1.8.2 --parallel
 # -> build/m68k-bartman-1.8.2/mm2.exe (ELF2HUNK hunk executable)
 ```
 
+Each Amiga link **copies** all `*.dat`, `*.32`, and `*.anm` from the MM2 repo root
+(`../` relative to `game/`) into the same folder as `mm2.exe`, so the default data dir
+`.` matches WinUAE’s working directory. Rebuild after you change data files on disk.
+Optional: still pass `../../..` (or another path) as argv[1] if you prefer not to copy.
+
 Presets live in `CMakePresets.json`; toolchain files in `cmake/` (`mm2-m68k-bartman.cmake`,
-`AmigaCMakeCrossToolchains/m68k-bartman.cmake`). ACE is fetched from `Vairn/ACE` branch **AGA**
-(matching LoL). VS Code kit: `.vscode/cmake-kits.json` + `amiga.json`.
+`AmigaCMakeCrossToolchains/m68k-bartman.cmake`). ACE is fetched from [AmigaPorts/ACE](https://github.com/AmigaPorts/ACE) **main** with `ACE_USE_AGA_FEATURES` enabled. VS Code kit: `.vscode/cmake-kits.json` + `amiga.json`.
 
 Amiga uses `-fno-exceptions -fno-rtti` and `CppStdCompat.h` instead of libstdc++.
 

@@ -9,10 +9,10 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
-set(MM2_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
+get_filename_component(MM2_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 set(MM2_DECOMP ${MM2_ROOT}/EXTRACTED/decomp)
 
-# AGA ACE (same fork as LandsOfLore — see ../Amiga/LandsOfLore/CMakeLists.txt)
+# AGA ACE — upstream AmigaPorts/ACE (ACE_USE_AGA_FEATURES on master).
 set(ACE_USE_AGA_FEATURES ON CACHE BOOL "ACE AGA features" FORCE)
 set(ACE_USE_ECS_FEATURES ON CACHE BOOL "ACE ECS features" FORCE)
 
@@ -25,32 +25,6 @@ if(AMIGA)
   set(MM2_PLATFORM_SOURCES src/platform/amiga/PlatformAmiga.cpp)
   set(MM2_MAIN_SOURCE src/main_amiga.cpp)
 
-  set(FETCHCONTENT_UPDATES_DISCONNECTED OFF)
-  include(FetchContent)
-  FetchContent_Declare(
-    ace_engine
-    GIT_REPOSITORY https://github.com/Vairn/ACE.git
-    GIT_TAG AGA
-    GIT_SHALLOW TRUE
-  )
-  FetchContent_GetProperties(ace_engine)
-  if(NOT ace_engine_POPULATED)
-    FetchContent_Populate(ace_engine)
-  endif()
-  set(_ace_simplebuffer "${ace_engine_SOURCE_DIR}/src/ace/managers/viewport/simplebuffer.c")
-  if(EXISTS "${_ace_simplebuffer}")
-    file(READ "${_ace_simplebuffer}" _ace_simplebuffer_src)
-    string(
-      REPLACE "uwDDFStep = simpleBufferGetDDFStep(pManager);"
-      "uwDDFStep = simpleBufferGetDDfStep(pManager);"
-      _ace_simplebuffer_src "${_ace_simplebuffer_src}"
-    )
-    file(WRITE "${_ace_simplebuffer}" "${_ace_simplebuffer_src}")
-  endif()
-  unset(CPM_DIRECTORY CACHE)
-  unset(CPM_FILE CACHE)
-  unset(CPM_VERSION CACHE)
-  unset(CPM_PACKAGES CACHE)
   if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(ACE_DEBUG ON CACHE BOOL "ACE debug logging" FORCE)
     set(ACE_DEBUG_UAE ON CACHE BOOL "ACE logWrite -> WinUAE/Bartman console" FORCE)
@@ -58,7 +32,24 @@ if(AMIGA)
     set(ACE_DEBUG OFF CACHE BOOL "ACE debug logging" FORCE)
     set(ACE_DEBUG_UAE OFF CACHE BOOL "ACE logWrite -> WinUAE/Bartman console" FORCE)
   endif()
-  add_subdirectory(${ace_engine_SOURCE_DIR} ${ace_engine_BINARY_DIR})
+
+  # Stale CPM_DIRECTORY from a prior ACE fork breaks AmigaPorts/ACE's include(cmake/CPM.cmake).
+  unset(CPM_DIRECTORY CACHE)
+  unset(CPM_FILE CACHE)
+  unset(CPM_VERSION CACHE)
+  unset(CPM_PACKAGES CACHE)
+
+  set(FETCHCONTENT_UPDATES_DISCONNECTED OFF)
+  include(FetchContent)
+  FetchContent_Declare(
+    amigaports_ace
+    GIT_REPOSITORY https://github.com/AmigaPorts/ACE.git
+    GIT_TAG main
+    GIT_SHALLOW TRUE
+  )
+  FetchContent_MakeAvailable(amigaports_ace)
+  set(ace_engine_SOURCE_DIR "${amigaports_ace_SOURCE_DIR}")
+  set(ace_engine_BINARY_DIR "${amigaports_ace_BINARY_DIR}")
   if(ACE_DEBUG)
     # LoL pattern: ACE_DEBUG_ALL enables logWrite; ACE_DEBUG_UAE routes to UAE debugger.
     target_compile_definitions(ace PUBLIC ACE_DEBUG_ALL ACE_DEBUG_UAE)
@@ -148,6 +139,7 @@ if(AMIGA)
     ${MM2_CODEC_SOURCES}
     src/platform/amiga/mm2_amiga_display.c
     src/platform/amiga/mm2_amiga_planar.c
+    src/platform/amiga/mm2_fade.c
   )
 endif()
 
@@ -209,7 +201,21 @@ target_compile_definitions(${_mm2_target} PRIVATE
   $<$<CONFIG:Debug>:MM2_DEBUG ACE_DEBUG GAME_DEBUG>
 )
 
-message(STATUS "[MM2] Data files expected beside binary or passed as argv[1] (MM2 install dir)")
+if(AMIGA)
+  # WinUAE/Bartman cwd is the build output dir; argv data path is often unset.
+  add_custom_command(
+    TARGET ${_mm2_target} POST_BUILD
+    COMMAND "${CMAKE_COMMAND}"
+      -DMM2_ROOT=${MM2_ROOT}
+      -DDEST=$<TARGET_FILE_DIR:${_mm2_target}>
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/copy_mm2_data.cmake"
+    COMMENT "[MM2] Copy .dat/.32/.anm from repo root into Amiga output dir"
+    VERBATIM
+  )
+  message(STATUS "[MM2] Amiga: post-build copies data from ${MM2_ROOT} -> build dir")
+endif()
+
+message(STATUS "[MM2] Data: beside binary (Amiga post-build) or argv[1] / ../ on desktop")
 if(AMIGA AND ELF2HUNK)
   message(STATUS "[MM2] Amiga output: ${CMAKE_CURRENT_BINARY_DIR}/${MM2_OUTPUT}")
 endif()

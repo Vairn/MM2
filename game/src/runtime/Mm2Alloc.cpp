@@ -10,10 +10,10 @@
  * recover it. ULONG (4 bytes) satisfies m68k's maximum alignment requirement. */
 static const ULONG kHeaderSize = sizeof(ULONG);
 
-static void *alloc_with_header(ULONG bytes)
+static void *alloc_with_header(ULONG bytes, ULONG mem_flags)
 {
     ULONG total = bytes + kHeaderSize;
-    ULONG *block = static_cast<ULONG *>(memAllocFastClear(total));
+    ULONG *block = static_cast<ULONG *>(memAlloc(total, mem_flags | MEMF_CLEAR));
     if (!block) {
         return nullptr;
     }
@@ -34,7 +34,12 @@ namespace mm2::runtime {
 
 void *allocate(std::size_t bytes)
 {
-    return alloc_with_header(static_cast<ULONG>(bytes));
+    return alloc_with_header(static_cast<ULONG>(bytes), MEMF_CHIP);
+}
+
+void *allocate_fast(std::size_t bytes)
+{
+    return alloc_with_header(static_cast<ULONG>(bytes), MEMF_FAST);
 }
 
 void deallocate(void *ptr, std::size_t /*bytes*/) noexcept
@@ -71,6 +76,8 @@ void operator delete(void *ptr, std::size_t /*size*/) noexcept { free_with_heade
 void operator delete[](void *ptr, std::size_t /*size*/) noexcept { free_with_header(ptr); }
 
 extern "C" void *mm2_malloc(std::size_t size) { return mm2::runtime::allocate(size); }
+
+extern "C" void *mm2_malloc_fast(std::size_t size) { return mm2::runtime::allocate_fast(size); }
 
 extern "C" void mm2_free(void *ptr) { free_with_header(ptr); }
 

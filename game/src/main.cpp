@@ -53,6 +53,11 @@ int SDL_main(int argc, char **argv)
         return 1;
     }
 
+    if (!mm2::platform::beginDisplay()) {
+        mm2::platform::shutdown();
+        return 1;
+    }
+
     mm2::Game game;
     if (!game.init(data_dir, ui_kind)) {
         mm2::platform::shutdown();

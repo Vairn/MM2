@@ -5,6 +5,10 @@
 #include "mm2/CppStdCompat.h"
 #include "mm2/Config.h"
 
+#if MM2_HOST_AMIGA
+#include "mm2/platform/amiga/Mm2AmigaPlanar.h"
+#endif
+
 #if !MM2_HOST_AMIGA
 #include <cstdlib>
 #endif
@@ -48,6 +52,10 @@ void ScreenCompositor::clear(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 
 void ScreenCompositor::putPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
+#if MM2_HOST_AMIGA
+    mm2_amiga_put_pixel_rgb((UWORD)x, (UWORD)y, r, g, b, a);
+    return;
+#else
     if (!rgba_ || x < 0 || y < 0 || x >= kWidth || y >= kHeight) {
         return;
     }
@@ -70,6 +78,7 @@ void ScreenCompositor::putPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, u
     rgba_[i + 1] = static_cast<uint8_t>((g * src_a + rgba_[i + 1] * dst_a * inv_src / 255u + out_a / 2u) / out_a);
     rgba_[i + 2] = static_cast<uint8_t>((b * src_a + rgba_[i + 2] * dst_a * inv_src / 255u + out_a / 2u) / out_a);
     rgba_[i + 3] = static_cast<uint8_t>(out_a);
+#endif
 }
 
 void ScreenCompositor::clearRect(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b, uint8_t a)

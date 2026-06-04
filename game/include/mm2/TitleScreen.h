@@ -49,6 +49,9 @@ public:
 
     void shutdown();
 
+    /** Loads character UI backend on first C/V/G (not at title boot). */
+    bool ensureCharacterUi();
+
 
 
     void tick(const platform::KeyState &keys);
@@ -82,6 +85,8 @@ private:
 
     void releaseIntroClips();
 
+    void releaseLogoAsset();
+
     void drawTitleMenu();
     void drawControls();
     void drawOptions();
@@ -95,6 +100,8 @@ private:
 
 
     const char *data_dir_ = nullptr;
+    ui::CharacterUiKind ui_kind_ = ui::CharacterUiKind::AmigaClassic;
+    bool character_ui_ready_ = false;
 
     bool quit_ = false;
 
@@ -161,6 +168,14 @@ private:
     uint8_t logo_alpha_ = 0;
 
     int logo_splash_x_ = 10;
+
+#if MM2_HOST_AMIGA
+    /* Last state painted into ACE pBack (retail retains FB between overlay steps). */
+    int pegasus_painted_overlay_phase_ = -1;
+    int pegasus_painted_peeker_slot_ = -1;
+    bool pegasus_painted_peeker_visible_ = false;
+    void invalidatePegasusPaint();
+#endif
 
 };
 

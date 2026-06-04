@@ -2,9 +2,12 @@
 
 #if defined(AMIGA) || MM2_HOST_AMIGA
 
+#include "mm2/DataPath.h"
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
 #include "mm2/platform/amiga/Mm2AmigaDisplay.h"
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
+
+#include <ace/types.h>
 
 #include "mm2_image32_codec.h"
 
@@ -22,7 +25,8 @@ namespace mm2::platform {
 
 namespace {
 
-static bool g_ace_ready = false;
+static bool g_system_ready = false;
+static bool g_display_ready = false;
 
 static char asciiFromKey(UBYTE ubKey)
 {
@@ -50,23 +54,30 @@ bool init(int *argc, char ***argv)
     copCreate();
     keyCreate();
 
+    g_system_ready = true;
+#ifdef ACE_DEBUG
+    logWrite("MM2: ACE system ok (display deferred)\n");
+#endif
+    return true;
+}
+
+bool beginDisplay()
+{
+    if (!g_system_ready || g_display_ready) {
+        return g_display_ready;
+    }
+
     if (!mm2AmigaDisplayCreate(MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, 1)) {
 #ifdef ACE_DEBUG
         logWrite("MM2: mm2AmigaDisplayCreate failed\n");
 #endif
-        keyDestroy();
-        copDestroy();
-        blitManagerDestroy();
-        timerDestroy();
-        memDestroy();
-        systemDestroy();
         return false;
     }
 
     mm2AmigaDisplayActivate();
-    g_ace_ready = true;
+    g_display_ready = true;
 #ifdef ACE_DEBUG
-    logWrite("MM2: platform init ok (AGA %ux%u %ubpp)\n", MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT,
+    logWrite("MM2: display ok (AGA %ux%u %ubpp)\n", MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT,
              MM2_AGA_SCREEN_BPP);
 #endif
     return true;
@@ -74,26 +85,40 @@ bool init(int *argc, char ***argv)
 
 void shutdown()
 {
-    if (!g_ace_ready) {
+    if (g_display_ready) {
+        mm2AmigaDisplayDispose();
+        g_display_ready = false;
+    }
+
+    if (!g_system_ready) {
         return;
     }
 
-    mm2AmigaDisplayDispose();
     keyDestroy();
     copDestroy();
     blitManagerDestroy();
     timerDestroy();
     memDestroy();
     systemDestroy();
-    g_ace_ready = false;
+    g_system_ready = false;
 }
 
-bool readFile(const char *path, uint8_t **out_data, std::size_t *out_size)
-{
-    if (!path || !out_data || !out_size) {
-        return false;
-    }
+namespace {
 
+void stripDotSlash(const char *path, char *out, size_t out_cap)
+{
+    if (!path || !out || out_cap == 0) {
+        return;
+    }
+    if (path[0] == '.' && (path[1] == '/' || path[1] == '\\') && path[2]) {
+        snprintf(out, out_cap, "%s", path + 2);
+        return;
+    }
+    snprintf(out, out_cap, "%s", path);
+}
+
+bool readFileAtPath(const char *path, uint8_t **out_data, std::size_t *out_size)
+{
     tFile *fp = diskFileOpen(path, DISK_FILE_MODE_READ, 1);
     if (!fp) {
         return false;
@@ -123,13 +148,75 @@ bool readFile(const char *path, uint8_t **out_data, std::size_t *out_size)
     return true;
 }
 
+}  // namespace
+
+bool readFile(const char *path, uint8_t **out_data, std::size_t *out_size)
+{
+    if (!path || !out_data || !out_size) {
+        return false;
+    }
+
+    char name[512];
+    stripDotSlash(path, name, sizeof(name));
+
+    char candidate[512];
+    static const char *const kPrefixes[] = {"", "dh1:", "dh0:"};
+
+    for (const char *prefix : kPrefixes) {
+        if (!joinDataPath(candidate, sizeof(candidate), prefix, name)) {
+            continue;
+        }
+        if (readFileAtPath(candidate, out_data, out_size)) {
+            return true;
+        }
+    }
+
+    return readFileAtPath(name, out_data, out_size);
+}
+
 void freeFileBuffer(uint8_t *data) { mm2_free(data); }
+
+bool resolveDataDir(const char *hint, char *out, size_t out_cap)
+{
+    if (!out || out_cap == 0) {
+        return false;
+    }
+
+    char probe[512];
+    static const char *const kDirs[] = {"", "dh1:", "dh0:"};
+
+    if (hint && hint[0] && !(hint[0] == '.' && hint[1] == '\0')) {
+        if (joinDataPath(probe, sizeof(probe), hint, "intro.32") && diskFileExists(probe)) {
+            if (hint[0] == '.' && (hint[1] == '/' || hint[1] == '\\')) {
+                out[0] = '\0';
+            } else {
+                snprintf(out, out_cap, "%s", hint);
+            }
+            return true;
+        }
+    }
+
+    for (const char *dir : kDirs) {
+        if (!joinDataPath(probe, sizeof(probe), dir, "intro.32")) {
+            continue;
+        }
+        if (diskFileExists(probe)) {
+            out[0] = '\0';
+            if (dir[0]) {
+                snprintf(out, out_cap, "%s", dir);
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
 
 KeyState pollInput()
 {
     KeyState keys{};
 
-    if (!g_ace_ready) {
+    if (!g_display_ready) {
         return keys;
     }
 
@@ -176,23 +263,34 @@ void presentFrame(const uint8_t *rgba, int width, int height)
     (void)width;
     (void)height;
 
-    if (!g_ace_ready) {
+    if (!g_display_ready) {
         return;
     }
 
-    /* Drawing is planar blits into pBack during render; here we only end the frame. */
+    /* Blit wait + palette push, then ACE buffer swap via viewProcessManagers. */
+    mm2_amiga_present_end();
     mm2AmigaDisplayFrameEnd();
 }
 
 void clearScreen() { mm2_amiga_clear_screen(); }
 
-void blitImage32(const ::mm2_image32_file *img, int frame_index, int x, int y)
+void applyUiPalette() { mm2_amiga_apply_ui_palette(); }
+
+void logoFadeCapturePalette() { mm2AmigaFadeCapturePalette(); }
+
+void logoFadeBeginIn(int frames) { mm2AmigaFadeBeginIn((UBYTE)frames); }
+
+void logoFadeBeginOut(int frames) { mm2AmigaFadeBeginOut((UBYTE)frames); }
+
+bool logoFadeConsumeDone() { return mm2AmigaFadeConsumeDone() != 0; }
+
+void blitImage32(const ::mm2_image32_file *img, int frame_index, int x, int y, int opaque)
 {
-    if (!g_ace_ready || !img || frame_index < 0) {
+    if (!g_display_ready || !img || frame_index < 0) {
         return;
     }
     mm2_amiga_blit_frame(img, static_cast<uint16_t>(frame_index), static_cast<UWORD>(x),
-                         static_cast<UWORD>(y));
+                         static_cast<UWORD>(y), opaque ? 1 : 0);
 }
 
 void setWindowTitle(const char *title) { (void)title; }
@@ -203,10 +301,8 @@ void setPresentScale(int scale) { (void)scale; }
 
 void delayMs(int ms)
 {
-    if (ms <= 0) {
-        return;
-    }
-    timerWaitUs(static_cast<UWORD>(ms * 1000));
+    /* vPortWaitForEnd in presentFrame already paces to display refresh. */
+    (void)ms;
 }
 
 const char *hostName() { return "ACE-AGA-6bpp"; }

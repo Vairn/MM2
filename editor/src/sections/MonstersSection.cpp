@@ -10,122 +10,37 @@
 #include "widgets/UiLayout.h"
 
 namespace mm2 {
-namespace {
-
-int sequenceFrameAt(const GfxImage& img, int seqIndex, int step) {
-    if (seqIndex < 0 || seqIndex >= static_cast<int>(img.sequences.size())) return -1;
-    const auto& seq = img.sequences[seqIndex];
-    if (seq.size() < 2) return -1;
-    const int pairCount = static_cast<int>(seq.size() / 2);
-    if (pairCount <= 0) return -1;
-    if (step < 0) step = 0;
-    if (step >= pairCount) step = pairCount - 1;
-    return static_cast<int>(seq[static_cast<size_t>(step) * 2]);
-}
-
-float sequenceStepDurationSec(const GfxImage& img, int seqIndex, int step, float speed) {
-    if (seqIndex < 0 || seqIndex >= static_cast<int>(img.sequences.size()) || speed <= 0.0f) return 0.10f;
-    const auto& seq = img.sequences[seqIndex];
-    if (seq.size() < 2) return 0.10f;
-    const int pairCount = static_cast<int>(seq.size() / 2);
-    if (pairCount <= 0) return 0.10f;
-    if (step < 0) step = 0;
-    if (step >= pairCount) step = pairCount - 1;
-    const int delayTicks = static_cast<int>(seq[static_cast<size_t>(step) * 2 + 1]);
-    const float base = static_cast<float>(delayTicks > 0 ? delayTicks : 1) / 60.0f;
-    return base / speed;
-}
-
-bool hasSequencePlayback(const GfxImage& img) {
-    for (const auto& seq : img.sequences) {
-        if (seq.size() >= 2) return true;
-    }
-    return false;
-}
-
-void computeAnmCompositeCanvas(const GfxImage& img, int& outMinX, int& outMinY, int& outW, int& outH) {
-    outMinX = 0;
-    outMinY = 0;
-    outW = 0;
-    outH = 0;
-    const int n = static_cast<int>(img.frames.size());
-    if (n <= 0) return;
-
-    int minX = 0;
-    int minY = 0;
-    int maxX = img.frames[0].width;
-    int maxY = img.frames[0].height;
-    for (int i = 1; i < n; ++i) {
-        const int preIdx = i - 1;
-        if (preIdx < 0 || preIdx >= static_cast<int>(img.preludeEntries.size())) continue;
-        const GfxAnimPreludeEntry& pe = img.preludeEntries[preIdx];
-        if (!pe.used) continue;
-        const GfxFrame& fr = img.frames[i];
-        int w = (pe.width > 0 && pe.width < fr.width) ? pe.width : fr.width;
-        int h = (pe.height > 0 && pe.height < fr.height) ? pe.height : fr.height;
-        if (w <= 0 || h <= 0) continue;
-        int x = pe.xOffset;
-        int y = pe.yOffset;
-        int x2 = x + w;
-        int y2 = y + h;
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x2 > maxX) maxX = x2;
-        if (y2 > maxY) maxY = y2;
-    }
-    outMinX = minX;
-    outMinY = minY;
-    outW = maxX - minX;
-    outH = maxY - minY;
-}
-
-void blitFrameToCanvas(const GfxFrame& fr, int dstX, int dstY, int copyW, int copyH, int canvasW, int canvasH,
-                       std::vector<uint8_t>& rgba) {
-    if (copyW <= 0 || copyH <= 0) return;
-    if (copyW > fr.width) copyW = fr.width;
-    if (copyH > fr.height) copyH = fr.height;
-    for (int y = 0; y < copyH; ++y) {
-        const int oy = dstY + y;
-        if (oy < 0 || oy >= canvasH) continue;
-        for (int x = 0; x < copyW; ++x) {
-            const int ox = dstX + x;
-            if (ox < 0 || ox >= canvasW) continue;
-            const uint8_t* src = &fr.rgba[(static_cast<size_t>(y) * fr.width + x) * 4];
-            if (src[3] == 0) continue;
-            uint8_t* dst = &rgba[(static_cast<size_t>(oy) * canvasW + ox) * 4];
-            dst[0] = src[0];
-            dst[1] = src[1];
-            dst[2] = src[2];
-            dst[3] = src[3];
-        }
-    }
-}
-
-void clearRectRgba(int dstX, int dstY, int rectW, int rectH, int canvasW, int canvasH, std::vector<uint8_t>& rgba) {
-    if (rectW <= 0 || rectH <= 0) return;
-    for (int y = 0; y < rectH; ++y) {
-        const int oy = dstY + y;
-        if (oy < 0 || oy >= canvasH) continue;
-        for (int x = 0; x < rectW; ++x) {
-            const int ox = dstX + x;
-            if (ox < 0 || ox >= canvasW) continue;
-            uint8_t* dst = &rgba[(static_cast<size_t>(oy) * canvasW + ox) * 4];
-            dst[0] = dst[1] = dst[2] = dst[3] = 0;
-        }
-    }
-}
-
-}  // namespace
 
 MonstersSection::~MonstersSection() { releaseTextures(); }
 
 void MonstersSection::releaseTextures() {
     for (unsigned int t : textures_) freeTexture(t);
     textures_.clear();
-    if (spriteCompositeTex_) freeTexture(spriteCompositeTex_);
-    spriteCompositeTex_ = 0;
-    spriteCompositeFrame_ = -1;
-    spriteCompositeRgba_.clear();
+    for (unsigned int t : composedTextures_) freeTexture(t);
+    composedTextures_.clear();
+}
+
+void MonstersSection::buildSpriteComposedTextures() {
+    composedTextures_.clear();
+    if (sprite_.frames.empty()) return;
+
+    spriteAnmCanvas_ = gfxAnmCompositeCanvas(sprite_);
+    if (!spriteAnmCanvas_.valid) return;
+
+    spriteCanvasMinX_ = spriteAnmCanvas_.minX;
+    spriteCanvasMinY_ = spriteAnmCanvas_.minY;
+    spriteCanvasW_ = spriteAnmCanvas_.width;
+    spriteCanvasH_ = spriteAnmCanvas_.height;
+
+    std::vector<uint8_t> rgba;
+    composedTextures_.reserve(sprite_.frames.size());
+    for (int i = 0; i < static_cast<int>(sprite_.frames.size()); ++i) {
+        if (!gfxAnmCompositeFrame(sprite_, i, rgba, &spriteAnmCanvas_)) {
+            composedTextures_.push_back(0);
+            continue;
+        }
+        composedTextures_.push_back(makeTextureRGBA(rgba.data(), spriteAnmCanvas_.width, spriteAnmCanvas_.height));
+    }
 }
 
 bool MonstersSection::load(const std::string& dataDir) {
@@ -172,52 +87,12 @@ void MonstersSection::loadSprite(uint8_t picture) {
         textures_.reserve(sprite_.frames.size());
         for (auto& fr : sprite_.frames)
             textures_.push_back(makeTextureRGBA(fr.rgba.data(), fr.width, fr.height));
-        if (hasSequencePlayback(sprite_)) {
-            int frame = sequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+        buildSpriteComposedTextures();
+        if (spritePlayMode_ == AnmPlayMode::Sequence && gfxAnmHasSequencePlayback(sprite_)) {
+            int frame = gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
             if (frame >= 0) spriteFrame_ = frame;
         }
-        computeAnmCompositeCanvas(sprite_, spriteCanvasMinX_, spriteCanvasMinY_, spriteCanvasW_, spriteCanvasH_);
-        if (spriteCanvasW_ > 0 && spriteCanvasH_ > 0) {
-            spriteCompositeRgba_.assign(static_cast<size_t>(spriteCanvasW_) * spriteCanvasH_ * 4, 0);
-            spriteCompositeTex_ = makeTextureRGBA(spriteCompositeRgba_.data(), spriteCanvasW_, spriteCanvasH_);
-        }
     }
-}
-
-void MonstersSection::rebuildSpriteCompositeForFrame() {
-    const int n = static_cast<int>(sprite_.frames.size());
-    if (n <= 0 || spriteFrame_ < 0 || spriteFrame_ >= n || spriteCanvasW_ <= 0 || spriteCanvasH_ <= 0 ||
-        !spriteCompositeTex_ || spriteCompositeRgba_.empty())
-        return;
-    if (spriteCompositeFrame_ == spriteFrame_) return;
-
-    std::fill(spriteCompositeRgba_.begin(), spriteCompositeRgba_.end(), 0);
-    const GfxFrame& fr = sprite_.frames[spriteFrame_];
-    if (!sprite_.frames.empty()) {
-        const GfxFrame& base = sprite_.frames[0];
-        blitFrameToCanvas(base, -spriteCanvasMinX_, -spriteCanvasMinY_, base.width, base.height, spriteCanvasW_,
-                          spriteCanvasH_, spriteCompositeRgba_);
-    }
-    if (spriteFrame_ > 0) {
-        int x = -spriteCanvasMinX_;
-        int y = -spriteCanvasMinY_;
-        int copyW = fr.width;
-        int copyH = fr.height;
-        const int preIdx = spriteFrame_ - 1;
-        if (preIdx >= 0 && preIdx < static_cast<int>(sprite_.preludeEntries.size()) &&
-            sprite_.preludeEntries[preIdx].used) {
-            const GfxAnimPreludeEntry& pe = sprite_.preludeEntries[preIdx];
-            x = pe.xOffset - spriteCanvasMinX_;
-            y = pe.yOffset - spriteCanvasMinY_;
-            if (pe.width > 0 && pe.width < copyW) copyW = pe.width;
-            if (pe.height > 0 && pe.height < copyH) copyH = pe.height;
-        }
-        // Match runtime semantics: clear destination rect before draw.
-        clearRectRgba(x, y, copyW, copyH, spriteCanvasW_, spriteCanvasH_, spriteCompositeRgba_);
-        blitFrameToCanvas(fr, x, y, copyW, copyH, spriteCanvasW_, spriteCanvasH_, spriteCompositeRgba_);
-    }
-    uploadTextureRGBA(spriteCompositeTex_, spriteCompositeRgba_.data(), spriteCanvasW_, spriteCanvasH_);
-    spriteCompositeFrame_ = spriteFrame_;
 }
 
 void MonstersSection::draw(App& app) {
@@ -278,6 +153,23 @@ void MonstersSection::draw(App& app) {
             ui::SetFieldShort();
             ImGui::SliderFloat("Speed##sprite", &spriteSpeed_, 0.1f, 4.0f, "%.2fx");
             ui::SetFieldMed();
+            const char* spriteModeLabel =
+                (spritePlayMode_ == AnmPlayMode::Flipbook) ? "Flipbook" : "Sequence";
+            if (ImGui::BeginCombo("Play mode##sprite", spriteModeLabel)) {
+                if (ImGui::Selectable("Flipbook (all composed frames)", spritePlayMode_ == AnmPlayMode::Flipbook)) {
+                    spritePlayMode_ = AnmPlayMode::Flipbook;
+                    spriteSequenceStep_ = 0;
+                    spriteElapsed_ = 0.0f;
+                }
+                if (ImGui::Selectable("Sequence (game stream)", spritePlayMode_ == AnmPlayMode::Sequence)) {
+                    spritePlayMode_ = AnmPlayMode::Sequence;
+                    spriteSequenceStep_ = 0;
+                    spriteElapsed_ = 0.0f;
+                    int frame = gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+                    if (frame >= 0) spriteFrame_ = frame;
+                }
+                ImGui::EndCombo();
+            }
             ImGui::SliderInt("Frame##sprite", &spriteFrame_, 0, n > 0 ? n - 1 : 0);
             ImGui::SliderFloat("Zoom##sprite", &spriteZoom_, 1.0f, 6.0f, "%.0fx");
 
@@ -287,16 +179,18 @@ void MonstersSection::draw(App& app) {
                 spriteLastTick_ = now;
                 spriteElapsed_ += (dt > 0.0f) ? dt : 0.0f;
 
-                if (hasSequencePlayback(sprite_)) {
+                const bool useSequence =
+                    spritePlayMode_ == AnmPlayMode::Sequence && gfxAnmHasSequencePlayback(sprite_);
+                if (useSequence) {
                     if (spriteSequence_ < 0 || spriteSequence_ >= static_cast<int>(sprite_.sequences.size()))
                         spriteSequence_ = 0;
                     const auto& seq = sprite_.sequences[spriteSequence_];
                     const int pairCount = static_cast<int>(seq.size() / 2);
                     if (pairCount > 0) {
-                        while (spriteElapsed_ >=
-                               sequenceStepDurationSec(sprite_, spriteSequence_, spriteSequenceStep_, spriteSpeed_)) {
-                            spriteElapsed_ -= sequenceStepDurationSec(sprite_, spriteSequence_,
-                                                                      spriteSequenceStep_, spriteSpeed_);
+                        while (spriteElapsed_ >= gfxAnmSequenceStepDurationSec(sprite_, spriteSequence_,
+                                                                                 spriteSequenceStep_, spriteSpeed_)) {
+                            spriteElapsed_ -= gfxAnmSequenceStepDurationSec(sprite_, spriteSequence_,
+                                                                           spriteSequenceStep_, spriteSpeed_);
                             ++spriteSequenceStep_;
                             if (spriteSequenceStep_ >= pairCount) {
                                 if (spriteLoop_)
@@ -307,7 +201,7 @@ void MonstersSection::draw(App& app) {
                                     break;
                                 }
                             }
-                            int frame = sequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+                            int frame = gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
                             if (frame >= 0 && frame < n) spriteFrame_ = frame;
                         }
                     }
@@ -334,7 +228,7 @@ void MonstersSection::draw(App& app) {
             if (spriteFrame_ < 0) spriteFrame_ = 0;
             if (spriteFrame_ >= n) spriteFrame_ = (n > 0) ? (n - 1) : 0;
 
-            if (!sprite_.sequences.empty()) {
+            if (!sprite_.sequences.empty() && spritePlayMode_ == AnmPlayMode::Sequence) {
                 if (spriteSequence_ < 0 || spriteSequence_ >= static_cast<int>(sprite_.sequences.size()))
                     spriteSequence_ = 0;
                 std::string seqLabel = "Sequence " + std::to_string(spriteSequence_);
@@ -348,14 +242,14 @@ void MonstersSection::draw(App& app) {
                             spriteSequence_ = i;
                             spriteSequenceStep_ = 0;
                             spriteElapsed_ = 0.0f;
-                            int frame = sequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+                            int frame = gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
                             if (frame >= 0 && frame < n) spriteFrame_ = frame;
                         }
                         if (sel) ImGui::SetItemDefaultFocus();
                     }
                     ImGui::EndCombo();
                 }
-                const int frame = sequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+                const int frame = gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
                 const int delay = (spriteSequence_ >= 0 &&
                                    spriteSequence_ < static_cast<int>(sprite_.sequences.size()) &&
                                    static_cast<size_t>(spriteSequenceStep_) * 2 + 1 <
@@ -368,15 +262,22 @@ void MonstersSection::draw(App& app) {
 
             if (spriteFrame_ >= 0 && spriteFrame_ < n) {
                 const GfxFrame& fr = sprite_.frames[spriteFrame_];
-                rebuildSpriteCompositeForFrame();
-                unsigned int tex = (spriteCompositeTex_ != 0) ? spriteCompositeTex_ : textures_[spriteFrame_];
+                unsigned int tex = textures_[spriteFrame_];
+                int drawW = fr.width;
+                int drawH = fr.height;
+                if (spriteAnmCanvas_.valid && spriteFrame_ >= 0 &&
+                    spriteFrame_ < static_cast<int>(composedTextures_.size()) &&
+                    composedTextures_[spriteFrame_]) {
+                    tex = composedTextures_[spriteFrame_];
+                    drawW = spriteCanvasW_;
+                    drawH = spriteCanvasH_;
+                }
                 if (tex) {
-                    const int drawW = (spriteCompositeTex_ != 0) ? spriteCanvasW_ : fr.width;
-                    const int drawH = (spriteCompositeTex_ != 0) ? spriteCanvasH_ : fr.height;
                     ImVec2 sz(drawW * spriteZoom_, drawH * spriteZoom_);
                     ImGui::Image(static_cast<ImTextureID>(tex), sz);
                 }
-                ImGui::TextDisabled("%dx%d  flags=0x%X", fr.width, fr.height, fr.flags);
+                ImGui::TextDisabled("composed %dx%d  raw patch %dx%d  flags=0x%X", drawW, drawH, fr.width, fr.height,
+                                    fr.flags);
                 const int preIdx = spriteFrame_ - 1;
                 if (preIdx >= 0 && preIdx < static_cast<int>(sprite_.preludeEntries.size())) {
                     const GfxAnimPreludeEntry& pe = sprite_.preludeEntries[preIdx];

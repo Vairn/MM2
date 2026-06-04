@@ -26,6 +26,8 @@ public:
 private:
     void selectFile(int idx);
     void releaseTextures();
+    void buildComposedTextures();
+    unsigned int composedTextureForFrame(int frameIdx) const;
     bool initTitlePreviewAssets();
     void updateTitlePlayback();
     void drawTitleTab();
@@ -46,16 +48,9 @@ private:
     float elapsed_ = 0.0f;
     int selectedSequence_ = 0;
     int sequenceStep_ = 0;
-    bool useAnmPreludePlacement_ = false;
-    int compositeCanvasW_ = 0;
-    int compositeCanvasH_ = 0;
-    int compositeCanvasMinX_ = 0;
-    int compositeCanvasMinY_ = 0;
-    unsigned int compositeTexture_ = 0;
-    int compositeTextureFrame_ = -1;
-    bool compositeTextureValid_ = false;
-    std::vector<uint8_t> compositeRgba_;
-    // Title compositor preview: intro.32 + introclips.32.
+    AnmPlayMode anmPlayMode_ = AnmPlayMode::Flipbook;
+
+    GfxImage image_;
     bool titleReady_ = false;
     std::string titleStatus_;
     GfxImage titleIntro_;
@@ -79,8 +74,10 @@ private:
     int titleAsmYBottom_ = 216;
     bool titleAsmCanvasPrimed_ = false;
 
-    GfxImage image_;
+    // Title compositor preview: intro.32 + introclips.32.
     std::vector<unsigned int> textures_;
+    std::vector<unsigned int> composedTextures_;
+    GfxAnmCanvas anmCanvas_{};
 };
 
 }  // namespace mm2

@@ -8,6 +8,8 @@ namespace mm2::runtime {
 #if MM2_HOST_AMIGA
 
 void *allocate(std::size_t bytes);
+/** Decode/file scratch buffers — keep CHIP for blitter bitmaps only. */
+void *allocate_fast(std::size_t bytes);
 void deallocate(void *ptr, std::size_t bytes) noexcept;
 void *reallocate(void *ptr, std::size_t old_bytes, std::size_t new_bytes);
 
@@ -42,6 +44,7 @@ extern "C" {
 #endif
 
 void *mm2_malloc(std::size_t size);
+void *mm2_malloc_fast(std::size_t size);
 void mm2_free(void *ptr);
 void *mm2_realloc(void *ptr, std::size_t size);
 

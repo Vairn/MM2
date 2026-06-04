@@ -70,9 +70,11 @@ scan the data folder, decode the selected file, and preview frames (single +
 contact sheet), the palette, and per-frame metadata. Decoding is verified
 against real wall/UI `.32` sheets via `tests/gfx_dump.cpp`. Note: `globe.32` and
 `disk.32` use the `.32` extension in the resource table but are XOR data blobs
-(copy-protection strings / other), not planar image chunks. The `.anm` viewer also includes an **experimental** "Use prelude placement" toggle
-that draws each selected frame at its prelude `(x,y)` on a shared canvas for
-layout sanity checks without forcing a hard format interpretation.
+(copy-protection strings / other), not planar image chunks. `.anm` files use TV-prelude
+**composition** (frame 0 = base, N>0 = patch at prelude[N-1]; see
+`EXTRACTED/docs/07-anm-tv-format.md`). The Animations section shows **composed**
+runtime frames (what the game blits), a **Raw patches** tab for decoded bitmaps,
+and sequence-driven playback. Shared API: `core/Gfx.h` → `gfxAnmCompositeFrame()`.
 
 ## Adding a new section
 

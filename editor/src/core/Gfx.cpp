@@ -274,6 +274,143 @@ GfxImage gfxDecode(const Bytes& bytesIn, bool isAnm) {
     return img;
 }
 
+namespace {
+
+void blitOpaqueRgba(const GfxFrame& fr, int dstX, int dstY, int copyW, int copyH, int canvasW, int canvasH,
+                    std::vector<uint8_t>& rgba) {
+    if (copyW <= 0 || copyH <= 0) return;
+    if (copyW > fr.width) copyW = fr.width;
+    if (copyH > fr.height) copyH = fr.height;
+    for (int y = 0; y < copyH; ++y) {
+        const int oy = dstY + y;
+        if (oy < 0 || oy >= canvasH) continue;
+        for (int x = 0; x < copyW; ++x) {
+            const int ox = dstX + x;
+            if (ox < 0 || ox >= canvasW) continue;
+            const uint8_t* src = &fr.rgba[(static_cast<size_t>(y) * fr.width + x) * 4];
+            if (src[3] == 0) continue;
+            uint8_t* dst = &rgba[(static_cast<size_t>(oy) * canvasW + ox) * 4];
+            dst[0] = src[0];
+            dst[1] = src[1];
+            dst[2] = src[2];
+            dst[3] = src[3];
+        }
+    }
+}
+
+void clearRectRgba(int dstX, int dstY, int rectW, int rectH, int canvasW, int canvasH, std::vector<uint8_t>& rgba) {
+    if (rectW <= 0 || rectH <= 0) return;
+    for (int y = 0; y < rectH; ++y) {
+        const int oy = dstY + y;
+        if (oy < 0 || oy >= canvasH) continue;
+        for (int x = 0; x < rectW; ++x) {
+            const int ox = dstX + x;
+            if (ox < 0 || ox >= canvasW) continue;
+            uint8_t* dst = &rgba[(static_cast<size_t>(oy) * canvasW + ox) * 4];
+            dst[0] = dst[1] = dst[2] = dst[3] = 0;
+        }
+    }
+}
+
+}  // namespace
+
+GfxAnmCanvas gfxAnmCompositeCanvas(const GfxImage& img) {
+    GfxAnmCanvas c;
+    const int n = static_cast<int>(img.frames.size());
+    if (n <= 0) return c;
+
+    int minX = 0;
+    int minY = 0;
+    int maxX = img.frames[0].width;
+    int maxY = img.frames[0].height;
+    for (int i = 1; i < n; ++i) {
+        const int preIdx = i - 1;
+        if (preIdx < 0 || preIdx >= static_cast<int>(img.preludeEntries.size())) continue;
+        const GfxAnimPreludeEntry& pe = img.preludeEntries[preIdx];
+        if (!pe.used) continue;
+        const GfxFrame& fr = img.frames[i];
+        int w = (pe.width > 0 && pe.width < fr.width) ? pe.width : fr.width;
+        int h = (pe.height > 0 && pe.height < fr.height) ? pe.height : fr.height;
+        if (w <= 0 || h <= 0) continue;
+        const int x = pe.xOffset;
+        const int y = pe.yOffset;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x + w > maxX) maxX = x + w;
+        if (y + h > maxY) maxY = y + h;
+    }
+    c.minX = minX;
+    c.minY = minY;
+    c.width = maxX - minX;
+    c.height = maxY - minY;
+    c.valid = c.width > 0 && c.height > 0;
+    return c;
+}
+
+bool gfxAnmCompositeFrame(const GfxImage& img, int frameIdx, std::vector<uint8_t>& rgba, const GfxAnmCanvas* canvas) {
+    const int n = static_cast<int>(img.frames.size());
+    if (n <= 0 || frameIdx < 0 || frameIdx >= n) return false;
+
+    GfxAnmCanvas local;
+    const GfxAnmCanvas& c = canvas ? *canvas : (local = gfxAnmCompositeCanvas(img));
+    if (!c.valid) return false;
+
+    rgba.assign(static_cast<size_t>(c.width) * c.height * 4, 0);
+    const GfxFrame& base = img.frames[0];
+    blitOpaqueRgba(base, -c.minX, -c.minY, base.width, base.height, c.width, c.height, rgba);
+
+    if (frameIdx > 0) {
+        const GfxFrame& fr = img.frames[frameIdx];
+        int x = -c.minX;
+        int y = -c.minY;
+        int copyW = fr.width;
+        int copyH = fr.height;
+        const int preIdx = frameIdx - 1;
+        if (preIdx >= 0 && preIdx < static_cast<int>(img.preludeEntries.size()) &&
+            img.preludeEntries[preIdx].used) {
+            const GfxAnimPreludeEntry& pe = img.preludeEntries[preIdx];
+            x = pe.xOffset - c.minX;
+            y = pe.yOffset - c.minY;
+            if (pe.width > 0 && pe.width < copyW) copyW = pe.width;
+            if (pe.height > 0 && pe.height < copyH) copyH = pe.height;
+        }
+        clearRectRgba(x, y, copyW, copyH, c.width, c.height, rgba);
+        blitOpaqueRgba(fr, x, y, copyW, copyH, c.width, c.height, rgba);
+    }
+    return true;
+}
+
+bool gfxAnmHasSequencePlayback(const GfxImage& img) {
+    for (const auto& seq : img.sequences) {
+        if (seq.size() >= 2) return true;
+    }
+    return false;
+}
+
+int gfxAnmSequenceFrameAt(const GfxImage& img, int seqIndex, int step) {
+    if (seqIndex < 0 || seqIndex >= static_cast<int>(img.sequences.size())) return -1;
+    const auto& seq = img.sequences[seqIndex];
+    if (seq.size() < 2) return -1;
+    const int pairCount = static_cast<int>(seq.size() / 2);
+    if (pairCount <= 0) return -1;
+    if (step < 0) step = 0;
+    if (step >= pairCount) step = pairCount - 1;
+    return static_cast<int>(seq[static_cast<size_t>(step) * 2]);
+}
+
+float gfxAnmSequenceStepDurationSec(const GfxImage& img, int seqIndex, int step, float speed) {
+    if (seqIndex < 0 || seqIndex >= static_cast<int>(img.sequences.size()) || speed <= 0.0f) return 0.10f;
+    const auto& seq = img.sequences[seqIndex];
+    if (seq.size() < 2) return 0.10f;
+    const int pairCount = static_cast<int>(seq.size() / 2);
+    if (pairCount <= 0) return 0.10f;
+    if (step < 0) step = 0;
+    if (step >= pairCount) step = pairCount - 1;
+    const int delayTicks = static_cast<int>(seq[static_cast<size_t>(step) * 2 + 1]);
+    const float base = static_cast<float>(delayTicks > 0 ? delayTicks : 1) / 60.0f;
+    return base / speed;
+}
+
 bool gfxLoad(const std::string& path, bool isAnm, GfxImage& out) {
     Bytes b;
     if (!readFile(path, b)) {

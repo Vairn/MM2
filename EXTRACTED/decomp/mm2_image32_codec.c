@@ -141,26 +141,40 @@ static mm2_image32_error decode_palette(const uint8_t *data, size_t pal_off, mm2
 
 #if defined(MM2_CODEC_AMIGA)
 
+#include <ace/managers/blit.h>
 #include <ace/utils/bitmap.h>
 
 static mm2_image32_error planar_frame(const uint8_t *planes, uint16_t w, uint16_t h,
                                       mm2_image32_frame *frame)
 {
     size_t rs = mm2_image32_rassize(w, h);
+    const UWORD uwBmW = (UWORD)(((ULONG)w + 15UL) & ~15UL);
+    UWORD uwRowBytesSrc = (UWORD)((((ULONG)w + 15UL) >> 3) & 0xFFFEUL);
     UBYTE pl;
+    UWORD y;
+    tBitMap *bm;
 
     frame->width = w;
     frame->height = h;
     frame->rgba = NULL;
     frame->rgba_size = 0;
-    frame->bitmap = bitmapCreate(w, h, MM2_IMAGE32_PLANES, BMF_CLEAR | BMF_DISPLAYABLE);
+    /* ACE bitmapCreate requires width multiple of 16; keep frame->width for blit bounds. */
+    /* On Amiga, ACE bitmapCreate only understands OS/ACE layout flags — not the
+     * stub BMF_CLEAR|BMF_DISPLAYABLE (3). Planes are filled by memcpy below. */
+    frame->bitmap = bitmapCreate(uwBmW, h, MM2_IMAGE32_PLANES, 0);
     if (!frame->bitmap) {
         return MM2_IMAGE32_ERR_NOMEM;
     }
-    {
-        tBitMap *bm = (tBitMap *)frame->bitmap;
-        for (pl = 0; pl < MM2_IMAGE32_PLANES; ++pl) {
-            memcpy(bm->Planes[pl], planes + (size_t)pl * rs, rs);
+    bm = (tBitMap *)frame->bitmap;
+    for (pl = 0; pl < MM2_IMAGE32_PLANES; ++pl) {
+        const uint8_t *src_plane = planes + (size_t)pl * rs;
+        uint8_t *dst_plane = (uint8_t *)bm->Planes[pl];
+        for (y = 0; y < h; ++y) {
+            uint8_t *row = dst_plane + (ULONG)y * (ULONG)bm->BytesPerRow;
+            memcpy(row, src_plane + (ULONG)y * (ULONG)uwRowBytesSrc, uwRowBytesSrc);
+            if (bm->BytesPerRow > uwRowBytesSrc) {
+                memset(row + uwRowBytesSrc, 0, (size_t)bm->BytesPerRow - (size_t)uwRowBytesSrc);
+            }
         }
     }
     return MM2_IMAGE32_OK;
@@ -220,6 +234,9 @@ void mm2_image32_free(mm2_image32_file *img)
         return;
     }
     if (img->frames) {
+#if defined(MM2_CODEC_AMIGA)
+        blitWait();
+#endif
         for (i = 0; i < (size_t)img->frame_count; ++i) {
 #if defined(MM2_CODEC_AMIGA)
             if (img->frames[i].bitmap) {
@@ -332,32 +349,53 @@ mm2_image32_error mm2_image32_load_file(const char *path, mm2_image32_file *out)
         return MM2_IMAGE32_ERR_BAD_FORMAT;
     }
 
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+    systemUse();
+#endif
     fp = fopen(path, "rb");
     if (!fp) {
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
         return MM2_IMAGE32_ERR_IO;
     }
     if (fseek(fp, 0, SEEK_END) != 0) {
         fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
         return MM2_IMAGE32_ERR_IO;
     }
     fsize_l = ftell(fp);
     if (fsize_l <= 0) {
         fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
         return MM2_IMAGE32_ERR_BAD_FORMAT;
     }
     fsize = (size_t)fsize_l;
     if (fseek(fp, 0, SEEK_SET) != 0) {
         fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
         return MM2_IMAGE32_ERR_IO;
     }
 
     buf = (uint8_t *)malloc(fsize);
     if (!buf) {
         fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
         return MM2_IMAGE32_ERR_NOMEM;
     }
     got = fread(buf, 1, fsize, fp);
     fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+    systemUnuse();
+#endif
     if (got != fsize) {
         free(buf);
         return MM2_IMAGE32_ERR_IO;
