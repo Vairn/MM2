@@ -1,0 +1,3 @@
+[submodule "game/cmake/AmigaCMakeCrossToolchains"]
+	path = game/cmake/AmigaCMakeCrossToolchains
+	url = https://github.com/AmigaPorts/AmigaCMakeCrossToolchains.git

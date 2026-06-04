@@ -16,6 +16,8 @@
 !tools/**
 !wiki/
 !wiki/**
+!game/
+!game/**
 
 # Reverse-engineering docs/source artifacts
 !EXTRACTED/
@@ -29,6 +31,8 @@
 # Ignore generated/build/output files even under included paths
 editor/build/
 editor/build/**
+game/build/
+game/build/**
 wiki/node_modules/
 wiki/node_modules/**
 wiki/.vitepress/dist/

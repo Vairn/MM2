@@ -1,0 +1,7 @@
+{
+  "includePath": ["${workspaceFolder}/include", "${workspaceFolder}/../EXTRACTED/decomp"],
+  "shrinkler": {
+    "fast": "-h -o -1",
+    "slow": "-h -f dff180 -9"
+  }
+}

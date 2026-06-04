@@ -1,0 +1,46 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 16, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "m68k-bartman-1.8.2",
+      "displayName": "Amiga (Bartman / VS Code extension) Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/m68k-bartman-1.8.2",
+      "toolchainFile": "${sourceDir}/cmake/mm2-m68k-bartman.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "AMIGA": "ON",
+        "M68K_CPU": "68020",
+        "ACE_USE_AGA_FEATURES": "ON",
+        "ACE_USE_ECS_FEATURES": "ON"
+      }
+    },
+    {
+      "name": "m68k-bartman-1.8.2-debug",
+      "displayName": "Amiga (Bartman) Debug",
+      "inherits": "m68k-bartman-1.8.2",
+      "binaryDir": "${sourceDir}/build/m68k-bartman-1.8.2-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ACE_DEBUG": "ON",
+        "ACE_DEBUG_UAE": "ON"
+      }
+    },
+    {
+      "name": "sdl-release",
+      "displayName": "Desktop SDL Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/sdl",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "AMIGA": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "m68k-bartman-1.8.2", "configurePreset": "m68k-bartman-1.8.2" },
+    { "name": "m68k-bartman-1.8.2-debug", "configurePreset": "m68k-bartman-1.8.2-debug" },
+    { "name": "sdl-release", "configurePreset": "sdl-release" }
+  ]
+}
