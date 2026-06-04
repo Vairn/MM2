@@ -51,6 +51,11 @@ if(AMIGA)
   unset(CPM_FILE CACHE)
   unset(CPM_VERSION CACHE)
   unset(CPM_PACKAGES CACHE)
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(ACE_DEBUG ON CACHE BOOL "ACE debug logging" FORCE)
+  else()
+    set(ACE_DEBUG OFF CACHE BOOL "ACE debug logging" FORCE)
+  endif()
   add_subdirectory(${ace_engine_SOURCE_DIR} ${ace_engine_BINARY_DIR})
 else()
   message(STATUS "[MM2] Desktop / SDL2 target")
@@ -193,7 +198,7 @@ else()
 endif()
 
 target_compile_definitions(${_mm2_target} PRIVATE
-  $<$<CONFIG:Debug>:MM2_DEBUG>
+  $<$<CONFIG:Debug>:MM2_DEBUG ACE_DEBUG GAME_DEBUG>
 )
 
 message(STATUS "[MM2] Data files expected beside binary or passed as argv[1] (MM2 install dir)")
