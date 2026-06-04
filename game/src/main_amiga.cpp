@@ -45,17 +45,21 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    mm2::Game game;
-    if (!game.init(data_dir, ui_kind)) {
+    /* Game embeds GameSession (64K+ gs_image) and TitleScreen roster — must not live on
+     * the Amiga stack (~4–8K). Heap allocation via mm2 operator new / ACE memAlloc. */
+    mm2::Game *const game = new mm2::Game();
+    if (!game->init(data_dir, ui_kind)) {
+        delete game;
         mm2::platform::shutdown();
         return 1;
     }
 
-    while (!game.shouldQuit()) {
-        game.tick();
+    while (!game->shouldQuit()) {
+        game->tick();
     }
 
-    game.shutdown();
+    game->shutdown();
+    delete game;
     mm2::platform::shutdown();
     return 0;
 }
