@@ -84,6 +84,9 @@ extern "C" void *mm2_realloc(void *ptr, std::size_t size)
     return mm2::runtime::reallocate(ptr, old_bytes, size);
 }
 
+/* No C++ runtime on Amiga — trap on pure virtual call (should never happen). */
+extern "C" void __cxa_pure_virtual() { for (;;) {} }
+
 #else
 
 #include <cstdlib>
