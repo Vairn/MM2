@@ -422,4 +422,116 @@ bool gfxLoad(const std::string& path, bool isAnm, GfxImage& out) {
     return out.ok;
 }
 
+namespace {
+
+// Pack one frame's indexed pixels into 5 concatenated Amiga bitplanes.
+std::vector<uint8_t> packFramePlanes(const GfxEncodeFrame& fr) {
+    const int bpr = (((fr.width + 15) >> 3) & 0xFFFE);
+    const int rs = fr.height * bpr;
+    std::vector<uint8_t> planes(static_cast<size_t>(kGfxPlanes) * rs, 0);
+    for (int y = 0; y < fr.height; ++y) {
+        for (int x = 0; x < fr.width; ++x) {
+            const uint8_t v = fr.indices[static_cast<size_t>(y) * fr.width + x] & 0x1F;
+            if (v == 0) continue;
+            const int byteOff = y * bpr + (x >> 3);
+            const int bit = 7 - (x & 7);
+            for (int pl = 0; pl < kGfxPlanes; ++pl) {
+                if ((v >> pl) & 1) planes[static_cast<size_t>(pl) * rs + byteOff] |= (1u << bit);
+            }
+        }
+    }
+    return planes;
+}
+
+// Encode a byte stream to the .32 nibble-RLE format (runs only for 0x0/0xF).
+void rleEncodeNibbles(const std::vector<uint8_t>& stream, Bytes& out) {
+    std::vector<uint8_t> nibs(stream.size() * 2);
+    for (size_t i = 0; i < stream.size(); ++i) {
+        nibs[2 * i] = (stream[i] >> 4) & 0x0F;
+        nibs[2 * i + 1] = stream[i] & 0x0F;
+    }
+    const size_t n = nibs.size();
+    size_t i = 0;
+    while (i < n) {
+        const uint8_t v = nibs[i];
+        if (v == 0x0 || v == 0xF) {
+            size_t j = i + 1;
+            while (j < n && nibs[j] == v && (j - i) < 16) ++j;
+            out.push_back(static_cast<uint8_t>((v << 4) | (j - i - 1)));
+            i = j;
+        } else {
+            const uint8_t lo = (i + 1 < n) ? nibs[i + 1] : 0;
+            out.push_back(static_cast<uint8_t>((v << 4) | lo));
+            i += 2;
+        }
+    }
+}
+
+}  // namespace
+
+Bytes gfxEncode32(const std::vector<GfxEncodeFrame>& frames,
+                  const uint8_t palette[kGfxPaletteColors][4], int depth) {
+    Bytes out;
+    out.resize(4);
+    writeU16BE(out.data(), static_cast<uint16_t>(frames.size()));
+    writeU16BE(out.data() + 2, static_cast<uint16_t>(depth));
+    for (const auto& fr : frames) {
+        uint8_t hdr[6];
+        writeU16BE(hdr, static_cast<uint16_t>(fr.width));
+        writeU16BE(hdr + 2, static_cast<uint16_t>(fr.height));
+        writeU16BE(hdr + 4, static_cast<uint16_t>(fr.flags));
+        out.insert(out.end(), hdr, hdr + 6);
+    }
+    for (int i = 0; i < kGfxPaletteColors; ++i) {
+        const uint16_t packed = static_cast<uint16_t>(
+            ((palette[i][0] / 17) << 8) | ((palette[i][1] / 17) << 4) | (palette[i][2] / 17));
+        uint8_t pw[2];
+        writeU16BE(pw, packed);
+        out.insert(out.end(), pw, pw + 2);
+    }
+    for (const auto& fr : frames) {
+        rleEncodeNibbles(packFramePlanes(fr), out);
+    }
+    return out;
+}
+
+Bytes gfxEncode32FromImage(const GfxImage& img) {
+    std::vector<GfxEncodeFrame> frames;
+    frames.reserve(img.frames.size());
+    for (const auto& f : img.frames) {
+        GfxEncodeFrame ef;
+        ef.width = f.width;
+        ef.height = f.height;
+        ef.flags = f.flags;
+        ef.indices.resize(static_cast<size_t>(f.width) * f.height, 0);
+        for (size_t p = 0; p < ef.indices.size(); ++p) {
+            const uint8_t* px = &f.rgba[p * 4];
+            if (px[3] == 0) {
+                ef.indices[p] = 0;  // transparent -> pen 0
+                continue;
+            }
+            int best = 0;
+            int bestDist = 0x7fffffff;
+            for (int c = 0; c < kGfxPaletteColors; ++c) {
+                const int dr = px[0] - img.palette[c][0];
+                const int dg = px[1] - img.palette[c][1];
+                const int db = px[2] - img.palette[c][2];
+                const int dist = dr * dr + dg * dg + db * db;
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = c;
+                }
+            }
+            ef.indices[p] = static_cast<uint8_t>(best);
+        }
+        frames.push_back(std::move(ef));
+    }
+    return gfxEncode32(frames, img.palette, img.depth);
+}
+
+bool gfxSave32(const std::string& path, const GfxImage& img) {
+    if (!img.ok || img.frames.empty()) return false;
+    return writeFile(path, gfxEncode32FromImage(img));
+}
+
 }  // namespace mm2

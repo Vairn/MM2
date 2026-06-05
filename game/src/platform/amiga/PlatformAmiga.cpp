@@ -6,6 +6,7 @@
 #include "mm2/platform/amiga/Mm2AmigaDisplay.h"
 #include "mm2/Mm2Dbg.h"
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
+#include "mm2/gfx/mm2_font8x8.h"
 #include "mm2/runtime/PathScratch.h"
 #include <ace/types.h>
 #include "mm2_image32_codec.h"
@@ -65,6 +66,7 @@ bool beginDisplay()
     }
 
     mm2AmigaDisplayActivate();
+    mm2_amiga_font_init();
     g_display_ready = true;
     MM2_DBG("MM2 DBG: Display active AGA %ux%u %ubpp\n", MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT,
             MM2_AGA_SCREEN_BPP);
@@ -273,6 +275,14 @@ void delayMs(int ms)
 {
     /* vPortWaitForEnd in presentFrame already paces to display refresh. */
     (void)ms;
+}
+
+uint32_t nowTicks()
+{
+    /* ACE timerGet() = g_sTimerManager.uwFrameCounter, bumped by the VERTB int
+     * server (AmigaPorts/ACE system.c) — a true display-rate clock (50 Hz PAL /
+     * 60 Hz NTSC), independent of how fast the main loop spins. */
+    return static_cast<uint32_t>(timerGet());
 }
 
 const char *hostName() { return "ACE-AGA-6bpp"; }

@@ -28,8 +28,18 @@ if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
 from attrib_codec import AttribFile  # noqa: E402
+from mm2_map_move import movement_blocked_collision  # noqa: E402
 from mm2_map_ui import area_name, location_label_from_attrib, tile_notation  # noqa: E402
-from render_view_refs import VIEW_H, VIEW_W, blit, composite_backdrop, load_frame  # noqa: E402
+from render_view_refs import (  # noqa: E402
+    FLOOR_Y,
+    ORIGIN_X,
+    SKY_Y,
+    VIEW_H,
+    VIEW_W,
+    blit,
+    composite_backdrop,
+    load_frame,
+)
 from view3d_trace import (  # noqa: E402
     BUNDLE_E,
     BUNDLE_N,
@@ -49,6 +59,22 @@ from view3d_trace import (  # noqa: E402
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Sci-fi reskin asset sets (tools/make_scifi_art.py / make_scifi_two.py output).
+# When selected, town-env screens use these instead of town/townf/townt.32.
+SCIFI_OUT = ROOT / "EXTRACTED" / "gfx_scifi" / "out"
+SCIFI_VARIANTS = {
+    "one": ("scifi.32", "scifif.32", "scifit.32", "sky.32"),
+    "two": ("scifi_two.32", "scifi_twof.32", "scifi_twot.32", "scifi_twos.32"),
+    # scifi_twos = flat hull ceiling (sky.32 slot). Use --scifi2-sky orig to keep clouds.
+}
+SCIFI_VARIANT = None  # None | "one" | "two"
+
+
+def _sheet_dir(sheet: str, data_dir: Path) -> Path:
+    """Sci-fi sheets live in SCIFI_OUT; every other sheet in data_dir."""
+    return SCIFI_OUT if sheet.startswith("scifi") else data_dir
+
 BUNDLES = (BUNDLE_N, BUNDLE_E, BUNDLE_S, BUNDLE_W)
 STEP_DX = (0, 1, 0, -1)
 STEP_DY = (1, 0, -1, 0)
@@ -215,6 +241,9 @@ def select_sheets(attrib: AttribFile, screen: int) -> SheetSet:
         return SheetSet("cave.32", "cavef.32", "cavet.32")
     if env == "castle":
         return SheetSet("castle.32", "castlef.32", "castlet.32")
+    if SCIFI_VARIANT in SCIFI_VARIANTS:
+        w, f, t, s = SCIFI_VARIANTS[SCIFI_VARIANT]
+        return SheetSet(w, f, t, s)
     return SheetSet("town.32", "townf.32", "townt.32")
 
 
@@ -380,13 +409,20 @@ def compose_with_panel(view: Image.Image, n0: Image.Image, c1: Image.Image, c2: 
 def render_indoor_view(scene: View3DScene, sheets: SheetSet, data_dir: Path, *, visual: bytes,
                        collision: bytes, x: int, y: int, facing: int, screen: int,
                        map_name: str, with_minimap: bool, render_mode: str) -> Image.Image:
-    canvas = composite_backdrop(sheets.floor, sheets.sky, data_dir)
+    if sheets.floor.startswith("scifi") or sheets.sky.startswith("scifi"):
+        canvas = Image.new("RGBA", (VIEW_W, VIEW_H), (0, 0, 0, 255))
+        blit(canvas, load_frame(sheets.floor, 0, _sheet_dir(sheets.floor, data_dir)),
+             ORIGIN_X, FLOOR_Y)
+        blit(canvas, load_frame(sheets.sky, 0, _sheet_dir(sheets.sky, data_dir)),
+             ORIGIN_X, SKY_Y)
+    else:
+        canvas = composite_backdrop(sheets.floor, sheets.sky, data_dir)
     cache: Dict[Tuple[str, int], Image.Image] = {}
 
     def sprite(sheet: str, frame: int) -> Image.Image:
         key = (sheet, frame)
         if key not in cache:
-            cache[key] = load_frame(sheet, frame, data_dir)
+            cache[key] = load_frame(sheet, frame, _sheet_dir(sheet, data_dir))
         return cache[key]
 
     draw_blits = scene.blits
@@ -461,27 +497,65 @@ def dump_trace(scene: View3DScene, screen: int, x: int, y: int, facing: int, att
         print(f"  {b.kind:5s} depth={b.depth} frame={b.frame} @ ({b.x},{b.y})")
 
 
-def step_party(facing: int, x: int, y: int, screen: int, attrib: AttribFile) -> Tuple[int, int, int]:
-    x += STEP_DX[facing & 3]
-    y += STEP_DY[facing & 3]
+def collision_at(collision: bytes, x: int, y: int) -> int:
+    from mm2_map_move import collision_at as _at
+
+    return _at(collision, x, y)
+
+
+def movement_blocked(
+    maps,
+    screen: int,
+    x: int,
+    y: int,
+    facing: int,
+    attrib: AttribFile,
+) -> bool:
+    """Block step using map.dat page 1 (collision); outdoor terrain from page 0 high bits."""
     rec = attrib.records[screen]
-    if x < 0:
+    vis, col = maps[screen]
+    return movement_blocked_collision(
+        vis, col, x, y, facing, outdoor=rec.is_outdoor
+    )
+
+
+def step_party(
+    facing: int,
+    x: int,
+    y: int,
+    screen: int,
+    attrib: AttribFile,
+    maps,
+) -> Tuple[int, int, int]:
+    """Move one tile when map geometry allows; cross screen via attrib neighbours."""
+    if movement_blocked(maps, screen, x, y, facing, attrib):
+        return screen, x, y
+
+    d = facing & 3
+    nx = x + STEP_DX[d]
+    ny = y + STEP_DY[d]
+    rec = attrib.records[screen]
+    if nx < 0:
         n = rec.neighbors[3]
         if 0 <= n < MAP_SCREENS:
-            screen, x = n, 15
-    elif x >= MAP_GRID:
+            return n, 15, ny
+        return screen, x, y
+    if nx >= MAP_GRID:
         n = rec.neighbors[1]
         if 0 <= n < MAP_SCREENS:
-            screen, x = n, 0
-    if y < 0:
+            return n, 0, ny
+        return screen, x, y
+    if ny < 0:
         n = rec.neighbors[2]
         if 0 <= n < MAP_SCREENS:
-            screen, y = n, 15
-    elif y >= MAP_GRID:
+            return n, nx, 15
+        return screen, x, y
+    if ny >= MAP_GRID:
         n = rec.neighbors[0]
         if 0 <= n < MAP_SCREENS:
-            screen, y = n, 0
-    return screen, max(0, min(15, x)), max(0, min(15, y))
+            return n, nx, 0
+        return screen, x, y
+    return screen, nx, ny
 
 
 def run_interactive(maps, attrib: AttribFile, screen: int, x: int, y: int, facing: int, data_dir: Path,
@@ -548,12 +622,12 @@ def run_interactive(maps, attrib: AttribFile, screen: int, x: int, y: int, facin
                     if sandbox:
                         cx, cy = step_sandbox(sandbox_visual, cf, cx, cy)
                     else:
-                        cur_screen, cx, cy = step_party(cf, cx, cy, cur_screen, attrib)
+                        cur_screen, cx, cy = step_party(cf, cx, cy, cur_screen, attrib, maps)
                 elif ev.key == pygame.K_DOWN:
                     if sandbox:
                         cx, cy = step_sandbox(sandbox_visual, (cf + 2) & 3, cx, cy)
                     else:
-                        cur_screen, cx, cy = step_party((cf + 2) & 3, cx, cy, cur_screen, attrib)
+                        cur_screen, cx, cy = step_party((cf + 2) & 3, cx, cy, cur_screen, attrib, maps)
                 elif ev.key == pygame.K_d:
                     render_mode = "doors"
                 elif ev.key == pygame.K_a:
@@ -587,7 +661,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--scale", type=int, default=3, help="interactive scale")
     ap.add_argument("--no-minimap", action="store_true", help="render view only")
     ap.add_argument("--sandbox", action="store_true", help="blank map with boundary walls; Space places wall ahead")
+    ap.add_argument("--scifi", action="store_true",
+                    help="use sci-fi wall set v1 (scifi.32/scifif.32/scifit.32) for town screens")
+    ap.add_argument("--scifi2", action="store_true",
+                    help="use sci-fi wall set v2 from generated art "
+                         "(scifi_two.32/scifi_twof.32/scifi_twot.32) for town screens")
     args = ap.parse_args(argv)
+
+    global SCIFI_VARIANT
+    if args.scifi2:
+        SCIFI_VARIANT = "two"
+    elif args.scifi:
+        SCIFI_VARIANT = "one"
+    if SCIFI_VARIANT is not None:
+        sheets_needed = list(SCIFI_VARIANTS[SCIFI_VARIANT])
+        missing = [s for s in sheets_needed if not (SCIFI_OUT / s).exists()]
+        if missing:
+            builder = "make_scifi_two.py" if SCIFI_VARIANT == "two" else "make_scifi_art.py"
+            print(f"--scifi{'2' if SCIFI_VARIANT == 'two' else ''}: missing {missing} in "
+                  f"{SCIFI_OUT}; run `python tools/{builder}` first", file=sys.stderr)
+            return 1
 
     maps = load_map(args.map_dat)
     attrib = AttribFile.load(str(args.attrib_dat))

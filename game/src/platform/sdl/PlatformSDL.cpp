@@ -253,6 +253,12 @@ void setWindowSize(int width, int height)
 
 void delayMs(int ms) { SDL_Delay(static_cast<Uint32>(ms)); }
 
+uint32_t nowTicks()
+{
+    /* ~60 ticks/sec to match the Amiga VBlank-frame clock used for animation pacing. */
+    return (SDL_GetTicks() * 60u) / 1000u;
+}
+
 const char *hostName() { return "SDL2"; }
 
 }  // namespace mm2::platform

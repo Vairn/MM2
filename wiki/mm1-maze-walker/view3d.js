@@ -41,6 +41,35 @@ export const FACE = ["N", "E", "S", "W"];
 export const STEP_DX = [0, 1, 0, -1];
 export const STEP_DY = [1, 0, -1, 0];
 
+function collisionFieldWall(cell, dirIdx) {
+  const d = dirIdx & 3;
+  if (d === 3) return (cell & 0x40) !== 0;
+  return ((cell >> (d * 2)) & 1) !== 0;
+}
+
+function movementToCollisionDir(facing) {
+  return (3 - (facing & 3)) & 3;
+}
+
+export function movementBlocked(sc, x, y, facing) {
+  const d = facing & 3;
+  const cd = movementToCollisionDir(d);
+  const col = sc.collision;
+  const idx = y * MAP_GRID + x;
+  if (collisionFieldWall(col[idx], cd)) return true;
+  let nx = x + STEP_DX[d];
+  let ny = y + STEP_DY[d];
+  if (nx < 0 || ny < 0 || nx >= MAP_GRID || ny >= MAP_GRID) return false;
+  const back = movementToCollisionDir((d + 2) & 3);
+  const destIdx = ny * MAP_GRID + nx;
+  if (collisionFieldWall(col[destIdx], back)) return true;
+  if (sc.outdoor) {
+    const destV = sc.visual[destIdx];
+    if ((destV & 0x60) === 0x60 || (destV & 0x80) !== 0) return true;
+  }
+  return false;
+}
+
 export const K_CARTO_TILE_FALLBACK = [
   0x00, 0x05, 0x06, 0x05, 0x03, 0x0b, 0x0d, 0x0b, 0x04, 0x0c, 0x0e, 0x0c, 0x03, 0x0b, 0x0d, 0x0b,
   0x01, 0x0f, 0x11, 0x0f, 0x07, 0x13, 0x16, 0x13, 0x09, 0x15, 0x19, 0x15, 0x07, 0x13, 0x16, 0x13,
@@ -291,9 +320,12 @@ export function buildIndoorScene(grid, x, y, facing) {
 }
 
 export function stepParty(facing, x, y, screen, screens) {
+  const rec = screens[screen];
+  if (movementBlocked(rec, x, y, facing)) {
+    return { screen, x, y };
+  }
   x += STEP_DX[facing & 3];
   y += STEP_DY[facing & 3];
-  const rec = screens[screen];
   const n = rec.neighbors;
   const nScreens = screens.length;
   if (x < 0) {

@@ -44,6 +44,14 @@ void setWindowTitle(const char *title);
 void setWindowSize(int width, int height);
 void delayMs(int ms);
 
+/**
+ * Monotonic frame-tick clock for animation pacing (≈60 ticks/sec).
+ * Amiga: ACE timerGet() (VBlank-interrupt counter, true 50 Hz PAL / 60 Hz NTSC).
+ * SDL: derived from SDL_GetTicks(). Use signed 16-bit deltas to compare deadlines
+ * (the Amiga counter is a 16-bit frame count), matching LoL's timerGet() scheduling.
+ */
+uint32_t nowTicks();
+
 const char *hostName();
 
 #if MM2_HOST_AMIGA

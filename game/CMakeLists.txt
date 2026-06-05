@@ -95,7 +95,7 @@ if(NOT AMIGA)
   add_executable(image32_golden tests/image32_golden.c)
   target_link_libraries(image32_golden PRIVATE mm2_codecs)
 
-  add_executable(font_golden tests/font_golden.cpp src/gfx/ScreenCompositor.cpp)
+  add_executable(font_golden tests/font_golden.cpp src/gfx/ScreenCompositor.cpp src/gfx/mm2_font8x8.c)
   target_include_directories(font_golden PRIVATE include)
   target_link_libraries(font_golden PRIVATE mm2_codecs)
 endif()
@@ -122,6 +122,7 @@ set(MM2_GAME_SOURCES
   src/GameSession.cpp
   src/TitleScreen.cpp
   src/gfx/ScreenCompositor.cpp
+  src/gfx/mm2_font8x8.c
   src/gfx/View3D.cpp
   src/gfx/PlayScreenChrome.cpp
   src/runtime/Mm2Alloc.cpp

@@ -5,6 +5,10 @@
 #include "mm2/platform/Platform.h"
 #include "mm2/runtime/PathScratch.h"
 
+#if MM2_HOST_AMIGA
+#include "mm2/platform/amiga/Mm2AmigaPlanar.h"
+#endif
+
 #if MM2_HOST_AMIGA && defined(ACE_DEBUG)
 #include <ace/managers/memory.h>
 #endif
@@ -81,7 +85,7 @@ constexpr int kBotBoxX = 8, kBotBoxY = 104, kBotBoxW = 304, kBotBoxH = 93;
 constexpr int kBookY = 9;    // both books near the top of the top box
 constexpr int kBookLeftX = 16;
 // book.32 page-turn animation: one frame step per N ticks (frames 0..N-1 loop).
-constexpr int kBookStepTicks = 8;
+constexpr int kBookStepTicks = 3;
 // Centered title lines (between the two books) + full-width tagline beneath.
 const char *const kTitleLines[] = {"MIGHT", "and", "MAGIC", "Book Two"};
 const char *const kTitleTagline = "Gates To Another World!";
@@ -128,8 +132,16 @@ uint32_t titleRngNext(uint32_t &state) {
     state = state * 1664525u + 1013904223u;
     return state;
 }
+// LoL-style frame-tick scheduling: deadlines live in the VBlank counter's space.
+// The Amiga counter is 16-bit, so compare with a signed 16-bit delta (wrap-safe for
+// any interval < ~32 k ticks, which covers every animation step here).
+inline bool tickReached(uint32_t now, uint32_t deadline) {
+    return static_cast<int16_t>(static_cast<uint16_t>(now) - static_cast<uint16_t>(deadline)) >= 0;
+}
 constexpr int kFadeTicks = 60;
 constexpr int kLogoHoldTicks = 312;
+// Amiga logo splash: brief hold then attract (was a raw "state_ticks_ >= 90" loop count).
+constexpr int kLogoHoldAmigaTicks = 90;
 int textPixelWidth(const char *s) { return static_cast<int>(std::strlen(s)) * 8; }
 // Centered text x for the whole screen (or a sub-span when w0/x0 given).
 int centerX(const char *s, int x0 = 0, int w0 = kScreenW)
@@ -156,6 +168,14 @@ void TitleScreen::setState(TitleState next, const char *reason)
     }
 #else
     (void)reason;
+#endif
+#if MM2_HOST_AMIGA
+    if (next == TitleState::TitleAttract && state_ == TitleState::TitleMenu) {
+        invalidatePegasusPaint();
+    }
+    if (next == TitleState::TitleMenu && state_ != TitleState::TitleMenu) {
+        invalidateTitleMenuPaint();
+    }
 #endif
     state_ = next;
 }
@@ -314,14 +334,9 @@ bool TitleScreen::init(const char *data_dir, ui::CharacterUiKind ui_kind)
             has_roster_ ? 1 : 0, (unsigned long)memGetFreeChipSize());
 #endif
     state_ticks_ = 0;
-    overlay_gate_ = 0;
-    overlay_phase_ = 0;
-    peeker_gate_ = 0;
-    peeker_gap_ticks_ = 0;
+    logo_hold_until_ = 0;
     peeker_rng_ = 1;
-    peeker_visible_ = false;
-    peeker_gap_ticks_ = kPeekerInitialGapTicks;
-    pickRandomPeekerSlot();
+    resetAttractTiming();
 #if MM2_HOST_AMIGA
     invalidatePegasusPaint();
 #endif
@@ -378,6 +393,13 @@ void TitleScreen::invalidatePegasusPaint()
     pegasus_painted_peeker_slot_ = -1;
     pegasus_painted_peeker_visible_ = false;
 }
+
+void TitleScreen::invalidateTitleMenuPaint()
+{
+    mm2_amiga_ui_cache_invalidate();
+    title_menu_painted_ = false;
+    title_menu_painted_book_frame_ = -1;
+}
 #endif
 
 void TitleScreen::skipLogoToTitle()
@@ -391,12 +413,18 @@ void TitleScreen::skipLogoToTitle()
 #endif
     logo_alpha_ = 0;
     state_ticks_ = 0;
-    overlay_gate_ = 0;
+    logo_hold_until_ = 0;
+    resetAttractTiming();
+}
+
+// Restart the attract-mode animation clocks from the current frame tick.
+void TitleScreen::resetAttractTiming()
+{
+    const uint32_t now = platform::nowTicks();
     overlay_phase_ = 0;
-    peeker_gate_ = 0;
-    peeker_gap_ticks_ = 0;
+    overlay_until_ = now + static_cast<uint32_t>(kOverlayStepTicks);
     peeker_visible_ = false;
-    peeker_gap_ticks_ = kPeekerInitialGapTicks;
+    peeker_until_ = now + static_cast<uint32_t>(kPeekerInitialGapTicks);
     pickRandomPeekerSlot();
 }
 
@@ -417,7 +445,6 @@ void TitleScreen::pickRandomPeekerSlot()
         static_cast<uint32_t>(kPeekerDelayMaxTicks - kPeekerDelayMinTicks + 1);
     peeker_delay_ticks_ =
         kPeekerDelayMinTicks + static_cast<int>((titleRngNext(peeker_rng_) >> 16) % span);
-    peeker_gate_ = 0;
 }
 
 bool TitleScreen::isLogoState() const
@@ -498,27 +525,24 @@ void TitleScreen::tickPegasusAnimation()
     if (!has_introclips_) {
         return;
     }
-    if (overlay_gate_ >= kOverlayStepTicks) {
-        overlay_gate_ = 0;
+    const uint32_t now = platform::nowTicks();
+
+    // Pegasus overlay cels advance one phase per kOverlayStepTicks frame ticks.
+    if (tickReached(now, overlay_until_)) {
         overlay_phase_ = (overlay_phase_ + 1) % kOverlayPhaseCount;
-    } else {
-        ++overlay_gate_;
+        overlay_until_ = now + static_cast<uint32_t>(kOverlayStepTicks);
     }
 
-    if (peeker_gap_ticks_ > 0) {
-        --peeker_gap_ticks_;
-        if (peeker_gap_ticks_ == 0 && !peeker_visible_) {
-            pickRandomPeekerSlot();
+    // Scenery peekers: hidden for a gap, then one random slot shows for a random duration.
+    if (tickReached(now, peeker_until_)) {
+        if (peeker_visible_) {
+            peeker_visible_ = false;
+            peeker_until_ = now + static_cast<uint32_t>(kPeekerGapTicks);
+        } else {
+            pickRandomPeekerSlot();  // sets peeker_delay_ticks_ (visible duration)
             peeker_visible_ = true;
+            peeker_until_ = now + static_cast<uint32_t>(peeker_delay_ticks_);
         }
-        return;
-    }
-    if (peeker_gate_ >= peeker_delay_ticks_) {
-        peeker_visible_ = false;
-        peeker_gap_ticks_ = kPeekerGapTicks;
-        peeker_gate_ = 0;
-    } else {
-        ++peeker_gate_;
     }
 }
 
@@ -549,7 +573,12 @@ void TitleScreen::drawLogoSplash()
 
 void TitleScreen::drawControls()
 {
+#if MM2_HOST_AMIGA
+    platform::clearScreen();
+    platform::applyUiPalette();
+#else
     compositor_.clear(0, 0, 0, 255);
+#endif
     drawRedFrame(compositor_, 8, 8, 304, 184);
     int y = 20;
     compositor_.drawTextShadow(centerX("COMMAND REFERENCE", 0, 320), y, "COMMAND REFERENCE", 255, 255, 100);
@@ -585,7 +614,12 @@ void TitleScreen::drawControls()
 
 void TitleScreen::drawOptions()
 {
+#if MM2_HOST_AMIGA
+    platform::clearScreen();
+    platform::applyUiPalette();
+#else
     compositor_.clear(0, 0, 0, 255);
+#endif
     drawRedFrame(compositor_, 40, 40, 240, 120);
     int y = 56;
     compositor_.drawTextShadow(centerX("GAME OPTIONS", 0, 320), y, "GAME OPTIONS", 255, 255, 100);
@@ -597,35 +631,121 @@ void TitleScreen::drawOptions()
     compositor_.drawTextShadow(centerX("( 'ESC' to go back )", 0, 320), y, "( 'ESC' to go back )", 150, 150, 150);
 }
 
-void TitleScreen::drawTitleMenu()
+void TitleScreen::blitTitleMenuBooks()
 {
-    // Menu is book + text on black (ASM keeps frozen intro.32 underneath; avoid
-    // double-drawing pegasus/title art under the red boxes).
+    if (!has_book_ || book_.frame_count <= 0 || !book_.frames) {
+        return;
+    }
+    const int fi = (book_frame_ < book_.frame_count) ? book_frame_ : 0;
+    const mm2_image32_frame &bk = book_.frames[fi];
 #if MM2_HOST_AMIGA
-    platform::clearScreen();
-    platform::applyUiPalette();
-    invalidatePegasusPaint();
+    if (!bk.bitmap) {
+        return;
+    }
+    const int book_w = static_cast<int>(bk.width);
+    const int left_x = kBookLeftX;
+    const int right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
+    platform::blitImage32(&book_, fi, left_x, kBookY);
+    platform::blitImage32(&book_, fi, right_x, kBookY);
 #else
-    compositor_.clear(0, 0, 0, 255);
+    if (!bk.rgba) {
+        return;
+    }
+    const int book_w = static_cast<int>(bk.width);
+    const int left_x = kBookLeftX;
+    const int right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
+    compositor_.blitRgba(bk.rgba, bk.width, bk.height, left_x, kBookY);
+    compositor_.blitRgba(bk.rgba, bk.width, bk.height, right_x, kBookY);
+#endif
+}
+
+void TitleScreen::presentTitleMenu()
+{
+#if MM2_HOST_AMIGA
+    mm2_amiga_blit_sync();
+    platform::applyUiPalette();
+    mm2_amiga_ui_cache_present();
+    blitTitleMenuBooks();
+#else
+    drawTitleMenu();
+#endif
+}
+
+void TitleScreen::buildTitleMenuCache()
+{
+#if MM2_HOST_AMIGA
+    platform::applyUiPalette();
+    mm2_amiga_ui_cache_begin();
 #endif
 
-    // --- Top box: open-book art flanking the centered game title ---------
+    drawRedFrame(compositor_, kTopBoxX, kTopBoxY, kTopBoxW, kTopBoxH);
+
+    int book_w = 89;
+    int book_right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
+    if (has_book_ && book_.frame_count > 0 && book_.frames && book_.frames[0].width) {
+        book_w = static_cast<int>(book_.frames[0].width);
+        book_right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
+    }
+
+    const int gap_x0 = kBookLeftX + book_w;
+    const int gap_w = book_right_x - gap_x0;
+    int ty = kBookY + 4;
+    for (const char *line : kTitleLines) {
+        compositor_.drawTextShadow(centerX(line, gap_x0, gap_w), ty, line, 255, 220, 90);
+        ty += 12;
+    }
+    compositor_.drawTextShadow(centerX(kTitleTagline, kTopBoxX, kTopBoxW), kTopBoxY + kTopBoxH - 15, kTitleTagline,
+                               255, 220, 90);
+
+    drawRedFrame(compositor_, kBotBoxX, kBotBoxY, kBotBoxW, kBotBoxH);
+    struct MenuItem {
+        const char *text;
+        bool enabled;
+    };
+    const MenuItem items[] = {
+        {"C - Create Character", has_roster_},
+        {"V - View Party", has_roster_},
+        {"G - Goto Town", has_roster_},
+        {"M - Controls", true},
+        {"O - Options", true},
+        {"Q - Quit", true},
+    };
+
+    int my = kBotBoxY + 8;
+    for (const MenuItem &it : items) {
+        if (it.enabled) {
+            compositor_.drawTextShadow(centerX(it.text), my, it.text, 230, 230, 230);
+        } else {
+            compositor_.drawText(centerX(it.text), my, it.text, 110, 110, 110, 255);
+        }
+        my += 12;
+    }
+    if (!has_roster_) {
+        const char *warn = "(roster.dat not loaded)";
+        compositor_.drawText(centerX(warn), my + 1, warn, 255, 128, 128, 255);
+    }
+
+#if MM2_HOST_AMIGA
+    mm2_amiga_ui_cache_end();
+#endif
+}
+
+void TitleScreen::drawTitleMenu()
+{
+#if MM2_HOST_AMIGA
+    buildTitleMenuCache();
+    presentTitleMenu();
+    return;
+#endif
+
+    compositor_.clear(0, 0, 0, 255);
+
     drawRedFrame(compositor_, kTopBoxX, kTopBoxY, kTopBoxW, kTopBoxH);
     int book_w = 89;
     int book_right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
     if (has_book_ && book_.frame_count > 0 && book_.frames) {
         const int fi = (book_frame_ < book_.frame_count) ? book_frame_ : 0;
         const mm2_image32_frame &bk = book_.frames[fi];
-#if MM2_HOST_AMIGA
-        if (bk.bitmap) {
-            book_w = bk.width;
-            const int left_x = kBookLeftX;
-            const int right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
-            platform::blitImage32(&book_, fi, left_x, kBookY);
-            platform::blitImage32(&book_, fi, right_x, kBookY);
-            book_right_x = right_x;
-        }
-#else
         if (bk.rgba) {
             book_w = bk.width;
             const int left_x = kBookLeftX;
@@ -634,10 +754,8 @@ void TitleScreen::drawTitleMenu()
             compositor_.blitRgba(bk.rgba, bk.width, bk.height, right_x, kBookY);
             book_right_x = right_x;
         }
-#endif
     }
 
-    // Title lines centered in the gap between the two books.
     const int gap_x0 = kBookLeftX + book_w;
     const int gap_w = book_right_x - gap_x0;
     int ty = kBookY + 4;
@@ -683,12 +801,11 @@ void TitleScreen::tickBookAnimation()
     if (!has_book_ || book_.frame_count <= 1) {
         return;
     }
-    if (book_gate_ < kBookStepTicks) {
-        ++book_gate_;
-        return;
+    const uint32_t now = platform::nowTicks();
+    if (tickReached(now, book_until_)) {
+        book_frame_ = (book_frame_ + 1) % book_.frame_count;
+        book_until_ = now + static_cast<uint32_t>(kBookStepTicks);
     }
-    book_gate_ = 0;
-    book_frame_ = (book_frame_ + 1) % book_.frame_count;
 }
 
 void TitleScreen::render()
@@ -706,7 +823,14 @@ void TitleScreen::render()
         drawAttract();
         break;
     case TitleState::TitleMenu:
+#if MM2_HOST_AMIGA
+        if (!mm2_amiga_ui_cache_ready()) {
+            buildTitleMenuCache();
+        }
+        presentTitleMenu();
+#else
         drawTitleMenu();
+#endif
         break;
     case TitleState::Controls:
         drawControls();
@@ -736,10 +860,14 @@ void TitleScreen::tick(const platform::KeyState &keys)
         }
 
 #if MM2_HOST_AMIGA
-        /* Fades off: static nwcp logo at full palette, then attract (or key to skip). */
+        /* Fades off: static nwcp logo at full palette, then attract (or key to skip).
+         * Hold is timed off the VBlank frame clock, not loop iterations. */
         if (state_ == TitleState::LogoHold) {
-            ++state_ticks_;
-            if (state_ticks_ >= 90) {
+            const uint32_t now = platform::nowTicks();
+            if (logo_hold_until_ == 0) {
+                logo_hold_until_ = now + static_cast<uint32_t>(kLogoHoldAmigaTicks);
+            }
+            if (tickReached(now, logo_hold_until_)) {
                 skipLogoToTitle();
             }
         }
@@ -815,13 +943,7 @@ void TitleScreen::tick(const platform::KeyState &keys)
         tickBookAnimation();
         if (keys.escape) {
             setState(TitleState::TitleAttract, "esc to attract");
-            overlay_gate_ = 0;
-            overlay_phase_ = 0;
-            peeker_gate_ = 0;
-            peeker_gap_ticks_ = 0;
-            peeker_visible_ = false;
-            peeker_gap_ticks_ = kPeekerInitialGapTicks;
-            pickRandomPeekerSlot();
+            resetAttractTiming();
             return;
         }
         if (keys.key_q) {

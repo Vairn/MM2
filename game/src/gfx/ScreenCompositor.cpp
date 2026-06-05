@@ -1,6 +1,7 @@
 #include "mm2/gfx/ScreenCompositor.h"
 
 #include "mm2/gfx/Mm2FontGlyphs.h"
+#include "mm2/gfx/mm2_font8x8.h"
 
 #include "mm2/CppStdCompat.h"
 #include "mm2/Config.h"
@@ -14,13 +15,6 @@
 #endif
 
 namespace mm2::gfx {
-
-namespace {
-
-// MM2 Amiga 8×8 console font (from editor/assets/fonts/mm2_8.png).
-#include "Mm2Font8x8.inc"
-
-}  // namespace
 
 ScreenCompositor::ScreenCompositor()
 {
@@ -53,7 +47,7 @@ void ScreenCompositor::clear(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 void ScreenCompositor::putPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
 #if MM2_HOST_AMIGA
-    mm2_amiga_put_pixel_rgb((UWORD)x, (UWORD)y, r, g, b, a);
+    mm2_amiga_fill_rect_rgb((UWORD)x, (UWORD)y, 1, 1, r, g, b, a);
     return;
 #else
     if (!rgba_ || x < 0 || y < 0 || x >= kWidth || y >= kHeight) {
@@ -83,11 +77,15 @@ void ScreenCompositor::putPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, u
 
 void ScreenCompositor::clearRect(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
+#if MM2_HOST_AMIGA
+    mm2_amiga_fill_rect_rgb((UWORD)x, (UWORD)y, (UWORD)w, (UWORD)h, r, g, b, a);
+#else
     for (int py = y; py < y + h; ++py) {
         for (int px = x; px < x + w; ++px) {
             putPixel(px, py, r, g, b, a);
         }
     }
+#endif
 }
 
 void ScreenCompositor::fillRect(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
@@ -124,12 +122,16 @@ void ScreenCompositor::blitRgba(const uint8_t *src, int src_w, int src_h, int ds
 
 void ScreenCompositor::drawGlyph(int x, int y, uint8_t codepoint, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    if (codepoint >= 128u) {
+    if (codepoint >= MM2_FONT8X8_GLYPHS) {
         return;
     }
-    // Mm2Font8x8.inc: LSB column order (bit 0 = leftmost pixel).
-    const uint8_t *glyph = kFont8x8[codepoint];
-    for (int row = 0; row < 8; ++row) {
+#if MM2_HOST_AMIGA
+    mm2_amiga_draw_glyph8((UWORD)x, (UWORD)y, codepoint, r, g, b, a);
+    return;
+#else
+    // Mm2Font8x8_data.inc: LSB column order (bit 0 = leftmost pixel).
+    const uint8_t *glyph = mm2_font8x8_live()[codepoint];
+    for (int row = 0; row < MM2_FONT8X8_ROWS; ++row) {
         const uint8_t bits = glyph[row];
         for (int col = 0; col < 8; ++col) {
             if ((bits >> col) & 1u) {
@@ -137,6 +139,7 @@ void ScreenCompositor::drawGlyph(int x, int y, uint8_t codepoint, uint8_t r, uin
             }
         }
     }
+#endif
 }
 
 void ScreenCompositor::drawChar(int x, int y, char ch, uint8_t r, uint8_t g, uint8_t b, uint8_t a)

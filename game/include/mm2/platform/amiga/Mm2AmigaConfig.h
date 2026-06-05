@@ -39,6 +39,20 @@
 
 #define MM2_AGA_PALETTE_PENS (1u << MM2_AGA_SCREEN_BPP)
 
+/*
+ * Title / menu UI pens — indices 32+ so CPU-drawn text survives .32 blits
+ * (mm2_amiga_apply_palette only loads art pens 0-31).
+ */
+#define MM2_UI_PEN_WHITE 32
+#define MM2_UI_PEN_RED 33
+#define MM2_UI_PEN_GOLD 34
+#define MM2_UI_PEN_YELLOW 35
+#define MM2_UI_PEN_GREY_LIGHT 36
+#define MM2_UI_PEN_GREY_MID 37
+#define MM2_UI_PEN_GREY_FOOTER 38
+#define MM2_UI_PEN_GREY_DIM 39
+#define MM2_UI_PEN_WARN 40
+
 /* ACE view/vport tags used in mm2_amiga_display.c (see LoL src/misc/screen.c) */
 #define MM2_AGA_VIEW_TAG_GLOBAL_PALETTE TAG_VIEW_GLOBAL_PALETTE
 #define MM2_AGA_VIEW_TAG_USES_AGA TAG_VIEW_USES_AGA

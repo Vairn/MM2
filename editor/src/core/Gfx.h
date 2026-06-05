@@ -82,6 +82,27 @@ struct GfxImage {
 GfxImage gfxDecode(const Bytes& bytes, bool isAnm);
 bool gfxLoad(const std::string& path, bool isAnm, GfxImage& out);
 
+// --- .32 encoder (inverse of gfxDecode for chunk-at-offset-0 sheets) ----------
+//
+// One indexed frame: row-major palette indices (0..31), index 0 = transparent.
+struct GfxEncodeFrame {
+    int width = 0;
+    int height = 0;
+    int flags = 0;
+    std::vector<uint8_t> indices;  // width*height, values 0..31
+};
+
+// Build a complete .32 byte stream: header + frame table + 32-colour palette
+// (RGBA in, packed to Amiga 0x0RGB) + nibble-RLE plane streams. The codec is
+// byte-identical to the original game data on round-trip.
+Bytes gfxEncode32(const std::vector<GfxEncodeFrame>& frames,
+                  const uint8_t palette[kGfxPaletteColors][4], int depth);
+
+// Convenience: re-index a decoded GfxImage (rgba frames + palette) and encode.
+// Pixels with alpha 0 map to index 0; others map to the nearest palette colour.
+Bytes gfxEncode32FromImage(const GfxImage& img);
+bool gfxSave32(const std::string& path, const GfxImage& img);
+
 // --- .anm TV-prelude composition (runtime-accurate; game must use this path) ---
 //
 // Stored image frames are NOT what the game blits for N>0:

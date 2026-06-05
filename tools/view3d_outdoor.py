@@ -36,7 +36,7 @@ if str(_TOOLS) not in sys.path:
 
 from attrib_codec import AttribFile, AttribRecord  # noqa: E402
 from mm2_map_ui import area_name, location_label_from_attrib, tile_notation  # noqa: E402
-from view3d_indoor import render_minimap  # noqa: E402
+from view3d_indoor import render_minimap, step_party  # noqa: E402
 from render_view_refs import (  # noqa: E402
     FRAMES,
     FLOOR_Y,
@@ -111,8 +111,6 @@ BIOME_SHEET_REMAP = {
 
 BUNDLES = (BUNDLE_N, BUNDLE_E, BUNDLE_S, BUNDLE_W)
 FACE = ("N", "E", "S", "W")
-STEP_DX = (0, 1, 0, -1)
-STEP_DY = (1, 0, -1, 0)
 
 
 @dataclass
@@ -659,32 +657,6 @@ def dump_scene_trace(
         print(f"    {b.sheet} f{b.frame} @ ({b.x},{b.y})")
 
 
-def step_party(
-    facing: int, x: int, y: int, screen: int, attrib: AttribFile
-) -> Tuple[int, int, int]:
-    """Move one tile; cross screen via attrib neighbours."""
-    x += STEP_DX[facing & 3]
-    y += STEP_DY[facing & 3]
-    rec = attrib.records[screen]
-    if x < 0:
-        n = rec.neighbors[3]
-        if 0 <= n < MAP_SCREENS:
-            screen, x = n, 15
-    elif x >= MAP_GRID:
-        n = rec.neighbors[1]
-        if 0 <= n < MAP_SCREENS:
-            screen, x = n, 0
-    if y < 0:
-        n = rec.neighbors[2]
-        if 0 <= n < MAP_SCREENS:
-            screen, y = n, 15
-    elif y >= MAP_GRID:
-        n = rec.neighbors[0]
-        if 0 <= n < MAP_SCREENS:
-            screen, y = n, 0
-    return screen, max(0, min(15, x)), max(0, min(15, y))
-
-
 def run_interactive(
     maps,
     attrib: AttribFile,
@@ -764,9 +736,9 @@ def run_interactive(
                 elif ev.key == pygame.K_RIGHT:
                     cf = (cf + 1) & 3
                 elif ev.key == pygame.K_UP:
-                    cur_screen, cx, cy = step_party(cf, cx, cy, cur_screen, attrib)
+                    cur_screen, cx, cy = step_party(cf, cx, cy, cur_screen, attrib, maps)
                 elif ev.key == pygame.K_DOWN:
-                    cur_screen, cx, cy = step_party((cf + 2) & 3, cx, cy, cur_screen, attrib)
+                    cur_screen, cx, cy = step_party((cf + 2) & 3, cx, cy, cur_screen, attrib, maps)
                 frame = redraw()
         win.blit(frame, (0, 0))
         pygame.display.flip()

@@ -1,5 +1,6 @@
 /**
  * Present .32 assets on the ACE playfield — planar blit only (no RGBA / chunky).
+ * Rect fills use ACE blitRect; 8×8 text uses CPU pen plot (fast enough when cached).
  */
 
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
@@ -8,6 +9,7 @@
 
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
 #include "mm2/platform/amiga/Mm2AmigaDisplay.h"
+#include "mm2/gfx/mm2_font8x8.h"
 
 #include <mini_std/string.h>
 
@@ -22,48 +24,75 @@ static const mm2_image32_file *s_applied_palette_img;
 
 static UBYTE s_palette_dirty;
 
+static tBitMap *s_ui_cache_bm;
+static tBitMap *s_pixel_target;
+
 void mm2_amiga_push_palette(void);
 
-void mm2_amiga_apply_ui_palette(void)
+static tBitMap *mm2_amiga_pixel_dest(void)
 {
-    tVPort *pVp;
-    ULONG *pPal;
-    pVp = mm2AmigaDisplayGetVPort();
-    if (!pVp || !pVp->pPalette) {
-        return;
+    if (s_pixel_target) {
+        return s_pixel_target;
     }
-    pPal = (ULONG *)pVp->pPalette;
-    pPal[0] = 0;
-    pPal[1] = 0x00FFFFFFUL;
-    pPal[2] = 0x00FF0000UL;
-    s_applied_palette_img = NULL;
-    s_palette_dirty = 1;
-    mm2_amiga_push_palette();
+    {
+        tSimpleBufferManager *pBfr = mm2AmigaDisplayGetBuffer();
+        return (pBfr && pBfr->pBack) ? pBfr->pBack : NULL;
+    }
 }
 
-void mm2_amiga_put_pixel_rgb(UWORD uwX, UWORD uwY, UBYTE ubR, UBYTE ubG, UBYTE ubB, UBYTE ubA)
+static UBYTE mm2_amiga_rgb_to_ui_pen(UBYTE ubR, UBYTE ubG, UBYTE ubB)
 {
-    tSimpleBufferManager *pBfr;
+    if (ubR <= 48 && ubG <= 48 && ubB <= 48) {
+        return 0;
+    }
+    if (ubR >= 200 && ubG <= 96 && ubB <= 96) {
+        return MM2_UI_PEN_RED;
+    }
+    if (ubR >= 200 && ubG >= 100 && ubG <= 170 && ubB >= 100 && ubB <= 170) {
+        return MM2_UI_PEN_WARN;
+    }
+    if (ubR >= 200 && ubG >= 240 && ubB >= 80 && ubB <= 130) {
+        return MM2_UI_PEN_YELLOW;
+    }
+    if (ubR >= 200 && ubG >= 170 && ubG < 240 && ubB <= 120) {
+        return MM2_UI_PEN_GOLD;
+    }
+    if (ubR >= 210 && ubG >= 210 && ubB >= 210) {
+        return MM2_UI_PEN_GREY_LIGHT;
+    }
+    if (ubR >= 180 && ubG >= 180 && ubB >= 180) {
+        return MM2_UI_PEN_GREY_MID;
+    }
+    if (ubR >= 130 && ubG >= 130 && ubB >= 130) {
+        return MM2_UI_PEN_GREY_FOOTER;
+    }
+    if (ubR >= 90 && ubG >= 90 && ubB >= 90) {
+        return MM2_UI_PEN_GREY_DIM;
+    }
+    if (ubR > 96 || ubG > 96 || ubB > 96) {
+        return MM2_UI_PEN_WHITE;
+    }
+    return 0;
+}
+
+static void mm2_amiga_brect(tBitMap *pDst, UWORD uwX, UWORD uwY, UWORD uwW, UWORD uwH, UBYTE pen)
+{
+    if (!pDst || uwW == 0 || uwH == 0 || !bitmapIsChip(pDst)) {
+        return;
+    }
+    blitRect(pDst, (WORD)uwX, (WORD)uwY, (WORD)uwW, (WORD)uwH, pen);
+}
+
+void mm2_amiga_put_pixel_pen(UWORD uwX, UWORD uwY, UBYTE pen)
+{
     tBitMap *pDst;
-    UBYTE pen;
     UBYTE pl;
     UWORD bpr;
-    if (ubA == 0 || uwX >= MM2_AGA_SCREEN_WIDTH || uwY >= MM2_AGA_SCREEN_HEIGHT) {
-        return;
-    }
-    if (ubR > 200 && ubG < 80 && ubB < 80) {
-        pen = 2;
-    } else if (ubR > 160 || ubG > 160 || ubB > 160) {
-        pen = 1;
-    } else {
-        pen = 0;
-    }
 
-    pBfr = mm2AmigaDisplayGetBuffer();
-    if (!pBfr || !pBfr->pBack) {
+    pDst = mm2_amiga_pixel_dest();
+    if (!pDst) {
         return;
     }
-    pDst = pBfr->pBack;
     bpr = pDst->BytesPerRow;
     for (pl = 0; pl < pDst->Depth; ++pl) {
         UBYTE *row = pDst->Planes[pl] + (ULONG)uwY * (ULONG)bpr;
@@ -77,21 +106,142 @@ void mm2_amiga_put_pixel_rgb(UWORD uwX, UWORD uwY, UBYTE ubR, UBYTE ubG, UBYTE u
     }
 }
 
+void mm2_amiga_put_pixel_rgb(UWORD uwX, UWORD uwY, UBYTE ubR, UBYTE ubG, UBYTE ubB, UBYTE ubA)
+{
+    if (ubA == 0 || uwX >= MM2_AGA_SCREEN_WIDTH || uwY >= MM2_AGA_SCREEN_HEIGHT) {
+        return;
+    }
+    mm2_amiga_put_pixel_pen(uwX, uwY, mm2_amiga_rgb_to_ui_pen(ubR, ubG, ubB));
+}
+
+void mm2_amiga_fill_rect_pen(UWORD uwX, UWORD uwY, UWORD uwW, UWORD uwH, UBYTE pen)
+{
+    mm2_amiga_brect(mm2_amiga_pixel_dest(), uwX, uwY, uwW, uwH, pen);
+}
+
+void mm2_amiga_fill_rect_rgb(UWORD uwX, UWORD uwY, UWORD uwW, UWORD uwH, UBYTE ubR, UBYTE ubG, UBYTE ubB,
+                             UBYTE ubA)
+{
+    if (ubA == 0) {
+        return;
+    }
+    mm2_amiga_fill_rect_pen(uwX, uwY, uwW, uwH, mm2_amiga_rgb_to_ui_pen(ubR, ubG, ubB));
+}
+
+void mm2_amiga_draw_glyph8_pen(UWORD uwX, UWORD uwY, UBYTE ubCodepoint, UBYTE pen, UBYTE ubA)
+{
+    const uint8_t *table;
+    const uint8_t *glyph;
+    UBYTE row;
+    UBYTE col;
+
+    if (ubA == 0 || ubCodepoint >= MM2_FONT8X8_GLYPHS) {
+        return;
+    }
+    table = mm2_font8x8_live();
+    glyph = table + (ULONG)ubCodepoint * (ULONG)MM2_FONT8X8_ROWS;
+    for (row = 0; row < MM2_FONT8X8_ROWS; ++row) {
+        const UBYTE bits = glyph[row];
+        for (col = 0; col < 8; ++col) {
+            if ((bits >> col) & 1u) {
+                mm2_amiga_put_pixel_pen(uwX + (UWORD)col, uwY + (UWORD)row, pen);
+            }
+        }
+    }
+}
+
+void mm2_amiga_apply_ui_palette(void)
+{
+    tVPort *pVp;
+    ULONG *pPal;
+    pVp = mm2AmigaDisplayGetVPort();
+    if (!pVp || !pVp->pPalette) {
+        return;
+    }
+    pPal = (ULONG *)pVp->pPalette;
+    pPal[0] = 0;
+    pPal[MM2_UI_PEN_WHITE] = 0x00FFFFFFUL;
+    pPal[MM2_UI_PEN_RED] = 0x00FF0000UL;
+    pPal[MM2_UI_PEN_GOLD] = 0x00FFDC5AUL;
+    pPal[MM2_UI_PEN_YELLOW] = 0x00FFFF64UL;
+    pPal[MM2_UI_PEN_GREY_LIGHT] = 0x00E6E6E6UL;
+    pPal[MM2_UI_PEN_GREY_MID] = 0x00C8C8C8UL;
+    pPal[MM2_UI_PEN_GREY_FOOTER] = 0x00969696UL;
+    pPal[MM2_UI_PEN_GREY_DIM] = 0x006E6E6EUL;
+    pPal[MM2_UI_PEN_WARN] = 0x00FF8080UL;
+    s_applied_palette_img = NULL;
+    s_palette_dirty = 1;
+    mm2_amiga_push_palette();
+}
+
+void mm2_amiga_blit_sync(void)
+{
+    blitWait();
+}
+
+void mm2_amiga_draw_glyph8(UWORD uwX, UWORD uwY, UBYTE ubCodepoint, UBYTE ubR, UBYTE ubG, UBYTE ubB, UBYTE ubA)
+{
+    mm2_amiga_draw_glyph8_pen(uwX, uwY, ubCodepoint, mm2_amiga_rgb_to_ui_pen(ubR, ubG, ubB), ubA);
+}
+
 void mm2_amiga_clear_screen(void)
 {
-    tSimpleBufferManager *pBfr = mm2AmigaDisplayGetBuffer();
+    tBitMap *pDst = mm2_amiga_pixel_dest();
+    if (!pDst) {
+        return;
+    }
+    mm2_amiga_brect(pDst, 0, 0, MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, 0);
+}
+
+void mm2_amiga_ui_cache_begin(void)
+{
+    if (!s_ui_cache_bm) {
+        s_ui_cache_bm = bitmapCreate(MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
+        if (!s_ui_cache_bm) {
+            return;
+        }
+    }
+    s_pixel_target = s_ui_cache_bm;
+    mm2_amiga_brect(s_ui_cache_bm, 0, 0, MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, 0);
+}
+
+void mm2_amiga_ui_cache_end(void)
+{
+    s_pixel_target = NULL;
+}
+
+void mm2_amiga_ui_cache_present(void)
+{
+    tSimpleBufferManager *pBfr;
     tBitMap *pDst;
-    UBYTE pl;
+
+    if (!s_ui_cache_bm) {
+        return;
+    }
+    pBfr = mm2AmigaDisplayGetBuffer();
     if (!pBfr || !pBfr->pBack) {
         return;
     }
     pDst = pBfr->pBack;
-    if (!bitmapIsChip(pDst)) {
+    if (!bitmapIsChip(s_ui_cache_bm) || !bitmapIsChip(pDst)) {
         return;
     }
-    for (pl = 0; pl < pDst->Depth; ++pl) {
-        memset(pDst->Planes[pl], 0, (size_t)pDst->Rows * (size_t)pDst->BytesPerRow);
+    blitCopy(s_ui_cache_bm, 0, 0, pDst, 0, 0, (WORD)MM2_AGA_SCREEN_WIDTH, (WORD)MM2_AGA_SCREEN_HEIGHT,
+             MINTERM_COPY);
+}
+
+void mm2_amiga_ui_cache_invalidate(void)
+{
+    s_pixel_target = NULL;
+    if (s_ui_cache_bm) {
+        bitmapDestroy(s_ui_cache_bm);
+        s_ui_cache_bm = NULL;
     }
+}
+
+UBYTE mm2_amiga_ui_cache_ready(void)
+{
+    return s_ui_cache_bm != NULL;
 }
 
 void mm2_amiga_apply_palette(const mm2_image32_file *img)
@@ -175,31 +325,10 @@ void mm2_amiga_blit_frame(const mm2_image32_file *img, uint16_t frame_index, UWO
     }
 
     if (opaque) {
-#ifdef ACE_DEBUG
-        if (!blitCopy(pSrc, 0, 0, pDst, (WORD)uwDstX, (WORD)uwDstY, w, h, MINTERM_COPY)) {
-            logWrite(
-                "MM2: blitCopy FAIL %s %dx%d@%d,%d\n",
-                img->debug_label[0] ? img->debug_label : "?",
-                (int)w, (int)h, (int)uwDstX, (int)uwDstY
-            );
-        }
-#else
         blitCopy(pSrc, 0, 0, pDst, (WORD)uwDstX, (WORD)uwDstY, w, h, MINTERM_COPY);
-#endif
     } else if (pMsk && pMsk->Planes[0]) {
-#ifdef ACE_DEBUG
-        if (!blitCopyMask(pSrc, 0, 0, pDst, (WORD)uwDstX, (WORD)uwDstY, w, h, pMsk->Planes[0])) {
-            logWrite(
-                "MM2: blitCopyMask FAIL %s %dx%d@%d,%d\n",
-                img->debug_label[0] ? img->debug_label : "?",
-                (int)w, (int)h, (int)uwDstX, (int)uwDstY
-            );
-        }
-#else
         blitCopyMask(pSrc, 0, 0, pDst, (WORD)uwDstX, (WORD)uwDstY, w, h, pMsk->Planes[0]);
-#endif
     }
-
 }
 
 void mm2_amiga_push_palette(void)
@@ -219,8 +348,7 @@ void mm2_amiga_push_palette(void)
 
 void mm2_amiga_present_end(void)
 {
-    /* Intentionally empty: no blitWait() (async blits; bad COOKIE can hang BLTDONE).
-     * Palette + buffer swap happen in mm2AmigaDisplayFrameEnd(). */
+    /* Palette + buffer swap happen in mm2AmigaDisplayFrameEnd(). */
 }
 
 #endif /* AMIGA */

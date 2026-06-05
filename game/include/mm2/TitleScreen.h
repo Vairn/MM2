@@ -42,10 +42,14 @@ private:
     void drawAttract();
     void blitIntroClipFrame(int frame_index, int x, int y);
     void tickPegasusAnimation();
+    void resetAttractTiming();
     void pickRandomPeekerSlot();
     void releaseIntroClips();
     void releaseLogoAsset();
     void drawTitleMenu();
+    void buildTitleMenuCache();
+    void presentTitleMenu();
+    void blitTitleMenuBooks();
     void drawControls();
     void drawOptions();
     void tickBookAnimation();
@@ -77,18 +81,20 @@ private:
     bool has_book_ = false;
     bool has_roster_ = false;
 
-    int overlay_gate_ = 0;
-    int overlay_phase_ = 0;  // 0..4 pegasus overlays (ASM A4-$647A mod 5 @ 0x26A1E)
-    int peeker_gate_ = 0;
-    int peeker_gap_ticks_ = 0;
-    int peeker_delay_ticks_ = 0;
+    // Animation timing is scheduled against platform::nowTicks() (VBlank frame clock),
+    // not per-loop-iteration counters, so speed tracks the 50/60 Hz display like LoL.
+    uint32_t overlay_until_ = 0;  // next pegasus-overlay phase deadline (frame ticks)
+    int overlay_phase_ = 0;       // 0..4 pegasus overlays (ASM A4-$647A mod 5 @ 0x26A1E)
+    uint32_t peeker_until_ = 0;   // next peeker show/hide deadline (frame ticks)
+    int peeker_delay_ticks_ = 0;  // visible duration for the current peeker
     int peeker_slot_ = 0;
     bool peeker_visible_ = false;
     uint32_t peeker_rng_ = 1;
 
     int book_frame_ = 0;
-    int book_gate_ = 0;
+    uint32_t book_until_ = 0;  // next book page-turn deadline (frame ticks)
 
+    uint32_t logo_hold_until_ = 0;  // Amiga logo-splash hold deadline (frame ticks)
     int state_ticks_ = 0;
     uint8_t logo_alpha_ = 0;
     int logo_splash_x_ = 10;
@@ -99,6 +105,10 @@ private:
     int pegasus_painted_peeker_slot_ = -1;
     bool pegasus_painted_peeker_visible_ = false;
     void invalidatePegasusPaint();
+
+    bool title_menu_painted_ = false;
+    int title_menu_painted_book_frame_ = -1;
+    void invalidateTitleMenuPaint();
 #endif
 
 };
