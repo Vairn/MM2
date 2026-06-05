@@ -37,6 +37,22 @@ void Game::shutdown()
 
 void Game::tick()
 {
+    if (phase_ == Phase::Title) {
+        title_.runPendingCharacterUiBootstrap();
+        if (pending_in_town_start_) {
+            if (session_.start(data_dir_, title_.roster(), pending_launch_)) {
+                MM2_DBG("MM2 DBG: Game phase Title -> InTown (area %u)\n", (unsigned)pending_launch_.area_id);
+                phase_ = Phase::InTown;
+#if !MM2_HOST_AMIGA
+                char window_title[256];
+                std::snprintf(window_title, sizeof(window_title), "MM2 (%s) — %s", platform::hostName(),
+                              GameSession::areaName(pending_launch_.area_id));
+                platform::setWindowTitle(window_title);
+#endif
+            }
+            pending_in_town_start_ = false;
+        }
+    }
     const auto keys = platform::pollInput();
     if (phase_ == Phase::Title) {
         title_.tick(keys);
@@ -47,16 +63,8 @@ void Game::tick()
 
         Mm2PartyLaunch launch{};
         if (title_.takePartyLaunch(&launch)) {
-            if (session_.start(data_dir_, title_.roster(), launch)) {
-                MM2_DBG("MM2 DBG: Game phase Title -> InTown (area %u)\n", (unsigned)launch.area_id);
-                phase_ = Phase::InTown;
-#if !MM2_HOST_AMIGA
-                char window_title[256];
-                std::snprintf(window_title, sizeof(window_title), "MM2 (%s) — %s", platform::hostName(),
-                              GameSession::areaName(launch.area_id));
-                platform::setWindowTitle(window_title);
-#endif
-            }
+            pending_launch_ = launch;
+            pending_in_town_start_ = true;
         }
 
         title_.render();

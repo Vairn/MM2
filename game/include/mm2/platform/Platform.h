@@ -72,5 +72,6 @@ void logoFadeCapturePalette(void);
 void logoFadeBeginIn(int frames);
 void logoFadeBeginOut(int frames);
 bool logoFadeConsumeDone(void);
+void logoFadeCancel(void);
 }
 #endif

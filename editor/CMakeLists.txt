@@ -42,17 +42,29 @@ FetchContent_Declare(
   SOURCE_SUBDIR  not-a-real-subdir
 )
 
-# imnodes (node graph UI for the event editor). It ships its own CMakeLists
-# that hard-fails without IMGUI_DIR, so we point SOURCE_SUBDIR at a path with
-# no CMakeLists to download the sources only and compile them ourselves below.
+# imnodes (node graph UI for the event editor). Zoom support from Auburn PR #192
+# (https://github.com/Nelarius/imnodes/pull/192) — not yet merged upstream.
 FetchContent_Declare(
   imnodes
-  GIT_REPOSITORY https://github.com/Nelarius/imnodes.git
-  GIT_TAG        master
+  GIT_REPOSITORY https://github.com/Auburn/imnodes.git
+  GIT_TAG        f802c80357f3fcd19b741da8ba7f82fd4349da39
   SOURCE_SUBDIR  not-a-real-subdir
 )
 
 FetchContent_MakeAvailable(glfw imgui portable_file_dialogs imnodes stb)
+
+# Auburn zoom fork still references removed ImGuiIO::SetPlatformImeDataFn (imgui 1.91+).
+set(_imnodes_cpp "${imnodes_SOURCE_DIR}/imnodes.cpp")
+if(EXISTS "${_imnodes_cpp}")
+  file(READ "${_imnodes_cpp}" _imnodes_src)
+  string(REPLACE "SetPlatformImeDataFn" "BackendLanguageUserData" _imnodes_patched "${_imnodes_src}")
+  if(NOT _imnodes_src STREQUAL _imnodes_patched)
+    file(WRITE "${_imnodes_cpp}" "${_imnodes_patched}")
+  endif()
+  unset(_imnodes_src)
+  unset(_imnodes_patched)
+endif()
+unset(_imnodes_cpp)
 
 find_package(OpenGL REQUIRED)
 

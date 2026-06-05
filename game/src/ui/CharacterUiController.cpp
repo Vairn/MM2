@@ -1,24 +1,64 @@
 #include "mm2/ui/CharacterUiController.h"
 
 #include "mm2/ui/CharacterUiFactory.h"
+#include "mm2/ui/ICharacterUi.h"
 
 namespace mm2::ui {
 
-bool CharacterUiController::init(const char *data_dir, CharacterUiKind kind)
+bool CharacterUiController::attachAndLoad(const char *data_dir, CharacterUiKind kind, uint8_t *items_dat,
+                                          std::size_t items_size)
 {
-    ui_ = createCharacterUi(kind);
-    if (!ui_) {
+    data_dir_ = data_dir;
+    if (!initBackend(kind)) {
         return false;
     }
-    return ui_->init(data_dir);
+    if (!ui_->init(data_dir)) {
+        shutdown();
+        return false;
+    }
+    if (items_dat && items_size > 0) {
+        if (!ui_->adoptItemNames(items_dat, items_size)) {
+            shutdown();
+            return false;
+        }
+    } else if (!loadDataFiles()) {
+        shutdown();
+        return false;
+    }
+    return true;
+}
+
+bool CharacterUiController::initBackend(CharacterUiKind kind)
+{
+#if MM2_HOST_AMIGA
+    ui_ = acquireCharacterUi(kind);
+    return ui_ != nullptr;
+#else
+    ui_ = createCharacterUi(kind);
+    return static_cast<bool>(ui_);
+#endif
+}
+
+bool CharacterUiController::loadDataFiles()
+{
+    return ui_ && ui_->loadDataFiles();
+}
+
+bool CharacterUiController::init(const char *data_dir, CharacterUiKind kind)
+{
+    return attachAndLoad(data_dir, kind);
 }
 
 void CharacterUiController::shutdown()
 {
     if (ui_) {
         ui_->shutdown();
+#if !MM2_HOST_AMIGA
         ui_.reset();
+#endif
+        ui_ = nullptr;
     }
+    data_dir_ = nullptr;
     mode_ = CharacterUiMode::None;
     roster_ = nullptr;
 }
@@ -47,6 +87,13 @@ void CharacterUiController::startCreateCharacter(Mm2RosterFile &roster, int slot
     mode_ = CharacterUiMode::CreateCharacter;
     quit_requested_ = false;
     ui_->beginCreateCharacter(roster, slot);
+}
+
+void CharacterUiController::prepareCreateCharacterAssets()
+{
+    if (ui_) {
+        ui_->prepareCreateCharacterAssets();
+    }
 }
 
 void CharacterUiController::tick(const platform::KeyState &keys)

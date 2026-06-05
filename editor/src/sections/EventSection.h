@@ -6,13 +6,20 @@
 // -> string nodes (text-table entries referenced by show_text opcodes).
 // Argument-byte edits write back into the in-memory file (length-preserving)
 // and persist on Save.
+//
+// DSL: Export/Import .mm2evt via Python mm2_event_lang. Block view shows
+// readable lifted script statements instead of hex opcode rows.
 
+#include <map>
 #include <string>
+#include <vector>
 
 #include "app/Section.h"
 #include "core/EventFile.h"
 
 namespace mm2 {
+
+class App;
 
 class EventSection : public Section {
 public:
@@ -24,11 +31,18 @@ public:
 
 private:
     void drawGraph(App& app, EventLocation& loc);
+    void exportDsl(App& app);
+    void importDsl(App& app);
+    void refreshDslCache(App& app);
+    void drawBlockScript(int evt, const std::vector<std::string>& lines);
 
     EventFile file_;
     int selectedLoc_ = 0;
     int layoutForLoc_ = -1;   // location whose initial node layout was applied
     bool showStrings_ = true;
+    bool blockView_ = false;
+    int dslCacheLoc_ = -1;
+    std::map<int, std::vector<std::string>> dslScriptBlocks_;
 };
 
 }  // namespace mm2

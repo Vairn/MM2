@@ -8,6 +8,7 @@
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
 #include "mm2/gfx/mm2_font8x8.h"
 #include "mm2/runtime/PathScratch.h"
+#include "mm2/platform/amiga/mm2_amiga_file.h"
 #include <ace/types.h>
 #include "mm2_image32_codec.h"
 #include <ace/managers/blit.h>
@@ -18,7 +19,6 @@
 #include <ace/managers/system.h>
 #include <ace/managers/timer.h>
 #include <ace/utils/disk_file.h>
-#include <ace/utils/file.h>
 
 namespace mm2::platform {
 
@@ -32,6 +32,23 @@ static char asciiFromKey(UBYTE ubKey)
         return 0;
     }
     return static_cast<char>(g_pToAscii[ubKey]);
+}
+
+/** Roster/party slot labels A..X map to these Amiga key codes (not sequential indices). */
+static const UBYTE kRosterSlotKeys[24] = {
+    KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H, KEY_I, KEY_J, KEY_K, KEY_L,
+    KEY_M, KEY_N, KEY_O, KEY_P, KEY_Q, KEY_R, KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X,
+};
+
+static void pollRosterSlotLetters(KeyState &keys)
+{
+    for (int i = 0; i < 24; ++i) {
+        if (keyUse(kRosterSlotKeys[i])) {
+            keys.any_key = true;
+            keys.last_ascii = static_cast<char>('A' + i);
+            return;
+        }
+    }
 }
 
 }  // namespace
@@ -106,37 +123,6 @@ void stripDotSlash(const char *path, char *out, size_t out_cap)
     snprintf(out, out_cap, "%s", path);
 }
 
-bool readFileAtPath(const char *path, uint8_t **out_data, std::size_t *out_size)
-{
-    tFile *fp = diskFileOpen(path, DISK_FILE_MODE_READ, 1);
-    if (!fp) {
-        return false;
-    }
-
-    const ULONG sz = fileGetSize(fp);
-    if (sz == 0) {
-        fileClose(fp);
-        return false;
-    }
-
-    uint8_t *buf = static_cast<uint8_t *>(mm2_malloc(static_cast<std::size_t>(sz)));
-    if (!buf) {
-        fileClose(fp);
-        return false;
-    }
-
-    const ULONG got = fileRead(fp, buf, sz);
-    fileClose(fp);
-    if (got != sz) {
-        mm2_free(buf);
-        return false;
-    }
-
-    *out_data = buf;
-    *out_size = static_cast<std::size_t>(sz);
-    return true;
-}
-
 }  // namespace
 bool readFile(const char *path, uint8_t **out_data, std::size_t *out_size)
 {
@@ -152,14 +138,14 @@ bool readFile(const char *path, uint8_t **out_data, std::size_t *out_size)
         if (!joinDataPath(candidate, MM2_PATH_SCRATCH_CAP, prefix, name)) {
             continue;
         }
-        if (readFileAtPath(candidate, out_data, out_size)) {
+        if (mm2_amiga_read_file(candidate, out_data, out_size)) {
             MM2_DBG("MM2 DBG: readFile ok '%s' (%lu bytes)\n", candidate,
                     (unsigned long)*out_size);
             return true;
         }
     }
 
-    return readFileAtPath(name, out_data, out_size);
+    return mm2_amiga_read_file(name, out_data, out_size) != 0;
 }
 
 void freeFileBuffer(uint8_t *data) { mm2_free(data); }
@@ -206,8 +192,14 @@ KeyState pollInput()
     }
 
     keyProcess();
-    keys.escape = keyCheck(KEY_ESCAPE) != 0;
-    keys.enter = keyCheck(KEY_RETURN) != 0;
+    if (keyUse(KEY_ESCAPE)) {
+        keys.escape = true;
+        keys.any_key = true;
+    }
+    if (keyUse(KEY_RETURN)) {
+        keys.enter = true;
+        keys.any_key = true;
+    }
     keys.space = keyCheck(KEY_SPACE) != 0;
     keys.up = keyCheck(KEY_UP) != 0;
     keys.down = keyCheck(KEY_DOWN) != 0;
@@ -222,17 +214,17 @@ KeyState pollInput()
     keys.key_o = keyCheck(KEY_O) != 0;
     keys.key_p = keyCheck(KEY_P) != 0;
     keys.key_q = keyCheck(KEY_Q) != 0;
-    if (keyUse(KEY_ESCAPE)) {
-        keys.quit = true;
-        keys.any_key = true;
-    }
+
+    pollRosterSlotLetters(keys);
 
     for (UBYTE i = 0; i < KEY_COUNT; ++i) {
         if (keyUse(i)) {
             keys.any_key = true;
-            const char ch = asciiFromKey(i);
-            if (ch) {
-                keys.last_ascii = ch;
+            if (keys.last_ascii == 0) {
+                const char ch = asciiFromKey(i);
+                if (ch) {
+                    keys.last_ascii = ch;
+                }
             }
         }
     }
@@ -259,6 +251,7 @@ void logoFadeCapturePalette() { mm2AmigaFadeCapturePalette(); }
 void logoFadeBeginIn(int frames) { mm2AmigaFadeBeginIn((UBYTE)frames); }
 void logoFadeBeginOut(int frames) { mm2AmigaFadeBeginOut((UBYTE)frames); }
 bool logoFadeConsumeDone() { return mm2AmigaFadeConsumeDone() != 0; }
+void logoFadeCancel() { mm2AmigaFadeCancel(); }
 void blitImage32(const ::mm2_image32_file *img, int frame_index, int x, int y, int opaque)
 {
     if (!g_display_ready || !img || frame_index < 0) {

@@ -193,13 +193,19 @@ void mm2_amiga_clear_screen(void)
     mm2_amiga_brect(pDst, 0, 0, MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, 0);
 }
 
+UBYTE mm2_amiga_ui_cache_create(void)
+{
+    if (s_ui_cache_bm) {
+        return 1;
+    }
+    s_ui_cache_bm = bitmapCreate(MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
+    return s_ui_cache_bm != NULL;
+}
+
 void mm2_amiga_ui_cache_begin(void)
 {
     if (!s_ui_cache_bm) {
-        s_ui_cache_bm = bitmapCreate(MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
-        if (!s_ui_cache_bm) {
-            return;
-        }
+        return;
     }
     s_pixel_target = s_ui_cache_bm;
     mm2_amiga_brect(s_ui_cache_bm, 0, 0, MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, 0);
@@ -233,6 +239,11 @@ void mm2_amiga_ui_cache_present(void)
 void mm2_amiga_ui_cache_invalidate(void)
 {
     s_pixel_target = NULL;
+}
+
+void mm2_amiga_ui_cache_destroy(void)
+{
+    s_pixel_target = NULL;
     if (s_ui_cache_bm) {
         bitmapDestroy(s_ui_cache_bm);
         s_ui_cache_bm = NULL;
@@ -244,13 +255,13 @@ UBYTE mm2_amiga_ui_cache_ready(void)
     return s_ui_cache_bm != NULL;
 }
 
-void mm2_amiga_apply_palette(const mm2_image32_file *img)
+static void mm2_amiga_write_asset_palette(const mm2_image32_file *img)
 {
     tVPort *pVp;
     ULONG *pPal;
     int i;
 
-    if (!img || img == s_applied_palette_img) {
+    if (!img) {
         return;
     }
 
@@ -266,6 +277,22 @@ void mm2_amiga_apply_palette(const mm2_image32_file *img)
     }
 
     s_applied_palette_img = img;
+}
+
+void mm2_amiga_stage_asset_palette(const mm2_image32_file *img)
+{
+    if (!img || img == s_applied_palette_img) {
+        return;
+    }
+    mm2_amiga_write_asset_palette(img);
+}
+
+void mm2_amiga_apply_palette(const mm2_image32_file *img)
+{
+    if (!img || img == s_applied_palette_img) {
+        return;
+    }
+    mm2_amiga_write_asset_palette(img);
     s_palette_dirty = 1;
     mm2_amiga_push_palette();
 }

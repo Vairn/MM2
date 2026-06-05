@@ -7,7 +7,7 @@
       "name": "MM2 A1200 Debug",
       "config": "A1200",
       "program": "${workspaceFolder}/build/m68k-bartman-1.8.2-debug/mm2",
-      "stackSize": 32768,
+      "stackSize": 4096,
       "kickstart": "C:\\Users\\Public\\Documents\\Amiga Files\\Shared\\rom\\amiga-os-310-a1200.rom",
       "internalConsoleOptions": "openOnSessionStart"
     }

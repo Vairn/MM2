@@ -44,8 +44,7 @@ if(AMIGA)
   FetchContent_Declare(
     amigaports_ace
     GIT_REPOSITORY https://github.com/AmigaPorts/ACE.git
-    GIT_TAG d2cc8d2
-    GIT_SHALLOW TRUE
+    GIT_TAG d2cc8d2166e403eb7575e03260447852d177e390
   )
   FetchContent_MakeAvailable(amigaports_ace)
   set(ace_engine_SOURCE_DIR "${amigaports_ace_SOURCE_DIR}")
@@ -141,6 +140,7 @@ if(AMIGA)
     ${MM2_CODEC_SOURCES}
     src/platform/amiga/mm2_amiga_display.c
     src/platform/amiga/mm2_amiga_planar.c
+    src/platform/amiga/mm2_amiga_file.c
     src/platform/amiga/mm2_fade.c
   )
 endif()

@@ -2,7 +2,7 @@
 
 /**
  * File-path scratch buffers in BSS (not stack).
- * Amiga Bartman builds use a 4K stack; never put 512+ byte path arrays on the stack.
+ * Bartman default process stack is 4K — never put large buffers or deep init chains on the stack.
  */
 
 #include <stddef.h>

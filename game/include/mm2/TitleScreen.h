@@ -9,6 +9,13 @@
 
 namespace mm2 {
 
+enum class PendingCharacterUiEntry {
+    None,
+    ViewParty,
+    CreateCharacter,
+    ChooseParty,
+};
+
 enum class TitleState {
     LogoFadeIn,
     LogoHold,
@@ -25,7 +32,8 @@ public:
     bool init(const char *data_dir, ui::CharacterUiKind ui_kind = ui::CharacterUiKind::AmigaClassic);
     void shutdown();
     /** Loads character UI backend on first C/V/G (not at title boot). */
-    bool ensureCharacterUi();
+    bool runPendingCharacterUiBootstrap();
+    void releaseCharacterUi();
 
     void tick(const platform::KeyState &keys);
     void render();
@@ -60,9 +68,13 @@ private:
     void dbgLogDisplay() const;
 #endif
 
+    bool loadItemsDat();
+    void releaseItemsDat();
+
     const char *data_dir_ = nullptr;
     ui::CharacterUiKind ui_kind_ = ui::CharacterUiKind::AmigaClassic;
     bool character_ui_ready_ = false;
+    PendingCharacterUiEntry pending_character_ui_ = PendingCharacterUiEntry::None;
     bool quit_ = false;
     TitleState state_ = TitleState::LogoFadeIn;
 
@@ -81,6 +93,12 @@ private:
     bool has_book_ = false;
     bool has_roster_ = false;
 
+#if MM2_HOST_AMIGA
+    uint8_t *items_dat_ = nullptr;
+    std::size_t items_dat_size_ = 0;
+    bool has_items_dat_ = false;
+#endif
+
     // Animation timing is scheduled against platform::nowTicks() (VBlank frame clock),
     // not per-loop-iteration counters, so speed tracks the 50/60 Hz display like LoL.
     uint32_t overlay_until_ = 0;  // next pegasus-overlay phase deadline (frame ticks)
@@ -98,6 +116,9 @@ private:
     int state_ticks_ = 0;
     uint8_t logo_alpha_ = 0;
     int logo_splash_x_ = 10;
+
+    bool logo_fade_armed_ = false;
+    bool logo_fade_out_armed_ = false;
 
 #if MM2_HOST_AMIGA
     /* Last state painted into ACE pBack (retail retains FB between overlay steps). */

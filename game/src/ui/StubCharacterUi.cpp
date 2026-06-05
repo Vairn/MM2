@@ -64,6 +64,17 @@ public:
         return true;
     }
 
+    bool loadDataFiles() override { return true; }
+
+    bool adoptItemNames(uint8_t *data, std::size_t size) override
+    {
+        if (data) {
+            platform::freeFileBuffer(data);
+        }
+        (void)size;
+        return true;
+    }
+
     void shutdown() override {}
 
     void beginViewParty(Mm2RosterFile &roster) override
@@ -368,5 +379,20 @@ std::unique_ptr<ICharacterUi> makeStubCharacterUi()
 {
     return std::make_unique<StubCharacterUi>();
 }
+
+#if MM2_HOST_AMIGA
+ICharacterUi *acquireStubCharacterUi()
+{
+    static StubCharacterUi *s_ui = nullptr;
+    if (!s_ui) {
+        void *mem = mm2_malloc(sizeof(StubCharacterUi));
+        if (!mem) {
+            return nullptr;
+        }
+        s_ui = new (mem) StubCharacterUi();
+    }
+    return s_ui;
+}
+#endif
 
 }  // namespace mm2::ui

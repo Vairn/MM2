@@ -7,6 +7,7 @@
 
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
+#include "mm2/platform/amiga/mm2_amiga_file.h"
 #endif
 
 #if MM2_HOST_AMIGA && defined(ACE_DEBUG)
@@ -138,7 +139,7 @@ uint32_t titleRngNext(uint32_t &state) {
 inline bool tickReached(uint32_t now, uint32_t deadline) {
     return static_cast<int16_t>(static_cast<uint16_t>(now) - static_cast<uint16_t>(deadline)) >= 0;
 }
-constexpr int kFadeTicks = 60;
+constexpr int kFadeTicks = 20;
 constexpr int kLogoHoldTicks = 312;
 // Amiga logo splash: brief hold then attract (was a raw "state_ticks_ >= 90" loop count).
 constexpr int kLogoHoldAmigaTicks = 90;
@@ -175,6 +176,14 @@ void TitleScreen::setState(TitleState next, const char *reason)
     }
     if (next == TitleState::TitleMenu && state_ != TitleState::TitleMenu) {
         invalidateTitleMenuPaint();
+    }
+    /* Leaving title menu: drop cached menu from the playfield; overlay states own the FB. */
+    if (state_ == TitleState::TitleMenu &&
+        (next == TitleState::Controls || next == TitleState::Options || next == TitleState::CharacterUi)) {
+        platform::clearScreen();
+        platform::applyUiPalette();
+        title_menu_painted_ = false;
+        title_menu_painted_book_frame_ = -1;
     }
 #endif
     state_ = next;
@@ -314,6 +323,8 @@ bool TitleScreen::init(const char *data_dir, ui::CharacterUiKind ui_kind)
     if (!has_roster_) {
         has_roster_ = tryRoster("dh0:");
     }
+    /* items.dat for character UI — same shallow init stack as roster.dat (not on V/C/G). */
+    loadItemsDat();
 #endif
 
     if (!has_intro_ && !has_nwcp_) {
@@ -321,7 +332,7 @@ bool TitleScreen::init(const char *data_dir, ui::CharacterUiKind ui_kind)
     }
     (void)has_introclips_;
     if (has_nwcp_) {
-        setState(TitleState::LogoHold, "boot with nwcp");
+        setState(TitleState::LogoFadeIn, "boot with nwcp");
     } else if (has_intro_) {
         setState(TitleState::TitleAttract, "boot intro only");
     } else {
@@ -339,24 +350,120 @@ bool TitleScreen::init(const char *data_dir, ui::CharacterUiKind ui_kind)
     resetAttractTiming();
 #if MM2_HOST_AMIGA
     invalidatePegasusPaint();
+    /* Pre-build title menu off-screen buffer here — bitmapCreate from tick→render
+     * overflows the 4K Bartman stack (ACE_DEBUG memCheckIntegrity + deep C++ chain). */
+    if (mm2_amiga_ui_cache_create()) {
+        buildTitleMenuCache();
+    }
 #endif
     return true;
 }
 
-bool TitleScreen::ensureCharacterUi()
+bool TitleScreen::loadItemsDat()
 {
-    if (character_ui_ready_) {
+#if MM2_HOST_AMIGA
+    releaseItemsDat();
+    char *const path = mm2_path_scratch_b();
+    auto tryLoad = [&](const char *dir) -> bool {
+        if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, dir, "items.dat")) {
+            return false;
+        }
+        return mm2_amiga_read_file(path, &items_dat_, &items_dat_size_) != 0;
+    };
+    has_items_dat_ = tryLoad(data_dir_);
+    if (!has_items_dat_ && data_dir_ && data_dir_[0]) {
+        has_items_dat_ = tryLoad("");
+    }
+    if (!has_items_dat_) {
+        has_items_dat_ = tryLoad("dh1:");
+    }
+    if (!has_items_dat_) {
+        has_items_dat_ = tryLoad("dh0:");
+    }
+#if defined(ACE_DEBUG)
+    if (has_items_dat_) {
+        MM2_DBG("MM2 DBG: Loading items.dat ok (%lu bytes)\n", (unsigned long)items_dat_size_);
+    } else {
+        MM2_DBG("MM2 DBG: Loading items.dat FAIL\n");
+    }
+#endif
+    return has_items_dat_;
+#else
+    return true;
+#endif
+}
+
+void TitleScreen::releaseItemsDat()
+{
+#if MM2_HOST_AMIGA
+    if (items_dat_) {
+        platform::freeFileBuffer(items_dat_);
+        items_dat_ = nullptr;
+    }
+    items_dat_size_ = 0;
+    has_items_dat_ = false;
+#endif
+}
+
+bool TitleScreen::runPendingCharacterUiBootstrap()
+{
+    if (pending_character_ui_ == PendingCharacterUiEntry::None) {
         return true;
     }
-    if (!character_ui_.init(data_dir_, ui_kind_)) {
-        return false;
-    }
-    character_ui_ready_ = true;
-#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
-    MM2_DBG("MM2 DBG: TitleScreen character UI ready, chip free %lu\n",
-            (unsigned long)memGetFreeChipSize());
+
+    if (!character_ui_ready_) {
+#if MM2_HOST_AMIGA
+        if (!has_items_dat_) {
+            MM2_DBG("MM2 DBG: TitleScreen character UI bootstrap FAIL (no items.dat)\n");
+            pending_character_ui_ = PendingCharacterUiEntry::None;
+            setState(TitleState::TitleMenu, "character UI no items.dat");
+            return false;
+        }
+        if (!character_ui_.attachAndLoad(data_dir_, ui_kind_, items_dat_, items_dat_size_)) {
+#else
+        if (!character_ui_.attachAndLoad(data_dir_, ui_kind_)) {
 #endif
+            MM2_DBG("MM2 DBG: TitleScreen character UI bootstrap FAIL\n");
+            pending_character_ui_ = PendingCharacterUiEntry::None;
+            setState(TitleState::TitleMenu, "character UI bootstrap fail");
+            return false;
+        }
+#if MM2_HOST_AMIGA
+        items_dat_ = nullptr;
+        items_dat_size_ = 0;
+        has_items_dat_ = false;
+#endif
+        character_ui_ready_ = true;
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+        MM2_DBG("MM2 DBG: TitleScreen character UI ready, chip free %lu\n",
+                (unsigned long)memGetFreeChipSize());
+#endif
+    }
+
+    switch (pending_character_ui_) {
+    case PendingCharacterUiEntry::ViewParty:
+        character_ui_.startViewParty(roster_);
+        break;
+    case PendingCharacterUiEntry::CreateCharacter:
+        character_ui_.prepareCreateCharacterAssets();
+        character_ui_.startCreateCharacter(roster_);
+        break;
+    case PendingCharacterUiEntry::ChooseParty:
+        character_ui_.startChooseParty(roster_);
+        break;
+    case PendingCharacterUiEntry::None:
+        break;
+    }
+    pending_character_ui_ = PendingCharacterUiEntry::None;
     return true;
+}
+
+void TitleScreen::releaseCharacterUi()
+{
+    if (character_ui_ready_) {
+        character_ui_.shutdown();
+        character_ui_ready_ = false;
+    }
 }
 
 void TitleScreen::shutdown()
@@ -369,6 +476,10 @@ void TitleScreen::shutdown()
     releaseIntroClips();
     releaseLogoAsset();
     mm2_image32_free(&book_);
+#if MM2_HOST_AMIGA
+    releaseItemsDat();
+    mm2_amiga_ui_cache_destroy();
+#endif
 }
 
 void TitleScreen::releaseIntroClips()
@@ -399,6 +510,7 @@ void TitleScreen::invalidateTitleMenuPaint()
     mm2_amiga_ui_cache_invalidate();
     title_menu_painted_ = false;
     title_menu_painted_book_frame_ = -1;
+    /* s_ui_cache_bm kept alive — do not bitmapDestroy from setState/tick (stack). */
 }
 #endif
 
@@ -406,6 +518,9 @@ void TitleScreen::skipLogoToTitle()
 {
     setState(TitleState::TitleAttract, "logo done or skipped");
 #if MM2_HOST_AMIGA
+    platform::logoFadeCancel();
+    logo_fade_armed_ = false;
+    logo_fade_out_armed_ = false;
     /* Do not releaseLogoAsset() here — bitmapDestroy + ACE_DEBUG memCheckIntegrity
      * overflows the 4K Bartman stack from this deep tick() call chain. nwcp stays
      * loaded until shutdown (~17 KB chip); intro.32 is already in memory. */
@@ -471,12 +586,6 @@ void TitleScreen::blitIntroClipFrame(int frame_index, int x, int y)
 void TitleScreen::drawIntroPegasus(bool animate_overlays)
 {
 #if MM2_HOST_AMIGA
-    if (animate_overlays && has_intro_ && overlay_phase_ == pegasus_painted_overlay_phase_
-        && peeker_visible_ == pegasus_painted_peeker_visible_
-        && peeker_slot_ == pegasus_painted_peeker_slot_) {
-        /* ACE simpleBuffer DB: composite already in the alternating buffers. */
-        return;
-    }
     pegasus_painted_overlay_phase_ = overlay_phase_;
 #if MM2_HOST_AMIGA && defined(ACE_DEBUG)
     MM2_DBG("MM2 DBG: Draw TitleAttract intro=%d overlay_phase=%d peeker=%d\n", has_intro_ ? 1 : 0,
@@ -484,8 +593,8 @@ void TitleScreen::drawIntroPegasus(bool animate_overlays)
 #endif
     pegasus_painted_peeker_visible_ = peeker_visible_;
     pegasus_painted_peeker_slot_ = peeker_slot_;
-    /* Full redraw: clear playfield then background (retail keeps intro.32 under logo/menu;
-     * attract path does not reuse the logo clear). */
+    /* Always composite to pBack — skipping redraw leaves the alternate DB buffer
+     * stale (e.g. nwcp logo) and causes a flash when ACE swaps front/back. */
     platform::clearScreen();
     if (has_intro_) {
         platform::blitImage32(&intro_, 0, kIntroBgX, kIntroBgY, 1);
@@ -554,11 +663,18 @@ void TitleScreen::drawAttract()
 void TitleScreen::drawLogoSplash()
 {
 #if MM2_HOST_AMIGA
-    platform::clearScreen();
     if (has_nwcp_ && nwcp_.frames[0].bitmap) {
+        if (state_ == TitleState::LogoFadeIn && !logo_fade_armed_) {
+            mm2_amiga_stage_asset_palette(&nwcp_);
+            platform::logoFadeCapturePalette();
+            platform::logoFadeBeginIn(kFadeTicks);
+            logo_fade_armed_ = true;
+        }
+        platform::clearScreen();
         const int logo_y = (gfx::ScreenCompositor::kHeight - static_cast<int>(nwcp_.frames[0].height)) / 2;
         platform::blitImage32(&nwcp_, 0, logo_splash_x_, logo_y, 0);
-        platform::logoFadeCapturePalette();
+    } else {
+        platform::clearScreen();
     }
 #else
     compositor_.clear(0, 0, 0, 255);
@@ -733,7 +849,6 @@ void TitleScreen::buildTitleMenuCache()
 void TitleScreen::drawTitleMenu()
 {
 #if MM2_HOST_AMIGA
-    buildTitleMenuCache();
     presentTitleMenu();
     return;
 #endif
@@ -823,14 +938,7 @@ void TitleScreen::render()
         drawAttract();
         break;
     case TitleState::TitleMenu:
-#if MM2_HOST_AMIGA
-        if (!mm2_amiga_ui_cache_ready()) {
-            buildTitleMenuCache();
-        }
-        presentTitleMenu();
-#else
         drawTitleMenu();
-#endif
         break;
     case TitleState::Controls:
         drawControls();
@@ -839,6 +947,10 @@ void TitleScreen::render()
         drawOptions();
         break;
     case TitleState::CharacterUi:
+#if MM2_HOST_AMIGA
+        platform::clearScreen();
+        platform::applyUiPalette();
+#endif
         if (character_ui_ready_) {
             character_ui_.render(compositor_);
         }
@@ -860,14 +972,26 @@ void TitleScreen::tick(const platform::KeyState &keys)
         }
 
 #if MM2_HOST_AMIGA
-        /* Fades off: static nwcp logo at full palette, then attract (or key to skip).
-         * Hold is timed off the VBlank frame clock, not loop iterations. */
-        if (state_ == TitleState::LogoHold) {
+        if (state_ == TitleState::LogoFadeIn) {
+            if (platform::logoFadeConsumeDone()) {
+                setState(TitleState::LogoHold, "fade in done");
+                logo_hold_until_ = 0;
+            }
+        } else if (state_ == TitleState::LogoHold) {
             const uint32_t now = platform::nowTicks();
             if (logo_hold_until_ == 0) {
                 logo_hold_until_ = now + static_cast<uint32_t>(kLogoHoldAmigaTicks);
             }
             if (tickReached(now, logo_hold_until_)) {
+                setState(TitleState::LogoFadeOut, "hold done");
+                logo_fade_out_armed_ = false;
+            }
+        } else if (state_ == TitleState::LogoFadeOut) {
+            if (!logo_fade_out_armed_) {
+                platform::logoFadeBeginOut(kFadeTicks);
+                logo_fade_out_armed_ = true;
+            }
+            if (platform::logoFadeConsumeDone()) {
                 skipLogoToTitle();
             }
         }
@@ -904,6 +1028,9 @@ void TitleScreen::tick(const platform::KeyState &keys)
     }
 
     if (state_ == TitleState::CharacterUi) {
+        if (pending_character_ui_ != PendingCharacterUiEntry::None) {
+            return;
+        }
         if (!character_ui_ready_) {
             setState(TitleState::TitleMenu, "character UI not ready");
             return;
@@ -914,6 +1041,7 @@ void TitleScreen::tick(const platform::KeyState &keys)
                 quit_ = true;
                 return;
             }
+            releaseCharacterUi();
             setState(TitleState::TitleMenu, "character UI done");
         }
         return;
@@ -939,6 +1067,8 @@ void TitleScreen::tick(const platform::KeyState &keys)
         return;
     }
 
+    /* Title menu only: book animation + menu keys. Sub-screens (Controls/Options/CharacterUi)
+     * are exclusive — render() switch draws one layer; tick must not advance menu state. */
     if (state_ == TitleState::TitleMenu) {
         tickBookAnimation();
         if (keys.escape) {
@@ -952,19 +1082,19 @@ void TitleScreen::tick(const platform::KeyState &keys)
         }
         {
             const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
-            if (ch == 'V' && has_roster_ && ensureCharacterUi()) {
+            if (ch == 'V' && has_roster_) {
+                pending_character_ui_ = PendingCharacterUiEntry::ViewParty;
                 setState(TitleState::CharacterUi, "menu V view party");
-                character_ui_.startViewParty(roster_);
                 return;
             }
-            if ((keys.key_c || ch == 'C') && has_roster_ && ensureCharacterUi()) {
+            if ((keys.key_c || ch == 'C') && has_roster_) {
+                pending_character_ui_ = PendingCharacterUiEntry::CreateCharacter;
                 setState(TitleState::CharacterUi, "menu C create");
-                character_ui_.startCreateCharacter(roster_);
                 return;
             }
-            if (ch == 'G' && has_roster_ && ensureCharacterUi()) {
+            if (ch == 'G' && has_roster_) {
+                pending_character_ui_ = PendingCharacterUiEntry::ChooseParty;
                 setState(TitleState::CharacterUi, "menu G goto town");
-                character_ui_.startChooseParty(roster_);
                 return;
             }
         }

@@ -23,6 +23,7 @@
 #include <ace/managers/viewport/simplebuffer.h>
 #include <ace/utils/bitmap.h>
 #include <ace/utils/extview.h>
+#include <ace/utils/palette.h>
 
 #ifdef ACE_DEBUG
 #include <ace/managers/log.h>
@@ -144,7 +145,9 @@ void mm2AmigaDisplayFrameEnd(void)
     if (!s_display.pView || !s_display.pVp) {
         return;
     }
-    /* Logo/title fades disabled while validating planar blits (mm2_fade_process dims palette). */
+    if (s_display.pFade) {
+        mm2_fade_process(s_display.pFade);
+    }
     /* ACE simpleBuffer: updates copper to pBack, then swaps pBack/pFront. */
     viewProcessManagers(s_display.pView);
     copProcessBlocks();
@@ -192,9 +195,22 @@ void mm2AmigaFadeCapturePalette(void)
 
 void mm2AmigaFadeBeginIn(UBYTE ubFrames)
 {
-    if (s_display.pFade) {
-        mm2_fade_set(s_display.pFade, MM2_FADE_STATE_IN, ubFrames, NULL);
+    if (!s_display.pFade || !s_display.pVp || !s_display.pView) {
+        return;
     }
+    mm2_fade_set(s_display.pFade, MM2_FADE_STATE_IN, ubFrames, NULL);
+#ifdef ACE_USE_AGA_FEATURES
+    paletteDimAga(
+        (ULONG *)s_display.pFade->pPaletteRef,
+        (ULONG *)s_display.pVp->pPalette,
+        s_display.pFade->ubColorCount, 0);
+#else
+    paletteDimOcs(
+        (UWORD *)s_display.pFade->pPaletteRef,
+        (volatile UWORD *)s_display.pVp->pPalette,
+        s_display.pFade->ubColorCount, 0);
+#endif
+    viewUpdateGlobalPalette(s_display.pView);
 }
 
 void mm2AmigaFadeBeginOut(UBYTE ubFrames)
@@ -211,6 +227,44 @@ UBYTE mm2AmigaFadeConsumeDone(void)
     }
     s_display.pFade->eState = MM2_FADE_STATE_IDLE;
     return 1;
+}
+
+void mm2AmigaFadeCancel(void)
+{
+    UBYTE i;
+
+    if (!s_display.pFade || !s_display.pVp || !s_display.pView) {
+        return;
+    }
+    if (s_display.pFade->eState == MM2_FADE_STATE_IDLE
+        || s_display.pFade->eState == MM2_FADE_STATE_EVENT_FIRED) {
+        s_display.pFade->eState = MM2_FADE_STATE_IDLE;
+        return;
+    }
+#ifdef ACE_USE_AGA_FEATURES
+    {
+        ULONG *pRef = (ULONG *)s_display.pFade->pPaletteRef;
+        ULONG *pVpPal = (ULONG *)s_display.pVp->pPalette;
+        if (pRef && pVpPal) {
+            for (i = 0; i < s_display.pFade->ubColorCount; ++i) {
+                pVpPal[i] = pRef[i];
+            }
+        }
+    }
+#else
+    {
+        UWORD *pRef = (UWORD *)s_display.pFade->pPaletteRef;
+        UWORD *pVpPal = (UWORD *)s_display.pVp->pPalette;
+        if (pRef && pVpPal) {
+            for (i = 0; i < s_display.pFade->ubColorCount; ++i) {
+                pVpPal[i] = pRef[i];
+            }
+        }
+    }
+#endif
+    viewUpdateGlobalPalette(s_display.pView);
+    s_display.pFade->eState = MM2_FADE_STATE_IDLE;
+    s_display.pFade->ubCnt = 0;
 }
 
 Mm2AmigaDisplay *mm2AmigaDisplayGet(void) { return &s_display; }

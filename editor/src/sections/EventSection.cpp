@@ -1,9 +1,13 @@
 #include "sections/EventSection.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <set>
+#include <sstream>
 #include <vector>
 
 #include "app/App.h"
@@ -11,6 +15,7 @@
 #include "core/EventOps.h"
 #include "imgui.h"
 #include "imnodes.h"
+#include "portable-file-dialogs.h"
 #include "widgets/UiLayout.h"
 
 namespace mm2 {
@@ -33,6 +38,19 @@ void popNodeStyle() {
     ImNodes::PopColorStyle();
     ImNodes::PopColorStyle();
     ImNodes::PopColorStyle();
+}
+
+void applyEditorMouseWheelZoom() {
+    if (!ImNodes::IsEditorHovered()) return;
+    const float wheel = ImGui::GetIO().MouseWheel;
+    if (wheel == 0.0f) return;
+
+    constexpr float kStep = 0.1f;
+    constexpr float kMinZoom = 0.25f;
+    constexpr float kMaxZoom = 4.0f;
+    const float zoom =
+        std::clamp(ImNodes::EditorContextGetZoom() + wheel * kStep, kMinZoom, kMaxZoom);
+    ImNodes::EditorContextSetZoom(zoom, ImGui::GetMousePos());
 }
 
 constexpr NodeColors kTrigColors{
@@ -76,6 +94,133 @@ static inline int kEvtIn(int e)      { return 0x50000 + e; }
 static inline int kOpOut(int e, int i)  { return 0x60000 + e * 256 + i; }
 static inline int kStrIn(int s)      { return 0x70000 + s; }
 static inline int kStaticAttr(int e, int i) { return 0x80000 + e * 256 + i; }
+
+static std::string blockColorForLine(const std::string& line) {
+    if (line.find("if ") == 0 || line.find("else") == 0) return "branch";
+    if (line.find("say") == 0) return "say";
+    if (line.find("quest ") == 0 || line.find("shop ") == 0) return "action";
+    if (line == "abort" || line == "end") return "flow";
+    return "other";
+}
+
+void EventSection::refreshDslCache(App& app) {
+    dslScriptBlocks_.clear();
+    dslCacheLoc_ = selectedLoc_;
+    if (app.state().dataDir.empty()) return;
+
+    const std::string tmpPath = app.state().dataDir + "/.mm2ed_dsl_cache.mm2evt";
+    const std::string toolsDir = app.state().dataDir + "/tools";
+    const std::string eventPath = app.state().dataDir + "/event.dat";
+
+    std::ostringstream cmd;
+#ifdef _WIN32
+    cmd << "cd /d \"" << toolsDir << "\" && python -m mm2_event_lang decompile -l "
+        << selectedLoc_ << " --output \"" << tmpPath << "\" \"" << eventPath << "\"";
+#else
+    cmd << "cd \"" << toolsDir << "\" && python -m mm2_event_lang decompile -l "
+        << selectedLoc_ << " --output \"" << tmpPath << "\" \"" << eventPath << "\"";
+#endif
+    if (std::system(cmd.str().c_str()) != 0) return;
+
+    std::ifstream in(tmpPath);
+    if (!in) return;
+    std::string line;
+    int currentEvt = -1;
+    while (std::getline(in, line)) {
+        if (line.rfind("script ", 0) == 0) {
+            auto at = line.find("@event ");
+            if (at != std::string::npos)
+                currentEvt = std::stoi(line.substr(at + 7));
+            else
+                currentEvt = -1;
+            continue;
+        }
+        if (currentEvt < 0) continue;
+        if (line.empty()) continue;
+        if (line[0] == ' ') {
+            std::string trimmed = line;
+            trimmed.erase(0, trimmed.find_first_not_of(' '));
+            if (!trimmed.empty()) dslScriptBlocks_[currentEvt].push_back(trimmed);
+        }
+    }
+}
+
+void EventSection::exportDsl(App& app) {
+    if (app.state().dataDir.empty()) return;
+    auto path = pfd::save_file("Export location as .mm2evt", "loc_" + std::to_string(selectedLoc_) + ".mm2evt",
+                               {"MM2 Event Script", "*.mm2evt", "All", "*"})
+                      .result();
+    if (path.empty()) return;
+
+    const std::string toolsDir = app.state().dataDir + "/tools";
+    const std::string eventPath = app.state().dataDir + "/event.dat";
+    std::ostringstream cmd;
+#ifdef _WIN32
+    cmd << "cd /d \"" << toolsDir << "\" && python -m mm2_event_lang decompile -l "
+        << selectedLoc_ << " --output \"" << path << "\" \"" << eventPath << "\"";
+#else
+    cmd << "cd \"" << toolsDir << "\" && python -m mm2_event_lang decompile -l "
+        << selectedLoc_ << " --output \"" << path << "\" \"" << eventPath << "\"";
+#endif
+    if (std::system(cmd.str().c_str()) == 0)
+        app.state().status = "Exported " + path;
+    else
+        app.state().status = "DSL export failed (is Python on PATH?)";
+}
+
+void EventSection::importDsl(App& app) {
+    if (app.state().dataDir.empty()) return;
+    auto paths = pfd::open_file("Import .mm2evt location", ".",
+                                {"MM2 Event Script", "*.mm2evt", "All Files", "*"})
+                       .result();
+    if (paths.empty()) return;
+    const std::string path = paths[0];
+
+    const std::string toolsDir = app.state().dataDir + "/tools";
+    const std::string eventPath = app.state().dataDir + "/event.dat";
+    const std::string outPath = app.state().dataDir + "/event.dat";
+    std::ostringstream cmd;
+#ifdef _WIN32
+    cmd << "cd /d \"" << toolsDir << "\" && python -m mm2_event_lang patch-loc -l "
+        << selectedLoc_ << " \"" << path << "\" --original \"" << eventPath << "\" -o \""
+        << outPath << "\"";
+#else
+    cmd << "cd \"" << toolsDir << "\" && python -m mm2_event_lang patch-loc -l "
+        << selectedLoc_ << " \"" << path << "\" --original \"" << eventPath << "\" -o \""
+        << outPath << "\"";
+#endif
+    if (std::system(cmd.str().c_str()) == 0) {
+        load(app.state().dataDir);
+        dslCacheLoc_ = -1;
+        layoutForLoc_ = -1;
+        app.state().status = "Imported " + path + " -> event.dat";
+    } else {
+        app.state().status = "DSL import failed (is Python on PATH?)";
+    }
+}
+
+void EventSection::drawBlockScript(int evt, const std::vector<std::string>& lines) {
+    ImNodes::BeginStaticAttribute(kStaticAttr(evt, 9000));
+    if (lines.empty()) {
+        ImGui::TextDisabled("(no lifted script — toggle off Block view for hex)");
+    } else {
+        for (size_t i = 0; i < lines.size(); ++i) {
+            const std::string& ln = lines[i];
+            const char* cat = blockColorForLine(ln).c_str();
+            ImU32 col = IM_COL32(200, 200, 200, 255);
+            if (std::string(cat) == "say") col = IM_COL32(120, 220, 160, 255);
+            else if (std::string(cat) == "branch") col = IM_COL32(240, 180, 90, 255);
+            else if (std::string(cat) == "action") col = IM_COL32(140, 180, 255, 255);
+            else if (std::string(cat) == "flow") col = IM_COL32(255, 120, 120, 255);
+            ImGui::PushStyleColor(ImGuiCol_Text, col);
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 420.0f);
+            ImGui::TextUnformatted(ln.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::PopStyleColor();
+        }
+    }
+    ImNodes::EndStaticAttribute();
+}
 
 bool EventSection::load(const std::string& dataDir) {
     loaded = file_.load(dataDir + "/" + fileName());
@@ -122,9 +267,21 @@ void EventSection::draw(App& app) {
     const ImGuiStyle& st = ImGui::GetStyle();
     float cbW = ImGui::GetFrameHeight() + st.ItemInnerSpacing.x +
                 ImGui::CalcTextSize("String nodes").x;
-    float btnW = ImGui::CalcTextSize("Relayout").x + st.FramePadding.x * 2.f;
-    ui::SameLineRightAlign(cbW + st.ItemSpacing.x + btnW);
+    float btnExportW = ImGui::CalcTextSize("Export .mm2evt").x + st.FramePadding.x * 2.f;
+    float btnImportW = ImGui::CalcTextSize("Import .mm2evt").x + st.FramePadding.x * 2.f;
+    float btnRelayoutW = ImGui::CalcTextSize("Relayout").x + st.FramePadding.x * 2.f;
+    float blockW = ImGui::GetFrameHeight() + st.ItemInnerSpacing.x +
+                   ImGui::CalcTextSize("Block view").x;
+    ui::SameLineRightAlign(cbW + blockW + st.ItemSpacing.x * 4 + btnExportW + btnImportW +
+                           btnRelayoutW);
+    ImGui::Checkbox("Block view", &blockView_);
+    if (blockView_ && dslCacheLoc_ != selectedLoc_) refreshDslCache(app);
+    ImGui::SameLine();
     ImGui::Checkbox("String nodes", &showStrings_);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Export .mm2evt")) exportDsl(app);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Import .mm2evt")) importDsl(app);
     ImGui::SameLine();
     if (ImGui::SmallButton("Relayout")) layoutForLoc_ = -1;
 
@@ -140,8 +297,8 @@ void EventSection::draw(App& app) {
         ImGui::PopStyleColor();
     }
     ImGui::TextDisabled(
-        "Drag nodes to arrange. Edit the hex byte fields to patch opcode "
-        "arguments / trigger flags in place; File > Save writes event.dat.");
+        "Drag nodes to arrange. Hex fields patch in place; use Export/Import .mm2evt "
+        "for structural edits. Block view shows readable script statements.");
     ImGui::TextDisabled("Colors:");
     ImGui::SameLine();
     ImGui::PushStyleColor(ImGuiCol_Text, kTrigColors.title);
@@ -296,6 +453,9 @@ void EventSection::drawGraph(App& app, EventLocation& loc) {
                 ImNodes::BeginStaticAttribute(kStaticAttr(evt, 0));
                 ImGui::TextDisabled("(empty)");
                 ImNodes::EndStaticAttribute();
+            } else if (blockView_) {
+                auto it = dslScriptBlocks_.find(evt);
+                drawBlockScript(evt, it != dslScriptBlocks_.end() ? it->second : std::vector<std::string>{});
             } else {
                 const int opCount = static_cast<int>(seg.ops.size());
                 for (int oi = 0; oi < opCount; ++oi) {
@@ -405,6 +565,7 @@ void EventSection::drawGraph(App& app, EventLocation& loc) {
 
     ImNodes::MiniMap(0.2f, ImNodesMiniMapLocation_BottomRight);
     ImNodes::EndNodeEditor();
+    applyEditorMouseWheelZoom();
 
     if (doLayout) layoutForLoc_ = selectedLoc_;
 }

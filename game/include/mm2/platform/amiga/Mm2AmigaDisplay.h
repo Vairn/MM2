@@ -36,6 +36,8 @@ void mm2AmigaFadeBeginIn(UBYTE ubFrames);
 void mm2AmigaFadeBeginOut(UBYTE ubFrames);
 /** Returns 1 once when fade finished; clears fired state. */
 UBYTE mm2AmigaFadeConsumeDone(void);
+/** Abort an in-progress fade and restore the captured reference palette. */
+void mm2AmigaFadeCancel(void);
 
 #ifdef __cplusplus
 }

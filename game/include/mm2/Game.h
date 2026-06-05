@@ -19,6 +19,8 @@ private:
     const char *data_dir_ = nullptr;
     bool quit_ = false;
     Phase phase_ = Phase::Title;
+    bool pending_in_town_start_ = false;
+    Mm2PartyLaunch pending_launch_{};
 
     TitleScreen title_;
     GameSession session_;

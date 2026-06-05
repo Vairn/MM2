@@ -35,7 +35,19 @@ ScreenCompositor::~ScreenCompositor()
 
 void ScreenCompositor::clear(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    if (!rgba_) { return; }
+#if MM2_HOST_AMIGA
+    if (!rgba_) {
+        if (r == 0 && g == 0 && b == 0 && a >= 255) {
+            mm2_amiga_clear_screen();
+        } else {
+            mm2_amiga_fill_rect_rgb(0, 0, kWidth, kHeight, r, g, b, a);
+        }
+        return;
+    }
+#endif
+    if (!rgba_) {
+        return;
+    }
     for (int i = 0; i < kWidth * kHeight; ++i) {
         rgba_[i * 4 + 0] = r;
         rgba_[i * 4 + 1] = g;

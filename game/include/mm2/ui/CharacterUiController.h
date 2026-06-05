@@ -20,11 +20,16 @@ enum class CharacterUiMode {
 
 class CharacterUiController {
 public:
+    bool attachAndLoad(const char *data_dir, CharacterUiKind kind, uint8_t *items_dat = nullptr,
+                       std::size_t items_size = 0);
+    bool initBackend(CharacterUiKind kind);
+    bool loadDataFiles();
     bool init(const char *data_dir, CharacterUiKind kind);
     void shutdown();
 
     void startViewParty(Mm2RosterFile &roster);
     void startCreateCharacter(Mm2RosterFile &roster, int slot = -1);
+    void prepareCreateCharacterAssets();
     void startChooseParty(Mm2RosterFile &roster);
 
     CharacterUiMode mode() const { return mode_; }
@@ -40,7 +45,12 @@ public:
     bool takePartyLaunch(Mm2PartyLaunch *out);
 
 private:
+#if MM2_HOST_AMIGA
+    ICharacterUi *ui_ = nullptr;
+#else
     std::unique_ptr<ICharacterUi> ui_;
+#endif
+    const char *data_dir_ = nullptr;
     CharacterUiMode mode_ = CharacterUiMode::None;
     Mm2RosterFile *roster_ = nullptr;
     int create_slot_ = -1;

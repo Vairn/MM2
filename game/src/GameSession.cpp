@@ -6,6 +6,9 @@
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/gfx/View3D.h"
+#if MM2_HOST_AMIGA
+#include "mm2/platform/Platform.h"
+#endif
 
 namespace mm2 {
 
@@ -20,11 +23,17 @@ void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int f
     }
 
     const mm2_image32_frame &f = img.frames[frame];
+#if MM2_HOST_AMIGA
+    if (!f.bitmap) {
+        return;
+    }
+    platform::blitImage32(&img, frame, dst_x, dst_y, 1);
+#else
     if (!f.rgba) {
         return;
     }
-
     c.blitRgba(f.rgba, f.width, f.height, dst_x, dst_y);
+#endif
 }
 
 }  // namespace
@@ -69,7 +78,14 @@ bool GameSession::loadImage(const char *name, mm2_image32_file *out)
     }
 
     ::memset(out, 0, sizeof(*out));
-    return mm2_image32_load_file(path, out) == MM2_IMAGE32_OK && out->frame_count > 0 && out->frames[0].rgba;
+    if (mm2_image32_load_file(path, out) != MM2_IMAGE32_OK || out->frame_count == 0) {
+        return false;
+    }
+#if MM2_HOST_AMIGA
+    return out->frames[0].bitmap != nullptr;
+#else
+    return out->frames[0].rgba != nullptr;
+#endif
 }
 
 bool GameSession::loadMapVisualPage(int screen_idx, uint8_t *out_page)

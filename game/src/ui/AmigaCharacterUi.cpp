@@ -8,6 +8,9 @@
 #include "mm2/Mm2Dbg.h"
 #include "mm2/platform/Platform.h"
 #include "mm2/runtime/PathScratch.h"
+#if MM2_HOST_AMIGA
+#include "mm2/platform/amiga/mm2_amiga_file.h"
+#endif
 #include "mm2_create_character.h"
 #include "mm2_image32_codec.h"
 #include "mm2_party_launch.h"
@@ -445,9 +448,36 @@ public:
     {
         data_dir_ = data_dir;
         MM2_DBG("MM2 DBG: CharacterUi init\n");
-        loadItems();
         return true;
     }
+
+    bool loadDataFiles() override
+    {
+        loadItems();
+        return has_items_;
+    }
+
+    bool adoptItemNames(uint8_t *data, std::size_t size) override
+    {
+        if (item_names_) {
+            platform::freeFileBuffer(item_names_);
+            item_names_ = nullptr;
+        }
+        item_names_ = data;
+        has_items_ = false;
+        if (!data) {
+            return false;
+        }
+        if (size < static_cast<std::size_t>(kItemRecordSize * kItemCount)) {
+            MM2_DBG("MM2 DBG: items.dat adopt FAIL (size %lu)\n", (unsigned long)size);
+            return false;
+        }
+        has_items_ = true;
+        MM2_DBG("MM2 DBG: items.dat adopt ok (%lu bytes)\n", (unsigned long)size);
+        return true;
+    }
+
+    void prepareCreateCharacterAssets() override { loadThrowAsset(); }
 
     void shutdown() override
     {
@@ -529,7 +559,6 @@ public:
         create_rng_ = 0xC0FFEE01u;
         mm2_create_pending_init(&pending_);
         pending_.class_id = -1;
-        loadThrowAsset();
         startThrowAnimation(true);
     }
 
@@ -677,9 +706,15 @@ private:
             return;
         }
         std::size_t size = 0;
+#if MM2_HOST_AMIGA
+        if (!mm2_amiga_read_file(path, &item_names_, &size)) {
+            return;
+        }
+#else
         if (!platform::readFile(path, &item_names_, &size)) {
             return;
         }
+#endif
         if (size < static_cast<std::size_t>(kItemRecordSize * kItemCount)) {
             platform::freeFileBuffer(item_names_);
             item_names_ = nullptr;
@@ -1785,5 +1820,20 @@ std::unique_ptr<ICharacterUi> makeAmigaCharacterUi()
 {
     return std::make_unique<AmigaCharacterUi>();
 }
+
+#if MM2_HOST_AMIGA
+ICharacterUi *acquireAmigaCharacterUi()
+{
+    static AmigaCharacterUi *s_ui = nullptr;
+    if (!s_ui) {
+        void *mem = mm2_malloc(sizeof(AmigaCharacterUi));
+        if (!mem) {
+            return nullptr;
+        }
+        s_ui = new (mem) AmigaCharacterUi();
+    }
+    return s_ui;
+}
+#endif
 
 }  // namespace mm2::ui
