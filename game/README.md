@@ -148,7 +148,9 @@ Amiga uses `-fno-exceptions -fno-rtti` and `CppStdCompat.h` instead of libstdc++
 
 **6bpp AGA screen** (LoL `screen.c` pattern, `TAG_VPORT_BPP` **6** not LoL’s 8):
 `src/platform/amiga/mm2_amiga_display.c`, defines in `include/mm2/platform/amiga/Mm2AmigaConfig.h`.
-`presentFrame()` refreshes copper; chunky RGBA→planar c2p is still TODO.
+Rendering is planar end-to-end (`mm2_amiga_planar.c`): `.32` assets decode straight
+to bitplanes and blit via ACE — no chunky RGBA buffer and no c2p needed.
+`presentFrame()` ignores the RGBA argument and just paces/refreshes the display.
 
 ## Conventions
 
