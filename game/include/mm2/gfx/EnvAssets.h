@@ -8,13 +8,13 @@
 //   -$7A16/-$7A12/-$7A0E outdoor sheets   -$7A02 sky (global, entry 6,
 //   loaded once @ 0x25FA6)   -$7A0A biome floor decor (outdoor)
 //
-// Milestone 1 loads only the sheets the indoor 3D view composites:
-// walls (-$7A06), floor (-$7A22) and the global sky.32 (-$7A02). The other
-// roles are carried as data-driven table entries; loading them is wired but
-// deferred (ceiling/auto-map/outdoor passes are not rendered yet).
+// Indoor milestone: walls (-$7A06), floor (-$7A22), global sky.32 (-$7A02).
+// Outdoor milestone: outf.32 floor, sky.32, outdoor1/2/3.32 horizon layers,
+// biome decor sheets (desert/ocean/tundra/swamp).
 
 #include "mm2/CppStdCompat.h"
 
+#include "mm2/gfx/OutdoorView3D.h"
 #include "mm2_attrib_codec.h"
 #include "mm2_image32_codec.h"
 
@@ -47,7 +47,7 @@ public:
     /* Load the global sky sheet (sky.32, filename-table entry 6). */
     bool loadGlobal(const char *data_dir);
 
-    /* (Re)load the per-environment wall + floor sheets. */
+    /* (Re)load the per-environment sheets for the active view mode. */
     bool loadEnv(const char *data_dir, EnvKind kind);
 
     void unloadAll();
@@ -59,16 +59,25 @@ public:
     const mm2_image32_file &floor() const { return floor_; }
     const mm2_image32_file &sky() const { return sky_; }
 
+    const mm2_image32_file &horizonSheet(OutdoorHorizonSheet sheet) const;
+    const mm2_image32_file &biomeSheet(OutdoorBiome biome);
+
 private:
     static bool loadImage(const char *data_dir, const char *name, mm2_image32_file *out);
 
     EnvKind kind_ = EnvKind::Town;
     bool env_ok_ = false;
     bool sky_ok_ = false;
+    const char *data_dir_ = nullptr;
 
     mm2_image32_file walls_{};
     mm2_image32_file floor_{};
     mm2_image32_file sky_{};
+    mm2_image32_file outdoor1_{};
+    mm2_image32_file outdoor2_{};
+    mm2_image32_file outdoor3_{};
+    mm2_image32_file biomes_[4]{};
+    bool biome_loaded_[4]{};
 };
 
 }  // namespace mm2::gfx

@@ -14,7 +14,7 @@
 | (3,3) | `0x33` | **8** | ANY_DIR |
 | (3,4) | `0x34` | **10** | ANY_DIR |
 | (3,5) | `0x35` | **9** | ANY_DIR |
-| (3,13) | `0x3D` | **4** | DIR_SPECIAL |
+| (3,13) | `0x3D` | **4** | DIR_E? |
 | (4,10) | `0x4A` | **9** | ANY_DIR |
 | (4,12) | `0x4C` | **10** | ANY_DIR |
 | (4,13) | `0x4D` | **13** | ANY_DIR |
@@ -103,7 +103,7 @@
 12: end_script()
 ```
 
-**Event 04** — triggers: (3,13)/DIR_SPECIAL
+**Event 04** — triggers: (3,13)/DIR_E?
 
 ```hex
 06 06

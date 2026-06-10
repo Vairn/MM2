@@ -1,16 +1,11 @@
 #include "mm2/events/ScriptedSceneEngine.h"
 
 #include "mm2/DataPath.h"
-#include "mm2/platform/Platform.h"
 #include "mm2/runtime/PathScratch.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/View3D.h"
 
-#include "mm2_anm_codec.h"
-#include "mm2_anm_preview.h"
-
-#include <cstdlib>
-#include <cstring>
+#include "mm2/CppStdCompat.h"
 
 namespace mm2::events {
 
@@ -19,16 +14,9 @@ namespace {
 using namespace gfx;
 using namespace gfx::play_layout;
 
-/* monsters.dat #131 Pegasus picture &0x7F = 21 → 21.anm via sign_sprite_load @ 0x316E / 0x9A30. */
-constexpr int kPegasusMonsterAnmId = 21;
-
-void blitRgba(gfx::ScreenCompositor &c, const uint8_t *rgba, int w, int h, int dst_x, int dst_y)
-{
-    if (!rgba || w <= 0 || h <= 0) {
-        return;
-    }
-    c.blitRgba(rgba, w, h, dst_x, dst_y);
-}
+/* monsters.dat #131 Pegasus picture &0x7F = 21 → 21.anm on disk. */
+constexpr int kPegasusMonsterAnmDisk = 21;
+constexpr int kGhostAnmDisk = 51;
 
 }  // namespace
 
@@ -71,20 +59,9 @@ void ScriptedSceneEngine::unload()
         mm2_event_free(&event_file_);
         event_loaded_ = false;
     }
-    if (pegasus_rgba_) {
-        std::free(pegasus_rgba_);
-        pegasus_rgba_ = nullptr;
-    }
-    pegasus_w_ = 0;
-    pegasus_h_ = 0;
+    pegasus_sprite_.unload();
+    ghost_sprite_.unload();
     has_pegasus_sprite_ = false;
-
-    if (ghost_rgba_) {
-        std::free(ghost_rgba_);
-        ghost_rgba_ = nullptr;
-    }
-    ghost_w_ = 0;
-    ghost_h_ = 0;
     has_ghost_sprite_ = false;
     pegasus_sign_.unload();
     has_pegasus_sign_ = false;
@@ -98,48 +75,15 @@ void ScriptedSceneEngine::unload()
     text_.reset();
 }
 
-bool ScriptedSceneEngine::tryLoadAnm(const char *data_dir, int anm_id, uint8_t **rgba_out, int *w_out,
-                                     int *h_out)
-{
-    if (!data_dir || anm_id <= 0 || !rgba_out || !w_out || !h_out) {
-        return false;
-    }
-
-    char *path = mm2_path_scratch_a();
-    char name[16];
-    std::snprintf(name, sizeof(name), "%02d.anm", anm_id);
-    if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir, name)) {
-        return false;
-    }
-
-    mm2_anm_file anm{};
-    if (mm2_anm_load_file(path, &anm) != MM2_ANM_OK) {
-        return false;
-    }
-
-    mm2_anm_composite_rgba comp{};
-    if (!mm2_anm_composite_frame0_rgba(&anm, &comp)) {
-        mm2_anm_free(&anm);
-        return false;
-    }
-    mm2_anm_free(&anm);
-
-    *w_out = comp.width;
-    *h_out = comp.height;
-    *rgba_out = comp.rgba;
-    return true;
-}
-
 bool ScriptedSceneEngine::tryLoadGhostAnm(const char *data_dir)
 {
-    has_ghost_sprite_ = tryLoadAnm(data_dir, 51, &ghost_rgba_, &ghost_w_, &ghost_h_);
+    has_ghost_sprite_ = ghost_sprite_.loadFromDiskIndex(data_dir, kGhostAnmDisk);
     return has_ghost_sprite_;
 }
 
 bool ScriptedSceneEngine::tryLoadPegasusAnm(const char *data_dir)
 {
-    has_pegasus_sprite_ =
-        tryLoadAnm(data_dir, kPegasusMonsterAnmId, &pegasus_rgba_, &pegasus_w_, &pegasus_h_);
+    has_pegasus_sprite_ = pegasus_sprite_.loadFromDiskIndex(data_dir, kPegasusMonsterAnmDisk);
     return has_pegasus_sprite_;
 }
 
@@ -196,7 +140,7 @@ void ScriptedSceneEngine::beginScene(const SceneSpec *spec)
     pegasus_sign_.unload();
     has_pegasus_sign_ = false;
     if (spec->sign_anm_id > 0 && data_dir_) {
-        has_pegasus_sign_ = pegasus_sign_.loadFromId(data_dir_, spec->sign_anm_id);
+        has_pegasus_sign_ = pegasus_sign_.loadFromTableId(data_dir_, spec->sign_anm_id);
     }
     text_.reset();
     showSceneText(spec);
@@ -269,6 +213,24 @@ void ScriptedSceneEngine::tick(const platform::KeyState &keys)
     }
 }
 
+bool ScriptedSceneEngine::tickAnimation()
+{
+    if (!active()) {
+        return false;
+    }
+
+    bool changed = false;
+    if (scene_id_ == ScriptedSceneId::PegasusC2 && has_pegasus_sprite_) {
+        changed |= pegasus_sprite_.tick();
+    } else if (has_ghost_sprite_) {
+        changed |= ghost_sprite_.tick();
+    }
+    if (has_pegasus_sign_) {
+        changed |= pegasus_sign_.tick();
+    }
+    return changed;
+}
+
 bool ScriptedSceneEngine::blocksInput() const
 {
     return active() && !demo_armed_;
@@ -281,10 +243,10 @@ bool ScriptedSceneEngine::hidesView3D() const
 
 void ScriptedSceneEngine::blitPegasusOverlay(gfx::ScreenCompositor &c) const
 {
-    if (has_pegasus_sprite_ && pegasus_rgba_) {
-        const int dst_x = kView3DOriginX + (kView3DViewportW - pegasus_w_) / 2;
+    if (has_pegasus_sprite_ && pegasus_sprite_.loaded()) {
+        const int dst_x = kView3DOriginX + (kView3DViewportW - pegasus_sprite_.width()) / 2;
         const int dst_y = kView3DSkyY + 8;
-        blitRgba(c, pegasus_rgba_, pegasus_w_, pegasus_h_, dst_x, dst_y);
+        pegasus_sprite_.blitAt(c, dst_x, dst_y);
         return;
     }
     c.drawTextShadow(kView3DOriginX + 8, kView3DSkyY + 48, "(21.anm pegasus sprite missing)", 255, 200, 100);
@@ -307,10 +269,10 @@ void ScriptedSceneEngine::drawGhostPlaceholder(gfx::ScreenCompositor &c) const
 
 void ScriptedSceneEngine::blitGhostOverlay(gfx::ScreenCompositor &c) const
 {
-    if (has_ghost_sprite_ && ghost_rgba_) {
-        const int dst_x = kView3DOriginX + (kView3DViewportW - ghost_w_) / 2;
+    if (has_ghost_sprite_ && ghost_sprite_.loaded()) {
+        const int dst_x = kView3DOriginX + (kView3DViewportW - ghost_sprite_.width()) / 2;
         const int dst_y = kView3DSkyY + 8;
-        blitRgba(c, ghost_rgba_, ghost_w_, ghost_h_, dst_x, dst_y);
+        ghost_sprite_.blitAt(c, dst_x, dst_y);
         return;
     }
     drawGhostPlaceholder(c);

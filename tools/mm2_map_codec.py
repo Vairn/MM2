@@ -55,7 +55,8 @@ COLL_S_WALL = 0x10
 COLL_S_DARK = 0x20
 COLL_W_WALL = 0x40
 COLL_EVENT = 0x80   # event flag, NOT west-dark
-COLL_WALL_MASK = 0x7F
+COLL_PASS_WALL_MASK = 0x55  # passability @ 0x9424 AND #$55 (walls only)
+COLL_WALL_MASK = 0x7F       # wall+dark with event stripped (display)
 
 
 def visual_walls(cell: int):

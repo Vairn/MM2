@@ -196,6 +196,13 @@ KeyState pollInput()
         keys.escape = true;
         keys.any_key = true;
     }
+    /* Level-triggered during play: held SPACE/RETURN must survive slow Corak frames. */
+    keys.enter = keyCheck(KEY_RETURN) != 0;
+    keys.space = keyCheck(KEY_SPACE) != 0;
+    if (keys.enter || keys.space) {
+        keys.any_key = true;
+    }
+    /* Edge for menus that want one-shot space (character UI). */
     if (keyUse(KEY_RETURN)) {
         keys.enter = true;
         keys.any_key = true;
@@ -248,6 +255,14 @@ void presentFrame(const uint8_t *rgba, int width, int height)
     mm2AmigaDisplayFrameEnd();
 }
 
+void waitVblank()
+{
+    if (!g_display_ready) {
+        return;
+    }
+    mm2AmigaDisplayWaitVblank();
+}
+
 void clearScreen() { mm2_amiga_clear_screen(); }
 void applyUiPalette() { mm2_amiga_apply_ui_palette(); }
 void logoFadeCapturePalette() { mm2AmigaFadeCapturePalette(); }
@@ -262,6 +277,14 @@ void blitImage32(const ::mm2_image32_file *img, int frame_index, int x, int y, i
     }
     mm2_amiga_blit_frame(img, static_cast<uint16_t>(frame_index), static_cast<UWORD>(x),
                          static_cast<UWORD>(y), opaque ? 1 : 0);
+}
+
+void blitAnmComposed(const ::mm2_anm_composite_planar *img, int x, int y)
+{
+    if (!g_display_ready || !img) {
+        return;
+    }
+    mm2_amiga_blit_anm_composed(img, static_cast<UWORD>(x), static_cast<UWORD>(y));
 }
 
 void setWindowTitle(const char *title) { (void)title; }

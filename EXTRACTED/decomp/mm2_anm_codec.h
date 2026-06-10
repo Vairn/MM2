@@ -57,6 +57,30 @@ mm2_anm_error mm2_anm_load_file(const char *path, mm2_anm_file *out);
 mm2_anm_error mm2_anm_save_file(const char *path, const mm2_anm_file *anm);
 void mm2_anm_free(mm2_anm_file *anm);
 
+/** Parsed (frame,delay)* sequence blocks from sequence_blob (doc 07-anm-tv-format.md). */
+#define MM2_ANM_MAX_SEQUENCE_BLOCKS 16
+#define MM2_ANM_MAX_SEQUENCE_PAIRS 128
+
+typedef struct mm2_anm_sequence_block {
+    uint8_t frame_delay[MM2_ANM_MAX_SEQUENCE_PAIRS * 2];
+    int pair_count;
+} mm2_anm_sequence_block;
+
+typedef struct mm2_anm_sequence_table {
+    mm2_anm_sequence_block blocks[MM2_ANM_MAX_SEQUENCE_BLOCKS];
+    int block_count;
+} mm2_anm_sequence_table;
+
+/** Parse FF-delimited sequence blocks; returns 0 on failure. */
+int mm2_anm_build_sequence_table(const mm2_anm_file *anm, mm2_anm_sequence_table *out);
+
+int mm2_anm_seq_block_pair_count(const mm2_anm_sequence_table *tbl, int block_idx);
+int mm2_anm_seq_frame_at(const mm2_anm_sequence_table *tbl, int block_idx, int step);
+int mm2_anm_seq_delay_at(const mm2_anm_sequence_table *tbl, int block_idx, int step);
+
+/** True when composed playback can advance (multi-frame or non-empty sequence). */
+int mm2_anm_has_animatable_frames(const mm2_anm_file *anm);
+
 #ifdef __cplusplus
 }
 #endif

@@ -171,6 +171,23 @@ static mm2_image32_error decode_palette(const uint8_t *data, size_t pal_off, mm2
 #include <ace/managers/system.h>
 #include <ace/utils/bitmap.h>
 
+/* Mirror ACE bitmap.c chip-plane free (bitmapFreeChipAligned is file-local there). */
+#if defined(ACE_USE_AGA_FEATURES) && defined(ACE_DEBUG)
+static void mm2_bitmap_free_chip_plane(void *pPlane, ULONG ulPlaneBytes)
+{
+    if (pPlane) {
+        memFree((UBYTE *)pPlane - sizeof(ULONG), ulPlaneBytes + sizeof(ULONG));
+    }
+}
+#else
+static void mm2_bitmap_free_chip_plane(void *pPlane, ULONG ulPlaneBytes)
+{
+    if (pPlane) {
+        memFree(pPlane, ulPlaneBytes);
+    }
+}
+#endif
+
 /* Shallow-stack teardown: avoid ACE bitmapDestroy() (logBlockBegin + memCheckIntegrity). */
 static void mm2_image32_destroy_bitmap(tBitMap *pBitMap)
 {
@@ -182,19 +199,30 @@ static void mm2_image32_destroy_bitmap(tBitMap *pBitMap)
     }
     blitWait();
     systemUse();
+    if (pBitMap->Flags & BMF_EXTERNAL) {
+        memFree(pBitMap, sizeof(tBitMap));
+        systemUnuse();
+        return;
+    }
     ulPlaneBytes = (ULONG)pBitMap->BytesPerRow * (ULONG)pBitMap->Rows;
     if (bitmapIsInterleaved(pBitMap)) {
         if (pBitMap->Planes[0]) {
-            memFree(pBitMap->Planes[0], ulPlaneBytes);
+            if (bitmapIsChip(pBitMap)) {
+                mm2_bitmap_free_chip_plane(pBitMap->Planes[0], ulPlaneBytes);
+            } else {
+                memFree(pBitMap->Planes[0], ulPlaneBytes);
+            }
         }
     } else if (pBitMap->Flags & BMF_CONTIGUOUS) {
         if (pBitMap->Planes[0]) {
-            memFree(pBitMap->Planes[0], ulPlaneBytes * (ULONG)pBitMap->Depth);
+            mm2_bitmap_free_chip_plane(
+                pBitMap->Planes[0], ulPlaneBytes * (ULONG)pBitMap->Depth
+            );
         }
     } else {
         for (i = pBitMap->Depth; i--;) {
             if (pBitMap->Planes[i]) {
-                memFree(pBitMap->Planes[i], ulPlaneBytes);
+                mm2_bitmap_free_chip_plane(pBitMap->Planes[i], ulPlaneBytes);
             }
         }
     }

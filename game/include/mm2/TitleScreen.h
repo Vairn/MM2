@@ -77,6 +77,11 @@ public:
 
     void returnToMenu();
 
+#if MM2_HOST_AMIGA
+    /** Drop title/attract CHIP bitmaps before play-mode load (4K-stack / CHIP budget). */
+    void releaseChipForPlayMode();
+#endif
+
     bool shouldQuit() const { return quit_; }
     const gfx::ScreenCompositor &compositor() const { return compositor_; }
     gfx::ScreenCompositor &compositor() { return compositor_; }
@@ -112,6 +117,7 @@ private:
     void pickRandomPeekerSlot();
     void releaseIntroClips();
     void releaseLogoAsset();
+    void ensureAttractAssetsLoaded();
     void drawTitleMenu();
     void buildTitleMenuCache();
     void presentTitleMenu();

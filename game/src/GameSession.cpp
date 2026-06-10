@@ -20,7 +20,8 @@ namespace {
 
 const char *kTownNames[] = {"?", "Middlegate", "Atlantium", "Tundara", "Vulcania", "Sandsobar"};
 
-void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int frame, int dst_x, int dst_y)
+void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int frame, int dst_x, int dst_y,
+                    int opaque = 0)
 {
     if (frame < 0 || frame >= img.frame_count) {
         return;
@@ -28,10 +29,11 @@ void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int f
 
     const mm2_image32_frame &f = img.frames[frame];
 #if MM2_HOST_AMIGA
+    (void)c;
     if (!f.bitmap) {
         return;
     }
-    platform::blitImage32(&img, frame, dst_x, dst_y, 1);
+    platform::blitImage32(&img, frame, dst_x, dst_y, opaque);
 #else
     if (!f.rgba) {
         return;
@@ -88,6 +90,14 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     gs_.initProtectDefaults();
     mm2_party_launch_apply(gs_.a4(), &launch_);
 
+    mm2_image32_set_preview_opaque(0);
+
+#if MM2_HOST_AMIGA
+    bootstrapping_ = true;
+    bootstrap_step_ = 0;
+    frame_dirty_ = true;
+    return true;
+#else
     ingame_sheet_.loadAssets(data_dir_);
 
     char *path = mm2_path_scratch_a();
@@ -95,7 +105,6 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
         has_items_ = mm2_items_load_file(path, &items_) == MM2_ITEMS_OK;
     }
 
-    mm2_image32_set_preview_opaque(0);
     const bool has_world = world_.load(data_dir_) && world_.enterScreen(gs_.screenId());
     bool has_env = false;
     bool has_sky = false;
@@ -114,6 +123,8 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
         maybeQueueScriptedScenes(true);
     }
 
+    frame_dirty_ = true;
+
 #if !MM2_NO_STL
     if (!assets_ok_) {
         std::fprintf(stderr, "mm2: play view missing assets in %s (world=%d env=%d sky=%d)\n", data_dir_,
@@ -122,7 +133,66 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
 #endif
 
     return true;
+#endif
 }
+
+#if MM2_HOST_AMIGA
+void GameSession::tickBootstrap()
+{
+    if (!bootstrapping_) {
+        return;
+    }
+
+    switch (bootstrap_step_) {
+    case 0:
+        ingame_sheet_.loadAssets(data_dir_);
+        {
+            char *path = mm2_path_scratch_a();
+            if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "items.dat")) {
+                has_items_ = mm2_items_load_file(path, &items_) == MM2_ITEMS_OK;
+            }
+        }
+        bootstrap_step_ = 1;
+        markDirty();
+        return;
+    case 1: {
+        const bool has_world = world_.load(data_dir_) && world_.enterScreen(gs_.screenId());
+        assets_ok_ = has_world;
+        bootstrap_step_ = 2;
+        markDirty();
+        return;
+    }
+    case 2: {
+        bool has_env = false;
+        bool has_sky = false;
+        if (world_.loaded()) {
+            has_sky = env_.loadGlobal(data_dir_);
+            has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
+        }
+        assets_ok_ = world_.loaded() && has_env && has_sky;
+        bootstrap_step_ = 3;
+        markDirty();
+        return;
+    }
+    case 3:
+        events_loaded_ = events_.load(data_dir_);
+        if (events_loaded_) {
+            refreshEventsForScreen();
+        }
+        bootstrap_step_ = 4;
+        markDirty();
+        return;
+    default:
+        scripted_loaded_ = scripted_scene_.load(data_dir_);
+        if (scripted_loaded_) {
+            maybeQueueScriptedScenes(true);
+        }
+        bootstrapping_ = false;
+        markDirty();
+        return;
+    }
+}
+#endif
 
 void GameSession::shutdown()
 {
@@ -141,6 +211,11 @@ void GameSession::shutdown()
     assets_ok_ = false;
     overlay_ = PlayOverlay::None;
     has_items_ = false;
+    frame_dirty_ = false;
+#if MM2_HOST_AMIGA
+    bootstrapping_ = false;
+    bootstrap_step_ = 0;
+#endif
 }
 
 void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
@@ -148,6 +223,8 @@ void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
     if (!move.acted) {
         return;
     }
+
+    markDirty();
 
     if (move.acted && data_dir_) {
         if (move.screen_changed) {
@@ -177,6 +254,7 @@ void GameSession::maybeQueueScriptedScenes(bool on_start)
         gs_.setFirstTimeFlag(true);
         scripted_scene_.queueScene(events::ScriptedSceneId::CorakIntro);
         gs_.setCorakIntroSeen(true);
+        markDirty();
         return;
     }
 
@@ -185,6 +263,7 @@ void GameSession::maybeQueueScriptedScenes(bool on_start)
         !gs_.pegasusIntroSeen()) {
         scripted_scene_.queueScene(events::ScriptedSceneId::PegasusC2);
         gs_.setPegasusIntroSeen(true);
+        markDirty();
     }
 }
 
@@ -206,6 +285,7 @@ void GameSession::refreshWorldAfterEventTransition()
     world_.enterScreen(gs_.screenId());
     const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
     assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
+    markDirty();
 }
 
 void GameSession::runPendingEvents()
@@ -214,7 +294,11 @@ void GameSession::runPendingEvents()
         return;
     }
     if (mm2_gs_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH)) {
+        const bool blocking_before = events_.blocksMovement();
         events_.scanAndRun(gs_, world_);
+        if (events_.blocksMovement() != blocking_before || events_.blocksMovement()) {
+            markDirty();
+        }
     }
 }
 
@@ -238,8 +322,13 @@ void GameSession::tickEventInput(const platform::KeyState &keys)
     if (!events_loaded_ || !events_.blocksMovement()) {
         return;
     }
+    const bool blocking_before = events_.blocksMovement();
+    const int layers_before = events_.textView().layerCount();
     events_.continueInput(gs_, world_, keys);
     refreshWorldAfterEventTransition();
+    if (events_.blocksMovement() != blocking_before || events_.textView().layerCount() != layers_before) {
+        markDirty();
+    }
 }
 
 void GameSession::showStatusMessage(const char *msg)
@@ -247,10 +336,12 @@ void GameSession::showStatusMessage(const char *msg)
     if (!msg) {
         status_message_[0] = '\0';
         overlay_ = PlayOverlay::None;
+        markDirty();
         return;
     }
     std::snprintf(status_message_, sizeof(status_message_), "%s", msg);
     overlay_ = PlayOverlay::StatusMessage;
+    markDirty();
 }
 
 gfx::PlayProtectValues GameSession::protectValues() const
@@ -275,6 +366,7 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
         break;
     case gameplay::PlaySessionAction::Controls:
         overlay_ = PlayOverlay::Controls;
+        markDirty();
         break;
     case gameplay::PlaySessionAction::DismissHireling:
         showStatusMessage("Dismiss hireling (GAP 0x141F4).");
@@ -316,6 +408,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         if (keys.escape || keys.any_key) {
             overlay_ = PlayOverlay::None;
             status_message_[0] = '\0';
+            markDirty();
         }
         return;
     }
@@ -323,11 +416,13 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
     if (overlay_ == PlayOverlay::Controls) {
         if (keys.escape) {
             overlay_ = PlayOverlay::None;
+            markDirty();
             return;
         }
         const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
         if (ch >= '1' && ch <= '4') {
             controls_screen_.handleKey(ch, gs_);
+            markDirty();
         }
         return;
     }
@@ -341,6 +436,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         }
         if (keys.escape || ch == 'N') {
             overlay_ = PlayOverlay::None;
+            markDirty();
         }
         return;
     }
@@ -348,6 +444,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
     if (overlay_ == PlayOverlay::QuickRef) {
         if (keys.escape) {
             overlay_ = PlayOverlay::None;
+            markDirty();
             return;
         }
         if (keys.key_q && !keys.ctrl) {
@@ -363,6 +460,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                 sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
                 sheet_session_.status_line[0] = '\0';
                 overlay_ = PlayOverlay::CharacterSheet;
+                markDirty();
             }
         }
         return;
@@ -374,16 +472,19 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                 sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
                 sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
                 sheet_session_.status_line[0] = '\0';
+                markDirty();
                 return;
             }
             overlay_ = PlayOverlay::None;
             sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
             sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
             sheet_session_.status_line[0] = '\0';
+            markDirty();
             return;
         }
         if (keys.key_q && !keys.ctrl) {
             overlay_ = PlayOverlay::QuickRef;
+            markDirty();
             return;
         }
 
@@ -398,6 +499,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                     sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
                     sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
                     sheet_session_.status_line[0] = '\0';
+                    markDirty();
                     return;
                 }
             }
@@ -414,6 +516,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         if (outcome == gameplay::SheetKeyOutcome::Close) {
             overlay_ = PlayOverlay::None;
         }
+        markDirty();
         return;
     }
 }
@@ -422,6 +525,7 @@ void GameSession::tickPlayInput(const platform::KeyState &keys)
 {
     if (keys.ctrl && keys.key_q) {
         overlay_ = PlayOverlay::QuitConfirm;
+        markDirty();
         return;
     }
 
@@ -434,9 +538,11 @@ void GameSession::tickPlayInput(const platform::KeyState &keys)
     switch (action) {
     case gameplay::PlaySessionAction::CtrlQuit:
         overlay_ = PlayOverlay::QuitConfirm;
+        markDirty();
         break;
     case gameplay::PlaySessionAction::QuickRef:
         overlay_ = PlayOverlay::QuickRef;
+        markDirty();
         break;
     case gameplay::PlaySessionAction::ViewCharacter:
         sheet_session_.party_slot = party_slot;
@@ -444,17 +550,20 @@ void GameSession::tickPlayInput(const platform::KeyState &keys)
         sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
         sheet_session_.status_line[0] = '\0';
         overlay_ = PlayOverlay::CharacterSheet;
+        markDirty();
         break;
     case gameplay::PlaySessionAction::PanelOptions:
         if (right_panel_ == gfx::PlayRightPanel::Protect) {
             right_panel_ = gfx::PlayRightPanel::Options;
             gs_.setRightPanelMode(0);
+            markDirty();
         }
         break;
     case gameplay::PlaySessionAction::PanelProtect:
         if (right_panel_ == gfx::PlayRightPanel::Options) {
             right_panel_ = gfx::PlayRightPanel::Protect;
             gs_.setRightPanelMode(1);
+            markDirty();
         }
         break;
     case gameplay::PlaySessionAction::BashDoor:
@@ -472,16 +581,48 @@ void GameSession::tickPlayInput(const platform::KeyState &keys)
     }
 }
 
+bool GameSession::awaitingContinuePrompt() const
+{
+    if (scripted_loaded_ && scripted_scene_.active()) {
+        return true;
+    }
+    if (events_loaded_ && events_.blocksMovement()) {
+        return true;
+    }
+    return false;
+}
+
+void GameSession::tickOverlayAnimations()
+{
+    bool changed = false;
+    if (scripted_loaded_ && scripted_scene_.active()) {
+        changed |= scripted_scene_.tickAnimation();
+    }
+    if (events_loaded_ && events_.textView().hasServicePortrait()) {
+        changed |= events_.textView().tickAnimation();
+    }
+    if (changed) {
+        markDirty();
+    }
+}
+
 void GameSession::tick(const platform::KeyState &keys)
 {
     if (!gs_.valid()) {
         return;
     }
 
+    tickOverlayAnimations();
+
     if (scripted_loaded_ && scripted_scene_.active()) {
+        const bool was_active = scripted_scene_.active();
         scripted_scene_.tick(keys);
+        if (was_active && !scripted_scene_.active()) {
+            markDirty();
+        }
         if (scripted_scene_.needsViewportRestore()) {
             scripted_scene_.clearViewportRestore();
+            markDirty();
         }
         return;
     }
@@ -524,11 +665,13 @@ void GameSession::tick(const platform::KeyState &keys)
     if (overlay_ == PlayOverlay::None && scripted_loaded_ &&
         keys.ctrl && (keys.last_ascii == 'G' || keys.last_ascii == 'g')) {
         scripted_scene_.queueScene(events::ScriptedSceneId::CorakIntro);
+        markDirty();
         return;
     }
     if (overlay_ == PlayOverlay::None && scripted_loaded_ &&
         keys.ctrl && (keys.last_ascii == 'P' || keys.last_ascii == 'p')) {
         scripted_scene_.queueScene(events::ScriptedSceneId::PegasusC2);
+        markDirty();
         return;
     }
 
@@ -538,13 +681,23 @@ void GameSession::tick(const platform::KeyState &keys)
 
 void GameSession::renderView3D()
 {
-    using namespace gfx;
-    using namespace gfx::play_layout;
-
     if (!assets_ok_) {
-        compositor_.drawTextShadow(kViewOriginX, kViewOriginY, "(missing town.32 / map.dat)", 200, 120, 120);
+        compositor_.drawTextShadow(gfx::play_layout::kViewOriginX, gfx::play_layout::kViewOriginY,
+                                   "(missing gfx / map.dat)", 200, 120, 120);
         return;
     }
+
+    if (world_.isOutdoor()) {
+        renderOutdoorView();
+    } else {
+        renderIndoorView3D();
+    }
+}
+
+void GameSession::renderIndoorView3D()
+{
+    using namespace gfx;
+    using namespace gfx::play_layout;
 
     View3DCamera camera{};
     camera.x = gs_.coordX();
@@ -555,11 +708,35 @@ void GameSession::renderView3D()
     const View3DScene scene = buildView3DScene(bufs, camera);
 
     const int sky_frame = world_.roofBitAt(camera.x, camera.y) ? 1 : 0;
-    blitImageFrame(compositor_, env_.floor(), 0, kView3DOriginX, kView3DFloorY);
-    blitImageFrame(compositor_, env_.sky(), sky_frame, kView3DOriginX, kView3DSkyY);
+    blitImageFrame(compositor_, env_.floor(), 0, kView3DOriginX, kView3DFloorY, 1);
+    blitImageFrame(compositor_, env_.sky(), sky_frame, kView3DOriginX, kView3DSkyY, 1);
 
     for (const View3DBlit &b : scene.blits) {
-        blitImageFrame(compositor_, env_.walls(), b.frame, b.x, b.y);
+        blitImageFrame(compositor_, env_.walls(), b.frame, b.x, b.y, 0);
+    }
+}
+
+void GameSession::renderOutdoorView()
+{
+    using namespace gfx;
+    using namespace gfx::play_layout;
+
+    View3DCamera camera{};
+    camera.x = gs_.coordX();
+    camera.y = gs_.coordY();
+    camera.facing = gs_.facing03();
+
+    /* Paint order @ outdoor_3d_master 0x18870: floor, sky, decor, horizon layers. */
+    blitImageFrame(compositor_, env_.floor(), 0, kView3DOriginX, kView3DFloorY, 1);
+    blitImageFrame(compositor_, env_.sky(), 0, kView3DOriginX, kView3DSkyY, 1);
+
+    const OutdoorScene scene = buildOutdoorScene(world_, camera);
+
+    for (const OutdoorSpriteBlit &b : scene.decor) {
+        blitImageFrame(compositor_, env_.biomeSheet(b.biome), b.frame, b.x, b.y, 0);
+    }
+    for (const OutdoorSpriteBlit &b : scene.horizon) {
+        blitImageFrame(compositor_, env_.horizonSheet(b.horizon), b.frame, b.x, b.y, 0);
     }
 }
 

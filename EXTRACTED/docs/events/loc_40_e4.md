@@ -25,7 +25,7 @@
 | (9,13) | `0x9D` | **5** | ANY_DIR |
 | (10,0) | `0xA0` | **11** | ANY_DIR |
 | (10,3) | `0xA3` | **6** | ANY_DIR |
-| (10,4) | `0xA4` | **1** | DIR_SPECIAL |
+| (10,4) | `0xA4` | **1** | DIR_E? |
 | (11,2) | `0xB2` | **12** | ANY_DIR |
 | (11,3) | `0xB3` | **10** | ANY_DIR |
 | (11,8) | `0xB8` | **7** | ANY_DIR |
@@ -47,7 +47,7 @@
 
 ## Events
 
-**Event 01** — triggers: (10,4)/DIR_SPECIAL
+**Event 01** — triggers: (10,4)/DIR_E?
 
 ```hex
 0b 17 00 02 01 0a 11 01 0c 04 e0 0f

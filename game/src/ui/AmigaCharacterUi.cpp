@@ -952,6 +952,7 @@ private:
         } else {
             view_mode_ = ViewMode::RosterList;
         }
+        markDirty();
     }
 
     UiResult tickCharacterSheet(const platform::KeyState &keys, bool from_party)
@@ -1612,7 +1613,7 @@ private:
         drawCellText(c, r0 + 1, kSheetStatColRight, buf);
         if (hireling) {
             const uint32_t cost = hirelingDailyCost(hireling_index, rec.level);
-            std::snprintf(buf, sizeof(buf), "Cost=%u /Day", cost);
+            std::snprintf(buf, sizeof(buf), "Cost=%lu /Day", static_cast<unsigned long>(cost));
         } else {
             std::snprintf(buf, sizeof(buf), "Gold=%lu", static_cast<unsigned long>(rec.gold));
         }
@@ -1850,7 +1851,7 @@ private:
     int party_count_ = 0;
     Mm2PartyLaunch party_launch_{};
     bool has_party_launch_ = false;
-    bool frame_dirty_ = true;
+    bool frame_dirty_ = false;
 };
 
 }  // namespace

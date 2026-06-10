@@ -37,7 +37,9 @@ inline int visualWallW(uint8_t cell) { return (cell >> 6) & 3; }
 //   bit4 0x10 South wall   bit5 0x20 South dark
 //   bit6 0x40 West  wall   bit7 0x80 EVENT flag (West's dark slot reused)
 constexpr uint8_t kCollisionEventFlag = 0x80;
-// Wall bits only (event flag stripped) for geometry/auto-map decode.
+// Wall bits only; passability first gate @ 0x9424 AND #$55.
+constexpr uint8_t kCollisionPassWallMask = 0x55;
+// Wall+dark bits with event stripped — cartography / display, not movement.
 constexpr uint8_t kCollisionWallMask = 0x7F;
 
 struct MapScreen {

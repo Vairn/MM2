@@ -7,6 +7,7 @@
 
 #include "mm2/GameState.h"
 #include "mm2/events/EventTextView.h"
+#include "mm2/events/ServiceSignResolver.h"
 #include "mm2/events/ScriptedSceneEngine.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/EnvAssets.h"
@@ -38,12 +39,15 @@ using namespace mm2::gfx::play_layout;
 
 static const char *g_demo_data_dir = nullptr;
 
+struct PlayFrame;
+
 struct DemoCase {
     const char *file_stem;
     const char *op_name;
     const char *source_note;
     void (*setup)(events::EventTextView &tv);
     void (*prepare_gs)(GameStateView &gs);  // nullptr → party-launch spawn coords
+    void (*setup_with_frame)(events::EventTextView &tv, PlayFrame &frame);  // outdoor / attrib-aware
     events::ScriptedSceneId scripted_id = events::ScriptedSceneId::None;
 };
 
@@ -249,7 +253,36 @@ void setup_op06(events::EventTextView &tv)
 void setup_op0b(events::EventTextView &tv)
 {
     /* loc 00 evt 22 @ (4,4): OP_0B str[2] pos 0 -> 62.anm S.J. Blacksmith (0x15756 table). */
-    tv.showOp0B("S.J. Blacksmith", g_demo_data_dir, 0, 2, 0);
+    tv.showOp0B("S.J. Blacksmith", g_demo_data_dir, 0, nullptr, 2, 0);
+}
+
+void setup_op0b_portcullis(events::EventTextView &tv, PlayFrame &frame)
+{
+    /* loc 11 evt 01 @ (3,7)/DIR_S: OP_0B str[24] -> 29.anm (table id 29, env 3) + OP_02 + OP_09. */
+    frame.gs.setScreenId(11);
+    frame.gs.setCoordY(3);
+    frame.gs.setCoordX(7);
+    frame.gs.setFacingKey('S');
+    frame.world.enterScreen(11);
+    frame.env.loadEnv(g_demo_data_dir, envKindFromAttrib(frame.world.attrib()));
+    events::ServiceSignResolver::syncSignEnvId(frame.gs.a4(), 11, &frame.world.attrib());
+    tv.showOp0B(nullptr, g_demo_data_dir, frame.gs, &frame.world.attrib(), 24, 0);
+    tv.showOp02("A giant portcullis slowly raises,\noffering admittance to Middlegate.\n"
+                "Enter (y/n)?");
+}
+
+void setup_op0b_hillstone(events::EventTextView &tv, PlayFrame &frame)
+{
+    /* loc 39 evt 02 @ (1,13)/ENTER: OP_0B str[6] -> table 47, file 47.anm portrait + OP_02 marble walls. */
+    frame.gs.setScreenId(39);
+    frame.gs.setCoordY(1);
+    frame.gs.setCoordX(13);
+    frame.gs.setFacingKey('N');
+    frame.world.enterScreen(39);
+    frame.env.loadEnv(g_demo_data_dir, envKindFromAttrib(frame.world.attrib()));
+    events::ServiceSignResolver::syncSignEnvId(frame.gs.a4(), 39, &frame.world.attrib());
+    tv.showOp0B(nullptr, g_demo_data_dir, frame.gs, &frame.world.attrib(), 6, 0);
+    tv.showOp02("The marble walls of Castle Hillstone\ngleam before you. Enter (y/n)?");
 }
 
 void setup_op07(events::EventTextView &tv)
@@ -264,21 +297,28 @@ void setup_op09(events::EventTextView &tv)
 }
 
 constexpr DemoCase kDemos[] = {
-    {"op01_center_row17", "OP_01", "Middlegate event 20 str[24] city gates", setup_op01, nullptr},
-    {"op02_block_rows19_22", "OP_02", "Middlegate event 42 str[9] fountain", setup_op02, nullptr},
-    {"op03_tall_block_rows17_22", "OP_03", "Pinehurst event 26 str[23] slow-time", setup_op03, nullptr},
-    {"op04_door_label_row3", "OP_04", "Middlegate event 01 @ (7,5)/S str[1] Middlegate Inn", setup_op04,
-     prepare_op04_gs},
-    {"op05_popup_a", "OP_05", "Tundara str[23] Monster Freezing popup", setup_op05, nullptr},
-    {"op06_signpost", "OP_06", "B2 event 02 str[1] Archers Only (outdoor signpost)", setup_op06, nullptr},
-    {"op0b_signboard", "OP_0B", "Middlegate evt 22 str[2] 62.anm S.J. Blacksmith @ (4,4)", setup_op0b,
+    {"op01_center_row17", "OP_01", "Middlegate event 20 str[24] city gates", setup_op01, nullptr, nullptr},
+    {"op02_block_rows19_22", "OP_02", "Middlegate event 42 str[9] fountain", setup_op02, nullptr, nullptr},
+    {"op03_tall_block_rows17_22", "OP_03", "Pinehurst event 26 str[23] slow-time", setup_op03, nullptr,
      nullptr},
-    {"op07_space_prompt", "OP_07", "Hillstone str[14] loot + SPACE prompt", setup_op07, nullptr},
-    {"op09_yn_prompt", "OP_09", "Middlegate event 20 — Y/N input only (no extra draw)", setup_op09, nullptr},
-    {"scripted_corak", "ScriptedScene", "Corak ghost overlay + loc 60 str[8] + SPACE (doc 46)",
-     nullptr, prepare_scripted_corak_gs, events::ScriptedSceneId::CorakIntro},
+    {"op04_door_label_row3", "OP_04", "Middlegate event 01 @ (7,5)/S str[1] Middlegate Inn", setup_op04,
+     prepare_op04_gs, nullptr},
+    {"op05_popup_a", "OP_05", "Tundara str[23] Monster Freezing popup", setup_op05, nullptr, nullptr},
+    {"op06_signpost", "OP_06", "B2 event 02 str[1] Archers Only (outdoor signpost)", setup_op06, nullptr,
+     nullptr},
+    {"op0b_signboard", "OP_0B", "Middlegate evt 22 str[2] 62.anm S.J. Blacksmith @ (4,4)", setup_op0b,
+     nullptr, nullptr},
+    {"op0b_portcullis", "OP_0B", "C2 loc 11 evt 01 str[24] 29.anm gate portrait @ (3,7)/S", nullptr,
+     nullptr, setup_op0b_portcullis},
+    {"op0b_hillstone_castle", "OP_0B", "D4 loc 39 evt 02 str[6] 47.anm Hillstone portrait @ (1,13)/ENTER",
+     nullptr, nullptr, setup_op0b_hillstone},
+    {"op07_space_prompt", "OP_07", "Hillstone str[14] loot + SPACE prompt", setup_op07, nullptr, nullptr},
+    {"op09_yn_prompt", "OP_09", "Middlegate event 20 — Y/N input only (no extra draw)", setup_op09, nullptr,
+     nullptr},
+    {"scripted_corak", "ScriptedScene", "Corak ghost overlay + loc 60 str[8] + SPACE (doc 46)", nullptr,
+     prepare_scripted_corak_gs, nullptr, events::ScriptedSceneId::CorakIntro},
     {"scripted_pegasus", "ScriptedScene", "C2 outdoor @ (4,7) + 21.anm (#131) + loc 11 str[5] OP_03 (doc 46)",
-     nullptr, prepare_scripted_pegasus_gs, events::ScriptedSceneId::PegasusC2},
+     nullptr, prepare_scripted_pegasus_gs, nullptr, events::ScriptedSceneId::PegasusC2},
 };
 
 }  // namespace
@@ -307,14 +347,16 @@ int main(int argc, char **argv)
     std::printf("Event text opcode demos -> %s/\n", out_dir);
     for (const DemoCase &demo : kDemos) {
         events::EventTextView tv;
-        if (demo.setup) {
-            demo.setup(tv);
-        }
-
         if (demo.prepare_gs) {
             demo.prepare_gs(frame.gs);
         } else {
             mm2_party_launch_apply(frame.gs.a4(), &frame.launch);
+        }
+
+        if (demo.setup_with_frame) {
+            demo.setup_with_frame(tv, frame);
+        } else if (demo.setup) {
+            demo.setup(tv);
         }
 
         if (demo.scripted_id == events::ScriptedSceneId::PegasusC2) {
@@ -324,10 +366,19 @@ int main(int argc, char **argv)
 
         frame.renderBase();
 
+        /* Advance multi-frame .anm overlays (~80 game ticks) before capture. */
+        for (int t = 0; t < 80; ++t) {
+            if (demo.scripted_id != events::ScriptedSceneId::None && has_scripted) {
+                scripted.tickAnimation();
+            } else if (demo.setup || demo.setup_with_frame) {
+                tv.tickAnimation();
+            }
+        }
+
         if (demo.scripted_id != events::ScriptedSceneId::None && has_scripted) {
             scripted.armDemo(demo.scripted_id);
             scripted.draw(frame.compositor);
-        } else if (demo.setup) {
+        } else if (demo.setup || demo.setup_with_frame) {
             tv.draw(frame.compositor);
         }
 
@@ -362,8 +413,9 @@ int main(int argc, char **argv)
         std::fprintf(readme, "\n## Not rendered\n\n");
         std::fprintf(readme, "- **OP_08** / **OP_0A** — scripted-input variants of OP_07 / OP_09; "
                              "no distinct draw path.\n");
-        std::fprintf(readme, "- **OP_0B** uses `ServiceSignResolver` + `62.anm` demo; mode `$17` placement "
-                             "table A4-$56E still partial.\n");
+        std::fprintf(readme, "- **OP_0B** `op0b_signboard` = Middlegate blacksmith `62.anm`; "
+                             "`op0b_portcullis` = C2 gate `29.anm` (loc 11 evt 01 str[24]); "
+                             "`op0b_hillstone_castle` = D4 `47.anm` (loc 39 evt 02 str[6]).\n");
         std::fprintf(readme, "\nRegenerate: `cmake --build build && ./build/event_op_demo.exe ..`\n");
         std::fclose(readme);
     }

@@ -9,8 +9,8 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (0,0) | `0x00` | **15** | ALWAYS |
-| (0,1) | `0x01` | **14** | DIR_SPECIAL |
+| (0,0) | `0x00` | **15** | DIR_W? |
+| (0,1) | `0x01` | **14** | DIR_E? |
 | (1,15) | `0x1F` | **17** | ANY_DIR |
 | (2,14) | `0x2E` | **17** | ANY_DIR |
 | (3,13) | `0x3D` | **17** | ANY_DIR |
@@ -24,24 +24,24 @@
 | (11,5) | `0xB5` | **17** | ANY_DIR |
 | (12,4) | `0xC4` | **17** | ANY_DIR |
 | (14,11) | `0xEB` | **16** | ANY_DIR |
-| (15,0) | `0xF0` | **18** | DIR_SPECIAL |
-| (15,3) | `0xF3` | **1** | DIR_SPECIAL |
-| (15,4) | `0xF4` | **2** | DIR_SPECIAL |
-| (15,5) | `0xF5` | **3** | DIR_SPECIAL |
-| (15,6) | `0xF6` | **4** | DIR_SPECIAL |
-| (15,7) | `0xF7` | **5** | DIR_SPECIAL |
-| (15,8) | `0xF8` | **6** | DIR_SPECIAL |
-| (15,9) | `0xF9` | **7** | DIR_SPECIAL |
-| (15,10) | `0xFA` | **8** | DIR_SPECIAL |
-| (15,11) | `0xFB` | **9** | DIR_SPECIAL |
-| (15,12) | `0xFC` | **10** | DIR_SPECIAL |
-| (15,13) | `0xFD` | **11** | DIR_SPECIAL |
-| (15,14) | `0xFE` | **12** | DIR_SPECIAL |
-| (15,15) | `0xFF` | **13** | DIR_SPECIAL |
+| (15,0) | `0xF0` | **18** | DIR_E? |
+| (15,3) | `0xF3` | **1** | DIR_E? |
+| (15,4) | `0xF4` | **2** | DIR_E? |
+| (15,5) | `0xF5` | **3** | DIR_E? |
+| (15,6) | `0xF6` | **4** | DIR_E? |
+| (15,7) | `0xF7` | **5** | DIR_E? |
+| (15,8) | `0xF8` | **6** | DIR_E? |
+| (15,9) | `0xF9` | **7** | DIR_E? |
+| (15,10) | `0xFA` | **8** | DIR_E? |
+| (15,11) | `0xFB` | **9** | DIR_E? |
+| (15,12) | `0xFC` | **10** | DIR_E? |
+| (15,13) | `0xFD` | **11** | DIR_E? |
+| (15,14) | `0xFE` | **12** | DIR_E? |
+| (15,15) | `0xFF` | **13** | DIR_E? |
 
 ## Events
 
-**Event 01** — triggers: (15,3)/DIR_SPECIAL
+**Event 01** — triggers: (15,3)/DIR_E?
 
 ```hex
 06 01
@@ -51,7 +51,7 @@
 00: show_text_popup_style_b(str[1] "Hello!")
 ```
 
-**Event 02** — triggers: (15,4)/DIR_SPECIAL
+**Event 02** — triggers: (15,4)/DIR_E?
 
 ```hex
 06 02
@@ -61,7 +61,7 @@
 00: show_text_popup_style_b(str[2] "Are you / ready?")
 ```
 
-**Event 03** — triggers: (15,5)/DIR_SPECIAL
+**Event 03** — triggers: (15,5)/DIR_E?
 
 ```hex
 06 03
@@ -71,7 +71,7 @@
 00: show_text_popup_style_b(str[3] "Hope so!")
 ```
 
-**Event 04** — triggers: (15,6)/DIR_SPECIAL
+**Event 04** — triggers: (15,6)/DIR_E?
 
 ```hex
 06 04
@@ -81,7 +81,7 @@
 00: show_text_popup_style_b(str[4] "Almost / there!")
 ```
 
-**Event 05** — triggers: (15,7)/DIR_SPECIAL
+**Event 05** — triggers: (15,7)/DIR_E?
 
 ```hex
 06 05
@@ -91,7 +91,7 @@
 00: show_text_popup_style_b(str[5] "The end / is near.")
 ```
 
-**Event 06** — triggers: (15,8)/DIR_SPECIAL
+**Event 06** — triggers: (15,8)/DIR_E?
 
 ```hex
 06 06
@@ -101,7 +101,7 @@
 00: show_text_popup_style_b(str[6] "Having / fun?")
 ```
 
-**Event 07** — triggers: (15,9)/DIR_SPECIAL
+**Event 07** — triggers: (15,9)/DIR_E?
 
 ```hex
 06 07
@@ -111,7 +111,7 @@
 00: show_text_popup_style_b(str[7] "Getting / closer ...")
 ```
 
-**Event 08** — triggers: (15,10)/DIR_SPECIAL
+**Event 08** — triggers: (15,10)/DIR_E?
 
 ```hex
 06 08
@@ -121,7 +121,7 @@
 00: show_text_popup_style_b(str[8] "Keep / going")
 ```
 
-**Event 09** — triggers: (15,11)/DIR_SPECIAL
+**Event 09** — triggers: (15,11)/DIR_E?
 
 ```hex
 06 09
@@ -131,7 +131,7 @@
 00: show_text_popup_style_b(str[9] "A little / further")
 ```
 
-**Event 10** — triggers: (15,12)/DIR_SPECIAL
+**Event 10** — triggers: (15,12)/DIR_E?
 
 ```hex
 06 0a
@@ -141,7 +141,7 @@
 00: show_text_popup_style_b(str[10] "Here it / is!!!!!")
 ```
 
-**Event 11** — triggers: (15,13)/DIR_SPECIAL
+**Event 11** — triggers: (15,13)/DIR_E?
 
 ```hex
 06 0b
@@ -151,7 +151,7 @@
 00: show_text_popup_style_b(str[11] "Just / kidding!")
 ```
 
-**Event 12** — triggers: (15,14)/DIR_SPECIAL
+**Event 12** — triggers: (15,14)/DIR_E?
 
 ```hex
 06 0c
@@ -161,7 +161,7 @@
 00: show_text_popup_style_b(str[12] "One more / step ...")
 ```
 
-**Event 13** — triggers: (15,15)/DIR_SPECIAL
+**Event 13** — triggers: (15,15)/DIR_E?
 
 ```hex
 06 0d
@@ -171,7 +171,7 @@
 00: show_text_popup_style_b(str[13] "This is / IT!!!!!")
 ```
 
-**Event 14** — triggers: (0,1)/DIR_SPECIAL
+**Event 14** — triggers: (0,1)/DIR_E?
 
 ```hex
 06 0e
@@ -181,7 +181,7 @@
 00: show_text_popup_style_b(str[14] "Beliaeff's / Beastiary")
 ```
 
-**Event 15** — triggers: (0,0)/ALWAYS
+**Event 15** — triggers: (0,0)/DIR_W?
 
 ```hex
 02 0f 09 11 01 0c 0b 7a 0f
@@ -231,7 +231,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 18** — triggers: (15,0)/DIR_SPECIAL
+**Event 18** — triggers: (15,0)/DIR_E?
 
 ```hex
 2b 04 15 00 7f 20 11 04 0b 03 00 0e fd 0b 89 00 0e fe 02 12 07 0c 00 50

@@ -43,12 +43,12 @@
 | (4,2) | `0x42` | **7** | ANY_DIR |
 | (4,4) | `0x44` | **8** | 0x60 |
 | (4,5) | `0x45` | **7** | ANY_DIR |
-| (4,6) | `0x46` | **10** | DIR_N? |
-| (4,7) | `0x47` | **11** | DIR_N? |
+| (4,6) | `0x46` | **10** | DIR_S? |
+| (4,7) | `0x47` | **11** | DIR_S? |
 | (4,8) | `0x48` | **2** | ANY_DIR |
 | (4,9) | `0x49` | **7** | ANY_DIR |
 | (4,10) | `0x4A` | **4** | ANY_DIR |
-| (4,11) | `0x4B` | **12** | DIR_N? |
+| (4,11) | `0x4B` | **12** | DIR_S? |
 | (4,12) | `0x4C` | **7** | ANY_DIR |
 | (4,13) | `0x4D` | **7** | ANY_DIR |
 | (4,15) | `0x4F` | **7** | ANY_DIR |
@@ -63,7 +63,7 @@
 | (6,5) | `0x65` | **7** | ANY_DIR |
 | (6,6) | `0x66` | **7** | ANY_DIR |
 | (6,8) | `0x68` | **6** | 0x60 |
-| (6,10) | `0x6A` | **11** | DIR_N? |
+| (6,10) | `0x6A` | **11** | DIR_S? |
 | (6,11) | `0x6B` | **7** | ANY_DIR |
 | (6,12) | `0x6C` | **7** | ANY_DIR |
 | (6,13) | `0x6D` | **7** | ANY_DIR |
@@ -73,7 +73,7 @@
 | (7,11) | `0x7B` | **7** | ANY_DIR |
 | (8,0) | `0x80` | **7** | ANY_DIR |
 | (8,3) | `0x83` | **7** | ANY_DIR |
-| (8,4) | `0x84` | **10** | DIR_N? |
+| (8,4) | `0x84` | **10** | DIR_S? |
 | (8,7) | `0x87` | **9** | 0xA0 |
 | (8,9) | `0x89` | **7** | ANY_DIR |
 | (9,0) | `0x90` | **7** | ANY_DIR |
@@ -83,9 +83,9 @@
 | (9,15) | `0x9F` | **7** | ANY_DIR |
 | (10,0) | `0xA0` | **7** | ANY_DIR |
 | (10,5) | `0xA5` | **7** | ANY_DIR |
-| (10,6) | `0xA6` | **13** | DIR_N? |
-| (10,7) | `0xA7` | **14** | DIR_N? |
-| (10,8) | `0xA8` | **15** | DIR_N? |
+| (10,6) | `0xA6` | **13** | DIR_S? |
+| (10,7) | `0xA7` | **14** | DIR_S? |
+| (10,8) | `0xA8` | **15** | DIR_S? |
 | (10,15) | `0xAF` | **7** | ANY_DIR |
 | (11,2) | `0xB2` | **7** | ANY_DIR |
 | (11,8) | `0xB8` | **7** | ANY_DIR |
@@ -97,7 +97,7 @@
 | (13,12) | `0xDC` | **7** | ANY_DIR |
 | (13,15) | `0xDF` | **7** | ANY_DIR |
 | (14,0) | `0xE0` | **7** | ANY_DIR |
-| (14,7) | `0xE7` | **12** | DIR_N? |
+| (14,7) | `0xE7` | **12** | DIR_S? |
 | (14,15) | `0xEF` | **7** | ANY_DIR |
 | (15,0) | `0xF0` | **7** | ANY_DIR |
 | (15,1) | `0xF1` | **7** | ANY_DIR |
@@ -278,7 +278,7 @@
 04: end_script()
 ```
 
-**Event 10** — triggers: (4,6)/DIR_N?, (8,4)/DIR_N?
+**Event 10** — triggers: (4,6)/DIR_S?, (8,4)/DIR_S?
 
 ```hex
 04 0d
@@ -288,7 +288,7 @@
 00: show_text_above_door(str[13] "No Robbers!")
 ```
 
-**Event 11** — triggers: (4,7)/DIR_N?, (6,10)/DIR_N?
+**Event 11** — triggers: (4,7)/DIR_S?, (6,10)/DIR_S?
 
 ```hex
 04 0e
@@ -298,7 +298,7 @@
 00: show_text_above_door(str[14] "No Clerics!")
 ```
 
-**Event 12** — triggers: (4,11)/DIR_N?, (14,7)/DIR_N?
+**Event 12** — triggers: (4,11)/DIR_S?, (14,7)/DIR_S?
 
 ```hex
 04 0f
@@ -308,7 +308,7 @@
 00: show_text_above_door(str[15] "No Elves!")
 ```
 
-**Event 13** — triggers: (10,6)/DIR_N?
+**Event 13** — triggers: (10,6)/DIR_S?
 
 ```hex
 04 15
@@ -318,7 +318,7 @@
 00: show_text_above_door(str[21] "Good")
 ```
 
-**Event 14** — triggers: (10,7)/DIR_N?
+**Event 14** — triggers: (10,7)/DIR_S?
 
 ```hex
 04 11
@@ -328,7 +328,7 @@
 00: show_text_above_door(str[17] "Neutral")
 ```
 
-**Event 15** — triggers: (10,8)/DIR_N?
+**Event 15** — triggers: (10,8)/DIR_S?
 
 ```hex
 04 12

@@ -1,6 +1,7 @@
 #include "mm2/events/EventRuntime.h"
 
 #include "mm2/DataPath.h"
+#include "mm2/events/ServiceSignResolver.h"
 #include "mm2/runtime/PathScratch.h"
 
 #include "mm2_attrib_codec.h"
@@ -17,13 +18,20 @@ constexpr uint8_t kOpTokenDelta[0x33] = {
 
 void initContextMaskTable(uint8_t *a4)
 {
-    /* Facing index 0/2/4/6 (W/S/E/N) → cond context @ A4-$6BE6 (scanner @ 0x175FE).
-     * Bit 0x10 is always set; direction adds 0x20/0x40/0x80 so ALWAYS (0x10) matches
-     * every facing while DIR_N?/DIR_SPECIAL/ENTER test the facing bits. */
-    static const uint8_t kMasks[8] = {0x10, 0, 0x30, 0, 0x50, 0, 0x90, 0};
+    /* Facing index 0/2/4/6 (W/S/E/N) → context_mask_tbl @ A4-$6BE6 (scanner @ 0x175FE).
+     * Verified from EXTRACTED/ghidra/mm2_data_00.bin @ A4-$6BE6 (file off 0x1418). */
+    static const uint8_t kMasks[8] = {0x10, 0, 0x20, 0, 0x40, 0, 0x80, 0};
     for (int i = 0; i < 8; ++i) {
         mm2_gs_set_u8(a4, MM2_GS_CONTEXT_MASK_TBL + i, kMasks[i]);
     }
+}
+
+/* Tile scanner cond test @ 0x17684: (triplet_cond & context) != 0.
+ * context_mask_tbl @ A4-$6BE6 maps facing index 0/2/4/6 (W/S/E/N) to 0x10/0x20/0x40/0x80.
+ * Triplet cond uses the same bit set — 0x10 is west-facing, not "all facings". */
+bool eventCondMatches(uint8_t cond, uint8_t ctx)
+{
+    return (cond & ctx) != 0;
 }
 
 int tokenDelta(uint8_t tok)
@@ -32,6 +40,31 @@ int tokenDelta(uint8_t tok)
         return kOpTokenDelta[tok];
     }
     return 1;
+}
+
+/* str.dat hall intros @ ~328–342 (doc 28 §6.3) — shown by open_mages_guild (OP_0E 0x05). */
+const char *mageGuildSpellIntro(int location_id)
+{
+    static const char *kIntro[] = {
+        "Sages in multi-hued robes congregate\n"
+        "in the hall.  The archmage offers\n"
+        "spells for sale.  Interested (y/n)?",
+        "The meeting shifts towards entropy as\n"
+        "you step in.  A cabalist approaches\n"
+        "you with a spell list.  Buy (y/n)?",
+        "Lounging next to a roaring fire which\n"
+        "burns no wood, mystics offer spells.\n"
+        "Buy (y/n)?",
+        "Magicians clad in furry robes sip\n"
+        "wine and chat softly.  Listen (y/n)?",
+        "Sorcerers sort phials of sands on\n"
+        "the shelves.  A man barks, \"Spells\n"
+        "(y/n)?\"",
+    };
+    if (location_id >= 0 && location_id < static_cast<int>(sizeof(kIntro) / sizeof(kIntro[0]))) {
+        return kIntro[location_id];
+    }
+    return kIntro[0];
 }
 
 }  // namespace
@@ -69,13 +102,13 @@ void EventRuntime::unload()
 
 bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world::MapWorld &world)
 {
-    (void)world;
     if (!loaded_ || !gs.valid() || location_id < 0 || location_id >= MM2_EVENT_LOCATION_COUNT) {
         return false;
     }
 
     location_id_ = location_id;
     loc_ = &file_.locations[location_id];
+    ServiceSignResolver::syncSignEnvId(gs.a4(), static_cast<int>(gs.screenId()), &world.attrib());
 
     const size_t copy_len =
         loc_->raw_len < MM2_GS_EVENT_WORK_SIZE ? loc_->raw_len : MM2_GS_EVENT_WORK_SIZE;
@@ -241,6 +274,7 @@ void EventRuntime::applyMapTransition(GameStateView &gs, world::MapWorld &world,
     gs.setCoordX(static_cast<uint8_t>(dest_tile & 0x0F));
     gs.setCoordY(static_cast<uint8_t>((dest_tile >> 4) & 0x0F));
     mm2_gs_set_u8(gs.a4(), MM2_GS_ERA_LOW, static_cast<uint8_t>(gs.era() & 0xFF));
+    ServiceSignResolver::syncSignEnvId(gs.a4(), static_cast<int>(dest_screen), &world.attrib());
     enterLocation(static_cast<int>(dest_screen), gs, world);
     screen_changed_ = true;
 }
@@ -337,19 +371,41 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         endScript(gs);
         break;
     }
-    case 0x0E:
-        readU8(gs);
-        /* GAP: town service selector — end active script. */
-        endScript(gs);
+    case 0x0E: {
+        const uint8_t sel = readU8(gs);
+        switch (sel) {
+        case 0x05:
+            /* -$7D10 open_mages_guild @ 0x1E3E6: str.dat hall intro rows 19..22, then -$7D46 Y/N. */
+            text_.showOp02(mageGuildSpellIntro(location_id_), 19);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
+                          static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
+            wait_ = EventVmWait::YesNo;
+            break;
+        default:
+            /* GAP: quest handlers (0xC9..0xCF) and other selectors — no-op in stub;
+             * original runs handler then returns to the event VM (Lord Slayer evt 15). */
+            break;
+        }
         break;
+    }
     case 0x0B: {
         const uint8_t str_idx = readU8(gs);
         const uint8_t placement = readU8(gs);
-        char text_buf[256];
-        text_.showOp0B(resolveString(str_idx, text_buf, sizeof(text_buf)), data_dir_, location_id_,
-                       str_idx, placement);
+        /* OP_0B @ 0x15DB0 / 0x15756: str_idx is table key (not text, not .anm id).
+         * env = A4-$79E3 (area_env_lookup @ 0x18AE on map load @ 0x1C44).
+         * anm = table[env][str_idx-1] → sign_sprite_load @ 0x316E.
+         * Hillstone evt 15: 0b 0e 00 → str[14], env 2 → 49.anm Lord Slayer portrait. */
+        text_.showOp0B(nullptr, data_dir_, gs, &world.attrib(), str_idx, placement);
         mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
                       static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 4));
+        break;
+    }
+    case 0x2B: {
+        /* OP_2B @ 0x16D74: skip N tokens when combat-victory latch set (A4-$77BD). */
+        const uint8_t n = readU8(gs);
+        if (mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH)) {
+            skipTokens(gs, n);
+        }
         break;
     }
     case 0x12:
@@ -424,14 +480,19 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, mm2_gs_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_START));
     mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
     mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 0);
-    if (!script_active_ && wait_ == EventVmWait::None) {
-        text_.reset();
-    }
 
     const uint8_t party_tile =
         static_cast<uint8_t>(((gs.coordY() & 0x0F) << 4) | (gs.coordX() & 0x0F));
     const uint8_t ctx = contextMask(gs);
     bool fired = false;
+
+    /* Every move/turn re-scan: drop ambient door/sign layers from the previous
+     * facing, then re-run the first triplet whose cond matches the current ctx.
+     * OP_04/0B are re-applied only when the scanner fires again (ALWAYS, ENTER,
+     * or the matching DIR_* bit); stale labels from facing E must not survive N. */
+    if (!script_active_ && wait_ == EventVmWait::None) {
+        text_.clearPersistentOverlays();
+    }
 
     int pos = 0;
     while (pos + 2 < MM2_GS_EVENT_WORK_SIZE) {
@@ -442,7 +503,7 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
             break;
         }
 
-        if (a == party_tile && (c & ctx) != 0) {
+        if (a == party_tile && eventCondMatches(c, ctx)) {
             if (eraGateOpen(gs, world)) {
                 const int script_off = poolSeek(b);
                 if (script_off >= 0) {
@@ -471,7 +532,7 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
     }
 
     if (wait_ == EventVmWait::Space) {
-        if (!keys.space) {
+        if (!keys.space && !keys.enter && !keys.any_key) {
             return true;
         }
         text_.clearSpacePrompt();

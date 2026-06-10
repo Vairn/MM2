@@ -51,7 +51,7 @@
 | (11,14) | `0xBE` | **4** | ANY_DIR |
 | (12,10) | `0xCA` | **15** | ANY_DIR |
 | (12,13) | `0xCD` | **8** | ANY_DIR |
-| (14,9) | `0xE9` | **2** | DIR_SPECIAL |
+| (14,9) | `0xE9` | **2** | DIR_E? |
 | (15,0) | `0xF0` | **12** | ANY_DIR |
 
 ## Events
@@ -72,7 +72,7 @@
 05: set_abort_and_exit()
 ```
 
-**Event 02** — triggers: (14,9)/DIR_SPECIAL
+**Event 02** — triggers: (14,9)/DIR_E?
 
 ```hex
 02 03 09 11 04 18 00 3a 00 96 18 00 3b 00 00 18 00 20 00 96 18 00 21 00 00 0f

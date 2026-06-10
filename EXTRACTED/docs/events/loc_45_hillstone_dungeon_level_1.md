@@ -9,12 +9,12 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (0,0) | `0x00` | **11** | DIR_N? |
+| (0,0) | `0x00` | **11** | DIR_S? |
 | (0,1) | `0x01` | **5** | ANY_DIR |
 | (0,8) | `0x08` | **5** | ANY_DIR |
 | (0,15) | `0x0F` | **5** | ANY_DIR |
-| (1,5) | `0x15` | **10** | DIR_SPECIAL |
-| (1,11) | `0x1B` | **6** | ALWAYS |
+| (1,5) | `0x15` | **10** | DIR_E? |
+| (1,11) | `0x1B` | **6** | DIR_W? |
 | (2,1) | `0x21` | **5** | ANY_DIR |
 | (2,7) | `0x27` | **5** | ANY_DIR |
 | (2,15) | `0x2F` | **5** | ANY_DIR |
@@ -22,25 +22,25 @@
 | (4,14) | `0x4E` | **5** | ANY_DIR |
 | (5,3) | `0x53` | **5** | ANY_DIR |
 | (5,5) | `0x55` | **5** | ANY_DIR |
-| (5,7) | `0x57` | **7** | DIR_N? |
-| (5,9) | `0x59` | **7** | DIR_N? |
-| (5,11) | `0x5B` | **12** | ENTER |
+| (5,7) | `0x57` | **7** | DIR_S? |
+| (5,9) | `0x59` | **7** | DIR_S? |
+| (5,11) | `0x5B` | **12** | DIR_N? |
 | (6,8) | `0x68` | **5** | ANY_DIR |
-| (7,6) | `0x76` | **7** | ALWAYS |
-| (7,10) | `0x7A` | **7** | DIR_SPECIAL |
+| (7,6) | `0x76` | **7** | DIR_W? |
+| (7,10) | `0x7A` | **7** | DIR_E? |
 | (9,13) | `0x9D` | **5** | ANY_DIR |
-| (12,1) | `0xC1` | **9** | ENTER |
+| (12,1) | `0xC1` | **9** | DIR_N? |
 | (12,3) | `0xC3` | **5** | ANY_DIR |
 | (12,8) | `0xC8` | **5** | ANY_DIR |
-| (12,15) | `0xCF` | **8** | ENTER |
-| (14,1) | `0xE1` | **4** | ENTER |
-| (14,15) | `0xEF` | **3** | ENTER |
-| (15,8) | `0xF8` | **1** | ENTER |
-| (15,15) | `0xFF` | **2** | DIR_SPECIAL |
+| (12,15) | `0xCF` | **8** | DIR_N? |
+| (14,1) | `0xE1` | **4** | DIR_N? |
+| (14,15) | `0xEF` | **3** | DIR_N? |
+| (15,8) | `0xF8` | **1** | DIR_N? |
+| (15,15) | `0xFF` | **2** | DIR_E? |
 
 ## Events
 
-**Event 01** — triggers: (15,8)/ENTER
+**Event 01** — triggers: (15,8)/DIR_N?
 
 ```hex
 01 01 09 11 01 0c 37 da 0f
@@ -55,7 +55,7 @@
 04: end_script()
 ```
 
-**Event 02** — triggers: (15,15)/DIR_SPECIAL
+**Event 02** — triggers: (15,15)/DIR_E?
 
 ```hex
 0b 0d 00 03 02 0a 11 01 0c 2f e0 0f
@@ -71,7 +71,7 @@
 05: end_script()
 ```
 
-**Event 03** — triggers: (14,15)/ENTER
+**Event 03** — triggers: (14,15)/DIR_N?
 
 ```hex
 2d 26 00 11 04 01 03 07 0d 09 0c 2d f8 02 04 19 01 f3 00 00 10 01 01 05 07 14
@@ -94,7 +94,7 @@
 11: clear_current_tile_event_flag()
 ```
 
-**Event 04** — triggers: (14,1)/ENTER
+**Event 04** — triggers: (14,1)/DIR_N?
 
 ```hex
 2d 27 00 11 04 01 06 07 0d 09 0c 2d f8 02 07 19 01 ed 00 00 10 01 01 05 07 14
@@ -132,7 +132,7 @@
 04: clear_current_tile_event_flag()
 ```
 
-**Event 06** — triggers: (1,11)/ALWAYS
+**Event 06** — triggers: (1,11)/DIR_W?
 
 ```hex
 2d a4 00 11 04 01 09 07 0d 09 0c 2d f8 17 3d 00 10 06 01 0a 07 1c 05 1f 80 3c 02 00 00 00 1a 3d 01 14 02 13 29
@@ -159,7 +159,7 @@
 15: set_abort_and_exit()
 ```
 
-**Event 07** — triggers: (5,7)/DIR_N?, (5,9)/DIR_N?, (7,6)/ALWAYS, (7,10)/DIR_SPECIAL
+**Event 07** — triggers: (5,7)/DIR_S?, (5,9)/DIR_S?, (7,6)/DIR_W?, (7,10)/DIR_E?
 
 ```hex
 04 0b
@@ -169,7 +169,7 @@
 00: show_text_above_door(str[11] "No Half-Orcs")
 ```
 
-**Event 08** — triggers: (12,15)/ENTER
+**Event 08** — triggers: (12,15)/DIR_N?
 
 ```hex
 04 0c
@@ -179,7 +179,7 @@
 00: show_text_above_door(str[12] "No Ninjas!")
 ```
 
-**Event 09** — triggers: (12,1)/ENTER
+**Event 09** — triggers: (12,1)/DIR_N?
 
 ```hex
 04 0d
@@ -189,7 +189,7 @@
 00: show_text_above_door(str[13] "No Barbarians!")
 ```
 
-**Event 10** — triggers: (1,5)/DIR_SPECIAL
+**Event 10** — triggers: (1,5)/DIR_E?
 
 ```hex
 01 0e 09 11 01 0c 2e c0 0f
@@ -204,7 +204,7 @@
 04: end_script()
 ```
 
-**Event 11** — triggers: (0,0)/DIR_N?
+**Event 11** — triggers: (0,0)/DIR_S?
 
 ```hex
 0b 0b 00 03 0f 0a 11 07 03 10 27 20 09 11 01 05 00 00 11 03 1f 09 10 01 03 00 00 03 11 08 0f
@@ -227,7 +227,7 @@
 11: end_script()
 ```
 
-**Event 12** — triggers: (5,11)/ENTER
+**Event 12** — triggers: (5,11)/DIR_N?
 
 ```hex
 02 12 09 11 01 0e cb 0f

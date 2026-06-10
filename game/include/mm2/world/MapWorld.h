@@ -35,6 +35,8 @@ public:
     bool enterScreen(int screen_id);
 
     int currentScreen() const { return screen_; }
+    const Mm2MapFile &mapFile() const { return map_; }
+    const Mm2AttribFile &attribFile() const { return attrib_; }
     const Mm2AttribRecord &attrib() const { return attrib_.records[screen_]; }
 
     const uint8_t *visualPage() const { return map_.screens[screen_].visual; }

@@ -10,15 +10,15 @@
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
 | (0,2) | `0x02` | **20** | ANY_DIR |
-| (0,3) | `0x03` | **16** | ENTER |
-| (0,4) | `0x04` | **16** | ENTER |
-| (0,5) | `0x05` | **16** | ENTER |
-| (0,6) | `0x06` | **16** | ENTER |
-| (0,8) | `0x08` | **16** | DIR_SPECIAL |
+| (0,3) | `0x03` | **16** | DIR_N? |
+| (0,4) | `0x04` | **16** | DIR_N? |
+| (0,5) | `0x05` | **16** | DIR_N? |
+| (0,6) | `0x06` | **16** | DIR_N? |
+| (0,8) | `0x08` | **16** | DIR_E? |
 | (0,12) | `0x0C` | **13** | ANY_DIR |
 | (1,10) | `0x1A` | **19** | ANY_DIR |
-| (1,12) | `0x1C` | **8** | DIR_N? |
-| (1,14) | `0x1E` | **16** | DIR_N? |
+| (1,12) | `0x1C` | **8** | DIR_S? |
+| (1,14) | `0x1E` | **16** | DIR_S? |
 | (2,1) | `0x21` | **18** | ANY_DIR |
 | (2,2) | `0x22` | **13** | ANY_DIR |
 | (2,5) | `0x25` | **13** | ANY_DIR |
@@ -26,7 +26,7 @@
 | (2,13) | `0x2D` | **21** | ANY_DIR |
 | (2,15) | `0x2F` | **13** | ANY_DIR |
 | (3,4) | `0x34` | **17** | ANY_DIR |
-| (3,8) | `0x38` | **41** | ENTER |
+| (3,8) | `0x38` | **41** | DIR_N? |
 | (3,12) | `0x3C` | **20** | ANY_DIR |
 | (4,1) | `0x41` | **19** | ANY_DIR |
 | (4,4) | `0x44` | **14** | ANY_DIR |
@@ -35,26 +35,26 @@
 | (5,1) | `0x51` | **38** | ANY_DIR |
 | (5,5) | `0x55` | **32** | ANY_DIR |
 | (5,6) | `0x56` | **14** | ANY_DIR |
-| (6,6) | `0x66` | **16** | DIR_SPECIAL |
+| (6,6) | `0x66` | **16** | DIR_E? |
 | (6,10) | `0x6A` | **18** | ANY_DIR |
 | (6,13) | `0x6D` | **20** | ANY_DIR |
-| (6,14) | `0x6E` | **16** | DIR_SPECIAL |
+| (6,14) | `0x6E` | **16** | DIR_E? |
 | (7,3) | `0x73` | **32** | ANY_DIR |
 | (7,6) | `0x76` | **32** | ANY_DIR |
-| (7,8) | `0x78` | **5** | DIR_N? |
+| (7,8) | `0x78` | **5** | DIR_S? |
 | (7,10) | `0x7A` | **19** | ANY_DIR |
 | (7,14) | `0x7E` | **12** | ANY_DIR |
 | (8,0) | `0x80` | **14** | ANY_DIR |
-| (8,1) | `0x81` | **42** | ALWAYS |
+| (8,1) | `0x81` | **42** | DIR_W? |
 | (8,2) | `0x82` | **33** | ANY_DIR |
-| (8,4) | `0x84` | **15** | ALWAYS |
+| (8,4) | `0x84` | **15** | DIR_W? |
 | (8,5) | `0x85` | **14** | ANY_DIR |
-| (8,7) | `0x87` | **6** | ALWAYS |
+| (8,7) | `0x87` | **6** | DIR_W? |
 | (8,8) | `0x88` | **1** | ANY_DIR |
-| (8,9) | `0x89` | **4** | DIR_SPECIAL |
+| (8,9) | `0x89` | **4** | DIR_E? |
 | (8,11) | `0x8B` | **12** | ANY_DIR |
-| (9,4) | `0x94` | **9** | ALWAYS |
-| (9,8) | `0x98` | **3** | ENTER |
+| (9,4) | `0x94` | **9** | DIR_W? |
+| (9,8) | `0x98` | **3** | DIR_N? |
 | (9,11) | `0x9B` | **25** | ANY_DIR |
 | (9,12) | `0x9C` | **24** | ANY_DIR |
 | (9,14) | `0x9E` | **25** | ANY_DIR |
@@ -63,15 +63,15 @@
 | (10,8) | `0xA8` | **11** | ANY_DIR |
 | (10,12) | `0xAC` | **23** | ANY_DIR |
 | (11,0) | `0xB0` | **34** | ANY_DIR |
-| (11,4) | `0xB4` | **16** | ALWAYS |
+| (11,4) | `0xB4` | **16** | DIR_W? |
 | (11,7) | `0xB7` | **36** | ANY_DIR |
 | (11,9) | `0xB9` | **27** | ANY_DIR |
 | (11,10) | `0xBA` | **26** | ANY_DIR |
-| (11,15) | `0xBF` | **40** | DIR_N? |
+| (11,15) | `0xBF` | **40** | DIR_S? |
 | (12,1) | `0xC1` | **39** | ANY_DIR |
-| (12,5) | `0xC5` | **16** | ALWAYS |
+| (12,5) | `0xC5` | **16** | DIR_W? |
 | (12,9) | `0xC9` | **11** | ANY_DIR |
-| (12,10) | `0xCA` | **7** | ENTER |
+| (12,10) | `0xCA` | **7** | DIR_N? |
 | (12,14) | `0xCE` | **22** | ANY_DIR |
 | (13,0) | `0xD0` | **14** | ANY_DIR |
 | (13,5) | `0xD5` | **28** | ANY_DIR |
@@ -79,11 +79,11 @@
 | (13,9) | `0xD9` | **28** | ANY_DIR |
 | (13,13) | `0xDD` | **31** | ANY_DIR |
 | (13,14) | `0xDE` | **30** | ANY_DIR |
-| (14,2) | `0xE2` | **16** | DIR_N? |
-| (14,7) | `0xE7` | **16** | ALWAYS |
-| (14,11) | `0xEB` | **10** | ENTER |
-| (14,15) | `0xEF` | **37** | DIR_N? |
-| (15,1) | `0xF1` | **2** | DIR_SPECIAL |
+| (14,2) | `0xE2` | **16** | DIR_S? |
+| (14,7) | `0xE7` | **16** | DIR_W? |
+| (14,11) | `0xEB` | **10** | DIR_N? |
+| (14,15) | `0xEF` | **37** | DIR_S? |
+| (15,1) | `0xF1` | **2** | DIR_E? |
 | (15,2) | `0xF2` | **14** | ANY_DIR |
 | (15,4) | `0xF4` | **36** | ANY_DIR |
 | (15,8) | `0xF8` | **34** | ANY_DIR |
@@ -107,7 +107,7 @@
 04: end_script()
 ```
 
-**Event 02** — triggers: (15,1)/DIR_SPECIAL
+**Event 02** — triggers: (15,1)/DIR_E?
 
 ```hex
 02 02 09 11 22 15 01 10 00 1b 32 10 01 1f 01 10 01 0a 00 00 15 02 10 00 1b 32 10 01 1f 02 10 01 0a 00 00 15 03 10 00 1b 32 10 01 1f 03 10 01 0a 00 00 15 04 10 00 1b 32 10 01 1f 04 10 01 0a 00 00 15 05 10 00 1b 32 10 01 1f 05 10 01 0a 00 00 15 06 10 00 1b 32 10 01 1f 06 10 01 0a 00 00 15 07 10 00 1b 32 10 01 1f 07 10 01 0a 00 00 15 08 10 00 1b 32 10 01 1f 08 10 01 0a 00 00 02 03 07 14
@@ -163,7 +163,7 @@
 37: clear_current_tile_event_flag()
 ```
 
-**Event 03** — triggers: (9,8)/ENTER
+**Event 03** — triggers: (9,8)/DIR_N?
 
 ```hex
 06 04
@@ -173,7 +173,7 @@
 00: show_text_popup_style_b(str[4] "Water / Druids")
 ```
 
-**Event 04** — triggers: (8,9)/DIR_SPECIAL
+**Event 04** — triggers: (8,9)/DIR_E?
 
 ```hex
 06 05
@@ -183,7 +183,7 @@
 00: show_text_popup_style_b(str[5] "Air / Druids")
 ```
 
-**Event 05** — triggers: (7,8)/DIR_N?
+**Event 05** — triggers: (7,8)/DIR_S?
 
 ```hex
 06 06
@@ -193,7 +193,7 @@
 00: show_text_popup_style_b(str[6] "Fire / Druids")
 ```
 
-**Event 06** — triggers: (8,7)/ALWAYS
+**Event 06** — triggers: (8,7)/DIR_W?
 
 ```hex
 06 07
@@ -203,7 +203,7 @@
 00: show_text_popup_style_b(str[7] "Earth / Druids")
 ```
 
-**Event 07** — triggers: (12,10)/ENTER
+**Event 07** — triggers: (12,10)/DIR_N?
 
 ```hex
 02 08 07 19 01 47 00 02 10 02 01 13 07 14
@@ -220,7 +220,7 @@
 06: clear_current_tile_event_flag()
 ```
 
-**Event 08** — triggers: (1,12)/DIR_N?
+**Event 08** — triggers: (1,12)/DIR_S?
 
 ```hex
 01 09 07 19 01 61 00 02 10 02 01 13 07 14
@@ -237,7 +237,7 @@
 06: clear_current_tile_event_flag()
 ```
 
-**Event 09** — triggers: (9,4)/ALWAYS
+**Event 09** — triggers: (9,4)/DIR_W?
 
 ```hex
 01 0a 07 19 01 24 05 02 10 02 01 13 07 14
@@ -254,7 +254,7 @@
 06: clear_current_tile_event_flag()
 ```
 
-**Event 10** — triggers: (14,11)/ENTER
+**Event 10** — triggers: (14,11)/DIR_N?
 
 ```hex
 01 0b 07 19 01 8f 00 02 10 02 01 13 07 14
@@ -323,7 +323,7 @@
 03: set_abort_and_exit()
 ```
 
-**Event 15** — triggers: (8,4)/ALWAYS
+**Event 15** — triggers: (8,4)/DIR_W?
 
 ```hex
 04 10
@@ -333,7 +333,7 @@
 00: show_text_above_door(str[16] "Coven Headquarters")
 ```
 
-**Event 16** — triggers: (0,3)/ENTER, (0,4)/ENTER, (0,5)/ENTER, (0,6)/ENTER, (0,8)/DIR_SPECIAL, (1,14)/DIR_N?, (6,6)/DIR_SPECIAL, (6,14)/DIR_SPECIAL, (11,4)/ALWAYS, (12,5)/ALWAYS, (14,2)/DIR_N?, (14,7)/ALWAYS
+**Event 16** — triggers: (0,3)/DIR_N?, (0,4)/DIR_N?, (0,5)/DIR_N?, (0,6)/DIR_N?, (0,8)/DIR_E?, (1,14)/DIR_S?, (6,6)/DIR_E?, (6,14)/DIR_E?, (11,4)/DIR_W?, (12,5)/DIR_W?, (14,2)/DIR_S?, (14,7)/DIR_W?
 
 ```hex
 04 11
@@ -603,7 +603,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 37** — triggers: (14,15)/DIR_N?
+**Event 37** — triggers: (14,15)/DIR_S?
 
 ```hex
 0e 67
@@ -645,7 +645,7 @@
 00: exec_selector(0x68)
 ```
 
-**Event 40** — triggers: (11,15)/DIR_N?
+**Event 40** — triggers: (11,15)/DIR_S?
 
 ```hex
 0e 6e
@@ -655,7 +655,7 @@
 00: exec_selector(0x6E)
 ```
 
-**Event 41** — triggers: (3,8)/ENTER
+**Event 41** — triggers: (3,8)/DIR_N?
 
 ```hex
 0e 6f
@@ -665,7 +665,7 @@
 00: exec_selector(0x6F)
 ```
 
-**Event 42** — triggers: (8,1)/ALWAYS
+**Event 42** — triggers: (8,1)/DIR_W?
 
 ```hex
 0e 72

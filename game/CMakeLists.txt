@@ -109,6 +109,14 @@ if(NOT AMIGA)
   target_include_directories(view3d_middlegate_check PRIVATE include)
   target_link_libraries(view3d_middlegate_check PRIVATE mm2_codecs)
 
+  add_executable(view3d_outdoor_check
+    tests/view3d_outdoor_check.cpp
+    src/gfx/OutdoorView3D.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(view3d_outdoor_check PRIVATE include)
+  target_link_libraries(view3d_outdoor_check PRIVATE mm2_codecs)
+
   add_executable(movement_middlegate_test
     tests/movement_middlegate_test.cpp
     src/gameplay/Movement.cpp
@@ -150,6 +158,7 @@ if(NOT AMIGA)
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
     src/world/MapWorld.cpp
+    src/runtime/Mm2Alloc.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(event_middlegate_test PRIVATE include)
   target_link_libraries(event_middlegate_test PRIVATE mm2_codecs)
@@ -163,6 +172,7 @@ if(NOT AMIGA)
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
     src/gfx/View3D.cpp
+    src/gfx/OutdoorView3D.cpp
     src/gfx/PlayScreenChrome.cpp
     src/gfx/PartyStatusFormat.cpp
     src/gfx/EnvAssets.cpp
@@ -182,6 +192,7 @@ if(NOT AMIGA)
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
     src/gfx/View3D.cpp
+    src/gfx/OutdoorView3D.cpp
     src/gfx/PlayScreenChrome.cpp
     src/gfx/PartyStatusFormat.cpp
     src/gfx/EnvAssets.cpp
@@ -228,6 +239,7 @@ set(MM2_GAME_SOURCES
   src/gfx/ScreenCompositor.cpp
   src/gfx/mm2_font8x8.c
   src/gfx/View3D.cpp
+  src/gfx/OutdoorView3D.cpp
   src/gfx/PlayScreenChrome.cpp
   src/gfx/PartyStatusFormat.cpp
   src/gfx/EnvAssets.cpp

@@ -19,9 +19,9 @@
 | (3,1) | `0x31` | **8** | ANY_DIR |
 | (3,5) | `0x35` | **9** | ANY_DIR |
 | (3,12) | `0x3C` | **10** | ANY_DIR |
-| (3,14) | `0x3E` | **7** | ENTER |
+| (3,14) | `0x3E` | **7** | DIR_N? |
 | (3,15) | `0x3F` | **10** | ANY_DIR |
-| (5,5) | `0x55` | **11** | ENTER |
+| (5,5) | `0x55` | **11** | DIR_N? |
 | (7,2) | `0x72` | **5** | ANY_DIR |
 | (7,7) | `0x77` | **5** | ANY_DIR |
 | (8,5) | `0x85` | **6** | ANY_DIR |
@@ -37,7 +37,7 @@
 | (12,12) | `0xCC` | **8** | ANY_DIR |
 | (13,15) | `0xDF` | **4** | ANY_DIR |
 | (14,1) | `0xE1` | **6** | ANY_DIR |
-| (14,11) | `0xEB` | **3** | ENTER |
+| (14,11) | `0xEB` | **3** | DIR_N? |
 
 ## Events
 
@@ -85,7 +85,7 @@
 17: clear_current_tile_event_flag()
 ```
 
-**Event 03** — triggers: (14,11)/ENTER
+**Event 03** — triggers: (14,11)/DIR_N?
 
 ```hex
 02 07 09 11 01 18 00 22 00 28 0f
@@ -158,7 +158,7 @@
 04: map_transition(0x06, 0x33)
 ```
 
-**Event 07** — triggers: (3,14)/ENTER
+**Event 07** — triggers: (3,14)/DIR_N?
 
 ```hex
 06 0e
@@ -216,7 +216,7 @@
 04: clear_current_tile_event_flag()
 ```
 
-**Event 11** — triggers: (5,5)/ENTER
+**Event 11** — triggers: (5,5)/DIR_N?
 
 ```hex
 0b 07 00 02 0f 0a 10 01 0f 15 00 7e 10 10 01 0e 56 15 00 76 80 11 04 16 01 e1 11 02 28 01 c8 10 03 02 10 08 14 02 11 2a 50 c3 00 f4 01 00 00 00 00 00 00 00 00 00 1f 00 31 04 90 d0 03 18 00 76 7f 00 18 00 7e ef 00 28 01 e1 08 14

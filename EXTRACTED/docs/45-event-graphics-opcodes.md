@@ -62,7 +62,7 @@ Classification: **Sprite** = `.anm`/planar sheet blit; **Font chrome** = control
 1. Read `u8 str_idx`, `u8 pos` from script.
 2. `0x15756(str_idx)` → **sign id** stored in `A4-$55C8` (maps string index → id using per-town tables @ `A4-$6C62`…`-$6C02` and env id `A4-$79E3`).
 3. `sign_sprite_place(-1, 0, 0)` @ `0x3266` — clear prior `A4-$79FE`.
-4. `sign_sprite_load(id)` @ `0x316E` — if can't-see (`A4-$79E1`), clear viewport preset #8; else load sheet via **`0x9A30(id-1)`** (builds filename `"NN.anm"` in scratch), gfx mode **`$16`** prep.
+4. `sign_sprite_load(id)` @ `0x316E` — if can't-see (`A4-$79E1`), clear viewport preset #8; else load sheet via **`0x9A30`**: `subq #1` @ `$31E8` then `addq #1` @ `$9A4C` before the decimal loop — **net `id` → `"NN.anm"`** in scratch, gfx mode **`$16`** prep.
 5. `sign_sprite_place(pos, $40, $20)` — mode **`$17`** draws board over viewport.
 6. Sets exit flag bit 2 (`A4-$7950`).
 

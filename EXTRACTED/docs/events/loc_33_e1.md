@@ -22,17 +22,17 @@
 | (2,7) | `0x27` | **8** | ANY_DIR |
 | (2,8) | `0x28` | **14** | ANY_DIR |
 | (2,9) | `0x29` | **8** | ANY_DIR |
-| (2,11) | `0x2B` | **11** | ENTER |
+| (2,11) | `0x2B` | **11** | DIR_N? |
 | (3,0) | `0x30` | **17** | ANY_DIR |
 | (3,1) | `0x31` | **15** | ANY_DIR |
 | (3,2) | `0x32` | **7** | ANY_DIR |
-| (3,3) | `0x33` | **10** | DIR_SPECIAL |
+| (3,3) | `0x33` | **10** | DIR_E? |
 | (3,7) | `0x37` | **8** | ANY_DIR |
 | (3,8) | `0x38` | **8** | ANY_DIR |
 | (3,9) | `0x39` | **8** | ANY_DIR |
-| (4,3) | `0x43` | **1** | ENTER |
-| (4,5) | `0x45` | **9** | ENTER |
-| (5,1) | `0x51` | **13** | DIR_N? |
+| (4,3) | `0x43` | **1** | DIR_N? |
+| (4,5) | `0x45` | **9** | DIR_N? |
+| (5,1) | `0x51` | **13** | DIR_S? |
 | (5,5) | `0x55` | **8** | ANY_DIR |
 | (5,6) | `0x56` | **8** | ANY_DIR |
 | (5,8) | `0x58` | **15** | ANY_DIR |
@@ -53,7 +53,7 @@
 | (8,3) | `0x83` | **8** | ANY_DIR |
 | (8,4) | `0x84` | **8** | ANY_DIR |
 | (8,5) | `0x85` | **8** | ANY_DIR |
-| (8,8) | `0x88` | **5** | ENTER+SPECIAL |
+| (8,8) | `0x88` | **5** | DIR_N?+DIR_E? |
 | (8,14) | `0x8E` | **6** | ANY_DIR |
 | (9,4) | `0x94` | **16** | ANY_DIR |
 | (10,1) | `0xA1` | **8** | ANY_DIR |
@@ -68,11 +68,11 @@
 | (14,4) | `0xE4` | **6** | ANY_DIR |
 | (14,8) | `0xE8` | **6** | ANY_DIR |
 | (14,14) | `0xEE` | **4** | ANY_DIR |
-| (15,15) | `0xFF` | **3** | ENTER+SPECIAL |
+| (15,15) | `0xFF` | **3** | DIR_N?+DIR_E? |
 
 ## Events
 
-**Event 01** — triggers: (4,3)/ENTER
+**Event 01** — triggers: (4,3)/DIR_N?
 
 ```hex
 0b 17 00 02 01 0a 11 01 0c 03 05 0f
@@ -103,7 +103,7 @@
 04: end_script()
 ```
 
-**Event 03** — triggers: (15,15)/ENTER+SPECIAL
+**Event 03** — triggers: (15,15)/DIR_N?+DIR_E?
 
 ```hex
 02 03 09 10 01 0f 1a 84 03 0c 2a ee
@@ -132,7 +132,7 @@
 03: clear_current_tile_event_flag()
 ```
 
-**Event 05** — triggers: (8,8)/ENTER+SPECIAL
+**Event 05** — triggers: (8,8)/DIR_N?+DIR_E?
 
 ```hex
 02 05 2e f3 02 07 14
@@ -194,7 +194,7 @@
 07: set_abort_and_exit()
 ```
 
-**Event 09** — triggers: (4,5)/ENTER
+**Event 09** — triggers: (4,5)/DIR_N?
 
 ```hex
 06 08
@@ -204,7 +204,7 @@
 00: show_text_popup_style_b(str[8] "Danger / Lava!")
 ```
 
-**Event 10** — triggers: (3,3)/DIR_SPECIAL
+**Event 10** — triggers: (3,3)/DIR_E?
 
 ```hex
 06 09
@@ -214,7 +214,7 @@
 00: show_text_popup_style_b(str[9] "Vulcania / <-")
 ```
 
-**Event 11** — triggers: (2,11)/ENTER
+**Event 11** — triggers: (2,11)/DIR_N?
 
 ```hex
 02 0a 09 11 02 1c 08 18 09 43 00 81 0f
@@ -284,7 +284,7 @@
 35: end_script()
 ```
 
-**Event 13** — triggers: (5,1)/DIR_N?
+**Event 13** — triggers: (5,1)/DIR_S?
 
 ```hex
 02 0a 09 11 08 18 00 24 00 28 18 00 26 00 14 18 00 2a 00 28 18 00 2b 00 28 18 00 2c 00 28 18 00 2d 00 28 18 00 22 00 28 18 00 23 00 28 0f

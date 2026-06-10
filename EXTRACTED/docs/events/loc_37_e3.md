@@ -43,7 +43,7 @@
 | (5,0) | `0x50` | **6** | ANY_DIR |
 | (5,2) | `0x52` | **10** | ANY_DIR |
 | (5,4) | `0x54` | **6** | ANY_DIR |
-| (5,5) | `0x55` | **1** | ENTER+SPECIAL |
+| (5,5) | `0x55` | **1** | DIR_N?+DIR_E? |
 | (6,2) | `0x62` | **6** | 0xF1 |
 | (6,5) | `0x65` | **2** | ANY_DIR |
 | (6,11) | `0x6B` | **5** | ANY_DIR |
@@ -59,7 +59,7 @@
 
 ## Events
 
-**Event 01** — triggers: (5,5)/ENTER+SPECIAL
+**Event 01** — triggers: (5,5)/DIR_N?+DIR_E?
 
 ```hex
 02 01 09 11 01 0c 20 7f 0f

@@ -57,7 +57,10 @@ enum {
     MM2_MAP_COLL_S_DARK = 0x20,
     MM2_MAP_COLL_W_WALL = 0x40,
     MM2_MAP_COLL_EVENT = 0x80,    /* event flag, NOT west-dark */
-    MM2_MAP_COLL_WALL_MASK = 0x7F /* wall/dark bits with event stripped */
+    /* Wall bits only (N/E/S/W low bit per direction); passability @ 0x9424 AND #$55. */
+    MM2_MAP_COLL_PASS_WALL_MASK = 0x55,
+    /* Wall+dark bits with event stripped — cartography / display, not movement. */
+    MM2_MAP_COLL_WALL_MASK = 0x7F
 };
 
 typedef struct Mm2MapScreen {
@@ -173,14 +176,15 @@ static inline void mm2_map_facing_delta(char facing_key, int8_t *dx, int8_t *dy)
 
 /*
  * Interior passability first gate @ 0x9424: current collision cell
- * (A4-$55D6) masked by facing bundle (A4-$55D8) and wall bits 0x55.
+ * (A4-$55D6) AND facing bundle (A4-$55D8) AND #$55 (wall bits only).
+ * Darkness high bits do not block; they drain light @ 0x69DC after a step.
  * Returns 0 if passable (-1 in original), 1 if blocked.
  * GAP: full 0x9424 path (doors, swim, barriers) not traced yet.
  */
 static inline int mm2_map_passability_blocked(uint8_t collision_cell, char facing_key)
 {
     const uint8_t mask = mm2_map_facing_mask_hi(facing_key);
-    const uint8_t walls = (uint8_t)(collision_cell & mask & MM2_MAP_COLL_WALL_MASK);
+    const uint8_t walls = (uint8_t)(collision_cell & mask & MM2_MAP_COLL_PASS_WALL_MASK);
     return walls != 0;
 }
 

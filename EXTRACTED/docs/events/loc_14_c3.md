@@ -25,14 +25,14 @@
 | (2,12) | `0x2C` | **13** | ANY_DIR |
 | (2,14) | `0x2E` | **13** | ANY_DIR |
 | (2,15) | `0x2F` | **15** | ANY_DIR |
-| (3,4) | `0x34` | **9** | ALWAYS |
-| (3,14) | `0x3E` | **10** | DIR_N? |
+| (3,4) | `0x34` | **9** | DIR_W? |
+| (3,14) | `0x3E` | **10** | DIR_S? |
 | (4,0) | `0x40` | **11** | ANY_DIR |
 | (4,2) | `0x42` | **11** | ANY_DIR |
 | (5,2) | `0x52` | **11** | ANY_DIR |
 | (5,3) | `0x53` | **2** | ANY_DIR |
 | (5,7) | `0x57` | **12** | ANY_DIR |
-| (6,1) | `0x61` | **1** | ENTER |
+| (6,1) | `0x61` | **1** | DIR_N? |
 | (6,9) | `0x69` | **12** | ANY_DIR |
 | (7,0) | `0x70` | **6** | ANY_DIR |
 | (7,1) | `0x71` | **11** | ANY_DIR |
@@ -42,21 +42,21 @@
 | (8,11) | `0x8B` | **12** | ANY_DIR |
 | (9,1) | `0x91` | **7** | ANY_DIR |
 | (9,3) | `0x93` | **11** | ANY_DIR |
-| (9,6) | `0x96` | **19** | ALWAYS |
-| (9,7) | `0x97` | **18** | ALWAYS |
-| (10,6) | `0xA6` | **20** | ALWAYS |
-| (11,0) | `0xB0` | **27** | ALWAYS |
-| (11,1) | `0xB1` | **26** | ALWAYS |
-| (11,2) | `0xB2` | **25** | ALWAYS |
-| (11,3) | `0xB3` | **24** | ALWAYS |
-| (11,4) | `0xB4` | **23** | ALWAYS |
-| (11,5) | `0xB5` | **22** | ALWAYS |
-| (11,6) | `0xB6` | **21** | ALWAYS |
+| (9,6) | `0x96` | **19** | DIR_W? |
+| (9,7) | `0x97` | **18** | DIR_W? |
+| (10,6) | `0xA6` | **20** | DIR_W? |
+| (11,0) | `0xB0` | **27** | DIR_W? |
+| (11,1) | `0xB1` | **26** | DIR_W? |
+| (11,2) | `0xB2` | **25** | DIR_W? |
+| (11,3) | `0xB3` | **24** | DIR_W? |
+| (11,4) | `0xB4` | **23** | DIR_W? |
+| (11,5) | `0xB5` | **22** | DIR_W? |
+| (11,6) | `0xB6` | **21** | DIR_W? |
 | (15,11) | `0xFB` | **8** | ANY_DIR |
 
 ## Events
 
-**Event 01** — triggers: (6,1)/ENTER
+**Event 01** — triggers: (6,1)/DIR_N?
 
 ```hex
 0e 5b
@@ -160,7 +160,7 @@
 04: map_transition(0x40, 0x00)
 ```
 
-**Event 09** — triggers: (3,4)/ALWAYS
+**Event 09** — triggers: (3,4)/DIR_W?
 
 ```hex
 06 0c
@@ -170,7 +170,7 @@
 00: show_text_popup_style_b(str[12] "Druids / Only!")
 ```
 
-**Event 10** — triggers: (3,14)/DIR_N?
+**Event 10** — triggers: (3,14)/DIR_S?
 
 ```hex
 06 0d
@@ -271,7 +271,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 18** — triggers: (9,7)/ALWAYS
+**Event 18** — triggers: (9,7)/DIR_W?
 
 ```hex
 01 08 15 00 7b 04 06 01 10 02 02 10 29 02 11 09 10 01 0f 02 12 1e c8 18 00 7b f3 08 0d 09 0c 0e 96
@@ -297,7 +297,7 @@
 14: map_transition(0x0E, 0x96)
 ```
 
-**Event 19** — triggers: (9,6)/ALWAYS
+**Event 19** — triggers: (9,6)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0e a6
@@ -312,7 +312,7 @@
 04: map_transition(0x0E, 0xA6)
 ```
 
-**Event 20** — triggers: (10,6)/ALWAYS
+**Event 20** — triggers: (10,6)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0e b6
@@ -327,7 +327,7 @@
 04: map_transition(0x0E, 0xB6)
 ```
 
-**Event 21** — triggers: (11,6)/ALWAYS
+**Event 21** — triggers: (11,6)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0e b5
@@ -342,7 +342,7 @@
 04: map_transition(0x0E, 0xB5)
 ```
 
-**Event 22** — triggers: (11,5)/ALWAYS
+**Event 22** — triggers: (11,5)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0e b4
@@ -357,7 +357,7 @@
 04: map_transition(0x0E, 0xB4)
 ```
 
-**Event 23** — triggers: (11,4)/ALWAYS
+**Event 23** — triggers: (11,4)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0e b3
@@ -372,7 +372,7 @@
 04: map_transition(0x0E, 0xB3)
 ```
 
-**Event 24** — triggers: (11,3)/ALWAYS
+**Event 24** — triggers: (11,3)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 01 13 1e c8 0d 09 0c 0e b2
@@ -389,7 +389,7 @@
 06: map_transition(0x0E, 0xB2)
 ```
 
-**Event 25** — triggers: (11,2)/ALWAYS
+**Event 25** — triggers: (11,2)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0e b1
@@ -404,7 +404,7 @@
 04: map_transition(0x0E, 0xB1)
 ```
 
-**Event 26** — triggers: (11,1)/ALWAYS
+**Event 26** — triggers: (11,1)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0e b0
@@ -419,7 +419,7 @@
 04: map_transition(0x0E, 0xB0)
 ```
 
-**Event 27** — triggers: (11,0)/ALWAYS
+**Event 27** — triggers: (11,0)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d bf

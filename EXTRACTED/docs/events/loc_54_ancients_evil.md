@@ -9,90 +9,90 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (1,1) | `0x11` | **8** | ENTER |
-| (2,1) | `0x21` | **32** | DIR_SPECIAL |
-| (2,4) | `0x24` | **42** | ENTER |
-| (2,6) | `0x26` | **22** | DIR_SPECIAL |
-| (2,8) | `0x28` | **22** | DIR_SPECIAL |
-| (2,12) | `0x2C` | **9** | ENTER |
-| (3,1) | `0x31` | **10** | ENTER |
-| (3,2) | `0x32` | **11** | ENTER |
-| (3,5) | `0x35` | **38** | ENTER |
-| (3,6) | `0x36` | **23** | DIR_SPECIAL |
-| (3,8) | `0x38` | **23** | DIR_SPECIAL |
-| (3,12) | `0x3C` | **3** | ENTER |
-| (4,3) | `0x43` | **33** | DIR_SPECIAL |
-| (4,6) | `0x46` | **24** | DIR_SPECIAL |
-| (4,8) | `0x48` | **24** | DIR_SPECIAL |
-| (5,1) | `0x51` | **10** | ENTER |
-| (5,2) | `0x52` | **11** | ENTER |
-| (5,3) | `0x53` | **12** | ENTER |
-| (5,4) | `0x54` | **13** | ENTER |
-| (5,7) | `0x57` | **39** | ENTER |
-| (5,8) | `0x58` | **25** | DIR_SPECIAL |
-| (5,11) | `0x5B` | **4** | ENTER |
-| (5,12) | `0x5C` | **6** | ENTER |
-| (5,13) | `0x5D` | **5** | ENTER |
-| (6,5) | `0x65` | **34** | DIR_SPECIAL |
-| (6,8) | `0x68` | **26** | DIR_SPECIAL |
-| (6,10) | `0x6A` | **26** | DIR_SPECIAL |
-| (6,12) | `0x6C` | **26** | DIR_SPECIAL |
-| (7,1) | `0x71` | **10** | ENTER |
-| (7,2) | `0x72` | **11** | ENTER |
-| (7,3) | `0x73` | **12** | ENTER |
-| (7,4) | `0x74` | **13** | ENTER |
-| (7,5) | `0x75` | **14** | ENTER |
-| (7,6) | `0x76` | **15** | ENTER |
-| (7,9) | `0x79` | **40** | ENTER |
-| (7,10) | `0x7A` | **27** | DIR_SPECIAL |
-| (7,12) | `0x7C` | **27** | DIR_SPECIAL |
-| (8,7) | `0x87` | **35** | DIR_SPECIAL |
-| (8,10) | `0x8A` | **28** | DIR_SPECIAL |
-| (8,12) | `0x8C` | **28** | DIR_SPECIAL |
-| (9,1) | `0x91` | **10** | ENTER |
-| (9,2) | `0x92` | **11** | ENTER |
-| (9,3) | `0x93` | **12** | ENTER |
-| (9,4) | `0x94` | **13** | ENTER |
-| (9,5) | `0x95` | **14** | ENTER |
-| (9,6) | `0x96` | **15** | ENTER |
-| (9,7) | `0x97` | **16** | ENTER |
-| (9,8) | `0x98` | **17** | ENTER |
-| (9,11) | `0x9B` | **41** | ENTER |
-| (9,12) | `0x9C` | **29** | DIR_SPECIAL |
-| (10,9) | `0xA9` | **36** | DIR_SPECIAL |
-| (10,12) | `0xAC` | **30** | DIR_SPECIAL |
-| (11,1) | `0xB1` | **10** | ENTER |
-| (11,2) | `0xB2` | **11** | ENTER |
-| (11,3) | `0xB3` | **12** | ENTER |
-| (11,4) | `0xB4` | **13** | ENTER |
-| (11,5) | `0xB5` | **14** | ENTER |
-| (11,6) | `0xB6` | **15** | ENTER |
-| (11,7) | `0xB7` | **16** | ENTER |
-| (11,8) | `0xB8` | **17** | ENTER |
-| (11,9) | `0xB9` | **18** | ENTER |
-| (11,10) | `0xBA` | **19** | ENTER |
+| (1,1) | `0x11` | **8** | DIR_N? |
+| (2,1) | `0x21` | **32** | DIR_E? |
+| (2,4) | `0x24` | **42** | DIR_N? |
+| (2,6) | `0x26` | **22** | DIR_E? |
+| (2,8) | `0x28` | **22** | DIR_E? |
+| (2,12) | `0x2C` | **9** | DIR_N? |
+| (3,1) | `0x31` | **10** | DIR_N? |
+| (3,2) | `0x32` | **11** | DIR_N? |
+| (3,5) | `0x35` | **38** | DIR_N? |
+| (3,6) | `0x36` | **23** | DIR_E? |
+| (3,8) | `0x38` | **23** | DIR_E? |
+| (3,12) | `0x3C` | **3** | DIR_N? |
+| (4,3) | `0x43` | **33** | DIR_E? |
+| (4,6) | `0x46` | **24** | DIR_E? |
+| (4,8) | `0x48` | **24** | DIR_E? |
+| (5,1) | `0x51` | **10** | DIR_N? |
+| (5,2) | `0x52` | **11** | DIR_N? |
+| (5,3) | `0x53` | **12** | DIR_N? |
+| (5,4) | `0x54` | **13** | DIR_N? |
+| (5,7) | `0x57` | **39** | DIR_N? |
+| (5,8) | `0x58` | **25** | DIR_E? |
+| (5,11) | `0x5B` | **4** | DIR_N? |
+| (5,12) | `0x5C` | **6** | DIR_N? |
+| (5,13) | `0x5D` | **5** | DIR_N? |
+| (6,5) | `0x65` | **34** | DIR_E? |
+| (6,8) | `0x68` | **26** | DIR_E? |
+| (6,10) | `0x6A` | **26** | DIR_E? |
+| (6,12) | `0x6C` | **26** | DIR_E? |
+| (7,1) | `0x71` | **10** | DIR_N? |
+| (7,2) | `0x72` | **11** | DIR_N? |
+| (7,3) | `0x73` | **12** | DIR_N? |
+| (7,4) | `0x74` | **13** | DIR_N? |
+| (7,5) | `0x75` | **14** | DIR_N? |
+| (7,6) | `0x76` | **15** | DIR_N? |
+| (7,9) | `0x79` | **40** | DIR_N? |
+| (7,10) | `0x7A` | **27** | DIR_E? |
+| (7,12) | `0x7C` | **27** | DIR_E? |
+| (8,7) | `0x87` | **35** | DIR_E? |
+| (8,10) | `0x8A` | **28** | DIR_E? |
+| (8,12) | `0x8C` | **28** | DIR_E? |
+| (9,1) | `0x91` | **10** | DIR_N? |
+| (9,2) | `0x92` | **11** | DIR_N? |
+| (9,3) | `0x93` | **12** | DIR_N? |
+| (9,4) | `0x94` | **13** | DIR_N? |
+| (9,5) | `0x95` | **14** | DIR_N? |
+| (9,6) | `0x96` | **15** | DIR_N? |
+| (9,7) | `0x97` | **16** | DIR_N? |
+| (9,8) | `0x98` | **17** | DIR_N? |
+| (9,11) | `0x9B` | **41** | DIR_N? |
+| (9,12) | `0x9C` | **29** | DIR_E? |
+| (10,9) | `0xA9` | **36** | DIR_E? |
+| (10,12) | `0xAC` | **30** | DIR_E? |
+| (11,1) | `0xB1` | **10** | DIR_N? |
+| (11,2) | `0xB2` | **11** | DIR_N? |
+| (11,3) | `0xB3` | **12** | DIR_N? |
+| (11,4) | `0xB4` | **13** | DIR_N? |
+| (11,5) | `0xB5` | **14** | DIR_N? |
+| (11,6) | `0xB6` | **15** | DIR_N? |
+| (11,7) | `0xB7` | **16** | DIR_N? |
+| (11,8) | `0xB8` | **17** | DIR_N? |
+| (11,9) | `0xB9` | **18** | DIR_N? |
+| (11,10) | `0xBA` | **19** | DIR_N? |
 | (11,14) | `0xBE` | **43** | ANY_DIR |
-| (12,11) | `0xCB` | **37** | DIR_SPECIAL |
-| (13,1) | `0xD1` | **10** | ENTER |
-| (13,2) | `0xD2` | **11** | ENTER |
-| (13,3) | `0xD3` | **12** | ENTER |
-| (13,4) | `0xD4` | **13** | ENTER |
-| (13,5) | `0xD5` | **14** | ENTER |
-| (13,6) | `0xD6` | **15** | ENTER |
-| (13,7) | `0xD7` | **16** | ENTER |
-| (13,8) | `0xD8` | **17** | ENTER |
-| (13,9) | `0xD9` | **18** | ENTER |
-| (13,10) | `0xDA` | **19** | ENTER |
-| (13,11) | `0xDB` | **20** | ENTER |
-| (13,12) | `0xDC` | **21** | ENTER |
-| (13,15) | `0xDF` | **2** | DIR_N? |
-| (14,15) | `0xEF` | **7** | DIR_N? |
-| (15,14) | `0xFE` | **31** | ALWAYS |
-| (15,15) | `0xFF` | **1** | ENTER |
+| (12,11) | `0xCB` | **37** | DIR_E? |
+| (13,1) | `0xD1` | **10** | DIR_N? |
+| (13,2) | `0xD2` | **11** | DIR_N? |
+| (13,3) | `0xD3` | **12** | DIR_N? |
+| (13,4) | `0xD4` | **13** | DIR_N? |
+| (13,5) | `0xD5` | **14** | DIR_N? |
+| (13,6) | `0xD6` | **15** | DIR_N? |
+| (13,7) | `0xD7` | **16** | DIR_N? |
+| (13,8) | `0xD8` | **17** | DIR_N? |
+| (13,9) | `0xD9` | **18** | DIR_N? |
+| (13,10) | `0xDA` | **19** | DIR_N? |
+| (13,11) | `0xDB` | **20** | DIR_N? |
+| (13,12) | `0xDC` | **21** | DIR_N? |
+| (13,15) | `0xDF` | **2** | DIR_S? |
+| (14,15) | `0xEF` | **7** | DIR_S? |
+| (15,14) | `0xFE` | **31** | DIR_W? |
+| (15,15) | `0xFF` | **1** | DIR_N? |
 
 ## Events
 
-**Event 01** — triggers: (15,15)/ENTER
+**Event 01** — triggers: (15,15)/DIR_N?
 
 ```hex
 02 01 09 11 01 0c 10 a4 0f
@@ -107,7 +107,7 @@
 04: end_script()
 ```
 
-**Event 02** — triggers: (13,15)/DIR_N?
+**Event 02** — triggers: (13,15)/DIR_S?
 
 ```hex
 2d 04 05 10 04 01 02 07 0d 09 0c 10 a4 0f
@@ -124,7 +124,7 @@
 06: end_script()
 ```
 
-**Event 03** — triggers: (3,12)/ENTER
+**Event 03** — triggers: (3,12)/DIR_N?
 
 ```hex
 2d 04 05 11 04 15 00 75 02 10 04 15 00 75 40 10 02 02 03 29 02 28 29
@@ -146,7 +146,7 @@
 09: set_abort_and_exit()
 ```
 
-**Event 04** — triggers: (5,11)/ENTER
+**Event 04** — triggers: (5,11)/DIR_N?
 
 ```hex
 01 29 2f 30 e4 e6 fa fa fa fa fa fa fa fa 10 02 01 2a 29 18 00 75 ef 10 01 2b 07 14
@@ -166,7 +166,7 @@
 09: clear_current_tile_event_flag()
 ```
 
-**Event 05** — triggers: (5,13)/ENTER
+**Event 05** — triggers: (5,13)/DIR_N?
 
 ```hex
 01 29 2f 30 e7 e8 fa fa fa fa fa fa fa fa 10 02 01 2a 29 18 00 75 df 20 01 2b 07 14
@@ -186,7 +186,7 @@
 09: clear_current_tile_event_flag()
 ```
 
-**Event 06** — triggers: (5,12)/ENTER
+**Event 06** — triggers: (5,12)/DIR_N?
 
 ```hex
 2d 04 05 11 09 15 00 75 02 10 02 15 00 75 40 11 02 02 28 29 15 00 75 30 1b 30 10 02 02 03 29 01 2c 15 00 75 80 10 03 02 2d 18 00 75 8f 40 29 18 00 75 00 03 02 2e 29
@@ -222,7 +222,7 @@
 21: set_abort_and_exit()
 ```
 
-**Event 07** — triggers: (14,15)/DIR_N?
+**Event 07** — triggers: (14,15)/DIR_S?
 
 ```hex
 04 02
@@ -232,7 +232,7 @@
 00: show_text_above_door(str[2] "Sorcerers only!")
 ```
 
-**Event 08** — triggers: (1,1)/ENTER
+**Event 08** — triggers: (1,1)/DIR_N?
 
 ```hex
 04 05
@@ -242,7 +242,7 @@
 00: show_text_above_door(str[5] "Illumination")
 ```
 
-**Event 09** — triggers: (2,12)/ENTER
+**Event 09** — triggers: (2,12)/DIR_N?
 
 ```hex
 04 06
@@ -252,7 +252,7 @@
 00: show_text_above_door(str[6] "Death's Doorway")
 ```
 
-**Event 10** — triggers: (3,1)/ENTER, (5,1)/ENTER, (7,1)/ENTER, (9,1)/ENTER, (11,1)/ENTER, (13,1)/ENTER
+**Event 10** — triggers: (3,1)/DIR_N?, (5,1)/DIR_N?, (7,1)/DIR_N?, (9,1)/DIR_N?, (11,1)/DIR_N?, (13,1)/DIR_N?
 
 ```hex
 04 07
@@ -262,7 +262,7 @@
 00: show_text_above_door(str[7] "Door #1")
 ```
 
-**Event 11** — triggers: (3,2)/ENTER, (5,2)/ENTER, (7,2)/ENTER, (9,2)/ENTER, (11,2)/ENTER, (13,2)/ENTER
+**Event 11** — triggers: (3,2)/DIR_N?, (5,2)/DIR_N?, (7,2)/DIR_N?, (9,2)/DIR_N?, (11,2)/DIR_N?, (13,2)/DIR_N?
 
 ```hex
 04 08
@@ -272,7 +272,7 @@
 00: show_text_above_door(str[8] "Door #2")
 ```
 
-**Event 12** — triggers: (5,3)/ENTER, (7,3)/ENTER, (9,3)/ENTER, (11,3)/ENTER, (13,3)/ENTER
+**Event 12** — triggers: (5,3)/DIR_N?, (7,3)/DIR_N?, (9,3)/DIR_N?, (11,3)/DIR_N?, (13,3)/DIR_N?
 
 ```hex
 04 09
@@ -282,7 +282,7 @@
 00: show_text_above_door(str[9] "Door #3")
 ```
 
-**Event 13** — triggers: (5,4)/ENTER, (7,4)/ENTER, (9,4)/ENTER, (11,4)/ENTER, (13,4)/ENTER
+**Event 13** — triggers: (5,4)/DIR_N?, (7,4)/DIR_N?, (9,4)/DIR_N?, (11,4)/DIR_N?, (13,4)/DIR_N?
 
 ```hex
 04 0a
@@ -292,7 +292,7 @@
 00: show_text_above_door(str[10] "Door #4")
 ```
 
-**Event 14** — triggers: (7,5)/ENTER, (9,5)/ENTER, (11,5)/ENTER, (13,5)/ENTER
+**Event 14** — triggers: (7,5)/DIR_N?, (9,5)/DIR_N?, (11,5)/DIR_N?, (13,5)/DIR_N?
 
 ```hex
 04 0b
@@ -302,7 +302,7 @@
 00: show_text_above_door(str[11] "Door #5")
 ```
 
-**Event 15** — triggers: (7,6)/ENTER, (9,6)/ENTER, (11,6)/ENTER, (13,6)/ENTER
+**Event 15** — triggers: (7,6)/DIR_N?, (9,6)/DIR_N?, (11,6)/DIR_N?, (13,6)/DIR_N?
 
 ```hex
 04 0c
@@ -312,7 +312,7 @@
 00: show_text_above_door(str[12] "Door #6")
 ```
 
-**Event 16** — triggers: (9,7)/ENTER, (11,7)/ENTER, (13,7)/ENTER
+**Event 16** — triggers: (9,7)/DIR_N?, (11,7)/DIR_N?, (13,7)/DIR_N?
 
 ```hex
 04 0d
@@ -322,7 +322,7 @@
 00: show_text_above_door(str[13] "Door #7")
 ```
 
-**Event 17** — triggers: (9,8)/ENTER, (11,8)/ENTER, (13,8)/ENTER
+**Event 17** — triggers: (9,8)/DIR_N?, (11,8)/DIR_N?, (13,8)/DIR_N?
 
 ```hex
 04 0e
@@ -332,7 +332,7 @@
 00: show_text_above_door(str[14] "Door #8")
 ```
 
-**Event 18** — triggers: (11,9)/ENTER, (13,9)/ENTER
+**Event 18** — triggers: (11,9)/DIR_N?, (13,9)/DIR_N?
 
 ```hex
 04 0f
@@ -342,7 +342,7 @@
 00: show_text_above_door(str[15] "Door #9")
 ```
 
-**Event 19** — triggers: (11,10)/ENTER, (13,10)/ENTER
+**Event 19** — triggers: (11,10)/DIR_N?, (13,10)/DIR_N?
 
 ```hex
 04 10
@@ -352,7 +352,7 @@
 00: show_text_above_door(str[16] "Door #10")
 ```
 
-**Event 20** — triggers: (13,11)/ENTER
+**Event 20** — triggers: (13,11)/DIR_N?
 
 ```hex
 04 11
@@ -362,7 +362,7 @@
 00: show_text_above_door(str[17] "Door #11")
 ```
 
-**Event 21** — triggers: (13,12)/ENTER
+**Event 21** — triggers: (13,12)/DIR_N?
 
 ```hex
 04 12
@@ -372,7 +372,7 @@
 00: show_text_above_door(str[18] "Door #12")
 ```
 
-**Event 22** — triggers: (2,6)/DIR_SPECIAL, (2,8)/DIR_SPECIAL
+**Event 22** — triggers: (2,6)/DIR_E?, (2,8)/DIR_E?
 
 ```hex
 04 13
@@ -382,7 +382,7 @@
 00: show_text_above_door(str[19] "Door A")
 ```
 
-**Event 23** — triggers: (3,6)/DIR_SPECIAL, (3,8)/DIR_SPECIAL
+**Event 23** — triggers: (3,6)/DIR_E?, (3,8)/DIR_E?
 
 ```hex
 04 14
@@ -392,7 +392,7 @@
 00: show_text_above_door(str[20] "Door B")
 ```
 
-**Event 24** — triggers: (4,6)/DIR_SPECIAL, (4,8)/DIR_SPECIAL
+**Event 24** — triggers: (4,6)/DIR_E?, (4,8)/DIR_E?
 
 ```hex
 04 15
@@ -402,7 +402,7 @@
 00: show_text_above_door(str[21] "Door C")
 ```
 
-**Event 25** — triggers: (5,8)/DIR_SPECIAL
+**Event 25** — triggers: (5,8)/DIR_E?
 
 ```hex
 04 16
@@ -412,7 +412,7 @@
 00: show_text_above_door(str[22] "Door D")
 ```
 
-**Event 26** — triggers: (6,8)/DIR_SPECIAL, (6,10)/DIR_SPECIAL, (6,12)/DIR_SPECIAL
+**Event 26** — triggers: (6,8)/DIR_E?, (6,10)/DIR_E?, (6,12)/DIR_E?
 
 ```hex
 04 17
@@ -422,7 +422,7 @@
 00: show_text_above_door(str[23] "Door E")
 ```
 
-**Event 27** — triggers: (7,10)/DIR_SPECIAL, (7,12)/DIR_SPECIAL
+**Event 27** — triggers: (7,10)/DIR_E?, (7,12)/DIR_E?
 
 ```hex
 04 18
@@ -432,7 +432,7 @@
 00: show_text_above_door(str[24] "Door F")
 ```
 
-**Event 28** — triggers: (8,10)/DIR_SPECIAL, (8,12)/DIR_SPECIAL
+**Event 28** — triggers: (8,10)/DIR_E?, (8,12)/DIR_E?
 
 ```hex
 04 19
@@ -442,7 +442,7 @@
 00: show_text_above_door(str[25] "Door G")
 ```
 
-**Event 29** — triggers: (9,12)/DIR_SPECIAL
+**Event 29** — triggers: (9,12)/DIR_E?
 
 ```hex
 04 1a
@@ -452,7 +452,7 @@
 00: show_text_above_door(str[26] "Door H")
 ```
 
-**Event 30** — triggers: (10,12)/DIR_SPECIAL
+**Event 30** — triggers: (10,12)/DIR_E?
 
 ```hex
 04 1b
@@ -462,7 +462,7 @@
 00: show_text_above_door(str[27] "Door I")
 ```
 
-**Event 31** — triggers: (15,14)/ALWAYS
+**Event 31** — triggers: (15,14)/DIR_W?
 
 ```hex
 05 1c
@@ -472,7 +472,7 @@
 00: show_text_popup_style_a(str[28] "All that are odd / are more but even / All that are even / become less e")
 ```
 
-**Event 32** — triggers: (2,1)/DIR_SPECIAL
+**Event 32** — triggers: (2,1)/DIR_E?
 
 ```hex
 05 1d
@@ -482,7 +482,7 @@
 00: show_text_popup_style_a(str[29] "This one's easy")
 ```
 
-**Event 33** — triggers: (4,3)/DIR_SPECIAL
+**Event 33** — triggers: (4,3)/DIR_E?
 
 ```hex
 05 1e
@@ -492,7 +492,7 @@
 00: show_text_popup_style_a(str[30] "Rhymes with door")
 ```
 
-**Event 34** — triggers: (6,5)/DIR_SPECIAL
+**Event 34** — triggers: (6,5)/DIR_E?
 
 ```hex
 05 1f
@@ -502,7 +502,7 @@
 00: show_text_popup_style_a(str[31] "The sick sheik's / sixth sheep ...")
 ```
 
-**Event 35** — triggers: (8,7)/DIR_SPECIAL
+**Event 35** — triggers: (8,7)/DIR_E?
 
 ```hex
 05 20
@@ -512,7 +512,7 @@
 00: show_text_popup_style_a(str[32] "Twice the first / two's double")
 ```
 
-**Event 36** — triggers: (10,9)/DIR_SPECIAL
+**Event 36** — triggers: (10,9)/DIR_E?
 
 ```hex
 05 21
@@ -522,7 +522,7 @@
 00: show_text_popup_style_a(str[33] "Sides of a pentagram")
 ```
 
-**Event 37** — triggers: (12,11)/DIR_SPECIAL
+**Event 37** — triggers: (12,11)/DIR_E?
 
 ```hex
 05 22
@@ -532,7 +532,7 @@
 00: show_text_popup_style_a(str[34] "Almost a dozen")
 ```
 
-**Event 38** — triggers: (3,5)/ENTER
+**Event 38** — triggers: (3,5)/DIR_N?
 
 ```hex
 05 23
@@ -542,7 +542,7 @@
 00: show_text_popup_style_a(str[35] "It's Z end")
 ```
 
-**Event 39** — triggers: (5,7)/ENTER
+**Event 39** — triggers: (5,7)/DIR_N?
 
 ```hex
 05 24
@@ -552,7 +552,7 @@
 00: show_text_popup_style_a(str[36] "You and you")
 ```
 
-**Event 40** — triggers: (7,9)/ENTER
+**Event 40** — triggers: (7,9)/DIR_N?
 
 ```hex
 05 25
@@ -562,7 +562,7 @@
 00: show_text_popup_style_a(str[37] "No, just you")
 ```
 
-**Event 41** — triggers: (9,11)/ENTER
+**Event 41** — triggers: (9,11)/DIR_N?
 
 ```hex
 05 26
@@ -572,7 +572,7 @@
 00: show_text_popup_style_a(str[38] "The first on / the right")
 ```
 
-**Event 42** — triggers: (2,4)/ENTER
+**Event 42** — triggers: (2,4)/DIR_N?
 
 ```hex
 05 27

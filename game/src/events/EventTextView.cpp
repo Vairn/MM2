@@ -18,6 +18,9 @@ constexpr uint8_t kPenSignBorderB = 0;
 constexpr uint8_t kPenSignTextR = 255;
 constexpr uint8_t kPenSignTextG = 255;
 constexpr uint8_t kPenSignTextB = 255;
+constexpr uint8_t kPenSignFillR = 0;
+constexpr uint8_t kPenSignFillG = 0;
+constexpr uint8_t kPenSignFillB = 0;
 // OP_0B service signboard sprite stub — horizontal tavern/building board (brown wood).
 constexpr uint8_t kPenServiceBoardR = 170;
 constexpr uint8_t kPenServiceBoardG = 102;
@@ -125,6 +128,20 @@ void printWrapped(gfx::ScreenCompositor &c, int start_col, int start_row, int en
     }
 }
 
+void fillSignInteriorRow(gfx::ScreenCompositor &c, int row)
+{
+    // OP_06 @ 0x15AEE: win_print("           ") ×11 spaces, JAM2 bg pen 0 (doc 44 §3.6).
+    // Pixel span cols 8..18 inclusive → 11 cells × 8 px.
+    c.fillRect(8 * 8, row * 8, 11 * 8, 8, kPenSignFillR, kPenSignFillG, kPenSignFillB, 255);
+}
+
+void fillSignInterior(gfx::ScreenCompositor &c)
+{
+    // win_open(sign) auto-clear of window interior (8,8)-(18,9) → px (64,64)-(151,79).
+    fillSignInteriorRow(c, 8);
+    fillSignInteriorRow(c, 9);
+}
+
 void drawSignpost(gfx::ScreenCompositor &c, const char *text)
 {
     using namespace gfx::font_glyphs;
@@ -137,8 +154,8 @@ void drawSignpost(gfx::ScreenCompositor &c, const char *text)
 
     for (int row = 8; row <= 9; ++row) {
         glyphAt(c, 7, row, kLeft, kPenSignBorderR, kPenSignBorderG, kPenSignBorderB);
+        fillSignInteriorRow(c, row);
         glyphAt(c, 19, row, kRight, kPenSignBorderR, kPenSignBorderG, kPenSignBorderB);
-        clearCells(c, 8, row, 18, row);
     }
 
     for (int col = 8; col <= 18; ++col) {
@@ -152,9 +169,11 @@ void drawSignpost(gfx::ScreenCompositor &c, const char *text)
         glyphAt(c, 13, row, kSolidBlock, kPenSignBorderR, kPenSignBorderG, kPenSignBorderB);
         glyphAt(c, 14, row, kLeft, kPenSignBorderR, kPenSignBorderG, kPenSignBorderB);
     }
-    glyphAt(c, 12, 14, kBottomLeft, kPenSignBorderR, kPenSignBorderG, kPenSignBorderB);
-    glyphAt(c, 14, 14, kBottomRight, kPenSignBorderR, kPenSignBorderG, kPenSignBorderB);
+    glyphAt(c, 12, 14, kBottomRight, kPenSignBorderR, kPenSignBorderG, kPenSignBorderB);
+    glyphAt(c, 14, 14, kBottomLeft, kPenSignBorderR, kPenSignBorderG, kPenSignBorderB);
     glyphAt(c, 13, 14, kSolidBlock, kPenSignBorderR, kPenSignBorderG, kPenSignBorderB);
+
+    fillSignInterior(c);
 
     char rewritten[256];
     int wi = 0;
@@ -205,11 +224,32 @@ int countPopupLines(const char *text)
     return lines;
 }
 
+bool textContains(const char *haystack, const char *needle)
+{
+    if (!haystack || !needle || needle[0] == '\0') {
+        return false;
+    }
+    for (size_t i = 0; haystack[i] != '\0'; ++i) {
+        size_t j = 0;
+        while (needle[j] != '\0' && haystack[i + j] == needle[j]) {
+            ++j;
+        }
+        if (needle[j] == '\0') {
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 void EventTextView::copyResolvedText(char *dst, size_t cap, const char *src)
 {
     if (!dst || cap == 0) {
+        return;
+    }
+    if (!src) {
+        dst[0] = '\0';
         return;
     }
     size_t j = 0;
@@ -293,21 +333,50 @@ void EventTextView::showOp06(const char *text)
     }
 }
 
-void EventTextView::showOp0B(const char *text, const char *data_dir, int location_id, uint8_t str_idx,
-                             uint8_t placement)
+void EventTextView::showOp0B(const char *text, const char *data_dir, const GameStateView &gs,
+                             const Mm2AttribRecord *attrib, uint8_t str_idx, uint8_t placement)
 {
+    sign_placement_ = placement;
+    sign_overlay_.unload();
+    bool has_sign = false;
+    if (data_dir) {
+        const int anm_id =
+            ServiceSignResolver::resolveForGameState(gs.a4(), static_cast<int>(gs.screenId()), attrib, str_idx);
+        if (anm_id > 0) {
+            has_sign = sign_overlay_.loadFromId(data_dir, anm_id);
+        }
+    }
+    const bool has_text = text != nullptr && text[0] != '\0';
+    if (!has_sign && !has_text) {
+        return;
+    }
     if (layer_count_ < static_cast<int>(sizeof(layers_) / sizeof(layers_[0]))) {
         EventTextLayer &layer = layers_[layer_count_++];
         layer.op = EventTextOp::Op0BServiceSign;
         copyResolvedText(layer.text, sizeof(layer.text), text);
     }
+}
+
+void EventTextView::showOp0B(const char *text, const char *data_dir, int screen_id,
+                             const Mm2AttribRecord *attrib, uint8_t str_idx, uint8_t placement)
+{
     sign_placement_ = placement;
     sign_overlay_.unload();
+    bool has_sign = false;
     if (data_dir) {
-        const int anm_id = ServiceSignResolver::resolveForLocation(location_id, str_idx);
+        const int anm_id = ServiceSignResolver::resolveForScreen(screen_id, attrib, str_idx);
         if (anm_id > 0) {
-            sign_overlay_.loadFromId(data_dir, anm_id);
+            has_sign = sign_overlay_.loadFromId(data_dir, anm_id);
         }
+    }
+    const bool has_text = text != nullptr && text[0] != '\0';
+    if (!has_sign && !has_text) {
+        return;
+    }
+    if (layer_count_ < static_cast<int>(sizeof(layers_) / sizeof(layers_[0]))) {
+        EventTextLayer &layer = layers_[layer_count_++];
+        layer.op = EventTextOp::Op0BServiceSign;
+        copyResolvedText(layer.text, sizeof(layer.text), text);
     }
 }
 
@@ -319,6 +388,11 @@ void EventTextView::showSpacePrompt()
 void EventTextView::clearSpacePrompt()
 {
     space_prompt_ = false;
+}
+
+bool EventTextView::tickAnimation()
+{
+    return sign_overlay_.tick();
 }
 
 void EventTextView::draw(gfx::ScreenCompositor &c) const
@@ -356,8 +430,12 @@ void EventTextView::draw(gfx::ScreenCompositor &c) const
             break;
         case EventTextOp::Op0BServiceSign:
             if (sign_overlay_.loaded()) {
+                /* OP_0B @ 0x15DB0 → sign_sprite_place @ 0x3266 mode $17 @ 0x23C8C:
+                 * all service signs blit over the 3D viewport (8,8)–(215,127).
+                 * Arg2 is a placement-table index (A4-$7538 → A4-$56E), not a
+                 * viewport-vs-panel switch — never route by sprite dimensions. */
                 sign_overlay_.blitCentered(c, sign_placement_);
-            } else {
+            } else if (layer.text[0] != '\0') {
                 drawServiceSignStub(c, layer.text);
             }
             break;
@@ -371,6 +449,19 @@ void EventTextView::draw(gfx::ScreenCompositor &c) const
     }
 }
 
+bool EventTextView::containsText(const char *needle) const
+{
+    if (!needle || needle[0] == '\0') {
+        return false;
+    }
+    for (int i = 0; i < layer_count_; ++i) {
+        if (textContains(layers_[i].text, needle)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool EventTextView::isPersistentOverlay(EventTextOp op)
 {
     switch (op) {
@@ -382,6 +473,22 @@ bool EventTextView::isPersistentOverlay(EventTextOp op)
     default:
         return false;
     }
+}
+
+void EventTextView::clearPersistentOverlays()
+{
+    int kept = 0;
+    for (int i = 0; i < layer_count_; ++i) {
+        if (!isPersistentOverlay(layers_[i].op)) {
+            if (kept != i) {
+                layers_[kept] = layers_[i];
+            }
+            ++kept;
+        }
+    }
+    layer_count_ = kept;
+    sign_overlay_.unload();
+    sign_placement_ = 0;
 }
 
 void EventTextView::scriptCleanup(bool *redraw_status, bool *redraw_roster, bool *redraw_divider)

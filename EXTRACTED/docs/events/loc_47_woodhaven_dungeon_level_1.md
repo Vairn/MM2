@@ -10,16 +10,16 @@
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
 | (0,6) | `0x06` | **8** | ANY_DIR |
-| (0,15) | `0x0F` | **7** | DIR_N? |
+| (0,15) | `0x0F` | **7** | DIR_S? |
 | (1,7) | `0x17` | **3** | 0x60 |
 | (2,9) | `0x29` | **8** | ANY_DIR |
-| (3,6) | `0x36` | **9** | DIR_N? |
+| (3,6) | `0x36` | **9** | DIR_S? |
 | (4,1) | `0x41` | **8** | ANY_DIR |
 | (4,4) | `0x44` | **4** | 0x60 |
-| (6,0) | `0x60` | **11** | ENTER |
-| (6,3) | `0x63` | **10** | DIR_N? |
+| (6,0) | `0x60` | **11** | DIR_N? |
+| (6,3) | `0x63` | **10** | DIR_S? |
 | (6,4) | `0x64` | **8** | ANY_DIR |
-| (7,0) | `0x70` | **5** | ENTER |
+| (7,0) | `0x70` | **5** | DIR_N? |
 | (7,1) | `0x71` | **8** | ANY_DIR |
 | (7,9) | `0x79` | **8** | ANY_DIR |
 | (8,13) | `0x8D` | **8** | ANY_DIR |
@@ -29,16 +29,16 @@
 | (12,15) | `0xCF` | **8** | ANY_DIR |
 | (13,7) | `0xD7` | **11** | 0x30 |
 | (13,8) | `0xD8` | **11** | 0x60 |
-| (13,13) | `0xDD` | **2** | DIR_N? |
+| (13,13) | `0xDD` | **2** | DIR_S? |
 | (14,5) | `0xE5` | **8** | ANY_DIR |
-| (14,8) | `0xE8` | **11** | DIR_SPECIAL |
-| (15,0) | `0xF0` | **1** | ALWAYS |
-| (15,6) | `0xF6` | **11** | DIR_SPECIAL |
-| (15,8) | `0xF8` | **11** | DIR_SPECIAL |
+| (14,8) | `0xE8` | **11** | DIR_E? |
+| (15,0) | `0xF0` | **1** | DIR_W? |
+| (15,6) | `0xF6` | **11** | DIR_E? |
+| (15,8) | `0xF8` | **11** | DIR_E? |
 
 ## Events
 
-**Event 01** — triggers: (15,0)/ALWAYS
+**Event 01** — triggers: (15,0)/DIR_W?
 
 ```hex
 01 01 09 11 01 0c 38 9b 0f
@@ -53,7 +53,7 @@
 04: end_script()
 ```
 
-**Event 02** — triggers: (13,13)/DIR_N?
+**Event 02** — triggers: (13,13)/DIR_S?
 
 ```hex
 01 02 09 11 01 0c 30 f7 0f
@@ -114,7 +114,7 @@
 11: clear_current_tile_event_flag()
 ```
 
-**Event 05** — triggers: (7,0)/ENTER
+**Event 05** — triggers: (7,0)/DIR_N?
 
 ```hex
 2d a1 00 11 04 01 0f 07 0d 09 0c 2f e0 17 3d 00 10 06 01 05 07 1c 05 1f 80 3c 02 00 00 00 1a 3d 01 14 02 11 29
@@ -157,7 +157,7 @@
 05: end_script()
 ```
 
-**Event 07** — triggers: (0,15)/DIR_N?
+**Event 07** — triggers: (0,15)/DIR_S?
 
 ```hex
 02 09 09 11 05 01 0a 26 20 09 12 01 05 00 00 11 01 1f 09 10 01 03 00 00 0f
@@ -190,7 +190,7 @@
 03: end_script()
 ```
 
-**Event 09** — triggers: (3,6)/DIR_N?
+**Event 09** — triggers: (3,6)/DIR_S?
 
 ```hex
 04 0c
@@ -200,7 +200,7 @@
 00: show_text_above_door(str[12] "No Robbers!")
 ```
 
-**Event 10** — triggers: (6,3)/DIR_N?
+**Event 10** — triggers: (6,3)/DIR_S?
 
 ```hex
 04 0d
@@ -210,7 +210,7 @@
 00: show_text_above_door(str[13] "No Clerics!")
 ```
 
-**Event 11** — triggers: (6,0)/ENTER, (13,7)/0x30, (13,8)/0x60, (14,8)/DIR_SPECIAL, (15,6)/DIR_SPECIAL, (15,8)/DIR_SPECIAL
+**Event 11** — triggers: (6,0)/DIR_N?, (13,7)/0x30, (13,8)/0x60, (14,8)/DIR_E?, (15,6)/DIR_E?, (15,8)/DIR_E?
 
 ```hex
 04 0e

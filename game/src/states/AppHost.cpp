@@ -79,6 +79,14 @@ void AppHost::framePresent()
     /* In-town frames live in the session compositor; everything else draws
      * into the title compositor. */
     const gfx::ScreenCompositor &c = in_town_active_ ? session_.compositor() : title_.compositor();
+#if MM2_HOST_AMIGA
+    if (in_town_active_ && !in_town_redrew_) {
+        /* Idle play screen: pace to vblank without swapping DB buffers (avoids
+         * showing stale back-buffer and skips redundant full-screen blits). */
+        platform::waitVblank();
+        return;
+    }
+#endif
     platform::presentFrame(c.pixels(), c.width(), c.height());
 #if !MM2_HOST_AMIGA
     platform::delayMs(16);
@@ -244,6 +252,8 @@ void AppHost::charChooseEnter()
 {
 #if MM2_HOST_AMIGA
     platform::clearScreen();
+    mm2_amiga_blit_sync();
+    mm2_amiga_ui_cache_invalidate();
     platform::applyUiPalette();
 #endif
     if (!character_ui_ready_ && !attachCharacterUi()) {
@@ -303,6 +313,8 @@ void AppHost::charStep()
 void AppHost::charDraw()
 {
 #if MM2_HOST_AMIGA
+    /* Drain blits from menuSuspend/clearScreen — Release can outrun the ACE blitter. */
+    mm2_amiga_blit_sync();
     if (character_ui_.needsRedraw()) {
         platform::applyUiPalette();
         mm2_amiga_ui_cache_begin();
@@ -312,12 +324,14 @@ void AppHost::charDraw()
         mm2_amiga_ui_cache_end();
         character_ui_.ackRedraw();
     }
+    /* Always composite cached UI to pBack before buffer swap (title menu does the same). */
     mm2_amiga_blit_sync();
     platform::applyUiPalette();
     mm2_amiga_ui_cache_present();
 #else
-    if (character_ui_ready_) {
+    if (character_ui_ready_ && character_ui_.needsRedraw()) {
         character_ui_.render(title_.compositor());
+        character_ui_.ackRedraw();
     }
 #endif
 }
@@ -333,6 +347,10 @@ bool AppHost::takePendingInTown()
 
 bool AppHost::startInTownFromPending()
 {
+#if MM2_HOST_AMIGA
+    mm2_amiga_blit_sync();
+    title_.releaseChipForPlayMode();
+#endif
     if (!session_.start(data_dir_, title_.roster(), pending_launch_)) {
         return false;
     }
@@ -348,13 +366,59 @@ bool AppHost::startInTownFromPending()
 
 void AppHost::inTownStep()
 {
+#if MM2_HOST_AMIGA
+    if (session_.isBootstrapping()) {
+        session_.tickBootstrap();
+        return;
+    }
+#endif
     session_.tick(keys_);
     if (session_.shouldQuit()) {
         quit_ = true;
     }
 }
 
-void AppHost::inTownDraw() { session_.render(); }
+void AppHost::inTownDraw()
+{
+#if MM2_HOST_AMIGA
+    mm2_amiga_blit_sync();
+    in_town_redrew_ = false;
+    if (session_.isBootstrapping()) {
+        if (session_.needsRedraw()) {
+            platform::clearScreen();
+            session_.ackRedraw();
+            in_town_redrew_ = true;
+        }
+        return;
+    }
+    if (session_.needsRedraw()) {
+        session_.render();
+        session_.ackRedraw();
+        in_town_redrew_ = true;
+    }
+    /* ACE keyUse is edge-triggered; re-poll after the play-screen draw so a short
+     * SPACE tap during a slow Corak frame is not lost between loop polls. */
+    if (session_.awaitingContinuePrompt()) {
+        const platform::KeyState after = platform::pollInput();
+        if (after.space || after.enter || after.any_key) {
+            session_.tick(after);
+            if (session_.shouldQuit()) {
+                quit_ = true;
+            }
+            if (session_.needsRedraw()) {
+                session_.render();
+                session_.ackRedraw();
+                in_town_redrew_ = true;
+            }
+        }
+    }
+#else
+    if (session_.needsRedraw()) {
+        session_.render();
+        session_.ackRedraw();
+    }
+#endif
+}
 
 void AppHost::inTownEnd()
 {

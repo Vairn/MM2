@@ -15,8 +15,8 @@ from mm2_gamestate import ANCHOR, EVENT_WORK_SIZE, GameState  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 TOKEN_TABLE_PATH = ROOT / "EXTRACTED" / "event_token_len_table.json"
 
-# Facing index 0/2/4/6 → context mask (defaults until RAM dump available).
-DEFAULT_CONTEXT_MASK = [0xF0, 0xF0, 0xF0, 0xF0]
+# Facing index 0/2/4/6 (W/S/E/N) → context mask @ A4-$6BE6 (ghidra off 0x1418).
+DEFAULT_CONTEXT_MASK = [0x10, 0, 0x20, 0, 0x40, 0, 0x80, 0]
 
 FACING_FROM_KEY = {"N": 0, "E": 2, "S": 4, "W": 6}
 

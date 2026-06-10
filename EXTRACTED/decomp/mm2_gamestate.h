@@ -31,6 +31,7 @@
 #define MM2_GS_SCRIPT_ABORT     (-0x79EA)  /* byte  ($8616) */
 #define MM2_GS_FIRST_TIME_FLAG  (-0x79E9)  /* byte  ($8617) */
 #define MM2_GS_SCREEN_MODE_PREV (-0x79E6)  /* byte  ($861A) */
+#define MM2_GS_SIGN_ENV_ID      (-0x79E3)  /* byte  ($861D) OP_0B table pick @ 0x15772 */
 #define MM2_GS_BUSY_STATUS      (-0x79E5)  /* byte  ($861B) */
 #define MM2_GS_ERA              (-0x79B6)  /* word  ($864A) era/timeline 0..9 */
 /* Low byte of the era word; read as the "current era" by event gating.
@@ -56,6 +57,7 @@
 #define MM2_GS_PENDING_EVENT_LATCH (-0x7952)  /* byte  ($86AE) */
 #define MM2_GS_COND_FLAG        (-0x7951)  /* byte  ($86AF) */
 #define MM2_GS_EXIT_FLAGS       (-0x7950)  /* byte  ($86B0) */
+#define MM2_GS_COMBAT_VICTORY_LATCH (-0x77BD)  /* byte  ($8843) OP_2B skip gate @ 0x16D74 */
 #define MM2_GS_EVENT_SCRIPT_START (-0x5C44)  /* word  ($A3BC) */
 #define MM2_GS_QUEUED_EVENT_ID  (-0x5D46)  /* byte  ($A2BA) */
 #define MM2_GS_SAVED_COND_FLAG  (-0x5D42)  /* byte  ($A2BE) */

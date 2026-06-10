@@ -239,6 +239,8 @@ void presentFrame(const uint8_t *rgba, int width, int height)
     SDL_RenderPresent(g_renderer);
 }
 
+void waitVblank() {}
+
 void setPresentScale(int scale)
 {
     if (scale > 0) {

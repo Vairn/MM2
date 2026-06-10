@@ -11,19 +11,19 @@
 |------------|-----|-------|-----------|
 | (1,1) | `0x11` | **3** | ANY_DIR |
 | (1,8) | `0x18` | **14** | ANY_DIR |
-| (3,3) | `0x33` | **11** | ENTER |
+| (3,3) | `0x33` | **11** | DIR_N? |
 | (3,6) | `0x36` | **15** | ANY_DIR |
-| (3,14) | `0x3E` | **10** | ENTER |
+| (3,14) | `0x3E` | **10** | DIR_N? |
 | (4,5) | `0x45` | **14** | ANY_DIR |
-| (5,1) | `0x51` | **8** | DIR_N? |
-| (5,5) | `0x55` | **4** | DIR_N? |
+| (5,1) | `0x51` | **8** | DIR_S? |
+| (5,5) | `0x55` | **4** | DIR_S? |
 | (5,6) | `0x56` | **15** | ANY_DIR |
-| (6,2) | `0x62` | **6** | ALWAYS |
+| (6,2) | `0x62` | **6** | DIR_W? |
 | (6,10) | `0x6A` | **13** | ANY_DIR |
 | (7,4) | `0x74` | **15** | ANY_DIR |
 | (7,6) | `0x76` | **16** | 0x00 |
 | (7,7) | `0x77` | **16** | ANY_DIR |
-| (8,1) | `0x81` | **2** | ALWAYS |
+| (8,1) | `0x81` | **2** | DIR_W? |
 | (8,9) | `0x89` | **14** | ANY_DIR |
 | (9,11) | `0x9B` | **13** | ANY_DIR |
 | (9,14) | `0x9E` | **12** | ANY_DIR |
@@ -31,21 +31,21 @@
 | (10,6) | `0xA6` | **17** | ANY_DIR |
 | (10,10) | `0xAA` | **15** | ANY_DIR |
 | (10,13) | `0xAD` | **12** | ANY_DIR |
-| (11,1) | `0xB1` | **7** | ENTER |
+| (11,1) | `0xB1` | **7** | DIR_N? |
 | (11,7) | `0xB7` | **17** | ANY_DIR |
 | (11,9) | `0xB9` | **14** | ANY_DIR |
 | (13,5) | `0xD5` | **14** | ANY_DIR |
 | (13,7) | `0xD7` | **18** | ANY_DIR |
 | (13,11) | `0xDB` | **17** | ANY_DIR |
 | (13,13) | `0xDD` | **15** | ANY_DIR |
-| (14,3) | `0xE3` | **1** | ENTER |
+| (14,3) | `0xE3` | **1** | DIR_N? |
 | (14,14) | `0xEE` | **14** | ANY_DIR |
 | (15,10) | `0xFA` | **9** | ANY_DIR |
 | (15,12) | `0xFC` | **17** | ANY_DIR |
 
 ## Events
 
-**Event 01** — triggers: (14,3)/ENTER
+**Event 01** — triggers: (14,3)/DIR_N?
 
 ```hex
 2b 0c 0b 07 00 02 01 0a 10 01 0f 16 01 d5 10 05 02 02 0a 10 01 0f 12 69 69 69 69 69 69 00 00 00 00 00 00 0c 38 08
@@ -72,7 +72,7 @@
 13: map_transition(0x38, 0x08)
 ```
 
-**Event 02** — triggers: (8,1)/ALWAYS
+**Event 02** — triggers: (8,1)/DIR_W?
 
 ```hex
 2b 03 15 00 78 40 11 05 12 8c 8c 00 00 00 00 00 00 00 00 00 00 02 03 2e 71 08 07 14 02 10 29
@@ -118,7 +118,7 @@
 14: clear_current_tile_event_flag()
 ```
 
-**Event 04** — triggers: (5,5)/DIR_N?
+**Event 04** — triggers: (5,5)/DIR_S?
 
 ```hex
 02 07 2e f3 20 07 14
@@ -151,7 +151,7 @@
 08: map_transition(0x07, 0x33)
 ```
 
-**Event 06** — triggers: (6,2)/ALWAYS
+**Event 06** — triggers: (6,2)/DIR_W?
 
 ```hex
 2b 03 15 00 77 02 10 02 12 2b 2b 2b 2b 2b 2b 2b 2b 00 00 00 00 14 02 09 29
@@ -169,7 +169,7 @@
 06: set_abort_and_exit()
 ```
 
-**Event 07** — triggers: (11,1)/ENTER
+**Event 07** — triggers: (11,1)/DIR_N?
 
 ```hex
 02 0a 09 10 01 0f 18 00 27 00 09 0f
@@ -185,7 +185,7 @@
 05: end_script()
 ```
 
-**Event 08** — triggers: (5,1)/DIR_N?
+**Event 08** — triggers: (5,1)/DIR_S?
 
 ```hex
 02 0b 09 10 01 0f 18 00 28 00 c8 18 00 29 00 00 0f
@@ -224,7 +224,7 @@
 09: clear_current_tile_event_flag()
 ```
 
-**Event 10** — triggers: (3,14)/ENTER
+**Event 10** — triggers: (3,14)/DIR_N?
 
 ```hex
 06 0d
@@ -234,7 +234,7 @@
 00: show_text_popup_style_b(str[13] "Vulcania / This Way[")
 ```
 
-**Event 11** — triggers: (3,3)/ENTER
+**Event 11** — triggers: (3,3)/DIR_N?
 
 ```hex
 06 0e

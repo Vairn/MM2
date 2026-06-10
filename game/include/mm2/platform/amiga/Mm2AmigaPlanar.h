@@ -4,6 +4,7 @@
 
 #include <ace/types.h>
 #include "mm2_image32_codec.h"
+#include "mm2_anm_preview.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +29,11 @@ void mm2_amiga_apply_palette(const mm2_image32_file *img);
 void mm2_amiga_stage_asset_palette(const mm2_image32_file *img);
 void mm2_amiga_blit_frame(const mm2_image32_file *img, uint16_t frame_index, UWORD uwDstX, UWORD uwDstY,
                           UBYTE opaque);
+
+/** Load .anm palette words (pen 0 transparent) into the viewport palette. */
+void mm2_amiga_apply_anm_palette(const uint16_t palette_words[MM2_ANM_PALETTE_COLORS]);
+/** Masked blit of composed .anm cel (pen 0 skipped via blitCopyMask). */
+void mm2_amiga_blit_anm_composed(const mm2_anm_composite_planar *img, UWORD uwDstX, UWORD uwDstY);
 
 void mm2_amiga_present_end(void);
 void mm2_amiga_push_palette(void);

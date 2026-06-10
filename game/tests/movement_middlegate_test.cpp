@@ -1,7 +1,7 @@
-// Movement tests: Middlegate spawn (7,3,N) collision + turns.
+// Movement tests: Middlegate spawn (7,3,N) collision + turns; screen 2 dark tile.
 //
 // Passability uses the 0x9424 first gate: collision cell AND facing bundle
-// hi (A4-$55D8) AND $55 — not absolute N/E/S/W nibble names.
+// hi (A4-$55D8) AND $55 (wall bits only) — darkness does not block.
 //
 // Usage: movement_middlegate_test <data_dir>
 
@@ -71,8 +71,21 @@ int main(int argc, char **argv)
     const mm2::gameplay::MoveResult w_block = mm2::gameplay::step(world, gs, true);
     expect(w_block.blocked && gs.coordX() == 7 && gs.coordY() == 4, "step W from (7,4) blocked", fails);
 
+    /* Screen 2 (dungeon): cell (1,0)=0x66 has S-dark in E-facing bundle 0x30.
+     * 0x9424 AND #$55 must not treat darkness as a wall; step E -> (2,0). */
+    expect(world.enterScreen(2), "enter screen 2", fails);
+    gs.setScreenId(2);
+    gs.setCoordX(1);
+    gs.setCoordY(0);
+    gs.setFacingKey('E');
+    gs.setLightFactor(5);
+    const mm2::gameplay::MoveResult dark_step = mm2::gameplay::step(world, gs, true);
+    expect(dark_step.moved && !dark_step.blocked, "dark bits do not block step E", fails);
+    expect(gs.coordX() == 2 && gs.coordY() == 0, "after dark-passable step at (2,0)", fails);
+    expect(gs.lightFactor() == 4, "dark destination drains light @ 0x69DC", fails);
+
     if (fails == 0) {
-        std::printf("OK: movement_middlegate_test (7 checks)\n");
+        std::printf("OK: movement_middlegate_test (11 checks)\n");
         return 0;
     }
     return 1;

@@ -61,7 +61,7 @@ flowchart TB
 | Layer | Entry | Loads | Blit destination |
 |-------|-------|-------|------------------|
 | Event text | `0x15924`–`0x15CE6` | loc string bank `A4-$47C8` | Rows 17–22 / popup cells ([doc 44](44-event-text-rendering.md)) |
-| **`OP_0B`** | `0x15DB0` | `0x9A30(id−1)` → **`NN.anm`** | Viewport `(8,8)–(215,127)` via **`0x3266`/`0x23C8C`** |
+| **`OP_0B`** | `0x15DB0` | `0x9A30(id)` → **`NN.anm`** (`0x316E` `subq` + `0x9A30` `addq` cancel) | Viewport `(8,8)–(215,127)` via **`0x3266`/`0x23C8C`** |
 | **Castle scene** | `0x6FB8` / `0x76AC` | Scene table `A4-$72FC` / sheet handles `A4-$7366` | Full viewport or slot rects (see §3) |
 | **Scripted score + text** | `0x64F8` | Pointer table **`A4-$73C4`** + **`A4-$73C0`** | Cleared band + **`-$7BE4`** strings + **`0x6798`** wait |
 | Title attract | `0x25FCE` | Embedded **`intro.32`**, **`introclips.32`** | Full 320×200 ([doc 38/39](38-title-screen-and-intro-assets.md)) |
@@ -76,7 +76,7 @@ Used by **`OP_0B`**, **combat encounter setup** (`OP_12`/`13` → `0x316E`), and
 
 1. Optional viewport clear if dark (`A4-$79E1`): preset **#8** @ `(8,8)–(215,127)`.
 2. Pick slot from **`A4-$7538`** (24 bytes) matching sign/sprite id.
-3. **`0x9A30(id−1)`** — builds **`NN.anm`** in scratch (`0x9A30` decimal string loop → **`-$7CB6`** open), returns handle → **`A4-$79FE`**.
+3. **`0x9A30(id)`** — builds **`NN.anm`** in scratch (`0x316E` `subq #1` then `0x9A30` `addq #1` before the decimal loop; net id unchanged), returns handle → **`A4-$79FE`**.
 4. Gfx prep: **`-$7BAE`** with mode **`$16`** (`0x3220`).
 
 ### 2.2 Place — `sign_sprite_place` @ `0x3266`

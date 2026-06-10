@@ -9,36 +9,36 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (0,0) | `0x00` | **24** | DIR_N? |
-| (0,1) | `0x01` | **2** | DIR_N? |
-| (0,9) | `0x09` | **18** | DIR_N? |
-| (0,14) | `0x0E` | **22** | DIR_N? |
+| (0,0) | `0x00` | **24** | DIR_S? |
+| (0,1) | `0x01` | **2** | DIR_S? |
+| (0,9) | `0x09` | **18** | DIR_S? |
+| (0,14) | `0x0E` | **22** | DIR_S? |
 | (1,2) | `0x12` | **7** | ANY_DIR |
-| (2,15) | `0x2F` | **23** | DIR_N? |
-| (6,3) | `0x63` | **19** | DIR_SPECIAL |
+| (2,15) | `0x2F` | **23** | DIR_S? |
+| (6,3) | `0x63` | **19** | DIR_E? |
 | (6,14) | `0x6E` | **8** | ANY_DIR |
 | (7,0) | `0x70` | **3** | 0x30 |
 | (8,1) | `0x81` | **5** | ANY_DIR |
-| (8,2) | `0x82` | **15** | ALWAYS |
+| (8,2) | `0x82` | **15** | DIR_W? |
 | (8,3) | `0x83` | **14** | ANY_DIR |
 | (8,4) | `0x84` | **13** | ANY_DIR |
-| (8,6) | `0x86` | **20** | DIR_SPECIAL |
-| (8,11) | `0x8B` | **26** | ALWAYS |
-| (8,12) | `0x8C` | **16** | ALWAYS |
-| (8,15) | `0x8F` | **1** | DIR_SPECIAL |
-| (10,3) | `0xA3` | **21** | DIR_SPECIAL |
+| (8,6) | `0x86` | **20** | DIR_E? |
+| (8,11) | `0x8B` | **26** | DIR_W? |
+| (8,12) | `0x8C` | **16** | DIR_W? |
+| (8,15) | `0x8F` | **1** | DIR_E? |
+| (10,3) | `0xA3` | **21** | DIR_E? |
 | (10,14) | `0xAE` | **9** | ANY_DIR |
 | (11,0) | `0xB0` | **10** | ANY_DIR |
-| (14,5) | `0xE5` | **17** | ENTER |
-| (14,8) | `0xE8` | **25** | ALWAYS |
-| (15,0) | `0xF0` | **4** | ALWAYS |
+| (14,5) | `0xE5` | **17** | DIR_N? |
+| (14,8) | `0xE8` | **25** | DIR_W? |
+| (15,0) | `0xF0` | **4** | DIR_W? |
 | (15,1) | `0xF1` | **6** | ANY_DIR |
 | (15,3) | `0xF3` | **12** | ANY_DIR |
 | (15,5) | `0xF5` | **11** | ANY_DIR |
 
 ## Events
 
-**Event 01** — triggers: (8,15)/DIR_SPECIAL
+**Event 01** — triggers: (8,15)/DIR_E?
 
 ```hex
 02 01 09 11 01 0c 00 08 0f
@@ -53,7 +53,7 @@
 04: end_script()
 ```
 
-**Event 02** — triggers: (0,1)/DIR_N?
+**Event 02** — triggers: (0,1)/DIR_S?
 
 ```hex
 02 02 2a e8 03 00 00 00 00 00 00 00 00 00 00 00 00 07 14
@@ -84,7 +84,7 @@
 07: clear_current_tile_event_flag()
 ```
 
-**Event 04** — triggers: (15,0)/ALWAYS
+**Event 04** — triggers: (15,0)/DIR_W?
 
 ```hex
 17 00 00 10 06 15 00 76 04 11 04 02 04 07 18 00 76 e0 0a 0f 02 05 29
@@ -235,7 +235,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 15** — triggers: (8,2)/ALWAYS
+**Event 15** — triggers: (8,2)/DIR_W?
 
 ```hex
 04 06
@@ -245,7 +245,7 @@
 00: show_text_above_door(str[6] "Goblin Lair")
 ```
 
-**Event 16** — triggers: (8,12)/ALWAYS
+**Event 16** — triggers: (8,12)/DIR_W?
 
 ```hex
 06 07
@@ -255,7 +255,7 @@
 00: show_text_popup_style_b(str[7] "DANGER! / BEWARE!")
 ```
 
-**Event 17** — triggers: (14,5)/ENTER
+**Event 17** — triggers: (14,5)/DIR_N?
 
 ```hex
 06 08
@@ -265,7 +265,7 @@
 00: show_text_popup_style_b(str[8] "Kobold HQ / Keep Out!")
 ```
 
-**Event 18** — triggers: (0,9)/DIR_N?
+**Event 18** — triggers: (0,9)/DIR_S?
 
 ```hex
 05 0c
@@ -275,7 +275,7 @@
 00: show_text_popup_style_a(str[12] "There are only 180 / days per year.")
 ```
 
-**Event 19** — triggers: (6,3)/DIR_SPECIAL
+**Event 19** — triggers: (6,3)/DIR_E?
 
 ```hex
 05 0d
@@ -285,7 +285,7 @@
 00: show_text_popup_style_a(str[13] "Win the Blackest / battles and you are / halfway to an / audience with Q")
 ```
 
-**Event 20** — triggers: (8,6)/DIR_SPECIAL
+**Event 20** — triggers: (8,6)/DIR_E?
 
 ```hex
 05 0a
@@ -295,7 +295,7 @@
 00: show_text_popup_style_a(str[10] "Lloyd, of Lloyd's / Beacon fame, was / last seen in Corak's / Cave at 7,")
 ```
 
-**Event 21** — triggers: (10,3)/DIR_SPECIAL
+**Event 21** — triggers: (10,3)/DIR_E?
 
 ```hex
 05 0b
@@ -305,7 +305,7 @@
 00: show_text_popup_style_a(str[11] "Seek Earth / Encasement at 14,1 / in the proper plane. / Do walk about f")
 ```
 
-**Event 22** — triggers: (0,14)/DIR_N?
+**Event 22** — triggers: (0,14)/DIR_S?
 
 ```hex
 05 0e
@@ -315,7 +315,7 @@
 00: show_text_popup_style_a(str[14] "Lord Haart's famous / ancestor, The Long / One, hangs out in / the 8th c")
 ```
 
-**Event 23** — triggers: (2,15)/DIR_N?
+**Event 23** — triggers: (2,15)/DIR_S?
 
 ```hex
 02 0f 29
@@ -326,7 +326,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 24** — triggers: (0,0)/DIR_N?
+**Event 24** — triggers: (0,0)/DIR_S?
 
 ```hex
 05 10
@@ -336,7 +336,7 @@
 00: show_text_popup_style_a(str[16] "Castle Pinehurst / keeps a multitude / of J-26 Fluxers / at 7,6.")
 ```
 
-**Event 25** — triggers: (14,8)/ALWAYS
+**Event 25** — triggers: (14,8)/DIR_W?
 
 ```hex
 01 11 02 12 29
@@ -348,7 +348,7 @@
 02: set_abort_and_exit()
 ```
 
-**Event 26** — triggers: (8,11)/ALWAYS
+**Event 26** — triggers: (8,11)/DIR_W?
 
 ```hex
 05 13

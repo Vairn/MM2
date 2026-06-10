@@ -358,7 +358,84 @@ void mm2_amiga_blit_frame(const mm2_image32_file *img, uint16_t frame_index, UWO
     }
 }
 
-void mm2_amiga_push_palette(void)
+void mm2_amiga_apply_anm_palette(const uint16_t palette_words[MM2_ANM_PALETTE_COLORS])
+{
+    tVPort *pVp;
+    ULONG *pPal;
+    int i;
+
+    if (!palette_words) {
+        return;
+    }
+
+    pVp = mm2AmigaDisplayGetVPort();
+    if (!pVp || !pVp->pPalette) {
+        return;
+    }
+
+    pPal = (ULONG *)pVp->pPalette;
+    pPal[0] = 0;
+    for (i = 1; i < MM2_ANM_PALETTE_COLORS; ++i) {
+        const uint16_t w = palette_words[i];
+        const uint8_t r = (uint8_t)(((w >> 8) & 0x0F) * 17);
+        const uint8_t g = (uint8_t)(((w >> 4) & 0x0F) * 17);
+        const uint8_t b = (uint8_t)((w & 0x0F) * 17);
+        pPal[i] = ((ULONG)r << 16) | ((ULONG)g << 8) | (ULONG)b;
+    }
+
+    s_applied_palette_img = NULL;
+    s_palette_dirty = 1;
+}
+
+void mm2_amiga_blit_anm_composed(const mm2_anm_composite_planar *img, UWORD uwDstX, UWORD uwDstY)
+{
+    tSimpleBufferManager *pBfr;
+    tBitMap *pDst;
+    tBitMap *pSrc;
+    tBitMap *pMsk;
+    WORD w;
+    WORD h;
+
+    if (!img || !img->bitmap) {
+        return;
+    }
+
+    pSrc = (tBitMap *)img->bitmap;
+    pMsk = (tBitMap *)img->mask;
+    if (!pSrc) {
+        return;
+    }
+
+    pBfr = mm2AmigaDisplayGetBuffer();
+    if (!pBfr || !pBfr->pBack) {
+        return;
+    }
+    pDst = pBfr->pBack;
+    if (!bitmapIsChip(pSrc) || !bitmapIsChip(pDst)) {
+        return;
+    }
+
+    mm2_amiga_apply_anm_palette(img->palette_words);
+    w = (WORD)img->width;
+    h = (WORD)img->height;
+    if (uwDstX + (UWORD)w > MM2_AGA_SCREEN_WIDTH) {
+        w = (WORD)(MM2_AGA_SCREEN_WIDTH - uwDstX);
+    }
+    if (uwDstY + (UWORD)h > MM2_AGA_SCREEN_HEIGHT) {
+        h = (WORD)(MM2_AGA_SCREEN_HEIGHT - uwDstY);
+    }
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    if (pMsk && pMsk->Planes[0]) {
+        blitCopyMask(pSrc, 0, 0, pDst, (WORD)uwDstX, (WORD)uwDstY, w, h, pMsk->Planes[0]);
+    }
+}
+
+/* Release -flto inlines this into mm2AmigaDisplayFrameEnd after vPortWaitForEnd;
+ * the wait loop leaves a stale a2, so viewUpdateGlobalPalette reads garbage. */
+__attribute__((noinline)) void mm2_amiga_push_palette(void)
 {
     tView *pView;
     if (!s_palette_dirty) {

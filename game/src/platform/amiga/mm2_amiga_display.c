@@ -155,6 +155,14 @@ void mm2AmigaDisplayFrameEnd(void)
     mm2_amiga_push_palette();
 }
 
+void mm2AmigaDisplayWaitVblank(void)
+{
+    if (!s_display.pVp) {
+        return;
+    }
+    vPortWaitForEnd(s_display.pVp);
+}
+
 void mm2AmigaDisplayDispose(void)
 {
     if (!s_display.pView) {

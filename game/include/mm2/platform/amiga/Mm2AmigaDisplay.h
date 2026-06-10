@@ -25,6 +25,8 @@ void mm2AmigaDisplayActivate(void);
 void mm2AmigaDisplayUnload(void);
 /** Copper refresh + wait for beam (call once per frame after drawing). */
 void mm2AmigaDisplayFrameEnd(void);
+/** Wait for beam only — no buffer swap (idle in-town frames). */
+void mm2AmigaDisplayWaitVblank(void);
 
 void mm2AmigaDisplayDispose(void);
 Mm2AmigaDisplay *mm2AmigaDisplayGet(void);

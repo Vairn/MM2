@@ -144,12 +144,12 @@ def decode_location(blob: bytes, loc_id: int) -> dict:
 
 
 FLAG_NAMES = {
-    0x10: "ALWAYS",
-    0x20: "DIR_N?",
-    0x40: "DIR_SPECIAL",
-    0x80: "ENTER",
+    0x10: "DIR_W?",
+    0x20: "DIR_S?",
+    0x40: "DIR_E?",
+    0x80: "DIR_N?",
     0xF0: "ANY_DIR",
-    0xC0: "ENTER+SPECIAL",
+    0xC0: "DIR_N?+DIR_E?",
 }
 
 OPCODES: dict[int, dict[str, object]] = {

@@ -9,6 +9,7 @@
 #include "mm2/gfx/EnvAssets.h"
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/gfx/ScreenCompositor.h"
+#include "mm2/gfx/OutdoorView3D.h"
 #include "mm2/gfx/View3D.h"
 #include "mm2/events/EventRuntime.h"
 #include "mm2/events/ScriptedSceneEngine.h"
@@ -38,12 +39,24 @@ public:
                uint32_t start_flags = 0);
     void shutdown();
 
+#if MM2_HOST_AMIGA
+    /** Staged play-mode asset load — one heavy step per frame (Bartman 4K stack). */
+    bool isBootstrapping() const { return bootstrapping_; }
+    void tickBootstrap();
+#endif
+
     void tick(const platform::KeyState &keys);
     void render();
+
+    /** Amiga: skip full play-screen rebuild when false (still pace vblank). */
+    bool needsRedraw() const { return frame_dirty_; }
+    void ackRedraw() { frame_dirty_ = false; }
 
     bool shouldQuit() const { return quit_; }
     bool requestTitle() const { return back_to_title_; }
     void clearTitleRequest() { back_to_title_ = false; }
+
+    bool awaitingContinuePrompt() const;
 
     const gfx::ScreenCompositor &compositor() const { return compositor_; }
 
@@ -53,6 +66,8 @@ private:
     static const char *townName(uint8_t town_filter);
 
     void renderView3D();
+    void renderIndoorView3D();
+    void renderOutdoorView();
     void renderPartyPanel();
     void renderOverlays();
     void refreshWorldAfterMove(const gameplay::MoveResult &move);
@@ -61,6 +76,7 @@ private:
     void handleExploreCommand(gameplay::PlaySessionAction action);
     bool overlayBlocksInput() const;
     void tickEventInput(const platform::KeyState &keys);
+    void tickOverlayAnimations();
     bool eventBlocksInput() const;
     bool scriptedBlocksInput() const;
     void runPendingEvents();
@@ -68,6 +84,7 @@ private:
     void refreshWorldAfterEventTransition();
     void maybeQueueScriptedScenes(bool on_start);
     void showStatusMessage(const char *msg);
+    void markDirty() { frame_dirty_ = true; }
     gfx::PlayProtectValues protectValues() const;
 
     const char *data_dir_ = nullptr;
@@ -102,6 +119,13 @@ private:
 
     events::ScriptedSceneEngine scripted_scene_;
     bool scripted_loaded_ = false;
+
+    bool frame_dirty_ = false;
+
+#if MM2_HOST_AMIGA
+    bool bootstrapping_ = false;
+    uint8_t bootstrap_step_ = 0;
+#endif
 };
 
 }  // namespace mm2

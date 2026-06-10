@@ -353,3 +353,108 @@ mm2_anm_error mm2_anm_save_file(const char *path, const mm2_anm_file *anm) {
     return MM2_ANM_OK;
 }
 
+int mm2_anm_build_sequence_table(const mm2_anm_file *anm, mm2_anm_sequence_table *out)
+{
+    if (!anm || !out) {
+        return 0;
+    }
+    memset(out, 0, sizeof(*out));
+    if (!anm->sequence_blob || anm->sequence_blob_size == 0) {
+        return 1;
+    }
+
+    size_t cur = 0;
+    const size_t seq_end = anm->sequence_blob_size;
+    while (cur < seq_end && out->block_count < MM2_ANM_MAX_SEQUENCE_BLOCKS) {
+        while (cur < seq_end && anm->sequence_blob[cur] != 0xFF) {
+            ++cur;
+        }
+        if (cur >= seq_end) {
+            break;
+        }
+        ++cur; /* consume delimiter */
+        const size_t begin = cur;
+        while (cur < seq_end && anm->sequence_blob[cur] != 0xFF) {
+            ++cur;
+        }
+        if (begin >= cur) {
+            continue;
+        }
+        mm2_anm_sequence_block *block = &out->blocks[out->block_count++];
+        const size_t byte_count = cur - begin;
+        const int pair_count = (int)(byte_count / 2);
+        block->pair_count = pair_count;
+        if (pair_count > MM2_ANM_MAX_SEQUENCE_PAIRS) {
+            block->pair_count = MM2_ANM_MAX_SEQUENCE_PAIRS;
+        }
+        memcpy(block->frame_delay, anm->sequence_blob + begin,
+               (size_t)block->pair_count * 2u);
+    }
+    return 1;
+}
+
+int mm2_anm_seq_block_pair_count(const mm2_anm_sequence_table *tbl, int block_idx)
+{
+    if (!tbl || block_idx < 0 || block_idx >= tbl->block_count) {
+        return 0;
+    }
+    return tbl->blocks[block_idx].pair_count;
+}
+
+int mm2_anm_seq_frame_at(const mm2_anm_sequence_table *tbl, int block_idx, int step)
+{
+    if (!tbl || block_idx < 0 || block_idx >= tbl->block_count) {
+        return 0;
+    }
+    const mm2_anm_sequence_block *block = &tbl->blocks[block_idx];
+    if (block->pair_count <= 0) {
+        return 0;
+    }
+    if (step < 0) {
+        step = 0;
+    }
+    if (step >= block->pair_count) {
+        step = block->pair_count - 1;
+    }
+    return (int)block->frame_delay[(size_t)step * 2u];
+}
+
+int mm2_anm_seq_delay_at(const mm2_anm_sequence_table *tbl, int block_idx, int step)
+{
+    if (!tbl || block_idx < 0 || block_idx >= tbl->block_count) {
+        return 1;
+    }
+    const mm2_anm_sequence_block *block = &tbl->blocks[block_idx];
+    if (block->pair_count <= 0) {
+        return 1;
+    }
+    if (step < 0) {
+        step = 0;
+    }
+    if (step >= block->pair_count) {
+        step = block->pair_count - 1;
+    }
+    const int delay = (int)block->frame_delay[(size_t)step * 2u + 1u];
+    return delay > 0 ? delay : 1;
+}
+
+int mm2_anm_has_animatable_frames(const mm2_anm_file *anm)
+{
+    if (!anm) {
+        return 0;
+    }
+    if (anm->frame_count > 1) {
+        return 1;
+    }
+    mm2_anm_sequence_table tbl;
+    if (!mm2_anm_build_sequence_table(anm, &tbl)) {
+        return 0;
+    }
+    for (int i = 0; i < tbl.block_count; ++i) {
+        if (tbl.blocks[i].pair_count > 1) {
+            return 1;
+        }
+    }
+    return 0;
+}
+

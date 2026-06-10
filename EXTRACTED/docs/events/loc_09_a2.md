@@ -9,19 +9,19 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (1,1) | `0x11` | **1** | ALWAYS |
+| (1,1) | `0x11` | **1** | DIR_W? |
 | (2,7) | `0x27` | **15** | ANY_DIR |
 | (2,11) | `0x2B` | **3** | ANY_DIR |
-| (3,1) | `0x31` | **4** | ALWAYS |
+| (3,1) | `0x31` | **4** | DIR_W? |
 | (3,6) | `0x36` | **16** | ANY_DIR |
-| (3,12) | `0x3C` | **2** | ENTER |
+| (3,12) | `0x3C` | **2** | DIR_N? |
 | (3,14) | `0x3E` | **15** | ANY_DIR |
 | (4,2) | `0x42` | **15** | ANY_DIR |
 | (4,6) | `0x46` | **14** | ANY_DIR |
 | (5,0) | `0x50` | **10** | ANY_DIR |
 | (5,6) | `0x56` | **9** | ANY_DIR |
 | (5,12) | `0x5C` | **16** | ANY_DIR |
-| (7,8) | `0x78` | **5** | ALWAYS |
+| (7,8) | `0x78` | **5** | DIR_W? |
 | (7,12) | `0x7C` | **14** | ANY_DIR |
 | (7,14) | `0x7E` | **6** | 0x50 |
 | (9,2) | `0x92` | **13** | ANY_DIR |
@@ -41,7 +41,7 @@
 
 ## Events
 
-**Event 01** — triggers: (1,1)/ALWAYS
+**Event 01** — triggers: (1,1)/DIR_W?
 
 ```hex
 2b 0c 0b 07 00 02 01 0a 10 01 0f 16 01 d5 10 05 02 0b 0a 10 01 0f 12 69 69 69 69 69 69 00 00 00 00 00 00 0c 39 8f
@@ -68,7 +68,7 @@
 13: map_transition(0x39, 0x8F)
 ```
 
-**Event 02** — triggers: (3,12)/ENTER
+**Event 02** — triggers: (3,12)/DIR_N?
 
 ```hex
 02 02 09 11 01 0c 19 08 0f
@@ -103,7 +103,7 @@
 08: clear_current_tile_event_flag()
 ```
 
-**Event 04** — triggers: (3,1)/ALWAYS
+**Event 04** — triggers: (3,1)/DIR_W?
 
 ```hex
 02 04 09 11 02 18 00 43 fb 04 18 00 22 00 1e 0f
@@ -119,7 +119,7 @@
 05: end_script()
 ```
 
-**Event 05** — triggers: (7,8)/ALWAYS
+**Event 05** — triggers: (7,8)/DIR_W?
 
 ```hex
 06 05

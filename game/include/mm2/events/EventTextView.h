@@ -2,8 +2,11 @@
 // Event text overlay rendering — OP_01..OP_07, OP_09 draw paths per doc 44.
 
 #include "mm2/CppStdCompat.h"
+#include "mm2/GameState.h"
 #include "mm2/gfx/ScreenCompositor.h"
 #include "mm2/gfx/ViewportAnmOverlay.h"
+
+#include "mm2_attrib_codec.h"
 
 namespace mm2::events {
 
@@ -41,15 +44,32 @@ public:
     void showOp04(const char *text);
     void showOp05(const char *text);
     void showOp06(const char *text);
-    /** OP_0B @ 0x15DB0 — blits service sign .anm when data_dir/location_id resolve. */
-    void showOp0B(const char *text, const char *data_dir = nullptr, int location_id = 0,
-                  uint8_t str_idx = 0, uint8_t placement = 0);
+    /** OP_0B @ 0x15DB0 — str_idx → 0x15756 table[A4-$79E3][str_idx-1] → NN.anm. */
+    void showOp0B(const char *text, const char *data_dir, const GameStateView &gs,
+                  const Mm2AttribRecord *attrib, uint8_t str_idx, uint8_t placement);
+    void showOp0B(const char *text, const char *data_dir, int screen_id,
+                  const Mm2AttribRecord *attrib, uint8_t str_idx, uint8_t placement);
 
     void showSpacePrompt();
     void clearSpacePrompt();
 
+    /** True when OP_0B loaded an .anm portrait/sign overlay. */
+    bool hasServicePortrait() const { return sign_overlay_.loaded(); }
+
     /** Draw all active layers onto the compositor (after 3D view). */
     void draw(gfx::ScreenCompositor &c) const;
+
+    /** Advance OP_0B sign .anm one game tick; true when cel changed. */
+    bool tickAnimation();
+
+    /** Current composed frame index (tests / demo verification). */
+    int serviceSignFrame() const { return sign_overlay_.composedFrame(); }
+
+    /** Test helper: true if any layer text contains needle (case-sensitive). */
+    bool containsText(const char *needle) const;
+
+    /** Drop OP_04/05/06/0B ambient layers (and sign .anm) before a tile re-scan. */
+    void clearPersistentOverlays();
 
     /** Script end cleanup @ 0x171AC — clears overlay state; returns bits for chrome redraw. */
     void scriptCleanup(bool *redraw_status, bool *redraw_roster, bool *redraw_divider);

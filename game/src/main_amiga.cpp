@@ -9,8 +9,12 @@ namespace {
 mm2::ui::CharacterUiKind parseUiKind(int argc, char **argv)
 {
 #if defined(MM2_UI_STUB)
+    (void)argc;
+    (void)argv;
     return mm2::ui::CharacterUiKind::Stub;
 #elif defined(MM2_UI_CLASSIC)
+    (void)argc;
+    (void)argv;
     return mm2::ui::CharacterUiKind::AmigaClassic;
 #else
     for (int i = 1; i < argc; ++i) {

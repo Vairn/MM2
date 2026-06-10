@@ -436,6 +436,33 @@ void TitleScreen::releaseLogoAsset()
     has_nwcp_ = false;
 }
 
+void TitleScreen::ensureAttractAssetsLoaded()
+{
+    if (!data_dir_) {
+        return;
+    }
+    if (!has_intro_) {
+        has_intro_ = loadImage("intro.32", &intro_);
+    }
+    if (!has_introclips_) {
+        has_introclips_ = loadImage("introclips.32", &introclips_);
+    }
+}
+
+#if MM2_HOST_AMIGA
+void TitleScreen::releaseChipForPlayMode()
+{
+    mm2_amiga_ui_cache_end();
+    mm2_amiga_ui_cache_destroy();
+    releaseIntroClips();
+    releaseLogoAsset();
+    if (has_intro_) {
+        mm2_image32_free(&intro_);
+        has_intro_ = false;
+    }
+}
+#endif
+
 #if MM2_HOST_AMIGA
 void TitleScreen::invalidatePegasusPaint()
 {
@@ -690,6 +717,9 @@ void TitleScreen::optionsDraw() { drawOptions(); }
 void TitleScreen::returnToMenu()
 {
 #if MM2_HOST_AMIGA
+    if (!mm2_amiga_ui_cache_ready()) {
+        mm2_amiga_ui_cache_create();
+    }
     invalidateTitleMenuPaint();
     if (mm2_amiga_ui_cache_ready()) {
         buildTitleMenuCache();
@@ -715,6 +745,9 @@ void TitleScreen::blitIntroClipFrame(int frame_index, int x, int y)
 
 void TitleScreen::drawIntroPegasus(bool animate_overlays)
 {
+#if MM2_HOST_AMIGA
+    ensureAttractAssetsLoaded();
+#endif
 #if MM2_HOST_AMIGA
     pegasus_painted_overlay_phase_ = overlay_phase_;
 #if MM2_HOST_AMIGA && defined(ACE_DEBUG)
