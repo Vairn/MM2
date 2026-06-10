@@ -52,7 +52,7 @@ The following were re-confirmed directly from `mm2.capstone.asm`:
 | `08` | `0x15D26` | 0 | wait for key (sets cursor mode `0xFD`, calls wait helper `0x15CE6`) |
 | `09` | `0x15D3C` | 0 | y/n prompt, writes result into condition flag |
 | `0A` | `0x15D9A` | 0 | y/n prompt variant (mode `0xFD`, calls `0x15D3C`) |
-| `0B` | `0x15DB0` | 2 | open service/title window (`u8` string via `0x15756`, `u8` position) |
+| `0B` | `0x15DB0` | 2 | open service/title window (`u8` string via `0x15756`, `u8` position); **only VM opcode that blits a `.anm` signboard** — see [45-event-graphics-opcodes.md](45-event-graphics-opcodes.md) |
 | `0C` | `0x15E12` | 2 | map transition to `(u8 dest, u8)` |
 | `0D` | `0x15EC4` | 1 | `u8` -> engine thunk `-$7E42` (generic engine call) |
 | `0E` | `0x160C2` | 1 | selector dispatch (see selector table below) |
@@ -122,7 +122,7 @@ to newline `0x0A` for the renderer), then paint. Font: 8×8 bitmap **font 8**
 | `03` | `0x159CE` | Prep (`-$7F5C`, `-$7ED8`) then delegates to `OP_02` with window height const `0x11` |
 | `04` | `0x159F4` | **Door label** — centered caption above a door tile; single `-$7BE4` text draw after width centering |
 | `05` | `0x15A46` | **Popup A** — large plain overlay (see below) |
-| `06` | `0x15AEE` | **Popup B** — framed sign popup (see below) |
+| `06` | `0x15AEE` | **Popup B** — outdoor signpost (font-glyph frame + post; pen `A4-$7A50`) |
 
 ### Popup A vs Popup B (`OP_05` / `OP_06`)
 
@@ -141,25 +141,29 @@ is non-zero — same gate as `OP_04`.
 - **Observed content:** longer narrative plaques — missing-person posters,
   quest hints, arena notices, radiation warnings (~40 uses in locations 0–59).
 
-**`OP_06` @ `0x15AEE` — framed sign (Popup B)**
+**`OP_06` @ `0x15AEE` — outdoor signpost (Popup B)**
 
+- **Not** the red console frame used by character UI (`JSR -$809E`, pen `$17`).
 - **Preprocesses** the string in place: every `-` (`0x2D`) is rewritten to `{`
   (`0x7B`, full-width horizontal bar glyph) before draw.
 - Smaller window `-$7C74(8, 8, 18, 9)`.
-- Draws a **UI border** by blitting font control glyphs through `-$7C62`:
-  `0x10`/`0x11` top corners, `0x0E` ×11 top bar, `0x14`/`0x15` sides with
-  `-$7BE4` text column between, `0x7E` fill tiles, `0x12`/`0x13` bottom
-  corners, `0x0F` ×11 bottom bar (see control-glyph table below).
-- **Observed content:** compact directional signs and town labels with arrows
-  and `$` bullet markers (~110 uses) — e.g. `"< Shortcut\nPinehurst"`,
-  `"Woodhaven$\n<Tundara"`, `"Dead Zone\nRadiation!"`.
+- Draws a **signpost** by blitting font control glyphs through `-$7C62` at pen
+  **`A4-$7A50`** (gold/yellow border on Amiga; outdoor init @ `0x26814` stores
+  pen `$12`): `0x10`/`0x11` top corners, `0x0E` ×11 top bar, `0x14`/`0x15` sides,
+  `0x7E` post core, `0x12`/`0x13` bottom corners, `0x0F` ×11 bottom bar (see
+  control-glyph table below). Vertical **post** below the board at cols 12..14.
+- **Observed content:** compact directional signs and outdoor labels (~110 uses)
+  — e.g. B2 **"Archers / Only"** (`06 01`), **"Yellow / Message 2"** (elemental
+  planes), `"< Shortcut\nPinehurst"`, `"Dead Zone\nRadiation!"`.
 
 **`OP_04` vs popups in practice:** `OP_04` is the shop/door nameplate fixed
 above a door (dominant in town maps — often paired with `OP_0B` service window
 and `OP_0E` shop selector). Use **`OP_05`** for long read-once lore/warning
-text without a frame; **`OP_06`** for short outdoor signposts that need a
-visible border and decorative rules/arrows; **`OP_04`** strictly for door
-labels on building entrances.
+text without a frame; **`OP_06`** for short **outdoor signposts** (yellow/gold
+glyph frame + post over the 3D view); **`OP_04`** strictly for door
+labels on building entrances. **`OP_0B`** is a separate **service signboard
+sprite** over shop/inn/pub tiles (see §`OP_0B` below / doc 28 §2.1) — not the
+same as OP_06 outdoor signs.
 
 ### MM2 8×8 Text Format Characters
 

@@ -2,6 +2,7 @@
 
 #include "mm2/CppStdCompat.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
+#include "mm2/gfx/PartyStatusFormat.h"
 
 // All draws happen on the 40x24 cell grid of the 8px font: x = col*8,
 // y = row*8 (text cursor -$7BFC -> 0x22108, glyph put -$7C62 -> 0x218EA).
@@ -18,9 +19,17 @@
 
 namespace mm2::gfx {
 
-namespace {
-
 using namespace play_layout;
+
+void fillCellRect(ScreenCompositor &c, int col, int row, int width_cells, int height_cells)
+{
+    if (width_cells <= 0 || height_cells <= 0) {
+        return;
+    }
+    c.fillRect(col * 8, row * 8, width_cells * 8, height_cells * 8, 0, 0, 0);
+}
+
+namespace {
 
 constexpr uint8_t kGlyphCornerTL = 0x01;
 constexpr uint8_t kGlyphCornerTR = 0x02;
@@ -95,23 +104,35 @@ void outerFrame(ScreenCompositor &c)
     }
 }
 
-/* Print a number the way -$7BDE + the trailing-space pads at 0x6266..0x629A
- * do for the party HP: ">999" prints "+++" (0x625A), otherwise the value
- * left-aligned padded with trailing spaces to 3 cells. */
-void formatHp(char *out, size_t cap, int hp)
+/* Black fills for play-screen interiors (clear_cell_rect @ 0x42DC / play_frame_draw
+ * @ 0x54F2). All rects stay INSIDE the outer frame (cols 1..38, not 0..39) so
+ * border glyph cells are never overwritten. */
+void playScreenInteriorFills(ScreenCompositor &c)
 {
-    if (hp > 999) {
-        std::snprintf(out, cap, "+++");
-    } else {
-        std::snprintf(out, cap, "%d", hp);
-    }
+    /* Viewport interior: cols 1..26, rows 1..15 (left of v-line col 0x1B). */
+    fillCellRect(c, 1, 1, 26, 15);
+    /* Right column interior: cols 28..37, rows 1..15. */
+    fillCellRect(c, 28, 1, 10, 15);
+    /* Status text row + party rows 17..22 (between h-lines at 16/18, above bottom border). */
+    fillCellRect(c, 1, 0x11, 38, 6);
 }
 
 }  // namespace
 
+void drawPlayModalBackdrop(ScreenCompositor &c)
+{
+    c.fillRect(0, 0, kScreenW, kScreenH, 0, 0, 0);
+    c.drawConsoleBox(kPlayOverlayBorderRow, kPlayOverlayBorderCol, kPlayOverlayBorderW,
+                     kPlayOverlayBorderH, kBorderR, kBorderG, kBorderB);
+    fillCellRect(c, kPlayOverlayBorderCol + 1, kPlayOverlayBorderRow + 1, kPlayOverlayBorderW - 2,
+                 kPlayOverlayBorderH - 2);
+}
+
 void drawPlayScreenChrome(ScreenCompositor &c)
 {
-    /* play_screen_chrome_init @ 0x60F4 */
+    /* play_screen_chrome_init @ 0x60F4 — black fills first, red glyphs on top. */
+    playScreenInteriorFills(c);
+
     outerFrame(c);                /* -$7F7A */
     hLine(c, 0, 0x27, 0x10);      /* status strip top    (row 16) */
     hLine(c, 0, 0x27, 0x12);      /* status strip bottom (row 18) */
@@ -152,38 +173,47 @@ void drawPlayStatusBar(ScreenCompositor &c, int day, int year, char facing_key, 
 
 void drawPlayPartyPanel(ScreenCompositor &c, const PlayPartySlot slots[8])
 {
-    /* draw_party_status_panel @ 0x6150: slot i at row 0x13 + i/2,
+    /* draw_party_status_panel @ 0x6178: slot i at row 0x13 + i/2,
      * col alternating 1 / 0x14 (slots 1..8 read across, two per row). */
     for (int i = 0; i < 8; ++i) {
-        const int row = 0x13 + i / 2;
-        const int col = (i & 1) ? 0x14 : 0x01;
+        const int row = kPartySlotRowBase + i / 2;
+        const int col = (i & 1) ? kPartySlotColRight : kPartySlotColLeft;
         const PlayPartySlot &s = slots[i];
 
+        /* Empty or occupied: clear slot strip via -$7F62 @ 0x6178 before text. */
+        fillCellRect(c, col, row, kPartySlotClearWidth, 1);
+
         if (!s.present) {
-            /* Empty slot: -$7F62 clear of cells (col, row)-(col+0x12, row)
-             * @ 0x617C..0x61A6 — nothing drawn. */
             continue;
         }
 
-        char head[8];
-        std::snprintf(head, sizeof(head), " %c) ", '1' + i);
-        textAt(c, col, row, head);
+        const PartyStatusPrefix prefix_style =
+            s.combat_checkmark ? PartyStatusPrefix::CombatCheckmark : PartyStatusPrefix::Exploration;
 
-        /* Name printed with text attribute 1 (-$7C08 @ 0x6212) when the
-         * condition byte +$26 is non-zero. GAP: exact palette effect of
-         * attribute 1 untraced (0x220BE); rendered here as red text. */
+        char line[48];
+        formatPartyStatusLine(line, sizeof(line), i, s.name, static_cast<uint16_t>(s.hp), prefix_style);
+
+        constexpr int kPrefixLen = 3;
+        char prefix[kPrefixLen + 1];
+        char name_field[kPartyNameFieldWidth + 1];
+        char tail[16];
+        std::memcpy(prefix, line, kPrefixLen);
+        prefix[kPrefixLen] = '\0';
+        std::memcpy(name_field, line + kPrefixLen, kPartyNameFieldWidth);
+        name_field[kPartyNameFieldWidth] = '\0';
+        std::snprintf(tail, sizeof(tail), "%s", line + kPrefixLen + kPartyNameFieldWidth);
+
+        textAt(c, col, row, prefix);
+
+        /* Text attribute 1 (-$7C08 @ 0x623A) when condition byte +$26 != 0.
+         * GAP: exact palette untraced (0x220BE); rendered as red text. */
         if (s.bad_condition) {
-            textAt(c, col + 4, row, s.name, 255, 80, 80);
+            textAt(c, col + kPrefixLen, row, name_field, 255, 80, 80);
         } else {
-            textAt(c, col + 4, row, s.name);
+            textAt(c, col + kPrefixLen, row, name_field);
         }
 
-        /* " /" + HP word +$5E (0x623E..0x629A). */
-        char hp[8];
-        formatHp(hp, sizeof(hp), s.hp);
-        char tail[16];
-        std::snprintf(tail, sizeof(tail), " /%s", hp);
-        textAt(c, col + 4 + static_cast<int>(std::strlen(s.name)), row, tail);
+        textAt(c, col + kPrefixLen + kPartyNameFieldWidth, row, tail);
     }
 }
 

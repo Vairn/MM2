@@ -79,8 +79,14 @@ bool EnvAssets::loadEnv(const char *data_dir, EnvKind kind)
     env_ok_ = false;
 
     const EnvSheetNames &names = envSheetNames(kind);
+    if (kind == EnvKind::Outdoor) {
+        /* Demo / partial outdoor 3D: outf.32 floor + outb.32 wall strips until layer path @ 0x18870. */
+        const bool has_floor = loadImage(data_dir, "outf.32", &floor_);
+        const bool has_walls = loadImage(data_dir, "outb.32", &walls_);
+        env_ok_ = has_floor && has_walls;
+        return env_ok_;
+    }
     if (!names.walls || !names.floor) {
-        /* Outdoor env: layer-sheet render path not implemented yet. */
         return false;
     }
 

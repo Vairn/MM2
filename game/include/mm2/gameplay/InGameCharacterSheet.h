@@ -27,11 +27,34 @@ enum class SheetSubMode : uint8_t {
     RemovePickEquip,
     DropPickSlot,
     CastPicker,
+    GatherPick,
+    TradePickType,
+    TradePickTarget,
 };
+
+enum class SheetTradeKind : uint8_t {
+    None,
+    Gold,
+    Gems,
+    Food,
+    Items,
+};
+
+/** True while sheet sub-handler owns digit keys (doc 43 §6.1 — not 0x907A chain). */
+inline bool sheetSubModeBlocksCharacterSwitch(SheetSubMode mode)
+{
+    switch (mode) {
+    case SheetSubMode::Normal:
+        return false;
+    default:
+        return true;
+    }
+}
 
 struct SheetSession {
     int party_slot = 0;
     SheetSubMode sub_mode = SheetSubMode::Normal;
+    SheetTradeKind trade_kind = SheetTradeKind::None;
     char status_line[48] = {};
 };
 

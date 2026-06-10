@@ -68,8 +68,8 @@ loops, restore behavior) are traced in
 | `03` | `0x159CE` | event.dat (via `02`) | `-$7F5C`→`0x43A8` + `-$7ED8(2)`→`0x5312` prep, then `02` base 17 | block **rows 17..22**, col 1 |
 | `04` | `0x159F4` | event.dat | `-$7BE4` → `0x22376` (JAM1) | door label, **row 3**, centered on col 14, over 3D view |
 | `05` | `0x15A46` | event.dat | `-$7C74`→`0x21624` window + `-$7BE4` | popup cells **(4,3)-(24,13)**, centered, transparent |
-| `06` | `0x15AEE` | event.dat | glyph frame + `-$7C74` window (8,8)-(18,9) | framed sign **(7,7)-(19,14)** + post |
-| `0B` | `0x15DB0` | event.dat (`0x15756` resolves index) | `-$7FC2`→`0x316E` sprite + `-$7FBC`→`0x3266` place | service signboard over viewport |
+| `06` | `0x15AEE` | event.dat | glyph signpost + post, pen `$7A50` | outdoor sign **(7,7)-(19,14)** |
+| `0B` | `0x15DB0` | event.dat (`0x15756` resolves index) | `-$7FC2`→`0x316E` sprite + `-$7FBC`→`0x3266` place | **service** signboard sprite over viewport |
 
 **`OP_09` / `OP_0A`:** y/n prompts (`0x15D3C`, Y → cond `A4-$7951`); question
 text still comes from prior **event** opcodes, not `str.dat`. **`OP_07`/`08`**

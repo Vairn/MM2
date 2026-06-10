@@ -129,23 +129,25 @@ Mm2ItemsError mm2_items_save_file(const char *path, const Mm2ItemsFile *items)
 
 void mm2_item_name_to_cstr(const Mm2ItemRecord *item, char *out, size_t out_size)
 {
-    size_t i;
-    size_t len = 0;
+    size_t end;
     if (!item || !out || out_size == 0) {
         return;
     }
-    for (i = 0; i < MM2_ITEMS_NAME_SIZE; i++) {
-        const char ch = item->name[i];
-        if (ch == '\0' || ch == ' ') {
+    out[0] = '\0';
+
+    end = MM2_ITEMS_NAME_SIZE;
+    while (end > 0) {
+        const uint8_t c = (uint8_t)item->name[end - 1];
+        if (c != 0 && c != (uint8_t)' ') {
             break;
         }
-        len = i + 1;
+        --end;
     }
-    if (len >= out_size) {
-        len = out_size - 1;
+    if (end >= out_size) {
+        end = out_size - 1;
     }
-    memcpy(out, item->name, len);
-    out[len] = '\0';
+    memcpy(out, item->name, end);
+    out[end] = '\0';
 }
 
 int mm2_item_class_can_use(const Mm2ItemRecord *item, uint8_t class_id)

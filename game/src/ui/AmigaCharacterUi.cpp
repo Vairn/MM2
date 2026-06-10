@@ -363,7 +363,7 @@ void drawCenteredHorizRule(gfx::ScreenCompositor &c, int row, int total_cols, in
     drawCellHorizRule(c, row, col, len, r, g, b);
 }
 
-// Section label flanked by font-8 horizontal rules (0x7B), matching OP_06 sign styling.
+// Section label flanked by font-8 horizontal rules (0x7B), matching character UI red frame (-$809E).
 void drawSectionHeader(gfx::ScreenCompositor &c, int row, int col, int width_cells, const char *label,
                        uint8_t r = 200, uint8_t g = 200, uint8_t b = 200)
 {

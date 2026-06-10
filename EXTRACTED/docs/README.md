@@ -57,6 +57,7 @@ Source of truth: `EXTRACTED/docs/`, `EXTRACTED/mm2-ANALYSIS.md`, `tools/`, `edit
 | [`21-map-dat-format.md`](21-map-dat-format.md) | `map.dat` — 60 screens, visual + collision pages |
 | [`06-event-dat-format.md`](06-event-dat-format.md) | `event.dat` — 71-location container format |
 | [`07-event-script-opcodes.md`](07-event-script-opcodes.md) | Script VM opcodes `0x00..0x32` |
+| [`45-event-graphics-opcodes.md`](45-event-graphics-opcodes.md) | **Event VM sprite/sign ops** — `OP_0B`, Corak/Pegasus paths |
 | [`16-monster-ability-format.md`](16-monster-ability-format.md) | `monsters.dat` — 256 × 26-byte records |
 | [`20-copy-protection-table.md`](20-copy-protection-table.md) | `globe.32` / `disk.32` XOR string tables |
 
@@ -81,6 +82,8 @@ python tools\mm2_codec.py items-decode items.dat …    # items / str codecs
 | [`15-3d-view-and-game-screen.md`](15-3d-view-and-game-screen.md) | First-person hood, wall bits, auto-map |
 | [`38-title-screen-and-intro-assets.md`](38-title-screen-and-intro-assets.md) | Title boot, `intro.32` / `introclips.32` / `nwcp.32` |
 | [`39-title-screen-animation.md`](39-title-screen-animation.md) | Pegasus overlays, peekers, menu — **authoritative coords** |
+| [`45-event-graphics-opcodes.md`](45-event-graphics-opcodes.md) | In-game `OP_0B` signboards vs title-screen pegasus |
+| [`46-scripted-scene-graphics.md`](46-scripted-scene-graphics.md) | **Corak ghost + Pegasus illustration** — castle engine (`0x6FB8`/`0x64F8`/`0x316E`); **§10 full scene catalog** (loc 60–70, blobs 63/65/68, `play_song_scripted` ids 2–6) |
 
 ---
 

@@ -77,6 +77,7 @@ endif()
 set(MM2_CODEC_SOURCES
   ${MM2_DECOMP}/mm2_image32_codec.c
   ${MM2_DECOMP}/mm2_anm_codec.c
+  ${MM2_DECOMP}/mm2_anm_preview.c
   ${MM2_DECOMP}/mm2_roster_codec.c
   ${MM2_DECOMP}/mm2_create_character.c
   ${MM2_DECOMP}/mm2_monsters_codec.c
@@ -122,9 +123,58 @@ if(NOT AMIGA)
   target_include_directories(playsession_input_test PRIVATE include)
   target_link_libraries(playsession_input_test PRIVATE mm2_codecs)
 
+  add_executable(character_sheet_input_test
+    tests/character_sheet_input_test.cpp
+    src/gameplay/InGameCharacterSheet.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/PlayScreenChrome.cpp
+    src/gfx/PartyStatusFormat.cpp
+    src/gfx/mm2_font8x8.c
+    src/runtime/PathScratch.cpp)
+  target_include_directories(character_sheet_input_test PRIVATE include)
+  target_link_libraries(character_sheet_input_test PRIVATE mm2_codecs)
+
+  add_executable(party_hp_format_test
+    tests/party_hp_format_test.cpp
+    src/gfx/PartyStatusFormat.cpp)
+  target_include_directories(party_hp_format_test PRIVATE include)
+  target_link_libraries(party_hp_format_test PRIVATE mm2_codecs)
+
+  add_executable(event_middlegate_test
+    tests/event_middlegate_test.cpp
+    src/events/EventRuntime.cpp
+    src/events/EventTextView.cpp
+    src/events/ServiceSignResolver.cpp
+    src/events/ScriptedSceneEngine.cpp
+    src/gfx/ViewportAnmOverlay.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/mm2_font8x8.c
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(event_middlegate_test PRIVATE include)
+  target_link_libraries(event_middlegate_test PRIVATE mm2_codecs)
+
+  add_executable(event_op_demo
+    tests/event_op_demo.cpp
+    src/events/EventTextView.cpp
+    src/events/ServiceSignResolver.cpp
+    src/events/ScriptedSceneEngine.cpp
+    src/gfx/ViewportAnmOverlay.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/mm2_font8x8.c
+    src/gfx/View3D.cpp
+    src/gfx/PlayScreenChrome.cpp
+    src/gfx/PartyStatusFormat.cpp
+    src/gfx/EnvAssets.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(event_op_demo PRIVATE include)
+  target_link_libraries(event_op_demo PRIVATE mm2_codecs)
+
   add_executable(playscreen_golden
     tests/playscreen_golden.cpp
     src/GameSession.cpp
+    src/events/ScriptedSceneEngine.cpp
     src/gameplay/Movement.cpp
     src/gameplay/PlaySessionInput.cpp
     src/gameplay/InGameCharacterSheet.cpp
@@ -133,8 +183,13 @@ if(NOT AMIGA)
     src/gfx/mm2_font8x8.c
     src/gfx/View3D.cpp
     src/gfx/PlayScreenChrome.cpp
+    src/gfx/PartyStatusFormat.cpp
     src/gfx/EnvAssets.cpp
     src/world/MapWorld.cpp
+    src/events/EventRuntime.cpp
+    src/events/EventTextView.cpp
+    src/events/ServiceSignResolver.cpp
+    src/gfx/ViewportAnmOverlay.cpp
     src/runtime/Mm2Alloc.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(playscreen_golden PRIVATE include)
@@ -174,8 +229,14 @@ set(MM2_GAME_SOURCES
   src/gfx/mm2_font8x8.c
   src/gfx/View3D.cpp
   src/gfx/PlayScreenChrome.cpp
+  src/gfx/PartyStatusFormat.cpp
   src/gfx/EnvAssets.cpp
   src/world/MapWorld.cpp
+  src/events/EventRuntime.cpp
+  src/events/EventTextView.cpp
+  src/events/ServiceSignResolver.cpp
+  src/events/ScriptedSceneEngine.cpp
+  src/gfx/ViewportAnmOverlay.cpp
   src/runtime/Mm2Alloc.cpp
   src/runtime/PathScratch.cpp
   src/ui/CharacterUiKind.cpp

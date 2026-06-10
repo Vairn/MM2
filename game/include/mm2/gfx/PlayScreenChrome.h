@@ -9,8 +9,9 @@ namespace mm2::gfx {
 
 struct PlayPartySlot {
     bool present = false;
-    bool bad_condition = false;  /* roster byte +$26 != 0 (0x6204) */
-    int hp = 0;                  /* roster word +$5E (0x624C) */
+    bool bad_condition = false;   /* roster byte +$26 != 0 (0x622C) */
+    bool combat_checkmark = false; /* combat refresh: glyph 0x7E before slot digit */
+    int hp = 0;                   /* roster word +$5E (0x6274) */
     char name[16] = {0};
 };
 
@@ -23,6 +24,12 @@ struct PlayProtectValues {
     uint8_t walk_water = 0;
     uint8_t guard_dog = 0;
 };
+
+/** Solid black fill for a text-cell rectangle (clear_cell_rect @ 0x42DC). */
+void fillCellRect(ScreenCompositor &c, int col, int row, int width_cells, int height_cells);
+
+/** Full-screen black + red console_box for in-game Quick Ref / character sheet. */
+void drawPlayModalBackdrop(ScreenCompositor &c);
 
 void drawPlayScreenChrome(ScreenCompositor &c);
 void drawPlayStatusBar(ScreenCompositor &c, int day, int year, char facing_key, bool new_game);

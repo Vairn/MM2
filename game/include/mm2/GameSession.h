@@ -10,6 +10,8 @@
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/gfx/ScreenCompositor.h"
 #include "mm2/gfx/View3D.h"
+#include "mm2/events/EventRuntime.h"
+#include "mm2/events/ScriptedSceneEngine.h"
 #include "mm2/platform/Platform.h"
 #include "mm2/world/MapWorld.h"
 
@@ -29,7 +31,11 @@ class GameSession {
 public:
     static const char *areaName(uint8_t area_id);
 
-    bool start(const char *data_dir, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch);
+    /** kStartSkipScriptedIntros: offline golden dumps — no Corak/Pegasus overlay on HUD. */
+    static constexpr uint32_t kStartSkipScriptedIntros = 1u;
+
+    bool start(const char *data_dir, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
+               uint32_t start_flags = 0);
     void shutdown();
 
     void tick(const platform::KeyState &keys);
@@ -54,10 +60,18 @@ private:
     void tickPlayInput(const platform::KeyState &keys);
     void handleExploreCommand(gameplay::PlaySessionAction action);
     bool overlayBlocksInput() const;
+    void tickEventInput(const platform::KeyState &keys);
+    bool eventBlocksInput() const;
+    bool scriptedBlocksInput() const;
+    void runPendingEvents();
+    void refreshEventsForScreen();
+    void refreshWorldAfterEventTransition();
+    void maybeQueueScriptedScenes(bool on_start);
     void showStatusMessage(const char *msg);
     gfx::PlayProtectValues protectValues() const;
 
     const char *data_dir_ = nullptr;
+    uint32_t start_flags_ = 0;
     bool quit_ = false;
     bool back_to_title_ = false;
     bool assets_ok_ = false;
@@ -83,6 +97,11 @@ private:
     GameStateView gs_;
 
     gfx::ScreenCompositor compositor_;
+    events::EventRuntime events_;
+    bool events_loaded_ = false;
+
+    events::ScriptedSceneEngine scripted_scene_;
+    bool scripted_loaded_ = false;
 };
 
 }  // namespace mm2

@@ -8,7 +8,8 @@ Source: `EXTRACTED/mm2.capstone.annotated.asm` + data hunk
 6-byte `JMP $xxxxxxxx` at data offset `$7FFE + disp`).
 
 Companions: [07-event-script-opcodes.md](07-event-script-opcodes.md) (opcode
-semantics), [30-event-to-string-path.md](30-event-to-string-path.md) (string
+semantics), [45-event-graphics-opcodes.md](45-event-graphics-opcodes.md)
+(`OP_0B` signboard sprites vs text-only ops), [30-event-to-string-path.md](30-event-to-string-path.md) (string
 sources), [15-3d-view-and-game-screen.md](15-3d-view-and-game-screen.md)
 (viewport composition).
 
@@ -228,7 +229,12 @@ Skipped when `-$79E1` ≠ 0.
 5. `win_close` — flags&$7F ≠ 1 → **no restore**; text persists until the next
    3D redraw.
 
-### 3.6 `OP_06` `0x15AEE` — Popup B (framed sign, window (8,8)-(18,9))
+### 3.6 `OP_06` `0x15AEE` — Popup B (outdoor signpost, window (8,8)-(18,9))
+
+**Common confusion:** this is the **yellow/gold outdoor signpost** (Archers Only,
+Yellow Message N, directional arrows). It is **not** the **red** font-glyph box
+used by character UI (`JSR -$809E`, pen `$17`). It is also **not** **`OP_0B`**
+(service shop signboard **sprite** via `sign_sprite_load` @ `0x316E`).
 
 Preprocess: every `-` (`$2D`) in the buffer → `{` (`$7B`, full-width bar).
 Skipped when `-$79E1` ≠ 0.
@@ -356,6 +362,20 @@ Trigger (15,5)/ENTER, bytecode `01 18 09 10 01 0f 0c 0b 37`:
    `OP_0C map_transition($0B, $37)` — party exits to overland C-3.
    If `N`: `OP_0F` → cleanup `0x171AC` → exit bit 0 → status-bar text redraw
    (`0x560A`), erasing the question from row 17.
+
+### 6.3 B2 overland — **Archers Only** outdoor signpost
+
+Location **10** (map screen 10 / sector **B2**), **event 02** @ tile (1,11)/ENTER
+(and related triggers). Bytecode:
+
+```hex
+06 01
+```
+
+→ **`OP_06 str[1]`** = `"Archers\nOnly"`. Same handler and yellow/gold signpost
+frame as **Yellow Message 2** (`OP_06` on elemental-plane locations). **Not**
+`OP_0B` (that opcode is town **service signboard sprites** only — see §3.8 /
+doc 28 §2.1).
 
 ---
 

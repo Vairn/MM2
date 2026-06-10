@@ -44,14 +44,14 @@ int main(int argc, char **argv)
     }
 
     mm2::GameSession session;
-    if (!session.start(data_dir, roster, launch)) {
+    if (!session.start(data_dir, roster, launch, mm2::GameSession::kStartSkipScriptedIntros)) {
         std::fprintf(stderr, "FAIL: GameSession::start\n");
         return 1;
     }
     session.render();
 
     const mm2::gfx::ScreenCompositor &c = session.compositor();
-    std::FILE *f = std::fopen("playscreen_middlegate.ppm", "wb");
+    std::FILE *f = std::fopen("playscreen_golden.ppm", "wb");
     if (!f) {
         std::fprintf(stderr, "FAIL: cannot write ppm\n");
         return 1;
@@ -67,6 +67,6 @@ int main(int argc, char **argv)
     std::fclose(f);
     session.shutdown();
 
-    std::printf("OK: playscreen_middlegate.ppm written (party=%d)\n", count);
+    std::printf("OK: playscreen_golden.ppm written (party=%d)\n", count);
     return 0;
 }

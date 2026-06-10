@@ -56,9 +56,11 @@ const char *GameSession::townName(uint8_t town_filter)
     return (town_filter >= 1 && town_filter <= 5) ? kTownNames[town_filter] : "?";
 }
 
-bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch)
+bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
+                        uint32_t start_flags)
 {
     data_dir_ = data_dir;
+    start_flags_ = start_flags;
     roster_ = roster;
     launch_ = launch;
     quit_ = false;
@@ -102,6 +104,15 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
         has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
     }
     assets_ok_ = has_world && has_env && has_sky;
+    events_loaded_ = events_.load(data_dir_);
+    if (events_loaded_) {
+        refreshEventsForScreen();
+    }
+
+    scripted_loaded_ = scripted_scene_.load(data_dir_);
+    if (scripted_loaded_) {
+        maybeQueueScriptedScenes(true);
+    }
 
 #if !MM2_NO_STL
     if (!assets_ok_) {
@@ -116,6 +127,10 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
 void GameSession::shutdown()
 {
     env_.unloadAll();
+    events_.unload();
+    events_loaded_ = false;
+    scripted_scene_.unload();
+    scripted_loaded_ = false;
     if (gs_image_) {
         mm2::runtime::deallocate(gs_image_, kGsImageBytes);
         gs_image_ = nullptr;
@@ -134,16 +149,97 @@ void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
         return;
     }
 
-    if (move.screen_changed && data_dir_) {
-        world_.enterScreen(gs_.screenId());
-        const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
-        assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
+    if (move.acted && data_dir_) {
+        if (move.screen_changed) {
+            world_.enterScreen(gs_.screenId());
+            const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
+            assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
+            if (events_loaded_) {
+                refreshEventsForScreen();
+            }
+        }
+        if (scripted_loaded_) {
+            maybeQueueScriptedScenes(false);
+        }
     }
+}
+
+void GameSession::maybeQueueScriptedScenes(bool on_start)
+{
+    if ((start_flags_ & kStartSkipScriptedIntros) != 0) {
+        return;
+    }
+    if (!scripted_loaded_ || !gs_.valid() || scripted_scene_.active()) {
+        return;
+    }
+
+    if (on_start && gs_.screenId() == 0 && !gs_.corakIntroSeen()) {
+        gs_.setFirstTimeFlag(true);
+        scripted_scene_.queueScene(events::ScriptedSceneId::CorakIntro);
+        gs_.setCorakIntroSeen(true);
+        return;
+    }
+
+    /* Guardian Pegasus: loc 11 (sector C2) evt 04 @ tile (y,x)=(4,7) ENTER — FAQ (7,4)^. */
+    if (!on_start && gs_.screenId() == 11 && gs_.coordY() == 4 && gs_.coordX() == 7 &&
+        !gs_.pegasusIntroSeen()) {
+        scripted_scene_.queueScene(events::ScriptedSceneId::PegasusC2);
+        gs_.setPegasusIntroSeen(true);
+    }
+}
+
+void GameSession::refreshEventsForScreen()
+{
+    if (!events_loaded_ || !gs_.valid()) {
+        return;
+    }
+    events_.enterLocation(static_cast<int>(gs_.screenId()), gs_, world_);
+}
+
+void GameSession::refreshWorldAfterEventTransition()
+{
+    if (!events_loaded_ || !events_.screenChanged() || !data_dir_) {
+        return;
+    }
+    events_.clearScreenChanged();
+
+    world_.enterScreen(gs_.screenId());
+    const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
+    assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
+}
+
+void GameSession::runPendingEvents()
+{
+    if (!events_loaded_ || !gs_.valid()) {
+        return;
+    }
+    if (mm2_gs_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH)) {
+        events_.scanAndRun(gs_, world_);
+    }
+}
+
+bool GameSession::eventBlocksInput() const
+{
+    return events_loaded_ && events_.blocksMovement();
+}
+
+bool GameSession::scriptedBlocksInput() const
+{
+    return scripted_loaded_ && scripted_scene_.blocksInput();
 }
 
 bool GameSession::overlayBlocksInput() const
 {
-    return overlay_ != PlayOverlay::None;
+    return overlay_ != PlayOverlay::None || eventBlocksInput();
+}
+
+void GameSession::tickEventInput(const platform::KeyState &keys)
+{
+    if (!events_loaded_ || !events_.blocksMovement()) {
+        return;
+    }
+    events_.continueInput(gs_, world_, keys);
+    refreshWorldAfterEventTransition();
 }
 
 void GameSession::showStatusMessage(const char *msg)
@@ -264,6 +360,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
             if (action == gameplay::PlaySessionAction::ViewCharacter) {
                 sheet_session_.party_slot = party_slot;
                 sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+                sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
                 sheet_session_.status_line[0] = '\0';
                 overlay_ = PlayOverlay::CharacterSheet;
             }
@@ -273,8 +370,15 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
 
     if (overlay_ == PlayOverlay::CharacterSheet) {
         if (keys.escape) {
+            if (gameplay::sheetSubModeBlocksCharacterSwitch(sheet_session_.sub_mode)) {
+                sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+                sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+                sheet_session_.status_line[0] = '\0';
+                return;
+            }
             overlay_ = PlayOverlay::None;
             sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+            sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
             sheet_session_.status_line[0] = '\0';
             return;
         }
@@ -283,15 +387,19 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
             return;
         }
 
-        int party_slot = -1;
-        gameplay::PlaySessionAction action = gameplay::PlaySessionAction::None;
-        if (gameplay::pollPlaySessionAction(keys, launch_.party_count, &action, &party_slot)) {
-            if (action == gameplay::PlaySessionAction::ViewCharacter) {
-                /* 0x907A digit chain: switch character without closing sheet. */
-                sheet_session_.party_slot = party_slot;
-                sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
-                sheet_session_.status_line[0] = '\0';
-                return;
+        const bool pending = gameplay::sheetSubModeBlocksCharacterSwitch(sheet_session_.sub_mode);
+        if (!pending) {
+            int party_slot = -1;
+            gameplay::PlaySessionAction action = gameplay::PlaySessionAction::None;
+            if (gameplay::pollPlaySessionAction(keys, launch_.party_count, &action, &party_slot)) {
+                if (action == gameplay::PlaySessionAction::ViewCharacter) {
+                    /* 0x907A digit chain: switch character without closing sheet. */
+                    sheet_session_.party_slot = party_slot;
+                    sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+                    sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+                    sheet_session_.status_line[0] = '\0';
+                    return;
+                }
             }
         }
 
@@ -333,6 +441,7 @@ void GameSession::tickPlayInput(const platform::KeyState &keys)
     case gameplay::PlaySessionAction::ViewCharacter:
         sheet_session_.party_slot = party_slot;
         sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+        sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
         sheet_session_.status_line[0] = '\0';
         overlay_ = PlayOverlay::CharacterSheet;
         break;
@@ -369,40 +478,62 @@ void GameSession::tick(const platform::KeyState &keys)
         return;
     }
 
-    if (overlayBlocksInput()) {
+    if (scripted_loaded_ && scripted_scene_.active()) {
+        scripted_scene_.tick(keys);
+        if (scripted_scene_.needsViewportRestore()) {
+            scripted_scene_.clearViewportRestore();
+        }
+        return;
+    }
+
+    if (events_loaded_ && events_.blocksMovement()) {
+        tickEventInput(keys);
+        return;
+    }
+
+    if (overlay_ != PlayOverlay::None) {
         tickOverlayInput(keys);
+    } else {
+        tickPlayInput(keys);
+        if (overlay_ == PlayOverlay::None) {
+            gameplay::ExploreCode code{};
+            if (gameplay::pollExploreCode(keys, &code)) {
+                gameplay::MoveResult move{};
+                switch (code) {
+                case gameplay::ExploreCode::TurnLeft:
+                    move = gameplay::turn(world_, gs_, false);
+                    break;
+                case gameplay::ExploreCode::TurnRight:
+                    move = gameplay::turn(world_, gs_, true);
+                    break;
+                case gameplay::ExploreCode::Forward:
+                    move = gameplay::step(world_, gs_, true);
+                    break;
+                case gameplay::ExploreCode::Back:
+                    move = gameplay::step(world_, gs_, false);
+                    break;
+                default:
+                    break;
+                }
+                refreshWorldAfterMove(move);
+            }
+        }
+    }
+
+    /* Debug triggers: Ctrl+G = Corak scene, Ctrl+P = Pegasus scene (doc 46 demos). */
+    if (overlay_ == PlayOverlay::None && scripted_loaded_ &&
+        keys.ctrl && (keys.last_ascii == 'G' || keys.last_ascii == 'g')) {
+        scripted_scene_.queueScene(events::ScriptedSceneId::CorakIntro);
+        return;
+    }
+    if (overlay_ == PlayOverlay::None && scripted_loaded_ &&
+        keys.ctrl && (keys.last_ascii == 'P' || keys.last_ascii == 'p')) {
+        scripted_scene_.queueScene(events::ScriptedSceneId::PegasusC2);
         return;
     }
 
-    tickPlayInput(keys);
-    if (overlayBlocksInput()) {
-        return;
-    }
-
-    gameplay::ExploreCode code{};
-    if (!gameplay::pollExploreCode(keys, &code)) {
-        return;
-    }
-
-    gameplay::MoveResult move{};
-    switch (code) {
-    case gameplay::ExploreCode::TurnLeft:
-        move = gameplay::turn(world_, gs_, false);
-        break;
-    case gameplay::ExploreCode::TurnRight:
-        move = gameplay::turn(world_, gs_, true);
-        break;
-    case gameplay::ExploreCode::Forward:
-        move = gameplay::step(world_, gs_, true);
-        break;
-    case gameplay::ExploreCode::Back:
-        move = gameplay::step(world_, gs_, false);
-        break;
-    default:
-        break;
-    }
-
-    refreshWorldAfterMove(move);
+    runPendingEvents();
+    refreshWorldAfterEventTransition();
 }
 
 void GameSession::renderView3D()
@@ -444,7 +575,7 @@ void GameSession::renderPartyPanel()
         const Mm2RosterRecord &rec = roster_.records[slot];
         slots[i].present = true;
         mm2_roster_name_to_cstr(&rec, slots[i].name, sizeof(slots[i].name));
-        slots[i].hp = rec.hp_max;
+        slots[i].hp = rec.hp_current;
         slots[i].bad_condition = rec.condition != 0;
     }
 
@@ -465,10 +596,13 @@ void GameSession::renderOverlays()
         controls_screen_.render(compositor_, gs_);
         break;
     case PlayOverlay::StatusMessage:
+        /* Status row 0x11 — same clear as EventTextView Op01 / y/n bar (doc 44). */
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
         compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 128, 255);
         compositor_.drawText(8, 18 * 8, "(ESC to dismiss)", 180, 180, 180, 255);
         break;
     case PlayOverlay::QuitConfirm:
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
         compositor_.drawText(8, 17 * 8, "Quit without game save (y/n)?", 255, 80, 80, 255);
         break;
     default:
@@ -481,19 +615,36 @@ void GameSession::render()
     compositor_.clear(0, 0, 0, 255);
 
     gfx::drawPlayScreenChrome(compositor_);
-    renderView3D();
 
-    const bool protect_panel = right_panel_ == gfx::PlayRightPanel::Protect;
+    const bool scripted_active = scripted_loaded_ && scripted_scene_.active();
+    if (!scripted_active || !scripted_scene_.hidesView3D()) {
+        renderView3D();
+    }
+
+    gfx::PlayRightPanel panel = right_panel_;
+    if (scripted_active) {
+        panel = scripted_scene_.panelMode() == 0 ? gfx::PlayRightPanel::Options : gfx::PlayRightPanel::Protect;
+    }
+
+    const bool protect_panel = panel == gfx::PlayRightPanel::Protect;
     gfx::drawPlayStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
                            gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
     renderPartyPanel();
 
     if (overlay_ == PlayOverlay::None || overlay_ == PlayOverlay::StatusMessage) {
         const gfx::PlayProtectValues prot = protectValues();
-        gfx::drawPlayRightColumn(compositor_, right_panel_, protect_panel ? &prot : nullptr);
+        gfx::drawPlayRightColumn(compositor_, panel, protect_panel ? &prot : nullptr);
+    }
+
+    if (scripted_active) {
+        scripted_scene_.draw(compositor_);
     }
 
     renderOverlays();
+
+    if (events_loaded_ && !scripted_active) {
+        events_.textView().draw(compositor_);
+    }
 }
 
 }  // namespace mm2

@@ -129,6 +129,37 @@ public:
         setRightPanelMode(1);
     }
 
+    /* Area enter @ 0x6E84 sets A4-$79E9 on first visit (doc 46 §3.6). */
+    bool firstTimeFlag() const { return mm2_gs_u8(a4_, MM2_GS_FIRST_TIME_FLAG) != 0; }
+    void setFirstTimeFlag(bool v) { mm2_gs_set_u8(a4_, MM2_GS_FIRST_TIME_FLAG, v ? 1 : 0); }
+
+    /* GAP: party progress byte offset 0x74 (apply_party evt 04) — stub bit 0x40 in A4-$79E8. */
+    static constexpr int kScriptedStubByte = -0x79E8;
+
+    bool pegasusIntroSeen() const { return (mm2_gs_u8(a4_, kScriptedStubByte) & 0x40) != 0; }
+    void setPegasusIntroSeen(bool v)
+    {
+        uint8_t b = mm2_gs_u8(a4_, kScriptedStubByte);
+        if (v) {
+            b |= 0x40;
+        } else {
+            b &= static_cast<uint8_t>(~0x40);
+        }
+        mm2_gs_set_u8(a4_, kScriptedStubByte, b);
+    }
+
+    bool corakIntroSeen() const { return (mm2_gs_u8(a4_, kScriptedStubByte) & 0x01) != 0; }
+    void setCorakIntroSeen(bool v)
+    {
+        uint8_t b = mm2_gs_u8(a4_, kScriptedStubByte);
+        if (v) {
+            b |= 0x01;
+        } else {
+            b &= static_cast<uint8_t>(~0x01);
+        }
+        mm2_gs_set_u8(a4_, kScriptedStubByte, b);
+    }
+
 private:
     int eraClamped() const
     {
