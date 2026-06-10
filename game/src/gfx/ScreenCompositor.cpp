@@ -142,7 +142,7 @@ void ScreenCompositor::drawGlyph(int x, int y, uint8_t codepoint, uint8_t r, uin
     return;
 #else
     // Mm2Font8x8_data.inc: LSB column order (bit 0 = leftmost pixel).
-    const uint8_t *glyph = mm2_font8x8_live()[codepoint];
+    const uint8_t *glyph = &mm2_font8x8_live()[codepoint * MM2_FONT8X8_ROWS];
     for (int row = 0; row < MM2_FONT8X8_ROWS; ++row) {
         const uint8_t bits = glyph[row];
         for (int col = 0; col < 8; ++col) {

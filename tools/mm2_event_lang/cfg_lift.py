@@ -6,11 +6,8 @@ from decode_event import decode_u16_arg
 
 from .ast import Expr, LoweredOp, Stmt
 from .semantic_tables import (
-    CLASS_BY_FIELD,
     COND_SET_OPS,
-    QUEST_FLAG_PATTERNS,
     TRANSITION_NAMES,
-    item_name,
 )
 from .token_util import skip_n_tokens
 
@@ -43,11 +40,11 @@ def _op_to_cond_expr(op: LoweredOp, strings: list[str], items: list[str]) -> Exp
         v = decode_u16_arg(o, a)
         return Expr.code16(v if v is not None else 0)
     if o == 0x28 and len(a) >= 2:
-        return Expr.has_item(item_name(items, a[1]), a[0])
-    if o == 0x2D and len(a) >= 2 and a[1] == 0x05:
-        cls = CLASS_BY_FIELD.get(a[0])
-        if cls:
-            return Expr.class_is(cls)
+        return Expr.has_item_id(a[1], a[0])
+    if o == 0x2D and len(a) >= 2:
+        return Expr.class_field(a[0], a[1])
+    if o == 0x17 and len(a) >= 2:
+        return Expr("load_var8", {"group": a[0], "index": a[1]})
     if o == 0x30:
         decoded = "".join(
             chr((0x11A - b) & 0xFF) if 0x20 <= ((0x11A - b) & 0xFF) <= 0x7E else "?"
@@ -94,13 +91,11 @@ def _op_to_stmt(op: LoweredOp, strings: list[str], items: list[str]) -> Stmt | N
     if o == 0x15 and len(a) >= 3:
         return Stmt.apply_party(a[0], a[1], a[2])
     if o == 0x18 and len(a) >= 4:
-        key = (a[1], a[2], a[3])
-        pat = QUEST_FLAG_PATTERNS.get(key)
-        if pat and a[0] == 0x00:
-            if pat[0] == "quest_complete":
-                return Stmt.set_quest_complete()
-            return Stmt.set_quest_flag(pat[0], pat[1])
         return Stmt.apply_party_masked(a[0], a[1], a[2], a[3])
+    if o == 0x17 and len(a) >= 2:
+        return Stmt.load_var8(a[0], a[1])
+    if o == 0x1A and len(a) >= 2:
+        return Stmt.store_var8(a[0], a[1])
     if o == 0x1E and a:
         return Stmt.delay(a[0])
     if o == 0x21 and len(a) >= 3:

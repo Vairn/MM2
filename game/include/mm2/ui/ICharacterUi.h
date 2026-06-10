@@ -27,6 +27,13 @@ public:
     virtual void prepareCreateCharacterAssets() {}
     virtual void shutdown() = 0;
 
+    /** Amiga: mark the off-screen cache stale (rebuild before next present). */
+    virtual void requestRedraw() {}
+    /** Amiga: playfield cache needs rebuilding. SDL: always true. */
+    virtual bool needsRedraw() const { return true; }
+    /** Amiga: call after cache rebuild. */
+    virtual void ackRedraw() {}
+
     virtual void beginViewParty(Mm2RosterFile &roster) = 0;
     virtual UiResult tickViewParty(const platform::KeyState &keys) = 0;
     virtual void renderViewParty(gfx::ScreenCompositor &compositor) = 0;

@@ -38,8 +38,18 @@ def _parse_cond(text: str) -> tuple[TriggerCond, int]:
 
 def _parse_expr(text: str) -> Expr:
     t = text.strip()
+    if t.startswith("class_field "):
+        m = re.match(r"class_field\s+0x([0-9A-Fa-f]+)(?:\s+mask=0x([0-9A-Fa-f]+))?", t)
+        if m:
+            field = int(m.group(1), 16)
+            mask = int(m.group(2), 16) if m.group(2) else 0x05
+            return Expr.class_field(field, mask)
     if t.startswith("class "):
         return Expr.class_is(t[6:].strip())
+    if re.match(r"has_item\s+0x", t, re.I):
+        m = re.match(r"has_item\s+0x([0-9A-Fa-f]+)(?:\s+probe=(\d+))?", t, re.I)
+        if m:
+            return Expr.has_item_id(int(m.group(1), 16), int(m.group(2) or 0))
     if t.startswith("gold >="):
         return Expr.gold_at_least(int(t.split(">=")[1].strip()))
     if t.startswith('answer == "'):
@@ -58,11 +68,25 @@ def _parse_expr(text: str) -> Expr:
     if t.startswith("yes_no"):
         mode = 1 if "mode=1" in t else 0
         return Expr.yes_no(mode)
+    if t.startswith("load_var8 "):
+        m = re.match(
+            r"load_var8\s+group=0x([0-9A-Fa-f]+)(?:\s+index=0x([0-9A-Fa-f]+))?",
+            t,
+            re.I,
+        )
+        if m:
+            idx = int(m.group(2), 16) if m.group(2) else 0
+            return Expr("load_var8", {"group": int(m.group(1), 16), "index": idx})
     return Expr("unknown", {"text": t})
 
 
+def _code_part(line: str) -> str:
+    """Strip trailing inline comment (emitter uses '  # ...')."""
+    return line.strip().split("  #", 1)[0].strip()
+
+
 def _parse_stmt_line(line: str) -> Stmt | None:
-    s = line.strip()
+    s = _code_part(line)
     if not s or s.startswith("#"):
         return None
     if s.startswith("| ") and s.endswith(" |"):
@@ -112,13 +136,26 @@ def _parse_stmt_line(line: str) -> Stmt | None:
     if s.startswith("say_popup "):
         return Stmt.say("popup_a", s[10:].strip())
     if s.startswith("say "):
-        return Stmt.say("", s[4:].strip().split("#", 1)[0].strip())
+        return Stmt.say("", s[4:].strip())
     if s.startswith("go_to "):
         m = re.search(r"screen\s+(\d+)\s+pos\s+0x([0-9A-Fa-f]+)", s)
         if m:
             return Stmt.go_to(int(m.group(1)), int(m.group(2), 16))
     if s.startswith("delay "):
         return Stmt.delay(int(s[6:].strip()))
+    if s.startswith("load_var8 "):
+        m = re.match(
+            r"load_var8\s+group=0x([0-9A-Fa-f]+)(?:\s+index=0x([0-9A-Fa-f]+))?",
+            s,
+            re.I,
+        )
+        if m:
+            idx = int(m.group(2), 16) if m.group(2) else 0
+            return Stmt.load_var8(int(m.group(1), 16), idx)
+    if s.startswith("store_var8 "):
+        m = re.match(r"store_var8\s+group=0x([0-9A-Fa-f]+)\s+value=0x([0-9A-Fa-f]+)", s, re.I)
+        if m:
+            return Stmt.store_var8(int(m.group(1), 16), int(m.group(2), 16))
     if s.startswith("@op "):
         parts = s.split()
         op = int(parts[1], 16)

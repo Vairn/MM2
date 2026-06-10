@@ -71,22 +71,26 @@ script juror_plaque:  @event 12
 
 | Readable | Opcode(s) |
 |----------|-----------|
-| `service_title sN mode=M` | OP_0B (sign/title window — not OP_01 dialog) |
+| `say sN` | OP_01–06 — inline `# "..."` comment shows string-bank text |
+| `service_title sN mode=M` | OP_0B — same inline string preview |
 | `wait space` / `wait key` | OP_07/08 |
 | `ask yes_no` | OP_09/0A |
-| `if class Knight:` | OP_2D + branch |
+| `if class_field 0xNN mask=0xMM:` | OP_2D + branch |
 | `if gold >= N:` | OP_24 + branch |
-| `if answer == "46":` | OP_30 + branch |
-| `set quest_complete` | OP_18 masked `$75` |
-| `selector 0xNN` | OP_0E (raw dispatch byte) |
+| `if answer == "46":` | OP_30 + branch (decoded from script bytes) |
+| `if has_item 0xNN probe=M:` | OP_28 + branch |
+| `@apply_party_masked count=… set=… and=… or=…` | OP_18 |
+| `selector 0xNN` | OP_0E dispatch byte; explicit asm cases get `# handler` comment |
 | `go_to screen N pos 0xNN` | OP_0C |
 | `fight monsters ...` | OP_12 |
 | `abort` / `end` | OP_29 / OP_0F |
 
-Decompile is **mechanical**: string refs are `s0`, `s1`, … (index into this
-location's string bank); scripts are `event_00`, `event_01`, …; OP_0E is always
-`selector 0xNN`. Read the `strings:` block for actual text. Optional hand-author
-sugar `shop tavern` still parses to OP_0E `0x01`.
+Decompile is **mechanical**: string refs are `s0`, `s1`, …; scripts are
+`event_00`, …; OP_0E is `selector 0xNN` (with `# open_tavern_food` etc. when the
+byte hits a dedicated handler @ asm `0x160C2`, not default-range bins); OP_18 is
+raw `@apply_party_masked` bytes. No quest-flag or class names are inferred.
+Optional hand-author sugar
+(`set quest_flag …`, `class Knight`, `shop tavern`) still parses when editing.
 
 Legacy alias: `say_service` parses as `service_title`.
 

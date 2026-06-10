@@ -1,6 +1,6 @@
 #include <SDL.h>
 
-#include "mm2/Game.h"
+#include "mm2/states/AppHost.h"
 #include "mm2/platform/Platform.h"
 #include "mm2/ui/CharacterUiKind.h"
 
@@ -58,17 +58,8 @@ int SDL_main(int argc, char **argv)
         return 1;
     }
 
-    mm2::Game game;
-    if (!game.init(data_dir, ui_kind)) {
-        mm2::platform::shutdown();
-        return 1;
-    }
+    const int rc = mm2_app_run(data_dir, static_cast<int>(ui_kind));
 
-    while (!game.shouldQuit()) {
-        game.tick();
-    }
-
-    game.shutdown();
     mm2::platform::shutdown();
-    return 0;
+    return rc;
 }

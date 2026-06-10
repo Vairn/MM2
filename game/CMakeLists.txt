@@ -117,9 +117,13 @@ endif()
 # ---------------------------------------------------------------------------
 set(MM2_GAME_SOURCES
   ${MM2_MAIN_SOURCE}
-  src/Game.cpp
   src/GameSession.cpp
   src/TitleScreen.cpp
+  src/states/mm2_state.c
+  src/states/mm2_app_context.c
+  src/states/mm2_states.cpp
+  src/states/AppHost.cpp
+  src/states/mm2_app_run.cpp
   src/gfx/ScreenCompositor.cpp
   src/gfx/mm2_font8x8.c
   src/gfx/View3D.cpp

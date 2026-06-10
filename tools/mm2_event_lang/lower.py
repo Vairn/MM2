@@ -22,6 +22,10 @@ def _encode_answer(text: str) -> list[int]:
 def expr_to_cond_ops(expr: Expr) -> list[LoweredOp]:
     k = expr.kind
     d = expr.data
+    if k == "class_field":
+        field = int(d["field"])
+        mask = int(d.get("mask", 0x05))
+        return [LoweredOp(0x2D, [field, mask])]
     if k == "class_is":
         field = CLASS_FIELD_BY_NAME.get(str(d["class"]).lower(), 0)
         return [LoweredOp(0x2D, [field, 0x05])]
@@ -30,6 +34,8 @@ def expr_to_cond_ops(expr: Expr) -> list[LoweredOp]:
         return [LoweredOp(0x24, [v & 0xFF, (v >> 8) & 0xFF])]
     if k == "answer_eq":
         return [LoweredOp(0x30, _encode_answer(str(d["text"])))]
+    if k == "has_item_id":
+        return [LoweredOp(0x28, [int(d.get("probe", 0)), int(d["item"])])]
     if k == "has_item":
         return [LoweredOp(0x28, [int(d.get("probe", 0)), 0])]
     if k == "code16":
@@ -45,6 +51,8 @@ def expr_to_cond_ops(expr: Expr) -> list[LoweredOp]:
         return [LoweredOp(0x0A if int(d.get("mode", 0)) else 0x09, [])]
     if k == "threshold":
         return [LoweredOp(0x1B, [int(d["value"])])]
+    if k == "load_var8":
+        return [LoweredOp(0x17, [int(d["group"]), int(d.get("index", 0))])]
     if k == "raw_op":
         return [LoweredOp(int(d["op"]), list(d["args"]))]
     return [LoweredOp(0x1C, [0])]
@@ -75,9 +83,14 @@ def stmt_to_ops(stmt: Stmt, string_index: dict[str, int]) -> list[LoweredOp]:
     if k == "ask_yes_no":
         return [LoweredOp(0x0A if int(d.get("mode", 0)) else 0x09, [])]
     if k == "if":
-        cond_ops = expr_to_cond_ops(d["cond"])
+        cond = d["cond"]
+        cond_ops = expr_to_cond_ops(cond)
         then_ops = lower_stmts(d["then"], string_index)
         else_ops = lower_stmts(d.get("else") or [], string_index)
+        if cond.kind == "yes_no":
+            n_skip = len(then_ops)
+            branch = LoweredOp(0x11, [n_skip if then_ops else 0])
+            return cond_ops + [branch] + then_ops + else_ops
         n_skip = len(else_ops)
         branch = LoweredOp(0x10, [n_skip if else_ops else 0])
         return cond_ops + [branch] + else_ops + then_ops
@@ -131,6 +144,10 @@ def stmt_to_ops(stmt: Stmt, string_index: dict[str, int]) -> list[LoweredOp]:
         return [LoweredOp(0x0F, [])]
     if k == "delay":
         return [LoweredOp(0x1E, [int(d["ticks"])])]
+    if k == "load_var8":
+        return [LoweredOp(0x17, [int(d["group"]), int(d.get("index", 0))])]
+    if k == "store_var8":
+        return [LoweredOp(0x1A, [int(d["group"]), int(d["value"])])]
     if k == "plain_text":
         return []
     if k == "unlifted":

@@ -5,6 +5,7 @@ from __future__ import annotations
 import textwrap
 
 from .ast import EventFile, Expr, Location, RecordKind, Script, Stmt, TriggerCond
+from .semantic_tables import selector_handler_comment
 
 
 def _indent(lines: list[str], level: int = 1) -> list[str]:
@@ -22,8 +23,16 @@ def _format_string_block(name: str, text: str) -> list[str]:
 
 def _format_expr(expr: Expr) -> str:
     k, d = expr.kind, expr.data
+    if k == "class_field":
+        mask = int(d.get("mask", 0x05))
+        return f"class_field 0x{d['field']:02X} mask=0x{mask:02X}"
     if k == "class_is":
         return f"class {d['class']}"
+    if k == "has_item_id":
+        probe = int(d.get("probe", 0))
+        if probe:
+            return f"has_item 0x{d['item']:02X} probe={probe}"
+        return f"has_item 0x{d['item']:02X}"
     if k == "gold_at_least":
         return f"gold >= {d['amount']}"
     if k == "answer_eq":
@@ -45,6 +54,11 @@ def _format_expr(expr: Expr) -> str:
         return "yes_no" if not d.get("mode") else "yes_no mode=1"
     if k == "threshold":
         return f"cond >= 0x{d['value']:02X}"
+    if k == "load_var8":
+        idx = int(d.get("index", 0))
+        if idx:
+            return f"load_var8 group=0x{d['group']:02X} index=0x{idx:02X}"
+        return f"load_var8 group=0x{d['group']:02X}"
     if k == "raw_op":
         args = " ".join(f"0x{x:02X}" for x in d["args"])
         return f"@op 0x{d['op']:02X} {args}".strip()
@@ -63,19 +77,41 @@ def _say_verb(variant: str) -> str:
     return "say"
 
 
-def _format_stmt(stmt: Stmt, depth: int = 1, next_stmt: Stmt | None = None) -> list[str]:
+def _strings_lookup(strings) -> dict[str, str]:
+    return {s.name: s.text for s in strings}
+
+
+def _string_ref_comment(ref: str | int, lookup: dict[str, str]) -> str:
+    """Inline preview from this location's string bank (not external semantics)."""
+    text = lookup.get(str(ref), "")
+    if not text or text in ("z", "\n"):
+        return ""
+    one_line = text.replace("\n", "@").strip()
+    if len(one_line) > 56:
+        one_line = one_line[:53] + "..."
+    escaped = one_line.replace('"', "'")
+    return f'  # "{escaped}"'
+
+
+def _format_stmt(
+    stmt: Stmt,
+    depth: int = 1,
+    next_stmt: Stmt | None = None,
+    string_lookup: dict[str, str] | None = None,
+) -> list[str]:
+    lookup = string_lookup or {}
     k, d = stmt.kind, stmt.data
     pad = "  " * depth
 
     if k == "say":
         verb = _say_verb(str(d.get("variant", "")))
         ref = d["string"]
-        return [f"{pad}{verb} {ref}"]
+        return [f"{pad}{verb} {ref}{_string_ref_comment(ref, lookup)}"]
 
     if k == "service_title":
         ref = d["string"]
         mode = int(d.get("mode", 0))
-        return [f"{pad}service_title {ref} mode={mode}"]
+        return [f"{pad}service_title {ref} mode={mode}{_string_ref_comment(ref, lookup)}"]
 
     if k == "wait":
         return [f"{pad}wait {d['kind']}"]
@@ -91,13 +127,13 @@ def _format_stmt(stmt: Stmt, depth: int = 1, next_stmt: Stmt | None = None) -> l
         then_body = d.get("then") or []
         for j, s in enumerate(then_body):
             nxt = then_body[j + 1] if j + 1 < len(then_body) else None
-            lines.extend(_format_stmt(s, depth + 1, nxt))
+            lines.extend(_format_stmt(s, depth + 1, nxt, lookup))
         else_body = d.get("else") or []
         if else_body:
             lines.append(f"{pad}else:")
             for j, s in enumerate(else_body):
                 nxt = else_body[j + 1] if j + 1 < len(else_body) else None
-                lines.extend(_format_stmt(s, depth + 1, nxt))
+                lines.extend(_format_stmt(s, depth + 1, nxt, lookup))
         return lines
 
     if k == "set_quest_complete":
@@ -110,14 +146,17 @@ def _format_stmt(stmt: Stmt, depth: int = 1, next_stmt: Stmt | None = None) -> l
         ]
     if k == "apply_party_masked":
         return [
-            f"{pad}@apply_party_masked set=0x{d['set']:02X} and=0x{d['and']:02X} or=0x{d['or']:02X}"
+            f"{pad}@apply_party_masked count=0x{d['count']:02X} set=0x{d['set']:02X} and=0x{d['and']:02X} or=0x{d['or']:02X}"
         ]
     if k == "selector":
-        return [f"{pad}selector 0x{d['value']:02X}"]
+        sel = int(d["value"])
+        return [f"{pad}selector 0x{sel:02X}{selector_handler_comment(sel)}"]
     if k == "shop":
-        return [f"{pad}selector 0x{d.get('selector', 0):02X}"]
+        sel = int(d.get("selector", 0))
+        return [f"{pad}selector 0x{sel:02X}{selector_handler_comment(sel)}"]
     if k == "quest":
-        return [f"{pad}selector 0x{d.get('selector', 0):02X}"]
+        sel = int(d.get("selector", 0))
+        return [f"{pad}selector 0x{sel:02X}{selector_handler_comment(sel)}"]
     if k == "engine_call":
         return [f"{pad}@engine_call 0x{d['code']:02X}"]
     if k == "go_to":
@@ -141,18 +180,25 @@ def _format_stmt(stmt: Stmt, depth: int = 1, next_stmt: Stmt | None = None) -> l
         return [f"{pad}end"]
     if k == "delay":
         return [f"{pad}delay {d['ticks']}"]
+    if k == "load_var8":
+        idx = int(d.get("index", 0))
+        if idx:
+            return [f"{pad}load_var8 group=0x{d['group']:02X} index=0x{idx:02X}"]
+        return [f"{pad}load_var8 group=0x{d['group']:02X}"]
+    if k == "store_var8":
+        return [f"{pad}store_var8 group=0x{d['group']:02X} value=0x{d['value']:02X}"]
     if k == "plain_text":
         txt = d["text"].replace("\n", "@")
         return [f"{pad}| {txt} |"]
     if k == "unlifted":
         lines = [f"{pad}@unlifted {{"]
         for s in d.get("body") or []:
-            lines.extend(_format_stmt(s, depth + 1))
+            lines.extend(_format_stmt(s, depth + 1, string_lookup=lookup))
         lines.append(f"{pad}}}")
         return lines
     if k == "raw_op":
         args = " ".join(f"0x{x:02X}" for x in d["args"])
-        return [f"{pad}@op 0x{d['op']:02X} {args}".strip()]
+        return [f"{pad}@op 0x{d['op']:02X} {args}"]
 
     return [f"{pad}@{k}"]
 
@@ -177,6 +223,8 @@ def emit_location(loc: Location, area_comment: str = "") -> str:
             lines.append(f"  {chunk}")
         return "\n".join(lines) + "\n"
 
+    string_lookup = _strings_lookup(loc.strings) if loc.strings else {}
+
     if loc.strings:
         lines.append("")
         lines.append("strings:")
@@ -200,11 +248,11 @@ def emit_location(loc: Location, area_comment: str = "") -> str:
         lines.append("")
         lines.append(f"script {sc.name}:  @event {sc.event_id}")
         if sc.is_plain_text and sc.body:
-            lines.extend(_format_stmt(sc.body[0], 1))
+            lines.extend(_format_stmt(sc.body[0], 1, string_lookup=string_lookup))
         else:
             for j, stmt in enumerate(sc.body):
                 nxt = sc.body[j + 1] if j + 1 < len(sc.body) else None
-                lines.extend(_format_stmt(stmt, 1, nxt))
+                lines.extend(_format_stmt(stmt, 1, nxt, string_lookup))
 
     return "\n".join(lines) + "\n"
 

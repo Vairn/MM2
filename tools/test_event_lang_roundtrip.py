@@ -52,8 +52,26 @@ class TestEventLangRoundtrip(unittest.TestCase):
         loc = decompile_location(records[53], 53)
         text = emit_location(loc)
         self.assertIn('if answer == "46":', text)
-        self.assertIn("set quest_flag ancients_code ok", text)
+        self.assertIn("@apply_party_masked count=0x00 set=0x75 and=0xFB or=0x04", text)
+        self.assertIn('# "Correct!"', text)
+        self.assertIn('# "Incorrect!"', text)
+        self.assertNotIn("quest_flag", text)
         self.assertNotIn("skip_tokens", text)
+
+    def test_loc0_fountain_store_var8(self) -> None:
+        _, records = load_event_records(EVENT_DAT.read_bytes())
+        loc = decompile_location(records[0], 0)
+        sc = next(s for s in loc.scripts if s.event_id == 42)
+        import mm2_event_lang.dsl_emit as emit_mod
+
+        lines = []
+        for j, stmt in enumerate(sc.body):
+            nxt = sc.body[j + 1] if j + 1 < len(sc.body) else None
+            lines.extend(emit_mod._format_stmt(stmt, 1, nxt))
+        self.assertIn("if yes_no:", "\n".join(lines))
+        self.assertIn("store_var8 group=0x2B value=0x32", "\n".join(lines))
+        self.assertIn("store_var8 group=0x2C value=0x32", "\n".join(lines))
+        self.assertNotIn("@op 0x1A", "\n".join(lines))
 
     def test_loc0_op0b_op0e_mechanical(self) -> None:
         _, records = load_event_records(EVENT_DAT.read_bytes())
@@ -68,7 +86,7 @@ class TestEventLangRoundtrip(unittest.TestCase):
             lines.extend(emit_mod._format_stmt(stmt, 1, nxt))
         self.assertEqual(
             lines,
-            ["  service_title s20 mode=0", "  selector 0x0D"],
+            ["  service_title s20 mode=0", "  selector 0x0D  # enroll_mages_guild"],
         )
         self.assertIn('s20: "Fool, you have no farthing to flick!"', text)
         self.assertNotIn("say_service", text)

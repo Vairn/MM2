@@ -63,6 +63,14 @@ void CharacterUiController::shutdown()
     roster_ = nullptr;
 }
 
+void CharacterUiController::leaveMode()
+{
+    mode_ = CharacterUiMode::None;
+    roster_ = nullptr;
+    quit_requested_ = false;
+    party_launch_ready_ = false;
+}
+
 void CharacterUiController::startViewParty(Mm2RosterFile &roster)
 {
     roster_ = &roster;
@@ -125,6 +133,18 @@ void CharacterUiController::tick(const platform::KeyState &keys)
         mode_ = CharacterUiMode::None;
     } else if (result == UiResult::Cancel) {
         mode_ = CharacterUiMode::None;
+    }
+}
+
+bool CharacterUiController::needsRedraw() const
+{
+    return ui_ && ui_->needsRedraw();
+}
+
+void CharacterUiController::ackRedraw()
+{
+    if (ui_) {
+        ui_->ackRedraw();
     }
 }
 

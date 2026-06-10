@@ -58,6 +58,14 @@ class Expr:
     data: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
+    def class_field(field: int, mask: int = 0x05) -> Expr:
+        return Expr("class_field", {"field": field, "mask": mask})
+
+    @staticmethod
+    def has_item_id(item_id: int, probe: int = 0) -> Expr:
+        return Expr("has_item_id", {"item": item_id, "probe": probe})
+
+    @staticmethod
     def class_is(name: str) -> Expr:
         return Expr("class_is", {"class": name})
 
@@ -201,6 +209,14 @@ class Stmt:
     @staticmethod
     def delay(ticks: int) -> Stmt:
         return Stmt("delay", {"ticks": ticks})
+
+    @staticmethod
+    def load_var8(group: int, index: int = 0) -> Stmt:
+        return Stmt("load_var8", {"group": group, "index": index})
+
+    @staticmethod
+    def store_var8(group: int, value: int) -> Stmt:
+        return Stmt("store_var8", {"group": group, "value": value})
 
     @staticmethod
     def plain_text(text: str) -> Stmt:

@@ -26,6 +26,8 @@ public:
     bool loadDataFiles();
     bool init(const char *data_dir, CharacterUiKind kind);
     void shutdown();
+    /** Amiga: drop active mode but keep backend + items.dat loaded (4K stack). */
+    void leaveMode();
 
     void startViewParty(Mm2RosterFile &roster);
     void startCreateCharacter(Mm2RosterFile &roster, int slot = -1);
@@ -41,6 +43,10 @@ public:
 
     void tick(const platform::KeyState &keys);
     void render(gfx::ScreenCompositor &compositor);
+
+    /** Amiga: true when the off-screen cache needs a rebuild (present still runs every frame). */
+    bool needsRedraw() const;
+    void ackRedraw();
 
     bool takePartyLaunch(Mm2PartyLaunch *out);
 

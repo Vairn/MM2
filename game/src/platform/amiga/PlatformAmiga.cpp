@@ -200,7 +200,10 @@ KeyState pollInput()
         keys.enter = true;
         keys.any_key = true;
     }
-    keys.space = keyCheck(KEY_SPACE) != 0;
+    if (keyUse(KEY_SPACE)) {
+        keys.space = true;
+        keys.any_key = true;
+    }
     keys.up = keyCheck(KEY_UP) != 0;
     keys.down = keyCheck(KEY_DOWN) != 0;
     keys.left = keyCheck(KEY_LEFT) != 0;

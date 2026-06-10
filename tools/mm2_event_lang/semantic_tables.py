@@ -18,6 +18,37 @@ CLASS_BY_FIELD = {
 
 CLASS_FIELD_BY_NAME = {v.lower(): k for k, v in CLASS_BY_FIELD.items()}
 
+# Explicit OP_0E dispatch cases @ asm 0x160C2 (not default -$7DFA range bins).
+# Decompile appends `# label` comments; compile path ignores them.
+SELECTOR_HANDLER_LABELS: dict[int, str] = {
+    0x01: "open_tavern_food",
+    0x02: "open_inn_lodging",
+    0x03: "open_temple",
+    0x04: "open_training",
+    0x05: "open_mages_guild",
+    0x06: "open_blacksmith_shop",
+    0x07: "open_general_store",
+    0x08: "open_special_shop",
+    0x0A: "goblet_quest",
+    0x0D: "enroll_mages_guild",
+    0x64: "portal_travel_100",
+    0x7E: "special_126",
+    0x7F: "special_127",
+    0x80: "special_128",
+    0x81: "special_129",
+    0x82: "special_130",
+    0x83: "special_131",
+    0xC9: "quest_handler_201",
+    0xCA: "quest_handler_202",
+    0xCB: "quest_handler_203",
+    0xCC: "quest_handler_204",
+    0xCD: "quest_handler_205",
+    0xCE: "quest_handler_206",
+    0xCF: "quest_handler_207",
+    0xE2: "special_226",
+    0xFD: "special_253",
+}
+
 SELECTOR_NAMES = {
     0x01: ("shop", "tavern"),
     0x02: ("shop", "inn"),
@@ -29,10 +60,7 @@ SELECTOR_NAMES = {
     0x08: ("shop", "special_shop"),
     0x0A: ("quest", "goblet"),
     0x0D: ("shop", "enroll_mages"),
-    0x0E: ("shop", "engine_default"),
     0x64: ("quest", "portal_travel"),
-    0x65: ("quest", "corak_reunion"),
-    0x97: ("quest", "farview_reward"),
     0xC9: ("quest", "handler_201"),
     0xCA: ("quest", "handler_202"),
     0xCB: ("quest", "handler_203"),
@@ -47,7 +75,8 @@ SELECTOR_BY_NAME: dict[tuple[str, str], int] = {
 }
 
 # OP_0E handlers draw UI text from str.dat / embedded exe — not event.dat strings.
-# Used only when hand-authoring .mm2evt (shop tavern); decompile emits raw selector bytes.
+# Hand-author sugar: shop tavern → selector 0x01. Decompile keeps `selector 0xNN`
+# plus `# handler` for explicit asm cases in SELECTOR_HANDLER_LABELS only.
 SERVICE_UI_NOTES: dict[int, str] = {
     0x01: "dialog from str.dat (tavern menu)",
     0x02: "dialog from embedded exe (inn)",
@@ -67,7 +96,7 @@ TRANSITION_NAMES = {
     (0x11, 0x8F): "cavern_middlegate",
 }
 
-# Known apply_party_masked(set=0x75, and, or) patterns
+# Known apply_party_masked(set=0x75, and, or) patterns — hand-author sugar only (not used on decompile).
 QUEST_FLAG_PATTERNS: dict[tuple[int, int, int], tuple[str, str]] = {
     (0x75, 0xFE, 0x01): ("quest_complete", "ok"),
     (0x75, 0xFB, 0x04): ("ancients_code", "ok"),
@@ -172,6 +201,11 @@ def item_name(items: list[str], item_id: int) -> str:
     if 0 <= item_id < len(items) and items[item_id]:
         return items[item_id]
     return f"item_{item_id}"
+
+
+def selector_handler_comment(sel: int) -> str:
+    label = SELECTOR_HANDLER_LABELS.get(sel)
+    return f"  # {label}" if label else ""
 
 
 def slugify(text: str, max_len: int = 32) -> str:

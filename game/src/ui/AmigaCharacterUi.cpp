@@ -489,6 +489,12 @@ public:
         has_throw_ = false;
     }
 
+    void requestRedraw() override { frame_dirty_ = true; }
+
+    bool needsRedraw() const override { return frame_dirty_; }
+
+    void ackRedraw() override { frame_dirty_ = false; }
+
     void beginViewParty(Mm2RosterFile &roster) override
     {
         MM2_DBG("MM2 DBG: CharacterUi ViewParty\n");
@@ -498,6 +504,7 @@ public:
         sheet_roster_index_ = -1;
         sheet_slot_letter_ = 'A';
         sheet_mode_ = SheetMode::View;
+        markDirty();
     }
 
     UiResult tickViewParty(const platform::KeyState &keys) override
@@ -513,6 +520,7 @@ public:
         if (view_mode_ == ViewMode::RosterList) {
             if (keys.space) {
                 roster_page_offset_ = (roster_page_offset_ == 0) ? amiga_layout::kRosterHirelingPageOffset : 0;
+                markDirty();
                 return UiResult::Continue;
             }
             const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
@@ -523,6 +531,7 @@ public:
                     sheet_slot_letter_ = ch;
                     sheet_mode_ = SheetMode::View;
                     view_mode_ = ViewMode::CharacterSheet;
+                    markDirty();
                 }
                 return UiResult::Continue;
             }
@@ -560,6 +569,7 @@ public:
         mm2_create_pending_init(&pending_);
         pending_.class_id = -1;
         startThrowAnimation(true);
+        markDirty();
     }
 
     UiResult tickCreateCharacter(const platform::KeyState &keys) override
@@ -581,6 +591,7 @@ public:
             rewindCreateStep(create_step_, pending_);
             create_step_ = previousCreateStep(create_step_);
             create_exchange_first_ = -1;
+            markDirty();
             return UiResult::Continue;
         }
 
@@ -618,6 +629,7 @@ public:
         party_sub_ = PartySub::List;
         party_count_ = 0;
         has_party_launch_ = false;
+        markDirty();
     }
 
     UiResult tickChooseParty(const platform::KeyState &keys) override
@@ -643,10 +655,12 @@ public:
         }
         if (keys.space) {
             party_page_ = (party_page_ == PartyPage::Characters) ? PartyPage::Hirelings : PartyPage::Characters;
+            markDirty();
             return UiResult::Continue;
         }
         if (keys.last_ascii >= '1' && keys.last_ascii <= '5') {
             party_town_ = keys.last_ascii - '0';
+            markDirty();
             return UiResult::Continue;
         }
         if (ch >= 'A' && ch <= 'X') {
@@ -659,10 +673,12 @@ public:
             }
             if (keys.ctrl) {
                 togglePartyMember(slot);
+                markDirty();
             } else {
                 sheet_roster_index_ = slot;
                 sheet_slot_letter_ = ch;
                 party_sub_ = PartySub::Sheet;
+                markDirty();
             }
             return UiResult::Continue;
         }
@@ -695,6 +711,9 @@ private:
     enum class CreateStep { StatRoll, Race, Alignment, Sex, Name };
     enum class PartyPage { Characters, Hirelings };
     enum class PartySub { List, Sheet };
+
+    void markDirty() { frame_dirty_ = true; }
+
     void loadItems()
     {
         has_items_ = false;
@@ -862,18 +881,21 @@ private:
         }
         mm2_roster_name_to_cstr(&roster_->records[sheet_roster_index_], rename_buf_, sizeof(rename_buf_));
         sheet_mode_ = SheetMode::Rename;
+        markDirty();
     }
 
     UiResult tickSheetRename(const platform::KeyState &keys)
     {
         if (keys.escape) {
             sheet_mode_ = SheetMode::View;
+            markDirty();
             return UiResult::Continue;
         }
         if (keys.backspace) {
             const std::size_t len = std::strlen(rename_buf_);
             if (len > 0) {
                 rename_buf_[len - 1] = '\0';
+                markDirty();
             }
             return UiResult::Continue;
         }
@@ -883,6 +905,7 @@ private:
                 saveRoster();
             }
             sheet_mode_ = SheetMode::View;
+            markDirty();
             return UiResult::Continue;
         }
         if ((keys.last_ascii >= 'A' && keys.last_ascii <= 'Z') ||
@@ -891,18 +914,21 @@ private:
             if (len < MM2_ROSTER_NAME_SIZE) {
                 rename_buf_[len] = keys.last_ascii;
                 rename_buf_[len + 1] = '\0';
+                markDirty();
             }
         } else if (keys.last_ascii >= '0' && keys.last_ascii <= '9') {
             const std::size_t len = std::strlen(rename_buf_);
             if (len < MM2_ROSTER_NAME_SIZE) {
                 rename_buf_[len] = keys.last_ascii;
                 rename_buf_[len + 1] = '\0';
+                markDirty();
             }
         } else if (keys.space) {
             const std::size_t len = std::strlen(rename_buf_);
             if (len > 0 && len < MM2_ROSTER_NAME_SIZE) {
                 rename_buf_[len] = ' ';
                 rename_buf_[len + 1] = '\0';
+                markDirty();
             }
         }
         return UiResult::Continue;
@@ -942,6 +968,7 @@ private:
             } else {
                 view_mode_ = ViewMode::RosterList;
             }
+            markDirty();
             return UiResult::Continue;
         }
 
@@ -990,6 +1017,7 @@ private:
                 mm2_create_swap_stats(&pending_.rolled, create_exchange_first_, 6);
                 create_exchange_first_ = -1;
             }
+            markDirty();
             return UiResult::Continue;
         }
         const int stat_key = statIndexFromKey(ch);
@@ -1000,6 +1028,7 @@ private:
                 mm2_create_swap_stats(&pending_.rolled, create_exchange_first_, stat_key);
                 create_exchange_first_ = -1;
             }
+            markDirty();
             return UiResult::Continue;
         }
         if (keys.last_ascii >= '1' && keys.last_ascii <= '8') {
@@ -1011,6 +1040,7 @@ private:
                 pending_.sex = -1;
                 create_exchange_first_ = -1;
                 create_step_ = CreateStep::Race;
+                markDirty();
             }
             return UiResult::Continue;
         }
@@ -1035,6 +1065,7 @@ private:
         throw_anim_step_ = 0;
         throw_anim_gate_ = 0;
         throw_roll_when_done_ = roll_when_done;
+        markDirty();
     }
 
     void tickThrowAnimation()
@@ -1056,6 +1087,7 @@ private:
         }
         throw_anim_frame_ =
             amiga_layout::kCreateThrowAnimFrameFirst + ((throw_anim_step_ - 1) % anim_frames);
+        markDirty();
         if (throw_anim_step_ < amiga_layout::kCreateThrowAnimSteps) {
             return;
         }
@@ -1068,6 +1100,7 @@ private:
             create_exchange_first_ = -1;
             throw_roll_when_done_ = false;
         }
+        markDirty();
     }
 
     void tickCreateNameCursor()
@@ -1080,6 +1113,7 @@ private:
         create_name_cursor_gate_ = 0;
         create_name_cursor_frame_ =
             (create_name_cursor_frame_ + 1) % kCreateNameCursorFrameCount;
+        markDirty();
     }
 
     // ---- throw.32 tableau (rewritten from asset + ASM LAB_551A / LAB_5632 / LAB_60DE) ----
@@ -1279,6 +1313,7 @@ private:
             pending_.race = static_cast<int8_t>(keys.last_ascii - '1');
             mm2_create_apply_race(pending_.race, &pending_.rolled, &pending_.modified);
             create_step_ = CreateStep::Alignment;
+            markDirty();
         }
         return UiResult::Continue;
     }
@@ -1288,6 +1323,7 @@ private:
         if (keys.last_ascii >= '1' && keys.last_ascii <= '3') {
             pending_.alignment = static_cast<int8_t>(keys.last_ascii - '1');
             create_step_ = CreateStep::Sex;
+            markDirty();
         }
         return UiResult::Continue;
     }
@@ -1300,6 +1336,7 @@ private:
             create_name_cursor_frame_ = 0;
             create_name_cursor_gate_ = 0;
             create_step_ = CreateStep::Name;
+            markDirty();
         }
         return UiResult::Continue;
     }
@@ -1813,6 +1850,7 @@ private:
     int party_count_ = 0;
     Mm2PartyLaunch party_launch_{};
     bool has_party_launch_ = false;
+    bool frame_dirty_ = true;
 };
 
 }  // namespace
