@@ -146,6 +146,18 @@ KeyState pollInput()
             case SDLK_RIGHT:
                 k.right = true;
                 break;
+            case SDLK_KP_2:
+                k.down = true;
+                break;
+            case SDLK_KP_4:
+                k.left = true;
+                break;
+            case SDLK_KP_6:
+                k.right = true;
+                break;
+            case SDLK_KP_8:
+                k.up = true;
+                break;
             case SDLK_c:
                 k.key_c = true;
                 break;

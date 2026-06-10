@@ -167,6 +167,8 @@ private:
     bool boot_fade_active_ = false;
     bool pending_in_town_ = false;
 
+    bool in_town_active_ = false;
+
     TitleScreen::BootOutcome boot_outcome_ = TitleScreen::BootOutcome::Working;
 
 

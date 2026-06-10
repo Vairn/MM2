@@ -82,7 +82,9 @@ set(MM2_CODEC_SOURCES
   ${MM2_DECOMP}/mm2_monsters_codec.c
   ${MM2_DECOMP}/mm2_event_codec.c
   ${MM2_DECOMP}/mm2_attrib_codec.c
+  ${MM2_DECOMP}/mm2_map_codec.c
   ${MM2_DECOMP}/mm2_party_launch.c
+  ${MM2_DECOMP}/mm2_items_codec.c
 )
 
 if(NOT AMIGA)
@@ -97,6 +99,46 @@ if(NOT AMIGA)
   add_executable(font_golden tests/font_golden.cpp src/gfx/ScreenCompositor.cpp src/gfx/mm2_font8x8.c)
   target_include_directories(font_golden PRIVATE include)
   target_link_libraries(font_golden PRIVATE mm2_codecs)
+
+  add_executable(view3d_middlegate_check
+    tests/view3d_middlegate_check.cpp
+    src/gfx/View3D.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(view3d_middlegate_check PRIVATE include)
+  target_link_libraries(view3d_middlegate_check PRIVATE mm2_codecs)
+
+  add_executable(movement_middlegate_test
+    tests/movement_middlegate_test.cpp
+    src/gameplay/Movement.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(movement_middlegate_test PRIVATE include)
+  target_link_libraries(movement_middlegate_test PRIVATE mm2_codecs)
+
+  add_executable(playsession_input_test
+    tests/playsession_input_test.cpp
+    src/gameplay/PlaySessionInput.cpp)
+  target_include_directories(playsession_input_test PRIVATE include)
+  target_link_libraries(playsession_input_test PRIVATE mm2_codecs)
+
+  add_executable(playscreen_golden
+    tests/playscreen_golden.cpp
+    src/GameSession.cpp
+    src/gameplay/Movement.cpp
+    src/gameplay/PlaySessionInput.cpp
+    src/gameplay/InGameCharacterSheet.cpp
+    src/gameplay/InGameControlsScreen.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/mm2_font8x8.c
+    src/gfx/View3D.cpp
+    src/gfx/PlayScreenChrome.cpp
+    src/gfx/EnvAssets.cpp
+    src/world/MapWorld.cpp
+    src/runtime/Mm2Alloc.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(playscreen_golden PRIVATE include)
+  target_link_libraries(playscreen_golden PRIVATE mm2_codecs)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -118,6 +160,10 @@ endif()
 set(MM2_GAME_SOURCES
   ${MM2_MAIN_SOURCE}
   src/GameSession.cpp
+  src/gameplay/Movement.cpp
+  src/gameplay/PlaySessionInput.cpp
+  src/gameplay/InGameCharacterSheet.cpp
+  src/gameplay/InGameControlsScreen.cpp
   src/TitleScreen.cpp
   src/states/mm2_state.c
   src/states/mm2_app_context.c
@@ -128,6 +174,8 @@ set(MM2_GAME_SOURCES
   src/gfx/mm2_font8x8.c
   src/gfx/View3D.cpp
   src/gfx/PlayScreenChrome.cpp
+  src/gfx/EnvAssets.cpp
+  src/world/MapWorld.cpp
   src/runtime/Mm2Alloc.cpp
   src/runtime/PathScratch.cpp
   src/ui/CharacterUiKind.cpp

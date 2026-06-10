@@ -33,6 +33,7 @@ Source of truth: `EXTRACTED/docs/`, `EXTRACTED/mm2-ANALYSIS.md`, `tools/`, `edit
 | [`01-startup-init.md`](01-startup-init.md) | Boot path, hunk entry, DOS/Exec, MANX heap |
 | [`02-runtime-memory-map.md`](02-runtime-memory-map.md) | `A4` workspace, thunk tables, wrappers |
 | [`03-main-loop-and-map.md`](03-main-loop-and-map.md) | Main scheduler `LAB_1280`, overland map |
+| [`43-exploration-input-and-ingame-options.md`](43-exploration-input-and-ingame-options.md) | **Exploration key dispatch `$1482`** — full key table, Options/Protect panels, Controls screen, char-sheet/cast entry |
 | [`04-party-and-session.md`](04-party-and-session.md) | New game, party copy, session restart |
 | [`05-open-questions.md`](05-open-questions.md) | Unknowns and next trace targets |
 | [`08-event-runtime.md`](08-event-runtime.md) | Event VM dispatch and collision triggers |
@@ -117,6 +118,7 @@ Remake: `game/src/TitleScreen.cpp` — **320×200**, `Mm2Font8x8.inc`, menu on *
 | [`07-event-script-opcodes.md`](07-event-script-opcodes.md) | Opcode argc, names, pseudo-code |
 | [`08-event-runtime.md`](08-event-runtime.md) | Collision `0x80` → interpreter @ `0x172CA` |
 | [`30-event-to-string-path.md`](30-event-to-string-path.md) | When scripts use `str.dat` vs exe text |
+| [`44-event-text-rendering.md`](44-event-text-rendering.md) | **Pixel-exact event text** — draw thunks, window kernel, per-op dest rects, prompt loops |
 | [`37-mount-farview-class-quest-event.md`](37-mount-farview-class-quest-event.md) | Class quests + Juror turn-in (loc 34) |
 | [`36-class-quest-hp-bug.md`](36-class-quest-hp-bug.md) | Class-quest reward HP bug @ `0x9D76` |
 

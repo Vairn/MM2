@@ -76,9 +76,10 @@ void AppHost::pollInput() { keys_ = platform::pollInput(); }
 
 void AppHost::framePresent()
 {
-    title_.compositor();
-    platform::presentFrame(title_.compositor().pixels(), title_.compositor().width(),
-                           title_.compositor().height());
+    /* In-town frames live in the session compositor; everything else draws
+     * into the title compositor. */
+    const gfx::ScreenCompositor &c = in_town_active_ ? session_.compositor() : title_.compositor();
+    platform::presentFrame(c.pixels(), c.width(), c.height());
 #if !MM2_HOST_AMIGA
     platform::delayMs(16);
 #endif
@@ -335,6 +336,7 @@ bool AppHost::startInTownFromPending()
     if (!session_.start(data_dir_, title_.roster(), pending_launch_)) {
         return false;
     }
+    in_town_active_ = true;
 #if !MM2_HOST_AMIGA
     char window_title[256];
     std::snprintf(window_title, sizeof(window_title), "MM2 (%s) — %s", platform::hostName(),
@@ -356,8 +358,10 @@ void AppHost::inTownDraw() { session_.render(); }
 
 void AppHost::inTownEnd()
 {
+    in_town_active_ = false;
+    /* shutdown() fully resets the session; re-assigning a temporary here
+     * would shallow-copy ScreenCompositor's pixel buffer (double free). */
     session_.shutdown();
-    session_ = GameSession{};
     title_.returnToMenu();
 #if !MM2_HOST_AMIGA
     char window_title[256];

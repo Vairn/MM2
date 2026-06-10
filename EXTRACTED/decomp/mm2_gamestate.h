@@ -39,8 +39,18 @@
  * 0x16A9E range-checks this value, and the event dispatch at 0x172BC compares
  * it against attrib.dat byte 0x0F.) */
 #define MM2_GS_ERA_LOW          (-0x79B5)  /* byte  ($864B) = era & 0xFF */
-#define MM2_GS_NEW_GAME_FLAG    (-0x79B2)  /* byte  ($864E) */
+#define MM2_GS_NEW_GAME_FLAG    (-0x79B2)  /* byte  ($864E) right-panel mode 0=OPTIONS 1=PROTECT 2=combat */
 #define MM2_GS_LAST_MOVE_KEY    (-0x79B1)  /* byte  ($864F) N/S/E/W */
+#define MM2_GS_SOUNDS_FLAG      (-0x79B0)  /* byte  ($8650) bit0 = SFX on */
+#define MM2_GS_WALK_BEEP_FLAG   (-0x79AF)  /* byte  ($8651) bit0 = footstep beep */
+#define MM2_GS_DISPOSITION      (-0x79AE)  /* byte  ($8652) 0..3 AI mood */
+#define MM2_GS_DELAY            (-0x79AD)  /* byte  ($8653) 0..9 text delay */
+#define MM2_GS_LIGHT_FACTOR     (-0x79AB)  /* byte  ($8655) light / Lasting Light */
+#define MM2_GS_MAGIC_PROTECT    (-0x79AA)  /* byte  ($8656) magic protection tier */
+#define MM2_GS_FORCES_PROTECT   (-0x79A9)  /* byte  ($8657) forces protection tier */
+#define MM2_GS_LEVITATE_FLAG    (-0x79A8)  /* byte  ($8658) Levitate active */
+#define MM2_GS_WALK_WATER_FLAG  (-0x79A7)  /* byte  ($8659) Walk on Water */
+#define MM2_GS_GUARD_DOG_FLAG   (-0x79A6)  /* byte  ($865A) Guard Dog */
 #define MM2_GS_EVENT_PARSE_POS  (-0x7956)  /* word  ($86AA) */
 #define MM2_GS_EVENT_SCRIPT_ANCHOR (-0x7954)  /* word  ($86AC) */
 #define MM2_GS_PENDING_EVENT_LATCH (-0x7952)  /* byte  ($86AE) */

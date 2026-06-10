@@ -73,16 +73,35 @@ flowchart TB
 
 ## Implementation phases
 
-1. **Bootstrap** (current) — **320×200** compositor (`ScreenCompositor`), title screen
+1. **Bootstrap** (done) — **320×200** compositor (`ScreenCompositor`), title screen
    (`intro.32` @ (3,0) + `introclips.32` pegasus/peekers + `nwcp.32` logo + `book.32`
    menu on black), roster viewer (`roster.dat`), 2× SDL present. Menu text uses
    **`Mm2Font8x8.inc`** (plain ASCII). Title animation spec:
    [`EXTRACTED/docs/39-title-screen-animation.md`](../EXTRACTED/docs/39-title-screen-animation.md).
    Character UI is pluggable — see
    [`39-character-ui-view-create.md`](../EXTRACTED/docs/39-character-ui-view-create.md).
-2. **Data + state** — wire all `.dat` codecs; materialize `A4` workspace (`mm2_gamestate.h`).
-3. **3D view** — port `0x2900` hood renderer (208×120 viewport, wall fields from map page 0).
-4. **Main loop** — `0x1280` mode dispatch (overland, town, combat, menus).
+2. **Data + state** (in progress) — wire all `.dat` codecs; materialize `A4` workspace
+   (`mm2_gamestate.h`). Done: `map.dat` codec (`mm2_map_codec.{h,c}` +
+   `tools/mm2_map_codec.py`), `world/MapWorld` (map+attrib, neighbor pages, screen-enter
+   per `0x256E`/`0x923E`), `GameStateView` (`include/mm2/GameState.h`: screen/x/y/facing
+   + per-era calendar `-$79DE/-$79CA`), party launch → A4 apply.
+3. **3D view + movement** (Milestone 2 done) — `0x2900` hood renderer plus
+   `gameplay/Movement` (turn @ `0x5838`, step @ `0x5816`, passability first gate @
+   `0x9424`, screen edge @ `0x1D0A`, time tick/light drain @ `0x69DC`). Arrow/keypad
+   → `$F0..$F3` via `PlaySessionInput` (**no WASD** — doc 43 §1 rawkey table).
+   Offline checks: `view3d_middlegate_check`, `playscreen_golden`,
+   `movement_middlegate_test`, `playsession_input_test`.
+4. **Exploration commands** (Phase 2) — in-town input from doc 43:
+   **Ctrl-Q** quit prompt (`$12F4`), **Q** Quick Ref party table (`$595C` via
+   `0x907A`), digits **1–8** in-game character sheet (`$8C8A` / `$39B4`) with
+   digit-chain character switch, **O**/**P** right-column OPTIONS/Protect toggle
+   (`-$79B2`), Protect panel Light/Magic/Forces from `-$79AB..-$79A6` (`0x5E28`),
+   **C** Controls modal (`0x13CCE`), sheet sub-keys **E/R/D** equip/remove/drop
+   (class mask from `items.dat`), **C/U/G/S/T** stubbed toward ASM handlers.
+   **B/D/E/M/S/U** exploration keys wired with status stubs; **R** Rest restores
+   HP/SP (minimal stub toward `0x19E20`). Codecs: `mm2_items_codec.{h,c}` +
+   `tools/mm2_items_codec.py`.
+5. **Main loop** — `0x1280` mode dispatch (overland, town, combat, menus).
 5. **Events** — triplet scanner `0x175E2`, script VM, `OP_0E` town-service dispatch.
 6. **Combat** — round loop, player bar, monster AI, rewards.
 7. **Audio** — Paula tone path from `master.32` or MOD export fallback on desktop.
