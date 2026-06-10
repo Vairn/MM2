@@ -414,7 +414,8 @@ void ViewportAnmOverlay::blitAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) 
 
 
 
-void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_index) const
+void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_index,
+                                      bool outdoor_viewport) const
 
 {
 
@@ -427,38 +428,33 @@ void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_in
 
 
     /* sign_sprite_place @ 0x3266 → mode $17 @ 0x23C8C over viewport (8,8)–(215,127).
+     * OP_0B @ 0x15DF2 passes (pos, $40, $20). Simple path @ 0x23E24:
+     *   dst_x = $20 (32 px), dst_y = $40 + 8 (72 px) — matches town interior hood.
+     * Outdoor overland (-$79E2 != 0): upper-center over the sky/horizon band. */
 
-     * OP_0B passes (placement, $40, $20). Final blit @ 0x23E24/0x23E2E:
-
-     *   dst_x = $c = 0x20 (32 px)
-
-     *   dst_y = $e + 8 where $e is the $40 arg word (0x40 + 8 = 72)
-
-     * Wide-sprite path indexes A4-$56E by placement when width > $40 (unimplemented). */
-
-    constexpr int kOp0BSignDstX = 0x20;
-
-    constexpr int kOp0BSignYArg = 0x40;
-
+    constexpr int kOp0BIndoorDstX = 0x20;
+    constexpr int kOp0BIndoorYArg = 0x40;
+    constexpr int kOp0BOutdoorSkyOffsetY = 20;
     constexpr int kView3DViewportBottomY = 127;
 
-
-
     const int slot_x = kView3DOriginX;
-
     const int slot_y = kView3DSkyY;
-
     const int slot_w = kView3DViewportW;
-
     const int slot_h = kView3DViewportBottomY - kView3DSkyY + 1;
 
-
-
-    int dst_x = kOp0BSignDstX;
-
-    int dst_y = kOp0BSignYArg + 8;
-
-    (void)placement_index; /* retail simple path ignores arg2; table path TBD */
+    int dst_x;
+    int dst_y;
+    if (outdoor_viewport) {
+        dst_x = slot_x + (slot_w - w_) / 2;
+        dst_y = kView3DSkyY + kOp0BOutdoorSkyOffsetY;
+        if (placement_index > 0 && placement_index < 24) {
+            dst_y += placement_index * 2;
+        }
+    } else {
+        dst_x = kOp0BIndoorDstX;
+        dst_y = kOp0BIndoorYArg + 8;
+        (void)placement_index;
+    }
 
 
 

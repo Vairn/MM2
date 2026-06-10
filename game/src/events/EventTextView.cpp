@@ -131,7 +131,6 @@ void printWrapped(gfx::ScreenCompositor &c, int start_col, int start_row, int en
 void fillSignInteriorRow(gfx::ScreenCompositor &c, int row)
 {
     // OP_06 @ 0x15AEE: win_print("           ") ×11 spaces, JAM2 bg pen 0 (doc 44 §3.6).
-    // Pixel span cols 8..18 inclusive → 11 cells × 8 px.
     c.fillRect(8 * 8, row * 8, 11 * 8, 8, kPenSignFillR, kPenSignFillG, kPenSignFillB, 255);
 }
 
@@ -395,7 +394,7 @@ bool EventTextView::tickAnimation()
     return sign_overlay_.tick();
 }
 
-void EventTextView::draw(gfx::ScreenCompositor &c) const
+void EventTextView::draw(gfx::ScreenCompositor &c, bool outdoor_viewport) const
 {
     for (int i = 0; i < layer_count_; ++i) {
         const EventTextLayer &layer = layers_[i];
@@ -434,7 +433,7 @@ void EventTextView::draw(gfx::ScreenCompositor &c) const
                  * all service signs blit over the 3D viewport (8,8)–(215,127).
                  * Arg2 is a placement-table index (A4-$7538 → A4-$56E), not a
                  * viewport-vs-panel switch — never route by sprite dimensions. */
-                sign_overlay_.blitCentered(c, sign_placement_);
+                sign_overlay_.blitCentered(c, sign_placement_, outdoor_viewport);
             } else if (layer.text[0] != '\0') {
                 drawServiceSignStub(c, layer.text);
             }

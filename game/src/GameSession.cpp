@@ -8,6 +8,7 @@
 #include "mm2/runtime/Alloc.h"
 #include "mm2/runtime/PathScratch.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
+#include "mm2/gfx/AutomapView.h"
 #include "mm2/gfx/PlayScreenChrome.h"
 
 #if MM2_HOST_AMIGA
@@ -69,6 +70,7 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     back_to_title_ = false;
     assets_ok_ = false;
     overlay_ = PlayOverlay::None;
+    automap_.clearAll();
     sheet_session_ = {};
     sheet_session_.party_slot = 0;
     status_message_[0] = '\0';
@@ -122,6 +124,8 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     if (scripted_loaded_) {
         maybeQueueScriptedScenes(true);
     }
+
+    automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_, launch_);
 
     frame_dirty_ = true;
 
@@ -187,6 +191,8 @@ void GameSession::tickBootstrap()
         if (scripted_loaded_) {
             maybeQueueScriptedScenes(true);
         }
+        automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_,
+                                               launch_);
         bootstrapping_ = false;
         markDirty();
         return;
@@ -236,8 +242,10 @@ void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
             }
         }
         if (scripted_loaded_) {
-            maybeQueueScriptedScenes(false);
+            maybeQueueScriptedScenes(true);
         }
+        automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_,
+                                               launch_);
     }
 }
 
@@ -375,7 +383,12 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
         showStatusMessage("Exchange order (GAP 0x20F58).");
         break;
     case gameplay::PlaySessionAction::Automap:
-        showStatusMessage("Automap not implemented (GAP 0x223A).");
+        if (!assets_ok_ || !env_.automapReady()) {
+            showStatusMessage("Automap tiles missing.");
+        } else {
+            overlay_ = PlayOverlay::Automap;
+        }
+        markDirty();
         break;
     case gameplay::PlaySessionAction::Search:
         showStatusMessage("Search (GAP $4800 / 0x1B19C).");
@@ -408,6 +421,14 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         if (keys.escape || keys.any_key) {
             overlay_ = PlayOverlay::None;
             status_message_[0] = '\0';
+            markDirty();
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::Automap) {
+        if (keys.escape) {
+            overlay_ = PlayOverlay::None;
             markDirty();
         }
         return;
@@ -778,6 +799,9 @@ void GameSession::renderOverlays()
         compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 128, 255);
         compositor_.drawText(8, 18 * 8, "(ESC to dismiss)", 180, 180, 180, 255);
         break;
+    case PlayOverlay::Automap:
+        gfx::renderAutomap(compositor_, env_, world_, automap_, gs_);
+        break;
     case PlayOverlay::QuitConfirm:
         gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
         compositor_.drawText(8, 17 * 8, "Quit without game save (y/n)?", 255, 80, 80, 255);
@@ -795,7 +819,9 @@ void GameSession::render()
 
     const bool scripted_active = scripted_loaded_ && scripted_scene_.active();
     if (!scripted_active || !scripted_scene_.hidesView3D()) {
-        renderView3D();
+        if (overlay_ != PlayOverlay::Automap) {
+            renderView3D();
+        }
     }
 
     gfx::PlayRightPanel panel = right_panel_;
@@ -820,7 +846,7 @@ void GameSession::render()
     renderOverlays();
 
     if (events_loaded_ && !scripted_active) {
-        events_.textView().draw(compositor_);
+        events_.textView().draw(compositor_, world_.isOutdoor());
     }
 }
 

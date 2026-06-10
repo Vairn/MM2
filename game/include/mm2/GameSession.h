@@ -8,6 +8,7 @@
 
 #include "mm2/gfx/EnvAssets.h"
 #include "mm2/gfx/PlayScreenChrome.h"
+#include "mm2/world/AutomapState.h"
 #include "mm2/gfx/ScreenCompositor.h"
 #include "mm2/gfx/OutdoorView3D.h"
 #include "mm2/gfx/View3D.h"
@@ -61,7 +62,7 @@ public:
     const gfx::ScreenCompositor &compositor() const { return compositor_; }
 
 private:
-    enum class PlayOverlay : uint8_t { None, QuickRef, CharacterSheet, QuitConfirm, Controls, StatusMessage };
+    enum class PlayOverlay : uint8_t { None, QuickRef, CharacterSheet, QuitConfirm, Controls, StatusMessage, Automap };
 
     static const char *townName(uint8_t town_filter);
 
@@ -99,6 +100,7 @@ private:
     bool has_items_ = false;
 
     world::MapWorld world_;
+    world::AutomapState automap_;
     gfx::EnvAssets env_;
     gameplay::InGameCharacterSheet ingame_sheet_;
     gameplay::InGameControlsScreen controls_screen_;

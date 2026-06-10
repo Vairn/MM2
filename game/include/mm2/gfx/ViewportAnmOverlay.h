@@ -88,9 +88,9 @@ public:
 
 
 
-    /** OP_0B / mode $17 @ 0x23C8C: dst (0x20, 0x48) clamped to viewport (8,8)–(215,127). */
-
-    void blitCentered(gfx::ScreenCompositor &c, int placement_index = 0) const;
+    /** OP_0B / mode $17 @ 0x23C8C, clamped to viewport (8,8)–(215,127).
+     *  Indoor: ASM (0x20, 0x48). Outdoor overland: upper-center in viewport. */
+    void blitCentered(gfx::ScreenCompositor &c, int placement_index = 0, bool outdoor_viewport = false) const;
 
     void blitAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) const;
 

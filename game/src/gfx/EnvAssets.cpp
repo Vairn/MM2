@@ -88,17 +88,23 @@ bool EnvAssets::loadEnv(const char *data_dir, EnvKind kind)
     data_dir_ = data_dir;
     mm2_image32_free(&walls_);
     mm2_image32_free(&floor_);
+    mm2_image32_free(&automap_);
+    automap_ok_ = false;
     mm2_image32_free(&outdoor1_);
     mm2_image32_free(&outdoor2_);
     mm2_image32_free(&outdoor3_);
     freeBiomes(biomes_, biome_loaded_);
     env_ok_ = false;
 
+    mm2_image32_free(&automap_);
+    automap_ok_ = false;
+
     if (kind == EnvKind::Outdoor) {
         const bool has_floor = loadImage(data_dir, "outf.32", &floor_);
         const bool has_h1 = loadImage(data_dir, "outdoor1.32", &outdoor1_);
         loadImage(data_dir, "outdoor2.32", &outdoor2_);
         loadImage(data_dir, "outdoor3.32", &outdoor3_);
+        automap_ok_ = loadImage(data_dir, envSheetNames(kind).automap, &automap_);
         env_ok_ = has_floor && has_h1;
         return env_ok_;
     }
@@ -110,6 +116,7 @@ bool EnvAssets::loadEnv(const char *data_dir, EnvKind kind)
 
     const bool has_walls = loadImage(data_dir, names.walls, &walls_);
     const bool has_floor = loadImage(data_dir, names.floor, &floor_);
+    automap_ok_ = names.automap && loadImage(data_dir, names.automap, &automap_);
     env_ok_ = has_walls && has_floor;
     return env_ok_;
 }
@@ -139,6 +146,8 @@ void EnvAssets::unloadAll()
 {
     mm2_image32_free(&walls_);
     mm2_image32_free(&floor_);
+    mm2_image32_free(&automap_);
+    automap_ok_ = false;
     mm2_image32_free(&sky_);
     mm2_image32_free(&outdoor1_);
     mm2_image32_free(&outdoor2_);

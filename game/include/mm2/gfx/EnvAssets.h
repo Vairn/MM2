@@ -58,6 +58,9 @@ public:
     const mm2_image32_file &walls() const { return walls_; }
     const mm2_image32_file &floor() const { return floor_; }
     const mm2_image32_file &sky() const { return sky_; }
+    const mm2_image32_file &automap() const { return automap_; }
+
+    bool automapReady() const { return automap_ok_; }
 
     const mm2_image32_file &horizonSheet(OutdoorHorizonSheet sheet) const;
     const mm2_image32_file &biomeSheet(OutdoorBiome biome);
@@ -72,7 +75,9 @@ private:
 
     mm2_image32_file walls_{};
     mm2_image32_file floor_{};
+    mm2_image32_file automap_{};
     mm2_image32_file sky_{};
+    bool automap_ok_ = false;
     mm2_image32_file outdoor1_{};
     mm2_image32_file outdoor2_{};
     mm2_image32_file outdoor3_{};

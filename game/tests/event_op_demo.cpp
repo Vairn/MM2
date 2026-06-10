@@ -13,6 +13,7 @@
 #include "mm2/gfx/EnvAssets.h"
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/gfx/ScreenCompositor.h"
+#include "mm2/gfx/OutdoorView3D.h"
 #include "mm2/gfx/View3D.h"
 #include "mm2/world/MapWorld.h"
 
@@ -111,25 +112,41 @@ struct PlayFrame {
         return true;
     }
 
-    void renderBase()
+    void renderView3D()
     {
-        compositor.clear(0, 0, 0, 255);
-        drawPlayScreenChrome(compositor);
-
         View3DCamera camera{};
         camera.x = gs.coordX();
         camera.y = gs.coordY();
         camera.facing = gs.facing03();
 
+        if (world.isOutdoor()) {
+            blitImageFrame(compositor, env.floor(), 0, kView3DOriginX, kView3DFloorY);
+            blitImageFrame(compositor, env.sky(), 0, kView3DOriginX, kView3DSkyY);
+            const OutdoorScene scene = buildOutdoorScene(world, camera);
+            for (const OutdoorSpriteBlit &b : scene.decor) {
+                blitImageFrame(compositor, env.biomeSheet(b.biome), b.frame, b.x, b.y);
+            }
+            for (const OutdoorSpriteBlit &b : scene.horizon) {
+                blitImageFrame(compositor, env.horizonSheet(b.horizon), b.frame, b.x, b.y);
+            }
+            return;
+        }
+
         const View3DMapBuffers bufs = world.buildView3DMapBuffers();
         const View3DScene scene = buildView3DScene(bufs, camera);
-
         const int sky_frame = world.roofBitAt(camera.x, camera.y) ? 1 : 0;
         blitImageFrame(compositor, env.floor(), 0, kView3DOriginX, kView3DFloorY);
         blitImageFrame(compositor, env.sky(), sky_frame, kView3DOriginX, kView3DSkyY);
         for (const View3DBlit &b : scene.blits) {
             blitImageFrame(compositor, env.walls(), b.frame, b.x, b.y);
         }
+    }
+
+    void renderBase()
+    {
+        compositor.clear(0, 0, 0, 255);
+        drawPlayScreenChrome(compositor);
+        renderView3D();
 
         const bool protect_panel = gs.rightPanelMode() != 0;
         drawPlayStatusBar(compositor, gs.day(), gs.year(), gs.facingKey(), protect_panel);
@@ -245,6 +262,15 @@ void setup_op05(events::EventTextView &tv)
     tv.showOp05("Monster Freezing\nAuthorized Personnel\nOnly!");
 }
 
+void prepare_op06_gs(GameStateView &gs)
+{
+    /* loc 10 (B2) evt 02 @ (1,11)/ENTER — outdoor signpost (doc 44 §6.3). */
+    gs.setScreenId(10);
+    gs.setCoordX(1);
+    gs.setCoordY(11);
+    gs.setFacingKey('N');
+}
+
 void setup_op06(events::EventTextView &tv)
 {
     tv.showOp06("Archers\nOnly");
@@ -304,8 +330,8 @@ constexpr DemoCase kDemos[] = {
     {"op04_door_label_row3", "OP_04", "Middlegate event 01 @ (7,5)/S str[1] Middlegate Inn", setup_op04,
      prepare_op04_gs, nullptr},
     {"op05_popup_a", "OP_05", "Tundara str[23] Monster Freezing popup", setup_op05, nullptr, nullptr},
-    {"op06_signpost", "OP_06", "B2 event 02 str[1] Archers Only (outdoor signpost)", setup_op06, nullptr,
-     nullptr},
+    {"op06_signpost", "OP_06", "B2 event 02 str[1] Archers Only (outdoor signpost)", setup_op06,
+     prepare_op06_gs, nullptr},
     {"op0b_signboard", "OP_0B", "Middlegate evt 22 str[2] 62.anm S.J. Blacksmith @ (4,4)", setup_op0b,
      nullptr, nullptr},
     {"op0b_portcullis", "OP_0B", "C2 loc 11 evt 01 str[24] 29.anm gate portrait @ (3,7)/S", nullptr,
@@ -353,6 +379,11 @@ int main(int argc, char **argv)
             mm2_party_launch_apply(frame.gs.a4(), &frame.launch);
         }
 
+        if (demo.prepare_gs == prepare_op06_gs) {
+            frame.world.enterScreen(10);
+            frame.env.loadEnv(data_dir, envKindFromAttrib(frame.world.attrib()));
+        }
+
         if (demo.setup_with_frame) {
             demo.setup_with_frame(tv, frame);
         } else if (demo.setup) {
@@ -379,7 +410,7 @@ int main(int argc, char **argv)
             scripted.armDemo(demo.scripted_id);
             scripted.draw(frame.compositor);
         } else if (demo.setup || demo.setup_with_frame) {
-            tv.draw(frame.compositor);
+            tv.draw(frame.compositor, frame.world.isOutdoor());
         }
 
         char ppm_path[512];

@@ -93,6 +93,12 @@ if(NOT AMIGA)
   target_include_directories(mm2_codecs PUBLIC ${MM2_DECOMP})
 endif()
 
+# GameSession + automap_golden share automap implementation (Cartography.h is header-only).
+set(MM2_AUTOMAP_SOURCES
+  src/gfx/AutomapView.cpp
+  src/world/AutomapState.cpp
+)
+
 if(NOT AMIGA)
   add_executable(image32_golden tests/image32_golden.c)
   target_link_libraries(image32_golden PRIVATE mm2_codecs)
@@ -130,6 +136,18 @@ if(NOT AMIGA)
     src/gameplay/PlaySessionInput.cpp)
   target_include_directories(playsession_input_test PRIVATE include)
   target_link_libraries(playsession_input_test PRIVATE mm2_codecs)
+
+  add_executable(automap_golden
+    tests/automap_golden.cpp
+    ${MM2_AUTOMAP_SOURCES}
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/mm2_font8x8.c
+    src/gfx/EnvAssets.cpp
+    src/gfx/OutdoorView3D.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(automap_golden PRIVATE include)
+  target_link_libraries(automap_golden PRIVATE mm2_codecs)
 
   add_executable(character_sheet_input_test
     tests/character_sheet_input_test.cpp
@@ -184,6 +202,7 @@ if(NOT AMIGA)
   add_executable(playscreen_golden
     tests/playscreen_golden.cpp
     src/GameSession.cpp
+    ${MM2_AUTOMAP_SOURCES}
     src/events/ScriptedSceneEngine.cpp
     src/gameplay/Movement.cpp
     src/gameplay/PlaySessionInput.cpp
@@ -243,6 +262,7 @@ set(MM2_GAME_SOURCES
   src/gfx/PlayScreenChrome.cpp
   src/gfx/PartyStatusFormat.cpp
   src/gfx/EnvAssets.cpp
+  ${MM2_AUTOMAP_SOURCES}
   src/world/MapWorld.cpp
   src/events/EventRuntime.cpp
   src/events/EventTextView.cpp
