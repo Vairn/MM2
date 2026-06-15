@@ -77,12 +77,15 @@ void ScriptedSceneEngine::unload()
 
 bool ScriptedSceneEngine::tryLoadGhostAnm(const char *data_dir)
 {
+    /* Overlaid on the 3D hood — share the env palette so walls stay correct. */
+    ghost_sprite_.setUseHostPalette(true);
     has_ghost_sprite_ = ghost_sprite_.loadFromDiskIndex(data_dir, kGhostAnmDisk);
     return has_ghost_sprite_;
 }
 
 bool ScriptedSceneEngine::tryLoadPegasusAnm(const char *data_dir)
 {
+    pegasus_sprite_.setUseHostPalette(true);
     has_pegasus_sprite_ = pegasus_sprite_.loadFromDiskIndex(data_dir, kPegasusMonsterAnmDisk);
     return has_pegasus_sprite_;
 }
@@ -140,6 +143,7 @@ void ScriptedSceneEngine::beginScene(const SceneSpec *spec)
     pegasus_sign_.unload();
     has_pegasus_sign_ = false;
     if (spec->sign_anm_id > 0 && data_dir_) {
+        pegasus_sign_.setUseHostPalette(true);
         has_pegasus_sign_ = pegasus_sign_.loadFromTableId(data_dir_, spec->sign_anm_id);
     }
     text_.reset();

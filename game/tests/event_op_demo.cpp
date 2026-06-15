@@ -123,10 +123,12 @@ struct PlayFrame {
             blitImageFrame(compositor, env.floor(), 0, kView3DOriginX, kView3DFloorY);
             blitImageFrame(compositor, env.sky(), 0, kView3DOriginX, kView3DSkyY);
             const OutdoorScene scene = buildOutdoorScene(world, camera);
-            for (const OutdoorSpriteBlit &b : scene.decor) {
+            for (int i = 0; i < scene.num_decor; ++i) {
+                const OutdoorSpriteBlit &b = scene.decor[static_cast<size_t>(i)];
                 blitImageFrame(compositor, env.biomeSheet(b.biome), b.frame, b.x, b.y);
             }
-            for (const OutdoorSpriteBlit &b : scene.horizon) {
+            for (int i = 0; i < scene.num_horizon; ++i) {
+                const OutdoorSpriteBlit &b = scene.horizon[static_cast<size_t>(i)];
                 blitImageFrame(compositor, env.horizonSheet(b.horizon), b.frame, b.x, b.y);
             }
             return;
@@ -137,7 +139,8 @@ struct PlayFrame {
         const int sky_frame = world.roofBitAt(camera.x, camera.y) ? 1 : 0;
         blitImageFrame(compositor, env.floor(), 0, kView3DOriginX, kView3DFloorY);
         blitImageFrame(compositor, env.sky(), sky_frame, kView3DOriginX, kView3DSkyY);
-        for (const View3DBlit &b : scene.blits) {
+        for (int i = 0; i < scene.num_blits; ++i) {
+            const View3DBlit &b = scene.blits[static_cast<size_t>(i)];
             blitImageFrame(compositor, env.walls(), b.frame, b.x, b.y);
         }
     }
@@ -410,7 +413,7 @@ int main(int argc, char **argv)
             scripted.armDemo(demo.scripted_id);
             scripted.draw(frame.compositor);
         } else if (demo.setup || demo.setup_with_frame) {
-            tv.draw(frame.compositor, frame.world.isOutdoor());
+            tv.draw(frame.compositor);
         }
 
         char ppm_path[512];

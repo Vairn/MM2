@@ -56,7 +56,8 @@ struct View3DBlit {
 };
 
 struct View3DScene {
-    std::vector<View3DBlit> blits;
+    std::array<View3DBlit, 20> blits{};
+    int num_blits = 0;
     std::array<uint8_t, 13> hood{};
     std::array<uint8_t, 20> slots{};
 };

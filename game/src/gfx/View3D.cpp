@@ -226,7 +226,7 @@ int wallFrame(WallField field, int baseFrame) {
     return baseFrame;
 }
 
-bool view3dPaintLatticeCell(std::vector<View3DBlit> &out, int latX, int latRow, uint8_t rawCode) {
+bool view3dPaintLatticeCell(View3DScene &scene, int latX, int latRow, uint8_t rawCode) {
     if (rawCode == 0) {
         return false;
     }
@@ -295,42 +295,44 @@ bool view3dPaintLatticeCell(std::vector<View3DBlit> &out, int latX, int latRow, 
     if (frame < 0) {
         return false;
     }
-    out.push_back({frame, x, y, latX, latRow, static_cast<uint8_t>(field)});
+    if (scene.num_blits < static_cast<int>(scene.blits.size())) {
+        scene.blits[scene.num_blits++] = {frame, x, y, latX, latRow, static_cast<uint8_t>(field)};
+    }
     return true;
 }
 
-void paintFrustumCell(std::vector<View3DBlit> &out, int latX, int paintDepth, uint8_t rawCode) {
+void paintFrustumCell(View3DScene &scene, int latX, int paintDepth, uint8_t rawCode) {
     const int depth = (paintDepth & 0x7F) - 1;
     if (depth < 0 || depth >= kView3DDepthBands) {
         return;
     }
-    view3dPaintLatticeCell(out, latX, view3dRowFromDepth(depth), rawCode);
+    view3dPaintLatticeCell(scene, latX, view3dRowFromDepth(depth), rawCode);
 }
 
-void collectBlits(const std::array<uint8_t, kFrustumSlots> &s, std::vector<View3DBlit> &out) {
-    out.clear();
+void collectBlits(const std::array<uint8_t, kFrustumSlots> &s, View3DScene &scene) {
+    scene.num_blits = 0;
     const auto sl = [&](int i) -> uint8_t { return s[static_cast<size_t>(i)]; };
 
-    paintFrustumCell(out, -1, 4, sl(S_F1D));
-    paintFrustumCell(out, -2, 0x84, sl(S_F11));
-    paintFrustumCell(out, 1, 4, sl(S_F19));
-    paintFrustumCell(out, 2, 0x84, sl(S_F0D));
-    paintFrustumCell(out, 0, 4, sl(S_F15));
-    paintFrustumCell(out, -1, 3, sl(S_F1E));
-    paintFrustumCell(out, -2, 0x83, sl(S_F12));
-    paintFrustumCell(out, 1, 3, sl(S_F1A));
-    paintFrustumCell(out, 2, 0x83, sl(S_F0E));
-    paintFrustumCell(out, 0, 3, sl(S_F16));
-    paintFrustumCell(out, -1, 2, sl(S_F1F));
-    paintFrustumCell(out, -2, 0x82, sl(S_F13));
-    paintFrustumCell(out, 1, 2, sl(S_F1B));
-    paintFrustumCell(out, 2, 0x82, sl(S_F0F));
-    paintFrustumCell(out, 0, 2, sl(S_F17));
-    paintFrustumCell(out, -1, 1, sl(S_F20));
-    paintFrustumCell(out, -2, 0x81, sl(S_F14));
-    paintFrustumCell(out, 1, 1, sl(S_F1C));
-    paintFrustumCell(out, 2, 0x81, sl(S_F10));
-    paintFrustumCell(out, 0, 1, sl(S_F18));
+    paintFrustumCell(scene, -1, 4, sl(S_F1D));
+    paintFrustumCell(scene, -2, 0x84, sl(S_F11));
+    paintFrustumCell(scene, 1, 4, sl(S_F19));
+    paintFrustumCell(scene, 2, 0x84, sl(S_F0D));
+    paintFrustumCell(scene, 0, 4, sl(S_F15));
+    paintFrustumCell(scene, -1, 3, sl(S_F1E));
+    paintFrustumCell(scene, -2, 0x83, sl(S_F12));
+    paintFrustumCell(scene, 1, 3, sl(S_F1A));
+    paintFrustumCell(scene, 2, 0x83, sl(S_F0E));
+    paintFrustumCell(scene, 0, 3, sl(S_F16));
+    paintFrustumCell(scene, -1, 2, sl(S_F1F));
+    paintFrustumCell(scene, -2, 0x82, sl(S_F13));
+    paintFrustumCell(scene, 1, 2, sl(S_F1B));
+    paintFrustumCell(scene, 2, 0x82, sl(S_F0F));
+    paintFrustumCell(scene, 0, 2, sl(S_F17));
+    paintFrustumCell(scene, -1, 1, sl(S_F20));
+    paintFrustumCell(scene, -2, 0x81, sl(S_F14));
+    paintFrustumCell(scene, 1, 1, sl(S_F1C));
+    paintFrustumCell(scene, 2, 0x81, sl(S_F10));
+    paintFrustumCell(scene, 0, 1, sl(S_F18));
 }
 
 }  // namespace
@@ -354,7 +356,7 @@ View3DScene buildView3DScene(const View3DMapBuffers &bufs, const View3DCamera &c
     View3DScene scene;
     scene.hood = hood;
     scene.slots = slots;
-    collectBlits(slots, scene.blits);
+    collectBlits(slots, scene);
     return scene;
 }
 

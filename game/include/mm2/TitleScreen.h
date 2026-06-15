@@ -117,6 +117,8 @@ private:
     void pickRandomPeekerSlot();
     void releaseIntroClips();
     void releaseLogoAsset();
+    /** Drop intro.32 / introclips.32 / nwcp.32 once the interactive menu is shown. */
+    void releaseAttractAssets();
     void ensureAttractAssetsLoaded();
     void drawTitleMenu();
     void buildTitleMenuCache();

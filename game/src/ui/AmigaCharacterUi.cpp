@@ -623,6 +623,7 @@ public:
 
     void beginChooseParty(Mm2RosterFile &roster) override
     {
+        MM2_DBG("MM2 GOTO: AmigaCharacterUi::beginChooseParty\n");
         roster_ = &roster;
         party_town_ = 1;
         party_page_ = PartyPage::Characters;
@@ -645,12 +646,15 @@ public:
         const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
         if (ch == 'Z') {
             // ASM @ 0x0E06: Z with party → spawn at town inn (requires members).
+            MM2_DBG("MM2 GOTO: ChooseParty Z party_count=%d town=%d\n", party_count_, party_town_);
             if (party_count_ <= 0) {
+                MM2_DBG("MM2 GOTO: ChooseParty Z ignored (empty party)\n");
                 return UiResult::Continue;
             }
             mm2_party_launch_build(&party_launch_, static_cast<uint8_t>(party_town_), party_members_,
                                    party_count_);
             has_party_launch_ = true;
+            MM2_DBG("MM2 GOTO: ChooseParty Z -> Done (launch built)\n");
             return UiResult::Done;
         }
         if (keys.space) {
@@ -687,6 +691,8 @@ public:
 
     void renderChooseParty(gfx::ScreenCompositor &compositor) override
     {
+        MM2_DBG("MM2 GOTO: renderChooseParty sub=%d page=%d count=%d\n", static_cast<int>(party_sub_),
+                static_cast<int>(party_page_), party_count_);
         compositor.clear(0, 0, 0, 255);
         if (party_sub_ == PartySub::Sheet) {
             renderCharacterSheet(compositor);

@@ -25,12 +25,17 @@ if(AMIGA)
   set(MM2_PLATFORM_SOURCES src/platform/amiga/PlatformAmiga.cpp)
   set(MM2_MAIN_SOURCE src/main_amiga.cpp)
 
-  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(ACE_DEBUG ON CACHE BOOL "ACE debug logging" FORCE)
-    set(ACE_DEBUG_UAE ON CACHE BOOL "ACE logWrite -> WinUAE/Bartman console" FORCE)
-  else()
-    set(ACE_DEBUG OFF CACHE BOOL "ACE debug logging" FORCE)
-    set(ACE_DEBUG_UAE OFF CACHE BOOL "ACE logWrite -> WinUAE/Bartman console" FORCE)
+  # Presets may set ACE_DEBUG=ON for RelWithDebInfo (optimized + symbols + MM2_DBG spam).
+  # Default ON for Debug, OFF otherwise; never FORCE — cacheVariables from presets win.
+  if(NOT DEFINED ACE_DEBUG)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+      set(ACE_DEBUG ON CACHE BOOL "ACE debug logging (MM2_DBG / logWrite)")
+    else()
+      set(ACE_DEBUG OFF CACHE BOOL "ACE debug logging (MM2_DBG / logWrite)")
+    endif()
+  endif()
+  if(NOT DEFINED ACE_DEBUG_UAE)
+    set(ACE_DEBUG_UAE ${ACE_DEBUG} CACHE BOOL "ACE logWrite -> WinUAE/Bartman console")
   endif()
 
   # Stale CPM_DIRECTORY from a prior ACE fork breaks AmigaPorts/ACE's include(cmake/CPM.cmake).
@@ -252,6 +257,7 @@ set(MM2_GAME_SOURCES
   src/TitleScreen.cpp
   src/states/mm2_state.c
   src/states/mm2_app_context.c
+  src/states/mm2_goto_trace.c
   src/states/mm2_states.cpp
   src/states/AppHost.cpp
   src/states/mm2_app_run.cpp
@@ -294,7 +300,7 @@ if(AMIGA AND ELF2HUNK)
   set(MM2_LINKED mm2.elf)
   set(MM2_OUTPUT mm2.exe)
   set(ELF2HUNK_EXTRA_OPTS "")
-  if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+  if(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(ELF2HUNK_EXTRA_OPTS "-s")
   endif()
   add_executable(${MM2_LINKED} ${MM2_GAME_SOURCES})
@@ -347,8 +353,11 @@ else()
   target_link_libraries(${_mm2_target} PRIVATE mm2_codecs SDL2::SDL2main SDL2::SDL2)
 endif()
 
+if(AMIGA AND ACE_DEBUG)
+  target_compile_definitions(${_mm2_target} PRIVATE ACE_DEBUG MM2_DEBUG)
+endif()
 target_compile_definitions(${_mm2_target} PRIVATE
-  $<$<CONFIG:Debug>:MM2_DEBUG ACE_DEBUG GAME_DEBUG>
+  $<$<CONFIG:Debug>:GAME_DEBUG>
 )
 
 if(AMIGA)

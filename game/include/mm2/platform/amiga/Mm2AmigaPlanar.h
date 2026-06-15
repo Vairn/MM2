@@ -48,6 +48,16 @@ void mm2_amiga_ui_cache_invalidate(void);
 void mm2_amiga_ui_cache_destroy(void);
 UBYTE mm2_amiga_ui_cache_ready(void);
 
+/** 3D hood snapshot (8,8)–(215,127) — restore before overlay-only .anm cel updates. */
+UBYTE mm2_amiga_viewport_cache_create(void);
+void mm2_amiga_viewport_cache_save(void);
+void mm2_amiga_viewport_cache_restore(void);
+void mm2_amiga_viewport_cache_invalidate(void);
+UBYTE mm2_amiga_viewport_cache_valid(void);
+
+/** Copy pFront → pBack before patching only the 3D viewport (double-buffer HUD reuse). */
+UBYTE mm2_amiga_copy_front_to_back(void);
+
 #ifdef __cplusplus
 }
 #endif

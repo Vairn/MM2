@@ -1,5 +1,6 @@
 #include "mm2/ui/CharacterUiController.h"
 
+#include "mm2/Mm2Dbg.h"
 #include "mm2/ui/CharacterUiFactory.h"
 #include "mm2/ui/ICharacterUi.h"
 
@@ -81,11 +82,13 @@ void CharacterUiController::startViewParty(Mm2RosterFile &roster)
 
 void CharacterUiController::startChooseParty(Mm2RosterFile &roster)
 {
+    MM2_DBG("MM2 GOTO: CharacterUiController::startChooseParty\n");
     roster_ = &roster;
     mode_ = CharacterUiMode::ChooseParty;
     quit_requested_ = false;
     party_launch_ready_ = false;
     ui_->beginChooseParty(roster);
+    MM2_DBG("MM2 GOTO: startChooseParty done needsRedraw=%d\n", needsRedraw() ? 1 : 0);
 }
 
 void CharacterUiController::startCreateCharacter(Mm2RosterFile &roster, int slot)
@@ -119,6 +122,10 @@ void CharacterUiController::tick(const platform::KeyState &keys)
         result = ui_->tickChooseParty(keys);
     }
 
+    if (mode_ == CharacterUiMode::ChooseParty && result != UiResult::Continue) {
+        MM2_DBG("MM2 GOTO: ChooseParty tick result=%d\n", static_cast<int>(result));
+    }
+
     if (result == UiResult::Quit) {
         quit_requested_ = true;
         mode_ = CharacterUiMode::None;
@@ -128,6 +135,13 @@ void CharacterUiController::tick(const platform::KeyState &keys)
             if (ui_->takePartyLaunch(&launch)) {
                 party_launch_ = launch;
                 party_launch_ready_ = true;
+                MM2_DBG(
+                    "MM2 GOTO: party_launch_ready town=%u members=%u\n",
+                    (unsigned)launch.town_filter,
+                    (unsigned)launch.party_count
+                );
+            } else {
+                MM2_DBG("MM2 GOTO: ChooseParty Done but takePartyLaunch failed\n");
             }
         }
         mode_ = CharacterUiMode::None;
@@ -151,10 +165,13 @@ void CharacterUiController::ackRedraw()
 bool CharacterUiController::takePartyLaunch(Mm2PartyLaunch *out)
 {
     if (!party_launch_ready_ || !out) {
+        MM2_DBG("MM2 GOTO: takePartyLaunch miss ready=%d out=%p\n", party_launch_ready_ ? 1 : 0,
+                static_cast<void *>(out));
         return false;
     }
     *out = party_launch_;
     party_launch_ready_ = false;
+    MM2_DBG("MM2 GOTO: takePartyLaunch ok\n");
     return true;
 }
 

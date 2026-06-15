@@ -27,6 +27,15 @@ static UBYTE s_palette_dirty;
 static tBitMap *s_ui_cache_bm;
 static tBitMap *s_pixel_target;
 
+/* Retail buf_copy_rect @ 0x171AC — 3D viewport before sprite overlay. */
+static tBitMap *s_viewport_cache_bm;
+static UBYTE s_viewport_cache_valid;
+
+#define MM2_VIEWPORT_CACHE_X 8u
+#define MM2_VIEWPORT_CACHE_Y 8u
+#define MM2_VIEWPORT_CACHE_W 208u
+#define MM2_VIEWPORT_CACHE_H 120u
+
 void mm2_amiga_push_palette(void);
 
 static tBitMap *mm2_amiga_pixel_dest(void)
@@ -255,6 +264,80 @@ UBYTE mm2_amiga_ui_cache_ready(void)
     return s_ui_cache_bm != NULL;
 }
 
+UBYTE mm2_amiga_viewport_cache_create(void)
+{
+    if (s_viewport_cache_bm) {
+        return 1;
+    }
+    s_viewport_cache_bm =
+        bitmapCreate(MM2_VIEWPORT_CACHE_W + 16, MM2_VIEWPORT_CACHE_H, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
+    return s_viewport_cache_bm != NULL;
+}
+
+void mm2_amiga_viewport_cache_save(void)
+{
+    tBitMap *pSrc;
+
+    if (!s_viewport_cache_bm) {
+        return;
+    }
+    pSrc = mm2_amiga_pixel_dest();
+    if (!pSrc || !bitmapIsChip(s_viewport_cache_bm) || !bitmapIsChip(pSrc)) {
+        return;
+    }
+    blitCopy(pSrc, (WORD)MM2_VIEWPORT_CACHE_X, (WORD)MM2_VIEWPORT_CACHE_Y, s_viewport_cache_bm, 0, 0,
+             (WORD)MM2_VIEWPORT_CACHE_W, (WORD)MM2_VIEWPORT_CACHE_H, MINTERM_COPY);
+    s_viewport_cache_valid = 1;
+}
+
+void mm2_amiga_viewport_cache_restore(void)
+{
+    tBitMap *pDst;
+
+    if (!s_viewport_cache_valid || !s_viewport_cache_bm) {
+        return;
+    }
+    pDst = mm2_amiga_pixel_dest();
+    if (!pDst || !bitmapIsChip(s_viewport_cache_bm) || !bitmapIsChip(pDst)) {
+        return;
+    }
+    blitCopy(s_viewport_cache_bm, 0, 0, pDst, (WORD)MM2_VIEWPORT_CACHE_X, (WORD)MM2_VIEWPORT_CACHE_Y,
+             (WORD)MM2_VIEWPORT_CACHE_W, (WORD)MM2_VIEWPORT_CACHE_H, MINTERM_COPY);
+}
+
+void mm2_amiga_viewport_cache_invalidate(void)
+{
+    s_viewport_cache_valid = 0;
+}
+
+UBYTE mm2_amiga_viewport_cache_valid(void)
+{
+    return s_viewport_cache_valid;
+}
+
+UBYTE mm2_amiga_copy_front_to_back(void)
+{
+    tSimpleBufferManager *pBfr;
+    tBitMap *pFront;
+    tBitMap *pBack;
+
+    pBfr = mm2AmigaDisplayGetBuffer();
+    if (!pBfr || !pBfr->pFront || !pBfr->pBack) {
+        return 0;
+    }
+    pFront = pBfr->pFront;
+    pBack = pBfr->pBack;
+    if (pFront == pBack) {
+        return 0;
+    }
+    if (!bitmapIsChip(pFront) || !bitmapIsChip(pBack)) {
+        return 0;
+    }
+    blitCopy(pFront, 0, 0, pBack, 0, 0, (WORD)MM2_AGA_SCREEN_WIDTH, (WORD)MM2_AGA_SCREEN_HEIGHT,
+             MINTERM_COPY);
+    return 1;
+}
+
 static void mm2_amiga_write_asset_palette(const mm2_image32_file *img)
 {
     tVPort *pVp;
@@ -415,7 +498,11 @@ void mm2_amiga_blit_anm_composed(const mm2_anm_composite_planar *img, UWORD uwDs
         return;
     }
 
-    mm2_amiga_apply_anm_palette(img->palette_words);
+    /* When the composite remapped its pens to the live env palette, leave pens
+     * 0-31 alone (walls keep their stone colours); otherwise load .anm pens. */
+    if (!img->map_to_host_palette) {
+        mm2_amiga_apply_anm_palette(img->palette_words);
+    }
     w = (WORD)img->width;
     h = (WORD)img->height;
     if (uwDstX + (UWORD)w > MM2_AGA_SCREEN_WIDTH) {

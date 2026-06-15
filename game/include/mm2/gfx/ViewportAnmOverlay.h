@@ -68,6 +68,10 @@ public:
 
     void unload();
 
+    /** Amiga: remap composed pens to the nearest live env palette pen so the
+     *  overlay shares the single hardware palette (walls keep their colours). */
+    void setUseHostPalette(bool v) { use_host_palette_ = v; }
+
 
 
     bool loaded() const { return anm_loaded_; }
@@ -89,8 +93,8 @@ public:
 
 
     /** OP_0B / mode $17 @ 0x23C8C, clamped to viewport (8,8)–(215,127).
-     *  Indoor: ASM (0x20, 0x48). Outdoor overland: upper-center in viewport. */
-    void blitCentered(gfx::ScreenCompositor &c, int placement_index = 0, bool outdoor_viewport = false) const;
+     *  Simple path @ 0x23E24: dst (0x20, 0x40+8) plus composed-canvas origin. */
+    void blitCentered(gfx::ScreenCompositor &c, int placement_index = 0) const;
 
     void blitAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) const;
 
@@ -126,6 +130,8 @@ private:
 
     bool animating_ = false;
 
+    bool use_host_palette_ = false;
+
     AnmLoopMode loop_mode_ = AnmLoopMode::Loop;
 
     int composed_frame_ = 0;
@@ -137,6 +143,11 @@ private:
     int w_ = 0;
 
     int h_ = 0;
+
+    /* mm2_anm_compose_canvas_of origin — retail blits the full cel at (0x20,0x48). */
+    int compose_min_x_ = 0;
+
+    int compose_min_y_ = 0;
 
 };
 

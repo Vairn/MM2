@@ -234,36 +234,34 @@ static void mm2_image32_destroy_bitmap(tBitMap *pBitMap)
 static mm2_image32_error build_pen0_mask(const tBitMap *bm, UWORD uwVisW, UWORD uwVisH, tBitMap **out_mask)
 {
     const UWORD uwMaskW = (UWORD)(((ULONG)uwVisW + 15UL) & ~15UL);
-    UWORD y;
-    UWORD x;
     UBYTE pl;
     tBitMap *msk;
+    ULONG bytes;
 
     *out_mask = NULL;
     if (!bm || uwVisW == 0 || uwVisH == 0) {
         return MM2_IMAGE32_ERR_BAD_FORMAT;
     }
-    msk = bitmapCreate(uwMaskW, uwVisH, 1, BMF_CLEAR);
+    msk = bitmapCreate(uwMaskW, uwVisH, 1, 0); // No need to clear, we will overwrite it
     if (!msk) {
         return MM2_IMAGE32_ERR_NOMEM;
     }
-    for (y = 0; y < uwVisH; ++y) {
-        for (x = 0; x < uwVisW; ++x) {
-            UBYTE idx = 0;
-            const UBYTE bit = (UBYTE)(0x80 >> (x & 7));
-            const UWORD byte_x = x >> 3;
-            for (pl = 0; pl < bm->Depth; ++pl) {
-                const UBYTE *row = bm->Planes[pl] + (ULONG)y * (ULONG)bm->BytesPerRow;
-                if (row[byte_x] & bit) {
-                    idx |= (UBYTE)(1u << pl);
-                }
-            }
-            if (idx != 0) {
-                UBYTE *mrow = msk->Planes[0] + (ULONG)y * (ULONG)msk->BytesPerRow;
-                mrow[byte_x] |= bit;
-            }
+
+    bytes = (ULONG)msk->BytesPerRow * (ULONG)msk->Rows;
+    
+    // The mask is simply checking if any bitplane is non-zero (i.e. pen != 0).
+    // We can just bitwise OR all planes together to generate the mask instantly.
+    memcpy(msk->Planes[0], bm->Planes[0], bytes);
+    
+    for (pl = 1; pl < bm->Depth; ++pl) {
+        UBYTE *dst = msk->Planes[0];
+        const UBYTE *src = bm->Planes[pl];
+        ULONG i;
+        for (i = 0; i < bytes; ++i) {
+            dst[i] |= src[i];
         }
     }
+
     *out_mask = msk;
     return MM2_IMAGE32_OK;
 }

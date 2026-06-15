@@ -411,9 +411,7 @@ void TitleScreen::releaseItemsDat()
 
 void TitleScreen::shutdown()
 {
-    mm2_image32_free(&intro_);
-    releaseIntroClips();
-    releaseLogoAsset();
+    releaseAttractAssets();
     mm2_image32_free(&book_);
 #if MM2_HOST_AMIGA
     releaseItemsDat();
@@ -436,6 +434,19 @@ void TitleScreen::releaseLogoAsset()
     has_nwcp_ = false;
 }
 
+void TitleScreen::releaseAttractAssets()
+{
+    if (has_intro_) {
+        mm2_image32_free(&intro_);
+        has_intro_ = false;
+    }
+    releaseIntroClips();
+    releaseLogoAsset();
+#if MM2_HOST_AMIGA
+    invalidatePegasusPaint();
+#endif
+}
+
 void TitleScreen::ensureAttractAssetsLoaded()
 {
     if (!data_dir_) {
@@ -454,12 +465,7 @@ void TitleScreen::releaseChipForPlayMode()
 {
     mm2_amiga_ui_cache_end();
     mm2_amiga_ui_cache_destroy();
-    releaseIntroClips();
-    releaseLogoAsset();
-    if (has_intro_) {
-        mm2_image32_free(&intro_);
-        has_intro_ = false;
-    }
+    releaseAttractAssets();
 }
 #endif
 
@@ -640,6 +646,7 @@ void TitleScreen::attractDraw() { drawAttract(); }
 
 void TitleScreen::menuEnter()
 {
+    releaseAttractAssets();
 #if MM2_HOST_AMIGA
     invalidateTitleMenuPaint();
 #endif
@@ -650,6 +657,8 @@ void TitleScreen::menuResume() {}
 void TitleScreen::menuSuspend()
 {
 #if MM2_HOST_AMIGA
+    MM2_DBG("MM2 GOTO: menuSuspend (blit_sync+clear)\n");
+    mm2_amiga_blit_sync();
     platform::clearScreen();
     platform::applyUiPalette();
     title_menu_painted_ = false;
@@ -664,21 +673,21 @@ TitleScreen::MenuAdvance TitleScreen::menuTick(const platform::KeyState &keys)
         return MenuAdvance::None;
     }
     tickBookAnimation();
-    if (keys.escape) {
-        return MenuAdvance::Attract;
-    }
     if (keys.key_q) {
         quit_ = true;
         return MenuAdvance::Quit;
     }
     const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
     if (ch == 'V' && has_roster_) {
+        MM2_DBG("MM2 GOTO: menu key V -> ViewParty\n");
         return MenuAdvance::ViewParty;
     }
     if ((keys.key_c || ch == 'C') && has_roster_) {
+        MM2_DBG("MM2 GOTO: menu key C -> CreateCharacter (key_c=%d ch=%c)\n", keys.key_c ? 1 : 0, ch);
         return MenuAdvance::CreateCharacter;
     }
     if (ch == 'G' && has_roster_) {
+        MM2_DBG("MM2 GOTO: menu key G -> ChooseParty (Goto Town)\n");
         return MenuAdvance::ChooseParty;
     }
     if (keys.key_m) {
@@ -790,6 +799,9 @@ void TitleScreen::drawIntroPegasus(bool animate_overlays)
         const IntroClipSlot &slot = kPeekerSlots[peeker_slot_];
         blitIntroClipFrame(slot.frame, slot.x, slot.y);
     }
+#if MM2_HOST_AMIGA
+    mm2_amiga_blit_sync();
+#endif
 }
 
 void TitleScreen::tickPegasusAnimation()

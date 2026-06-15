@@ -337,6 +337,7 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, const GameS
 {
     sign_placement_ = placement;
     sign_overlay_.unload();
+    sign_overlay_.setUseHostPalette(true);
     bool has_sign = false;
     if (data_dir) {
         const int anm_id =
@@ -361,6 +362,7 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, int screen_
 {
     sign_placement_ = placement;
     sign_overlay_.unload();
+    sign_overlay_.setUseHostPalette(true);
     bool has_sign = false;
     if (data_dir) {
         const int anm_id = ServiceSignResolver::resolveForScreen(screen_id, attrib, str_idx);
@@ -394,7 +396,7 @@ bool EventTextView::tickAnimation()
     return sign_overlay_.tick();
 }
 
-void EventTextView::draw(gfx::ScreenCompositor &c, bool outdoor_viewport) const
+void EventTextView::draw(gfx::ScreenCompositor &c) const
 {
     for (int i = 0; i < layer_count_; ++i) {
         const EventTextLayer &layer = layers_[i];
@@ -433,7 +435,7 @@ void EventTextView::draw(gfx::ScreenCompositor &c, bool outdoor_viewport) const
                  * all service signs blit over the 3D viewport (8,8)–(215,127).
                  * Arg2 is a placement-table index (A4-$7538 → A4-$56E), not a
                  * viewport-vs-panel switch — never route by sprite dimensions. */
-                sign_overlay_.blitCentered(c, sign_placement_, outdoor_viewport);
+                sign_overlay_.blitCentered(c, sign_placement_);
             } else if (layer.text[0] != '\0') {
                 drawServiceSignStub(c, layer.text);
             }

@@ -20,6 +20,16 @@ alignas(mm2::AppHost) unsigned char mm2_app_host_storage[sizeof(mm2::AppHost)];
 
 namespace mm2 {
 
+namespace {
+
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+unsigned long apphost_chip_free() { return (unsigned long)memGetFreeChipSize(); }
+#else
+unsigned long apphost_chip_free() { return 0; }
+#endif
+
+}  // namespace
+
 AppHost *AppHost::s_instance_ = nullptr;
 
 AppHost &AppHost::get()
@@ -134,9 +144,11 @@ bool AppHost::attachCharacterUi()
     uint8_t *items = nullptr;
     std::size_t size = 0;
     if (!title_.consumeItemsDat(&items, &size)) {
+        MM2_DBG("MM2 GOTO: attachCharacterUi FAIL consumeItemsDat\n");
         return false;
     }
     if (!character_ui_.attachAndLoad(data_dir_, ui_kind_, items, size)) {
+        MM2_DBG("MM2 GOTO: attachCharacterUi FAIL attachAndLoad\n");
         return false;
     }
 #else
@@ -229,6 +241,8 @@ void AppHost::optionsDraw() { title_.optionsDraw(); }
 void AppHost::charViewEnter()
 {
 #if MM2_HOST_AMIGA
+    mm2_amiga_blit_sync();
+    mm2_amiga_ui_cache_invalidate();
     platform::clearScreen();
     platform::applyUiPalette();
 #endif
@@ -242,25 +256,41 @@ void AppHost::charViewEnter()
 void AppHost::charCreateEnter()
 {
 #if MM2_HOST_AMIGA
+    mm2_amiga_blit_sync();
+    mm2_amiga_ui_cache_invalidate();
     platform::clearScreen();
     platform::applyUiPalette();
 #endif
     char_create_prepare_done_ = false;
+    char_create_booting_ = true;
 }
 
 void AppHost::charChooseEnter()
 {
+    MM2_DBG("MM2 GOTO: charChooseEnter begin chip=%lu ui_ready=%d\n", apphost_chip_free(),
+            character_ui_ready_ ? 1 : 0);
 #if MM2_HOST_AMIGA
-    platform::clearScreen();
+    MM2_DBG("MM2 GOTO: charChooseEnter blit_sync\n");
     mm2_amiga_blit_sync();
     mm2_amiga_ui_cache_invalidate();
+    MM2_DBG("MM2 GOTO: charChooseEnter clearScreen\n");
+    platform::clearScreen();
     platform::applyUiPalette();
 #endif
     if (!character_ui_ready_ && !attachCharacterUi()) {
+        MM2_DBG("MM2 GOTO: charChooseEnter ABORT attachCharacterUi failed\n");
         return;
     }
     char_create_prepare_done_ = true;
+    MM2_DBG("MM2 GOTO: charChooseEnter startChooseParty\n");
     character_ui_.startChooseParty(title_.roster());
+    MM2_DBG(
+        "MM2 GOTO: charChooseEnter done mode=%d active=%d redraw=%d chip=%lu\n",
+        static_cast<int>(character_ui_.mode()),
+        character_ui_.active() ? 1 : 0,
+        character_ui_.needsRedraw() ? 1 : 0,
+        apphost_chip_free()
+    );
 }
 
 void AppHost::charDestroy()
@@ -269,6 +299,7 @@ void AppHost::charDestroy()
     character_ui_.leaveMode();
 #endif
     char_create_prepare_done_ = false;
+    char_create_booting_ = false;
     pending_in_town_ = false;
 }
 
@@ -289,21 +320,41 @@ void AppHost::charStep()
         return;
     }
 
+    if (char_create_booting_) {
+        character_ui_.prepareCreateCharacterAssets();
+        char_create_booting_ = false;
+        return;
+    }
+
     if (!char_create_prepare_done_) {
         char_create_prepare_done_ = true;
-        character_ui_.prepareCreateCharacterAssets();
         character_ui_.startCreateCharacter(title_.roster());
         return;
     }
 
+    if (false && character_ui_.mode() == ui::CharacterUiMode::ChooseParty) {
+        MM2_DBG(
+            "MM2 GOTO: charStep tick ChooseParty ascii=%c ctrl=%d chip=%lu\n",
+            keys_.last_ascii,
+            keys_.ctrl ? 1 : 0,
+            apphost_chip_free()
+        );
+    }
     character_ui_.tick(keys_);
     if (!character_ui_.active()) {
         if (character_ui_.quitRequested()) {
+            MM2_DBG("MM2 GOTO: charStep quit from character UI\n");
             quit_ = true;
             return;
         }
         Mm2PartyLaunch launch{};
         if (character_ui_.takePartyLaunch(&launch)) {
+            MM2_DBG(
+                "MM2 GOTO: charStep party launch town=%u area=%u chip=%lu\n",
+                (unsigned)launch.town_filter,
+                (unsigned)launch.area_id,
+                apphost_chip_free()
+            );
             pending_launch_ = launch;
             pending_in_town_ = true;
         }
@@ -313,9 +364,20 @@ void AppHost::charStep()
 void AppHost::charDraw()
 {
 #if MM2_HOST_AMIGA
+    const bool goto_trace = false; // character_ui_.mode() == ui::CharacterUiMode::ChooseParty;
+    if (goto_trace) {
+        MM2_DBG("MM2 GOTO: charDraw begin redraw=%d chip=%lu\n", character_ui_.needsRedraw() ? 1 : 0,
+                apphost_chip_free());
+    }
     /* Drain blits from menuSuspend/clearScreen — Release can outrun the ACE blitter. */
     mm2_amiga_blit_sync();
+    if (goto_trace) {
+        MM2_DBG("MM2 GOTO: charDraw post-sync\n");
+    }
     if (character_ui_.needsRedraw()) {
+        if (goto_trace) {
+            MM2_DBG("MM2 GOTO: charDraw ui_cache_begin+render\n");
+        }
         platform::applyUiPalette();
         mm2_amiga_ui_cache_begin();
         if (character_ui_ready_) {
@@ -323,11 +385,20 @@ void AppHost::charDraw()
         }
         mm2_amiga_ui_cache_end();
         character_ui_.ackRedraw();
+        if (goto_trace) {
+            MM2_DBG("MM2 GOTO: charDraw render done chip=%lu\n", apphost_chip_free());
+        }
     }
     /* Always composite cached UI to pBack before buffer swap (title menu does the same). */
     mm2_amiga_blit_sync();
     platform::applyUiPalette();
+    if (goto_trace) {
+        MM2_DBG("MM2 GOTO: charDraw ui_cache_present\n");
+    }
     mm2_amiga_ui_cache_present();
+    if (goto_trace) {
+        MM2_DBG("MM2 GOTO: charDraw end\n");
+    }
 #else
     if (character_ui_ready_ && character_ui_.needsRedraw()) {
         character_ui_.render(title_.compositor());
@@ -341,27 +412,44 @@ bool AppHost::takePendingInTown()
     if (!pending_in_town_) {
         return false;
     }
+    MM2_DBG("MM2 GOTO: takePendingInTown\n");
     pending_in_town_ = false;
     return true;
 }
 
 bool AppHost::startInTownFromPending()
 {
+    MM2_DBG("MM2 GOTO: startInTownFromPending chip=%lu\n", apphost_chip_free());
 #if MM2_HOST_AMIGA
     mm2_amiga_blit_sync();
+    MM2_DBG("MM2 GOTO: releaseChipForPlayMode...\n");
     title_.releaseChipForPlayMode();
+    MM2_DBG("MM2 GOTO: releaseChipForPlayMode done chip=%lu\n", apphost_chip_free());
 #endif
     if (!session_.start(data_dir_, title_.roster(), pending_launch_)) {
+        MM2_DBG("MM2 GOTO: GameSession::start FAILED\n");
         return false;
     }
+    MM2_DBG("MM2 GOTO: GameSession::start ok bootstrapping=%d\n", session_.isBootstrapping() ? 1 : 0);
     in_town_active_ = true;
+    play_title_screen_ = -1;
+    refreshPlayWindowTitle();
+    return true;
+}
+
+void AppHost::refreshPlayWindowTitle()
+{
 #if !MM2_HOST_AMIGA
+    const int screen = session_.currentScreenId();
+    if (screen == play_title_screen_) {
+        return;
+    }
+    play_title_screen_ = screen;
     char window_title[256];
     std::snprintf(window_title, sizeof(window_title), "MM2 (%s) — %s", platform::hostName(),
-                  GameSession::areaName(pending_launch_.area_id));
+                  session_.currentScreenLabel());
     platform::setWindowTitle(window_title);
 #endif
-    return true;
 }
 
 void AppHost::inTownStep()
@@ -373,6 +461,7 @@ void AppHost::inTownStep()
     }
 #endif
     session_.tick(keys_);
+    refreshPlayWindowTitle();
     if (session_.shouldQuit()) {
         quit_ = true;
     }

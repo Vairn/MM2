@@ -249,20 +249,22 @@ int horizonStartCol(const std::array<uint8_t, kOutdoorLaneCols> &l1)
     return kOutdoorLaneCols;
 }
 
-void appendHorizon(std::vector<OutdoorSpriteBlit> &blits, uint8_t idx, int frame, int x, int y)
+void appendHorizon(OutdoorScene &scene, uint8_t idx, int frame, int x, int y)
 {
     if (idx == kOutdoorHorizonNone || idx > 2) {
         return;
     }
-    blits.push_back({OutdoorSpriteBlit::Kind::Horizon, OutdoorBiome::Desert,
-                     static_cast<OutdoorHorizonSheet>(idx), frame, x, y});
+    if (scene.num_horizon < static_cast<int>(scene.horizon.size())) {
+        scene.horizon[scene.num_horizon++] = {OutdoorSpriteBlit::Kind::Horizon, OutdoorBiome::Desert,
+                         static_cast<OutdoorHorizonSheet>(idx), frame, x, y};
+    }
 }
 
 void buildDecorBlits(const std::array<uint8_t, kOutdoorLaneCols> &c6,
                      const std::array<uint8_t, kOutdoorLaneCols> &laneL2,
                      const std::array<uint8_t, kOutdoorLaneCols> &laneL3,
                      const std::array<OutdoorBiome, kOutdoorLaneCols> &colBiomes,
-                     std::vector<OutdoorSpriteBlit> &blits)
+                     OutdoorScene &scene)
 {
     using T = OutdoorHorizonTables;
     for (int col = kOutdoorLaneCols - 1; col >= 0; --col) {
@@ -274,8 +276,10 @@ void buildDecorBlits(const std::array<uint8_t, kOutdoorLaneCols> &c6,
         const int y = T::kDecorY[col];
 
         auto pushDecor = [&](int frame, int x) {
-            blits.push_back({OutdoorSpriteBlit::Kind::Decor, biome, OutdoorHorizonSheet::Outdoor1,
-                             frame, x, y});
+            if (scene.num_decor < static_cast<int>(scene.decor.size())) {
+                scene.decor[scene.num_decor++] = {OutdoorSpriteBlit::Kind::Decor, biome, OutdoorHorizonSheet::Outdoor1,
+                                 frame, x, y};
+            }
         };
 
         if (mainA) {
@@ -300,7 +304,7 @@ void buildDecorBlits(const std::array<uint8_t, kOutdoorLaneCols> &c6,
 void buildHorizonBlits(std::array<uint8_t, kOutdoorLaneCols> c6,
                        std::array<uint8_t, kOutdoorLaneCols> laneL2,
                        std::array<uint8_t, kOutdoorLaneCols> laneL3,
-                       std::vector<OutdoorSpriteBlit> &blits)
+                       OutdoorScene &scene)
 {
     using T = OutdoorHorizonTables;
     std::array<uint8_t, kOutdoorLaneCols> l1{};
@@ -317,7 +321,7 @@ void buildHorizonBlits(std::array<uint8_t, kOutdoorLaneCols> c6,
     int pivot = (start == 3 && l1[3] == kOutdoorHorizonNone) ? 3 : start;
 
     if (start < kOutdoorLaneCols && l1[static_cast<size_t>(start)] != kOutdoorHorizonNone) {
-        appendHorizon(blits, l1[static_cast<size_t>(start)], T::kL1Frame[start], T::kL1X[start],
+        appendHorizon(scene, l1[static_cast<size_t>(start)], T::kL1Frame[start], T::kL1X[start],
                       T::kL1Y[start]);
     } else if (start == kOutdoorLaneCols) {
         pivot = 3;
@@ -347,7 +351,7 @@ void buildHorizonBlits(std::array<uint8_t, kOutdoorLaneCols> c6,
         if (col == 1 || (col == 2 && col == piv)) {
             x = 8;
         }
-        appendHorizon(blits, l2[static_cast<size_t>(col)], frame, x, y);
+        appendHorizon(scene, l2[static_cast<size_t>(col)], frame, x, y);
     };
 
     auto passL3 = [&](int col, int piv) {
@@ -371,7 +375,7 @@ void buildHorizonBlits(std::array<uint8_t, kOutdoorLaneCols> c6,
         if (col == 1 && l3[0] == kOutdoorHorizonNone) {
             x = (col == piv) ? 0xB0 : 0x98;
         }
-        appendHorizon(blits, l3[static_cast<size_t>(col)], frame, x, y);
+        appendHorizon(scene, l3[static_cast<size_t>(col)], frame, x, y);
     };
 
     for (int col = pivot; col >= 0; --col) {
@@ -441,8 +445,8 @@ OutdoorScene buildOutdoorScene(const world::MapWorld &world, const View3DCamera 
         c6[static_cast<size_t>(i)] = scene.laneC6[static_cast<size_t>(i)];
     }
 
-    buildDecorBlits(c6, laneL2, laneL3, scene.columnBiomes, scene.decor);
-    buildHorizonBlits(c6, laneL2, laneL3, scene.horizon);
+    buildDecorBlits(c6, laneL2, laneL3, scene.columnBiomes, scene);
+    buildHorizonBlits(c6, laneL2, laneL3, scene);
     return scene;
 }
 

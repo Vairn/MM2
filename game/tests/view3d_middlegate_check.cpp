@@ -52,12 +52,12 @@ int main(int argc, char **argv)
     const mm2::gfx::View3DScene scene = mm2::gfx::buildView3DScene(bufs, cam);
 
     int fails = 0;
-    if (static_cast<int>(scene.blits.size()) != kExpectedCount) {
+    if (scene.num_blits != kExpectedCount) {
         std::fprintf(stderr, "FAIL: expected %d blits, got %d\n", kExpectedCount,
-                     static_cast<int>(scene.blits.size()));
+                     scene.num_blits);
         ++fails;
     }
-    for (int i = 0; i < kExpectedCount && i < static_cast<int>(scene.blits.size()); ++i) {
+    for (int i = 0; i < kExpectedCount && i < scene.num_blits; ++i) {
         const mm2::gfx::View3DBlit &b = scene.blits[static_cast<size_t>(i)];
         const Expect &e = kExpected[i];
         if (b.frame != e.frame || b.x != e.x || b.y != e.y) {

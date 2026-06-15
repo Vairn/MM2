@@ -231,69 +231,12 @@ void mm2_anm_composite_rgba_free(mm2_anm_composite_rgba *img)
 #if defined(MM2_CODEC_AMIGA)
 
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
+#include "mm2/platform/amiga/Mm2AmigaDisplay.h"
 
 #include <ace/managers/blit.h>
 #include <ace/managers/memory.h>
-#include <ace/managers/system.h>
 #include <ace/utils/bitmap.h>
-
-/* Mirror ACE bitmap.c chip-plane free (bitmapFreeChipAligned is file-local there). */
-#if defined(ACE_USE_AGA_FEATURES) && defined(ACE_DEBUG)
-static void mm2_anm_free_chip_plane(void *pPlane, ULONG ulPlaneBytes)
-{
-    if (pPlane) {
-        memFree((UBYTE *)pPlane - sizeof(ULONG), ulPlaneBytes + sizeof(ULONG));
-    }
-}
-#else
-static void mm2_anm_free_chip_plane(void *pPlane, ULONG ulPlaneBytes)
-{
-    if (pPlane) {
-        memFree(pPlane, ulPlaneBytes);
-    }
-}
-#endif
-
-static void mm2_anm_destroy_bitmap(tBitMap *pBitMap)
-{
-    UBYTE i;
-    ULONG ulPlaneBytes;
-
-    if (!pBitMap) {
-        return;
-    }
-    blitWait();
-    systemUse();
-    if (pBitMap->Flags & BMF_EXTERNAL) {
-        memFree(pBitMap, sizeof(tBitMap));
-        systemUnuse();
-        return;
-    }
-    ulPlaneBytes = (ULONG)pBitMap->BytesPerRow * (ULONG)pBitMap->Rows;
-    if (bitmapIsInterleaved(pBitMap)) {
-        if (pBitMap->Planes[0]) {
-            if (bitmapIsChip(pBitMap)) {
-                mm2_anm_free_chip_plane(pBitMap->Planes[0], ulPlaneBytes);
-            } else {
-                memFree(pBitMap->Planes[0], ulPlaneBytes);
-            }
-        }
-    } else if (pBitMap->Flags & BMF_CONTIGUOUS) {
-        if (pBitMap->Planes[0]) {
-            mm2_anm_free_chip_plane(
-                pBitMap->Planes[0], ulPlaneBytes * (ULONG)pBitMap->Depth
-            );
-        }
-    } else {
-        for (i = pBitMap->Depth; i--;) {
-            if (pBitMap->Planes[i]) {
-                mm2_anm_free_chip_plane(pBitMap->Planes[i], ulPlaneBytes);
-            }
-        }
-    }
-    memFree(pBitMap, sizeof(tBitMap));
-    systemUnuse();
-}
+#include <ace/utils/extview.h>
 
 static int anm_pen_at(const uint8_t *planes, size_t rs, int bpr, uint16_t w, uint16_t h, int x, int y)
 {
@@ -309,6 +252,56 @@ static int anm_pen_at(const uint8_t *planes, size_t rs, int bpr, uint16_t w, uin
     return idx;
 }
 
+/* Build a 32-entry pen remap. Identity unless map_to_host applies, in which case
+ * each .anm pen (1..31) maps to the nearest LIVE host/env palette pen (1..31), so
+ * the overlay shares the one hardware palette instead of overwriting env pens. */
+static void anm_build_pen_remap(const mm2_anm_file *anm, int map_to_host, UBYTE remap[MM2_ANM_PALETTE_COLORS])
+{
+    int p;
+    tVPort *pVp;
+    const ULONG *pPal = NULL;
+
+    for (p = 0; p < MM2_ANM_PALETTE_COLORS; ++p) {
+        remap[p] = (UBYTE)p;
+    }
+    if (!map_to_host) {
+        return;
+    }
+    pVp = mm2AmigaDisplayGetVPort();
+    if (pVp && pVp->pPalette) {
+        pPal = (const ULONG *)pVp->pPalette;
+    }
+    if (!pPal) {
+        return; /* no host palette yet — keep identity (first-frame transient) */
+    }
+
+    remap[0] = 0; /* pen 0 stays transparent */
+    for (p = 1; p < MM2_ANM_PALETTE_COLORS; ++p) {
+        const uint16_t word = anm->palette_words[p];
+        const int r = (int)(((word >> 8) & 0x0F) * 17);
+        const int g = (int)(((word >> 4) & 0x0F) * 17);
+        const int b = (int)((word & 0x0F) * 17);
+        long best_d = 0x7FFFFFFFL;
+        UBYTE best_q = 1;
+        int q;
+        for (q = 1; q < MM2_ANM_PALETTE_COLORS; ++q) {
+            const ULONG c = pPal[q];
+            const int er = (int)((c >> 16) & 0xFF);
+            const int eg = (int)((c >> 8) & 0xFF);
+            const int eb = (int)(c & 0xFF);
+            const long dr = r - er;
+            const long dg = g - eg;
+            const long db = b - eb;
+            const long d = dr * dr + dg * dg + db * db;
+            if (d < best_d) {
+                best_d = d;
+                best_q = (UBYTE)q;
+            }
+        }
+        remap[p] = best_q; /* candidates start at 1, so remapped pens are always >=1 */
+    }
+}
+
 static void anm_put_pen_bitmap(tBitMap *bm, int x, int y, UBYTE pen)
 {
     UBYTE pl;
@@ -316,7 +309,9 @@ static void anm_put_pen_bitmap(tBitMap *bm, int x, int y, UBYTE pen)
     const UBYTE bit = (UBYTE)(0x80 >> (x & 7));
     const UWORD byte_x = (UWORD)(x >> 3);
 
-    if (x < 0 || y < 0 || y >= (int)bm->Rows) {
+    /* Clamp BOTH axes to the destination bitmap — byte_x past BytesPerRow would
+     * overrun the plane and trash the adjacent allocation's right guard band. */
+    if (x < 0 || y < 0 || y >= (int)bm->Rows || byte_x >= bpr) {
         return;
     }
     for (pl = 0; pl < bm->Depth; ++pl) {
@@ -352,7 +347,7 @@ static void anm_clear_rect_bitmap(tBitMap *bm, int x, int y, int w, int h)
 }
 
 static void anm_blit_planes_to_bitmap(tBitMap *dst, int dst_x, int dst_y, const uint8_t *planes, uint16_t sw,
-                                      uint16_t sh, int copy_w, int copy_h)
+                                      uint16_t sh, int copy_w, int copy_h, const UBYTE remap[MM2_ANM_PALETTE_COLORS])
 {
     const size_t rs = mm2_anm_rassize(sw, sh);
     const int bpr = (int)((((uint32_t)sw + 15U) >> 3) & 0xFFFEU);
@@ -375,45 +370,99 @@ static void anm_blit_planes_to_bitmap(tBitMap *dst, int dst_x, int dst_y, const 
             if (pen == 0) {
                 continue;
             }
-            anm_put_pen_bitmap(dst, dst_x + x, dst_y + y, (UBYTE)pen);
+            anm_put_pen_bitmap(dst, dst_x + x, dst_y + y, remap[pen & (MM2_ANM_PALETTE_COLORS - 1)]);
         }
     }
 }
 
-static int anm_build_pen0_mask(const tBitMap *bm, UWORD uwVisW, UWORD uwVisH, tBitMap **out_mask)
+/* Clear every plane of a chip bitmap to pen 0 (reuse before recompose). */
+static void anm_clear_bitmap_planes(tBitMap *bm)
 {
-    const UWORD uwMaskW = (UWORD)(((ULONG)uwVisW + 15UL) & ~15UL);
+    UBYTE pl;
+    const ULONG ulPlaneBytes = (ULONG)bm->BytesPerRow * (ULONG)bm->Rows;
+    if (bitmapIsInterleaved(bm)) {
+        if (bm->Planes[0]) {
+            memset(bm->Planes[0], 0, ulPlaneBytes * (ULONG)bm->Depth);
+        }
+        return;
+    }
+    for (pl = 0; pl < bm->Depth; ++pl) {
+        if (bm->Planes[pl]) {
+            memset(bm->Planes[pl], 0, ulPlaneBytes);
+        }
+    }
+}
+
+/* Rebuild the pen-0 mask IN PLACE: pre-cleared msk, set bit where bm pen != 0. */
+static void anm_refresh_pen0_mask(const tBitMap *bm, tBitMap *msk, UWORD uwVisW, UWORD uwVisH)
+{
     UWORD y;
     UWORD x;
     UBYTE pl;
-    tBitMap *msk;
+    const UWORD bm_bpr = bm->BytesPerRow;
+    const UWORD msk_bpr = msk->BytesPerRow;
 
-    *out_mask = NULL;
-    if (!bm || uwVisW == 0 || uwVisH == 0) {
-        return 0;
+    if (uwVisH > bm->Rows) {
+        uwVisH = bm->Rows;
     }
-    msk = bitmapCreate(uwMaskW, uwVisH, 1, BMF_CLEAR);
-    if (!msk) {
-        return 0;
+    if (uwVisW > (UWORD)(bm_bpr * 8)) {
+        uwVisW = (UWORD)(bm_bpr * 8);
     }
     for (y = 0; y < uwVisH; ++y) {
         for (x = 0; x < uwVisW; ++x) {
-            UBYTE idx = 0;
             const UBYTE bit = (UBYTE)(0x80 >> (x & 7));
             const UWORD byte_x = x >> 3;
+            UBYTE nonzero = 0;
             for (pl = 0; pl < bm->Depth; ++pl) {
-                const UBYTE *row = bm->Planes[pl] + (ULONG)y * (ULONG)bm->BytesPerRow;
+                const UBYTE *row = bm->Planes[pl] + (ULONG)y * (ULONG)bm_bpr;
                 if (row[byte_x] & bit) {
-                    idx |= (UBYTE)(1u << pl);
+                    nonzero = 1;
+                    break;
                 }
             }
-            if (idx != 0) {
-                UBYTE *mrow = msk->Planes[0] + (ULONG)y * (ULONG)msk->BytesPerRow;
+            if (nonzero && byte_x < msk_bpr) {
+                UBYTE *mrow = msk->Planes[0] + (ULONG)y * (ULONG)msk_bpr;
                 mrow[byte_x] |= bit;
             }
         }
     }
-    *out_mask = msk;
+}
+
+/* Allocate (or reuse) the persistent composite bitmap+mask sized to the canvas. */
+static int anm_ensure_planar_bitmaps(mm2_anm_composite_planar *out, UWORD uwBmW, UWORD uwVisH)
+{
+    tBitMap *bm = (tBitMap *)out->bitmap;
+    tBitMap *msk = (tBitMap *)out->mask;
+
+    if (bm && ((UWORD)(bm->BytesPerRow * 8) < uwBmW || bm->Rows < uwVisH)) {
+        bitmapDestroy(bm);
+        bm = NULL;
+        out->bitmap = NULL;
+    }
+    if (!bm) {
+        bm = bitmapCreate(uwBmW, uwVisH, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
+        if (!bm) {
+            return 0;
+        }
+        out->bitmap = bm;
+    } else {
+        anm_clear_bitmap_planes(bm);
+    }
+
+    if (msk && ((UWORD)(msk->BytesPerRow * 8) < uwBmW || msk->Rows < uwVisH)) {
+        bitmapDestroy(msk);
+        msk = NULL;
+        out->mask = NULL;
+    }
+    if (!msk) {
+        msk = bitmapCreate(uwBmW, uwVisH, 1, BMF_CLEAR);
+        if (!msk) {
+            return 0;
+        }
+        out->mask = msk;
+    } else {
+        anm_clear_bitmap_planes(msk);
+    }
     return 1;
 }
 
@@ -425,6 +474,7 @@ int mm2_anm_composite_frame_planar(const mm2_anm_file *anm, int frame_idx, mm2_a
     UWORD uwVisW;
     UWORD uwVisH;
     UWORD uwBmW;
+    UBYTE remap[MM2_ANM_PALETTE_COLORS];
 
     memset(&canvas, 0, sizeof(canvas));
     if (!anm || !out || frame_idx < 0 || frame_idx >= (int)anm->frame_count || !anm->frames) {
@@ -438,16 +488,21 @@ int mm2_anm_composite_frame_planar(const mm2_anm_file *anm, int frame_idx, mm2_a
     uwVisH = (UWORD)canvas.height;
     uwBmW = (UWORD)(((ULONG)uwVisW + 15UL) & ~15UL);
 
-    bm = bitmapCreate(uwBmW, uwVisH, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
-    if (!bm) {
+    /* The compose canvas is frame-INDEPENDENT (union over all frames), so the
+     * bitmap dimensions never change between cels — allocate once, reuse. */
+    if (!anm_ensure_planar_bitmaps(out, uwBmW, uwVisH)) {
         return 0;
     }
+    bm = (tBitMap *)out->bitmap;
+    msk = (tBitMap *)out->mask;
+
+    anm_build_pen_remap(anm, out->map_to_host_palette, remap);
 
     {
         const mm2_anm_frame_info *base = &anm->frames[0];
         if (base->planes) {
             anm_blit_planes_to_bitmap(bm, -canvas.min_x, -canvas.min_y, base->planes, base->width, base->height,
-                                      (int)base->width, (int)base->height);
+                                      (int)base->width, (int)base->height, remap);
         }
     }
 
@@ -469,18 +524,13 @@ int mm2_anm_composite_frame_planar(const mm2_anm_file *anm, int frame_idx, mm2_a
                 copy_h = pe->h;
             }
             anm_clear_rect_bitmap(bm, x, y, copy_w, copy_h);
-            anm_blit_planes_to_bitmap(bm, x, y, patch->planes, patch->width, patch->height, copy_w, copy_h);
+            anm_blit_planes_to_bitmap(bm, x, y, patch->planes, patch->width, patch->height, copy_w, copy_h, remap);
         }
     }
 
-    if (!anm_build_pen0_mask(bm, uwVisW, uwVisH, &msk)) {
-        mm2_anm_destroy_bitmap(bm);
-        return 0;
-    }
+    anm_refresh_pen0_mask(bm, msk, uwVisW, uwVisH);
 
     memcpy(out->palette_words, anm->palette_words, sizeof(out->palette_words));
-    out->bitmap = bm;
-    out->mask = msk;
     out->width = canvas.width;
     out->height = canvas.height;
     return 1;
@@ -492,11 +542,11 @@ void mm2_anm_composite_planar_free(mm2_anm_composite_planar *img)
         return;
     }
     if (img->mask) {
-        mm2_anm_destroy_bitmap((tBitMap *)img->mask);
+        bitmapDestroy((tBitMap *)img->mask);
         img->mask = NULL;
     }
     if (img->bitmap) {
-        mm2_anm_destroy_bitmap((tBitMap *)img->bitmap);
+        bitmapDestroy((tBitMap *)img->bitmap);
         img->bitmap = NULL;
     }
     img->width = 0;

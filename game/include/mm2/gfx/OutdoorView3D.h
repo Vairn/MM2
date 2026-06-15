@@ -75,8 +75,10 @@ struct OutdoorScene {
     std::array<uint8_t, kOutdoorHoodRowLen> laneC2{};
     std::array<uint8_t, kOutdoorHoodRowLen> laneBe{};
     std::array<OutdoorBiome, kOutdoorLaneCols> columnBiomes{};
-    std::vector<OutdoorSpriteBlit> decor;
-    std::vector<OutdoorSpriteBlit> horizon;
+    std::array<OutdoorSpriteBlit, 16> decor{};
+    int num_decor = 0;
+    std::array<OutdoorSpriteBlit, 16> horizon{};
+    int num_horizon = 0;
 };
 
 const char *outdoorBiomeFilename(OutdoorBiome biome);

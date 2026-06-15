@@ -51,6 +51,7 @@ bool init(int *argc, char ***argv)
         return false;
     }
 
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
     SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
     return true;
@@ -226,7 +227,9 @@ void presentFrame(const uint8_t *rgba, int width, int height)
     const int scaled_h = height * g_scale;
     int win_w = 0;
     int win_h = 0;
-    SDL_GetWindowSize(g_window, &win_w, &win_h);
+    if (SDL_GetRendererOutputSize(g_renderer, &win_w, &win_h) != 0) {
+        SDL_GetWindowSize(g_window, &win_w, &win_h);
+    }
 
     const int dst_x = std::max(0, (win_w - scaled_w) / 2);
     const int dst_y = std::max(0, (win_h - scaled_h) / 2);

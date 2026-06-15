@@ -1,5 +1,6 @@
 #include "mm2/GameSession.h"
 
+#include "mm2/Mm2Dbg.h"
 #include "mm2/CppStdCompat.h"
 
 #include "mm2/DataPath.h"
@@ -13,6 +14,7 @@
 
 #if MM2_HOST_AMIGA
 #include "mm2/platform/Platform.h"
+#include "mm2/platform/amiga/Mm2AmigaPlanar.h"
 #endif
 
 namespace mm2 {
@@ -45,6 +47,59 @@ void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int f
 
 }  // namespace
 
+bool GameSession::needsRedraw() const
+{
+#if MM2_HOST_AMIGA
+    return view3d_dirty_ || chrome_dirty_ || text_dirty_ || overlay_anim_dirty_;
+#else
+    return frame_dirty_;
+#endif
+}
+
+void GameSession::ackRedraw()
+{
+#if MM2_HOST_AMIGA
+    view3d_dirty_ = false;
+    chrome_dirty_ = false;
+    text_dirty_ = false;
+    overlay_anim_dirty_ = false;
+#else
+    frame_dirty_ = false;
+#endif
+}
+
+void GameSession::markDirty()
+{
+#if MM2_HOST_AMIGA
+    view3d_dirty_ = true;
+    chrome_dirty_ = true;
+    text_dirty_ = true;
+    overlay_anim_dirty_ = false;
+    play_buffer_valid_ = false;
+    mm2_amiga_viewport_cache_invalidate();
+#else
+    frame_dirty_ = true;
+#endif
+}
+
+#if MM2_HOST_AMIGA
+void GameSession::markView3DDirty()
+{
+    view3d_dirty_ = true;
+    mm2_amiga_viewport_cache_invalidate();
+}
+
+void GameSession::markTextDirty()
+{
+    text_dirty_ = true;
+}
+
+void GameSession::markOverlayAnimDirty()
+{
+    overlay_anim_dirty_ = true;
+}
+#endif
+
 const char *GameSession::areaName(uint8_t area_id)
 {
     static const char *kAreas[] = {"Middlegate", "Atlantium", "Tundara", "Vulcania", "Sandsobar"};
@@ -52,6 +107,109 @@ const char *GameSession::areaName(uint8_t area_id)
         return kAreas[area_id];
     }
     return "?";
+}
+
+namespace {
+
+const char *areaNameRaw(int area)
+{
+    switch (area) {
+        case 0:
+            return "Middlegate";
+        case 1:
+            return "Atlantium";
+        case 2:
+            return "Tundara";
+        case 3:
+            return "Vulcania";
+        case 4:
+            return "Sandsobar";
+        case 5:
+            return "A1";
+        case 6:
+            return "B1";
+        case 7:
+            return "C1";
+        case 8:
+            return "D1";
+        case 9:
+            return "A2";
+        case 10:
+            return "B2";
+        case 11:
+            return "C2";
+        case 12:
+            return "A3";
+        case 13:
+            return "B3";
+        case 14:
+            return "C3";
+        case 15:
+            return "A4";
+        case 16:
+            return "B4";
+        case 17:
+            return "Middlegate Cavern";
+        case 18:
+            return "Atlantium Cavern";
+        case 19:
+            return "Tundara Cavern";
+        case 20:
+            return "Vulcania Cavern";
+        case 21:
+            return "Sandsobar Cavern";
+        case 33:
+            return "E1";
+        case 34:
+            return "D2";
+        case 35:
+            return "E2";
+        case 36:
+            return "D3";
+        case 37:
+            return "E3";
+        case 38:
+            return "C4";
+        case 39:
+            return "D4";
+        case 40:
+            return "E4";
+        case 55:
+            return "Hillstone";
+        case 56:
+            return "Woodhaven";
+        case 57:
+            return "Pinehurst";
+        case 58:
+            return "Luxus Palace";
+        case 59:
+            return "Castle Xabran";
+        default:
+            return nullptr;
+    }
+}
+
+}  // namespace
+
+const char *GameSession::currentScreenLabel() const
+{
+    static char kFallback[24];
+    if (!world_.loaded()) {
+        return "?";
+    }
+    const int screen = world_.currentScreen();
+    const Mm2AttribRecord &rec = world_.attrib();
+    const int area = static_cast<int>(mm2_attrib_area_id(&rec));
+    const char *name = areaNameRaw(area);
+    if (name != nullptr) {
+        return name;
+    }
+    if (mm2_attrib_is_outdoor(&rec)) {
+        std::snprintf(kFallback, sizeof(kFallback), "Screen %d", screen);
+        return kFallback;
+    }
+    std::snprintf(kFallback, sizeof(kFallback), "Area %d", area);
+    return kFallback;
 }
 
 const char *GameSession::townName(uint8_t town_filter)
@@ -62,6 +220,13 @@ const char *GameSession::townName(uint8_t town_filter)
 bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
                         uint32_t start_flags)
 {
+    MM2_DBG(
+        "MM2 GOTO: GameSession::start town=%u area=%u members=%u flags=%u\n",
+        (unsigned)launch.town_filter,
+        (unsigned)launch.area_id,
+        (unsigned)launch.party_count,
+        (unsigned)start_flags
+    );
     data_dir_ = data_dir;
     start_flags_ = start_flags;
     roster_ = roster;
@@ -95,9 +260,11 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     mm2_image32_set_preview_opaque(0);
 
 #if MM2_HOST_AMIGA
+    mm2_amiga_viewport_cache_create();
     bootstrapping_ = true;
     bootstrap_step_ = 0;
-    frame_dirty_ = true;
+    markDirty();
+    MM2_DBG("MM2 GOTO: GameSession::start -> bootstrapping step 0\n");
     return true;
 #else
     ingame_sheet_.loadAssets(data_dir_);
@@ -127,7 +294,7 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
 
     automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_, launch_);
 
-    frame_dirty_ = true;
+    markDirty();
 
 #if !MM2_NO_STL
     if (!assets_ok_) {
@@ -147,8 +314,11 @@ void GameSession::tickBootstrap()
         return;
     }
 
+    MM2_DBG("MM2 GOTO: tickBootstrap step=%u\n", (unsigned)bootstrap_step_);
+
     switch (bootstrap_step_) {
     case 0:
+        MM2_DBG("MM2 GOTO: bootstrap load ingame_sheet + items\n");
         ingame_sheet_.loadAssets(data_dir_);
         {
             char *path = mm2_path_scratch_a();
@@ -160,6 +330,7 @@ void GameSession::tickBootstrap()
         markDirty();
         return;
     case 1: {
+        MM2_DBG("MM2 GOTO: bootstrap world load screen=%d\n", gs_.screenId());
         const bool has_world = world_.load(data_dir_) && world_.enterScreen(gs_.screenId());
         assets_ok_ = has_world;
         bootstrap_step_ = 2;
@@ -167,6 +338,7 @@ void GameSession::tickBootstrap()
         return;
     }
     case 2: {
+        MM2_DBG("MM2 GOTO: bootstrap env load\n");
         bool has_env = false;
         bool has_sky = false;
         if (world_.loaded()) {
@@ -179,6 +351,7 @@ void GameSession::tickBootstrap()
         return;
     }
     case 3:
+        MM2_DBG("MM2 GOTO: bootstrap events load\n");
         events_loaded_ = events_.load(data_dir_);
         if (events_loaded_) {
             refreshEventsForScreen();
@@ -187,6 +360,7 @@ void GameSession::tickBootstrap()
         markDirty();
         return;
     default:
+        MM2_DBG("MM2 GOTO: bootstrap scripted + finish\n");
         scripted_loaded_ = scripted_scene_.load(data_dir_);
         if (scripted_loaded_) {
             maybeQueueScriptedScenes(true);
@@ -194,6 +368,7 @@ void GameSession::tickBootstrap()
         automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_,
                                                launch_);
         bootstrapping_ = false;
+        MM2_DBG("MM2 GOTO: bootstrap DONE assets_ok=%d\n", assets_ok_ ? 1 : 0);
         markDirty();
         return;
     }
@@ -217,10 +392,17 @@ void GameSession::shutdown()
     assets_ok_ = false;
     overlay_ = PlayOverlay::None;
     has_items_ = false;
-    frame_dirty_ = false;
 #if MM2_HOST_AMIGA
+    view3d_dirty_ = false;
+    chrome_dirty_ = false;
+    text_dirty_ = false;
+    overlay_anim_dirty_ = false;
+    play_buffer_valid_ = false;
+    mm2_amiga_viewport_cache_invalidate();
     bootstrapping_ = false;
     bootstrap_step_ = 0;
+#else
+    frame_dirty_ = false;
 #endif
 }
 
@@ -230,7 +412,14 @@ void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
         return;
     }
 
+#if MM2_HOST_AMIGA
+    markView3DDirty();
+    if (move.turned) {
+        markTextDirty();
+    }
+#else
     markDirty();
+#endif
 
     if (move.acted && data_dir_) {
         if (move.screen_changed) {
@@ -293,6 +482,12 @@ void GameSession::refreshWorldAfterEventTransition()
     world_.enterScreen(gs_.screenId());
     const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
     assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
+    if (events_loaded_) {
+        /* OP_0C map_transition: drop OP_0B portraits / popups from the prior screen
+         * (enterLocation → text_.reset). Without this, Middlegate shop .anm overlays
+         * the overland viewport after exiting town. */
+        refreshEventsForScreen();
+    }
     markDirty();
 }
 
@@ -623,7 +818,11 @@ void GameSession::tickOverlayAnimations()
         changed |= events_.textView().tickAnimation();
     }
     if (changed) {
+#if MM2_HOST_AMIGA
+        markOverlayAnimDirty();
+#else
         markDirty();
+#endif
     }
 }
 
@@ -643,7 +842,11 @@ void GameSession::tick(const platform::KeyState &keys)
         }
         if (scripted_scene_.needsViewportRestore()) {
             scripted_scene_.clearViewportRestore();
+#if MM2_HOST_AMIGA
+            markView3DDirty();
+#else
             markDirty();
+#endif
         }
         return;
     }
@@ -732,7 +935,8 @@ void GameSession::renderIndoorView3D()
     blitImageFrame(compositor_, env_.floor(), 0, kView3DOriginX, kView3DFloorY, 1);
     blitImageFrame(compositor_, env_.sky(), sky_frame, kView3DOriginX, kView3DSkyY, 1);
 
-    for (const View3DBlit &b : scene.blits) {
+    for (int i = 0; i < scene.num_blits; ++i) {
+        const View3DBlit &b = scene.blits[static_cast<size_t>(i)];
         blitImageFrame(compositor_, env_.walls(), b.frame, b.x, b.y, 0);
     }
 }
@@ -753,10 +957,12 @@ void GameSession::renderOutdoorView()
 
     const OutdoorScene scene = buildOutdoorScene(world_, camera);
 
-    for (const OutdoorSpriteBlit &b : scene.decor) {
+    for (int i = 0; i < scene.num_decor; ++i) {
+        const OutdoorSpriteBlit &b = scene.decor[static_cast<size_t>(i)];
         blitImageFrame(compositor_, env_.biomeSheet(b.biome), b.frame, b.x, b.y, 0);
     }
-    for (const OutdoorSpriteBlit &b : scene.horizon) {
+    for (int i = 0; i < scene.num_horizon; ++i) {
+        const OutdoorSpriteBlit &b = scene.horizon[static_cast<size_t>(i)];
         blitImageFrame(compositor_, env_.horizonSheet(b.horizon), b.frame, b.x, b.y, 0);
     }
 }
@@ -811,16 +1017,38 @@ void GameSession::renderOverlays()
     }
 }
 
-void GameSession::render()
+void GameSession::renderFrame(bool overlay_anim_only)
 {
-    compositor_.clear(0, 0, 0, 255);
+    const bool scripted_active = scripted_loaded_ && scripted_scene_.active();
 
+    /* Chrome (red -809E border frame + black interior fills) must be redrawn every
+     * frame: with double-buffering the borders live OUTSIDE the cached 3D viewport
+     * region, so the fast overlay path still has to paint them into the current
+     * back buffer or they vanish on alternating buffers. */
+#if MM2_HOST_AMIGA
+    if (!overlay_anim_only) {
+        compositor_.clear(0, 0, 0, 255);
+    }
+#else
+    (void)overlay_anim_only;
+    compositor_.clear(0, 0, 0, 255);
+#endif
     gfx::drawPlayScreenChrome(compositor_);
 
-    const bool scripted_active = scripted_loaded_ && scripted_scene_.active();
     if (!scripted_active || !scripted_scene_.hidesView3D()) {
         if (overlay_ != PlayOverlay::Automap) {
+#if MM2_HOST_AMIGA
+            if (overlay_anim_only) {
+                /* Retail buf_copy_rect @ 0x171AC: restore the saved 3D viewport
+                 * instead of rebuilding floor+sky+wall slices every ghost cel. */
+                mm2_amiga_viewport_cache_restore();
+            } else {
+                renderView3D();
+                mm2_amiga_viewport_cache_save();
+            }
+#else
             renderView3D();
+#endif
         }
     }
 
@@ -846,8 +1074,66 @@ void GameSession::render()
     renderOverlays();
 
     if (events_loaded_ && !scripted_active) {
-        events_.textView().draw(compositor_, world_.isOutdoor());
+        events_.textView().draw(compositor_);
     }
+}
+
+#if MM2_HOST_AMIGA
+bool GameSession::canUsePartialView3DRefresh() const
+{
+    if (!play_buffer_valid_ || !view3d_dirty_ || chrome_dirty_ || overlay_anim_dirty_) {
+        return false;
+    }
+    if (!assets_ok_ || overlay_ != PlayOverlay::None) {
+        return false;
+    }
+    if (scripted_loaded_ && scripted_scene_.active()) {
+        return false;
+    }
+    return true;
+}
+
+void GameSession::renderFrameView3DOnly()
+{
+    if (!mm2_amiga_copy_front_to_back()) {
+        renderFrame(false);
+        play_buffer_valid_ = true;
+        return;
+    }
+
+    if (overlay_ != PlayOverlay::Automap) {
+        renderView3D();
+        mm2_amiga_viewport_cache_save();
+    }
+
+    if (text_dirty_) {
+        const bool protect_panel = right_panel_ == gfx::PlayRightPanel::Protect;
+        gfx::drawPlayStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
+                               gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
+    }
+}
+#endif
+
+void GameSession::render()
+{
+#if MM2_HOST_AMIGA
+    /* Overlay-animation-only frame (ghost/sign cel changed, nothing else): keep the
+     * borders + panel + text, restore the cached 3D viewport, repaint the sprite. */
+    if (overlay_anim_dirty_ && !view3d_dirty_ && !chrome_dirty_ && !text_dirty_ &&
+        mm2_amiga_viewport_cache_valid()) {
+        renderFrame(true);
+        return;
+    }
+
+    if (canUsePartialView3DRefresh()) {
+        renderFrameView3DOnly();
+        return;
+    }
+#endif
+    renderFrame(false);
+#if MM2_HOST_AMIGA
+    play_buffer_valid_ = true;
+#endif
 }
 
 }  // namespace mm2

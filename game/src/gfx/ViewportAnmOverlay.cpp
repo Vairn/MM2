@@ -108,6 +108,10 @@ void ViewportAnmOverlay::unload()
 
     h_ = 0;
 
+    compose_min_x_ = 0;
+
+    compose_min_y_ = 0;
+
 }
 
 
@@ -132,17 +136,15 @@ bool ViewportAnmOverlay::setComposedFrame(int frame_idx)
 
 #if MM2_HOST_AMIGA
 
-    mm2_anm_composite_planar next{};
+    /* Recompose into the persistent planar buffer — its chip bitmap + mask are
+     * allocated once and reused across cels (no per-frame bitmapCreate). */
+    planar_.map_to_host_palette = use_host_palette_ ? 1 : 0;
 
-    if (!mm2_anm_composite_frame_planar(&anm_, frame_idx, &next)) {
+    if (!mm2_anm_composite_frame_planar(&anm_, frame_idx, &planar_)) {
 
         return false;
 
     }
-
-    mm2_anm_composite_planar_free(&planar_);
-
-    planar_ = next;
 
     w_ = planar_.width;
 
@@ -171,6 +173,15 @@ bool ViewportAnmOverlay::setComposedFrame(int frame_idx)
     h_ = comp.height;
 
 #endif
+
+    mm2_anm_compose_canvas canvas{};
+    if (mm2_anm_compose_canvas_of(&anm_, &canvas)) {
+        compose_min_x_ = canvas.min_x;
+        compose_min_y_ = canvas.min_y;
+    } else {
+        compose_min_x_ = 0;
+        compose_min_y_ = 0;
+    }
 
     composed_frame_ = frame_idx;
 
@@ -414,8 +425,7 @@ void ViewportAnmOverlay::blitAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) 
 
 
 
-void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_index,
-                                      bool outdoor_viewport) const
+void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_index) const
 
 {
 
@@ -428,13 +438,14 @@ void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_in
 
 
     /* sign_sprite_place @ 0x3266 → mode $17 @ 0x23C8C over viewport (8,8)–(215,127).
-     * OP_0B @ 0x15DF2 passes (pos, $40, $20). Simple path @ 0x23E24:
-     *   dst_x = $20 (32 px), dst_y = $40 + 8 (72 px) — matches town interior hood.
-     * Outdoor overland (-$79E2 != 0): upper-center over the sky/horizon band. */
+     * OP_0B @ 0x15DF2: sign_sprite_place(pos, $40, $20). When pos <= 0 or pos >= sprite
+     * width, simple path @ 0x23E24: dst_x = $20, dst_y = $40 + 8.
+     * Runtime composite RGBA is cropped to compose_canvas min_x/min_y — add that origin
+     * so pen layout matches the uncropped cel the Amiga blits. Wide-sprite table path
+     * (A4-$56E, 0 < pos < width) is GAP. */
 
-    constexpr int kOp0BIndoorDstX = 0x20;
-    constexpr int kOp0BIndoorYArg = 0x40;
-    constexpr int kOp0BOutdoorSkyOffsetY = 20;
+    constexpr int kOp0BSimpleDstX = 0x20;
+    constexpr int kOp0BSimpleYArg = 0x40;
     constexpr int kView3DViewportBottomY = 127;
 
     const int slot_x = kView3DOriginX;
@@ -442,19 +453,9 @@ void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_in
     const int slot_w = kView3DViewportW;
     const int slot_h = kView3DViewportBottomY - kView3DSkyY + 1;
 
-    int dst_x;
-    int dst_y;
-    if (outdoor_viewport) {
-        dst_x = slot_x + (slot_w - w_) / 2;
-        dst_y = kView3DSkyY + kOp0BOutdoorSkyOffsetY;
-        if (placement_index > 0 && placement_index < 24) {
-            dst_y += placement_index * 2;
-        }
-    } else {
-        dst_x = kOp0BIndoorDstX;
-        dst_y = kOp0BIndoorYArg + 8;
-        (void)placement_index;
-    }
+    int dst_x = kOp0BSimpleDstX + compose_min_x_;
+    int dst_y = kOp0BSimpleYArg + 8 + compose_min_y_;
+    (void)placement_index;
 
 
 

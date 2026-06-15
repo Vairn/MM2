@@ -56,9 +56,8 @@ public:
     /** True when OP_0B loaded an .anm portrait/sign overlay. */
     bool hasServicePortrait() const { return sign_overlay_.loaded(); }
 
-    /** Draw all active layers onto the compositor (after 3D view).
-     *  outdoor_viewport mirrors GameSession View3D vs OutdoorView3D (-$79E2). */
-    void draw(gfx::ScreenCompositor &c, bool outdoor_viewport = false) const;
+    /** Draw all active layers onto the compositor (after 3D view). */
+    void draw(gfx::ScreenCompositor &c) const;
 
     /** Advance OP_0B sign .anm one game tick; true when cel changed. */
     bool tickAnimation();

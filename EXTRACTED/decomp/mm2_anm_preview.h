@@ -43,14 +43,22 @@ void mm2_anm_composite_rgba_free(mm2_anm_composite_rgba *img);
 #if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
 /** Chip bitmap + pen-0 mask for blitCopyMask (Amiga playfield depth). */
 typedef struct mm2_anm_composite_planar {
-    void *bitmap; /* tBitMap* */
-    void *mask;   /* tBitMap* 1bpp */
+    void *bitmap; /* tBitMap* — reused across frames; allocated once, freed on _free() */
+    void *mask;   /* tBitMap* 1bpp — reused across frames */
     uint16_t palette_words[MM2_ANM_PALETTE_COLORS];
     int width;
     int height;
+    /* Input hint (set by caller before first compose): when non-zero the composed
+     * pens are remapped to the nearest live host/env palette pen so the overlay
+     * shares the one hardware palette instead of clobbering pens 0-31. */
+    uint8_t map_to_host_palette;
 } mm2_anm_composite_planar;
 
-/** Composed .anm cel → chip bitmap; pen 0 transparent. Caller frees via mm2_anm_composite_planar_free(). */
+/**
+ * Composed .anm cel → chip bitmap; pen 0 transparent. The destination bitmap/mask
+ * in `out` are allocated on first call and REUSED on later calls (no per-frame
+ * bitmapCreate). Caller frees once via mm2_anm_composite_planar_free().
+ */
 int mm2_anm_composite_frame_planar(const mm2_anm_file *anm, int frame_idx, mm2_anm_composite_planar *out);
 
 void mm2_anm_composite_planar_free(mm2_anm_composite_planar *img);

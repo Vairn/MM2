@@ -50,8 +50,8 @@ public:
     void render();
 
     /** Amiga: skip full play-screen rebuild when false (still pace vblank). */
-    bool needsRedraw() const { return frame_dirty_; }
-    void ackRedraw() { frame_dirty_ = false; }
+    bool needsRedraw() const;
+    void ackRedraw();
 
     bool shouldQuit() const { return quit_; }
     bool requestTitle() const { return back_to_title_; }
@@ -61,11 +61,20 @@ public:
 
     const gfx::ScreenCompositor &compositor() const { return compositor_; }
 
+    /** Current map screen label (town name, D2, Luxus Palace, …) — not home town. */
+    const char *currentScreenLabel() const;
+    int currentScreenId() const { return world_.currentScreen(); }
+
 private:
     enum class PlayOverlay : uint8_t { None, QuickRef, CharacterSheet, QuitConfirm, Controls, StatusMessage, Automap };
 
     static const char *townName(uint8_t town_filter);
 
+    void renderFrame(bool overlay_anim_only);
+#if MM2_HOST_AMIGA
+    bool canUsePartialView3DRefresh() const;
+    void renderFrameView3DOnly();
+#endif
     void renderView3D();
     void renderIndoorView3D();
     void renderOutdoorView();
@@ -85,7 +94,12 @@ private:
     void refreshWorldAfterEventTransition();
     void maybeQueueScriptedScenes(bool on_start);
     void showStatusMessage(const char *msg);
-    void markDirty() { frame_dirty_ = true; }
+    void markDirty();
+#if MM2_HOST_AMIGA
+    void markView3DDirty();
+    void markTextDirty();
+    void markOverlayAnimDirty();
+#endif
     gfx::PlayProtectValues protectValues() const;
 
     const char *data_dir_ = nullptr;
@@ -122,7 +136,16 @@ private:
     events::ScriptedSceneEngine scripted_scene_;
     bool scripted_loaded_ = false;
 
+#if MM2_HOST_AMIGA
+    bool view3d_dirty_ = false;
+    bool chrome_dirty_ = false;
+    bool text_dirty_ = false;
+    bool overlay_anim_dirty_ = false;
+    /** After a full play-screen draw, pFront holds HUD chrome safe to copy to pBack. */
+    bool play_buffer_valid_ = false;
+#else
     bool frame_dirty_ = false;
+#endif
 
 #if MM2_HOST_AMIGA
     bool bootstrapping_ = false;
