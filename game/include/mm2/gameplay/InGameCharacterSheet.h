@@ -2,7 +2,8 @@
 
 // In-game character sheet + Quick Ref overlays (doc 43 §6, §6.3; doc 39 §4).
 //
-// Entry: exploration digits 1–8 or Q (via 0x907A). book.32 @ (312,144) when loaded.
+// Entry: exploration digits 1–8 or Q (via 0x907A). Text-only sheet (doc 39 §4 title path);
+// book.32 composite @ $39B4 is combat spell-book (V) only — not wired here yet.
 
 #include "mm2/gfx/ScreenCompositor.h"
 

@@ -16,6 +16,8 @@
 
 #if MM2_HOST_AMIGA
 
+#include "mm2/platform/amiga/Mm2AmigaPlanar.h"
+
 #include "mm2/platform/Platform.h"
 
 #else
@@ -70,6 +72,12 @@ void ViewportAnmOverlay::unload()
 
 #if MM2_HOST_AMIGA
 
+    const bool had_anm = anm_loaded_;
+
+#endif
+
+#if MM2_HOST_AMIGA
+
     mm2_anm_composite_planar_free(&planar_);
 
 #else
@@ -111,6 +119,16 @@ void ViewportAnmOverlay::unload()
     compose_min_x_ = 0;
 
     compose_min_y_ = 0;
+
+#if MM2_HOST_AMIGA
+
+    if (had_anm) {
+
+        mm2_amiga_restore_play_world_palette();
+
+    }
+
+#endif
 
 }
 
@@ -231,7 +249,17 @@ void ViewportAnmOverlay::resetPlayback(AnmLoopMode loop)
 
 
 
-bool ViewportAnmOverlay::loadFromPath(const char *path, AnmLoopMode loop)
+#if MM2_HOST_AMIGA
+void ViewportAnmOverlay::applyHardwarePalette() const
+{
+    if (!anm_loaded_ || use_host_palette_) {
+        return;
+    }
+    mm2_amiga_apply_anm_palette(anm_.palette_words);
+}
+#endif
+
+bool ViewportAnmOverlay::loadFromPath(const char *path, AnmLoopMode loop, bool apply_hw_palette)
 
 {
 
@@ -255,13 +283,20 @@ bool ViewportAnmOverlay::loadFromPath(const char *path, AnmLoopMode loop)
 
     resetPlayback(loop);
 
+#if MM2_HOST_AMIGA
+    if (apply_hw_palette) {
+        applyHardwarePalette();
+    }
+#endif
+
     return loaded();
 
 }
 
 
 
-bool ViewportAnmOverlay::loadFromTableId(const char *data_dir, int table_id, AnmLoopMode loop)
+bool ViewportAnmOverlay::loadFromTableId(const char *data_dir, int table_id, AnmLoopMode loop,
+                                         bool apply_hw_palette)
 
 {
 
@@ -277,13 +312,14 @@ bool ViewportAnmOverlay::loadFromTableId(const char *data_dir, int table_id, Anm
 
     /* sign_sprite_load @ 0x316E subq #1 ($31E8) then 0x9A30 addq #1 ($9A4C) — net: table id → NN.anm. */
 
-    return loadFromDiskIndex(data_dir, table_id, loop);
+    return loadFromDiskIndex(data_dir, table_id, loop, apply_hw_palette);
 
 }
 
 
 
-bool ViewportAnmOverlay::loadFromDiskIndex(const char *data_dir, int disk_index, AnmLoopMode loop)
+bool ViewportAnmOverlay::loadFromDiskIndex(const char *data_dir, int disk_index, AnmLoopMode loop,
+                                           bool apply_hw_palette)
 
 {
 
@@ -305,7 +341,7 @@ bool ViewportAnmOverlay::loadFromDiskIndex(const char *data_dir, int disk_index,
 
     }
 
-    return loadFromPath(path, loop);
+    return loadFromPath(path, loop, apply_hw_palette);
 
 }
 
@@ -437,15 +473,13 @@ void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_in
 
 
 
-    /* sign_sprite_place @ 0x3266 → mode $17 @ 0x23C8C over viewport (8,8)–(215,127).
-     * OP_0B @ 0x15DF2: sign_sprite_place(pos, $40, $20). When pos <= 0 or pos >= sprite
-     * width, simple path @ 0x23E24: dst_x = $20, dst_y = $40 + 8.
-     * Runtime composite RGBA is cropped to compose_canvas min_x/min_y — add that origin
-     * so pen layout matches the uncropped cel the Amiga blits. Wide-sprite table path
-     * (A4-$56E, 0 < pos < width) is GAP. */
+    /* sign_sprite_place(pos, $40, $20) @ 0x3266 → mode $17 @ 0x23C8C.
+     * Simple path @ 0x23E24 when pos <= 0 or pos >= width:
+     *   dst_x = arg2 = $40 (64), dst_y = arg3 + 8 = $28 (40).
+     * Wide-sprite table path (A4-$56E, 0 < pos < width) is GAP. */
 
-    constexpr int kOp0BSimpleDstX = 0x20;
-    constexpr int kOp0BSimpleYArg = 0x40;
+    constexpr int kOp0BSimpleDstX = 0x40;
+    constexpr int kOp0BSimpleDstY = 0x20 + 8;
     constexpr int kView3DViewportBottomY = 127;
 
     const int slot_x = kView3DOriginX;
@@ -453,8 +487,8 @@ void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_in
     const int slot_w = kView3DViewportW;
     const int slot_h = kView3DViewportBottomY - kView3DSkyY + 1;
 
-    int dst_x = kOp0BSimpleDstX + compose_min_x_;
-    int dst_y = kOp0BSimpleYArg + 8 + compose_min_y_;
+    int dst_x = kOp0BSimpleDstX;
+    int dst_y = kOp0BSimpleDstY;
     (void)placement_index;
 
 

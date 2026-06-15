@@ -45,31 +45,30 @@ class ViewportAnmOverlay {
 public:
 
     /** OP_0B table id via 0x15756 → sign_sprite_load @ 0x316E / 0x9A30 (file = id). */
-
-    bool loadFromTableId(const char *data_dir, int table_id, AnmLoopMode loop = AnmLoopMode::Loop);
+    bool loadFromTableId(const char *data_dir, int table_id, AnmLoopMode loop = AnmLoopMode::Loop,
+                         bool apply_hw_palette = true);
 
     /** Direct disk index NN.anm (combat / scripted monster sprites). */
-
-    bool loadFromDiskIndex(const char *data_dir, int disk_index, AnmLoopMode loop = AnmLoopMode::Loop);
-
-
+    bool loadFromDiskIndex(const char *data_dir, int disk_index, AnmLoopMode loop = AnmLoopMode::Loop,
+                           bool apply_hw_palette = true);
 
     /** Alias for OP_0B ServiceSignResolver table ids. */
-
-    bool loadFromId(const char *data_dir, int table_id, AnmLoopMode loop = AnmLoopMode::Loop)
-
+    bool loadFromId(const char *data_dir, int table_id, AnmLoopMode loop = AnmLoopMode::Loop,
+                    bool apply_hw_palette = true)
     {
-
-        return loadFromTableId(data_dir, table_id, loop);
-
+        return loadFromTableId(data_dir, table_id, loop, apply_hw_palette);
     }
+
+#if MM2_HOST_AMIGA
+    /** Push this overlay's pens 3-17 to hardware (once per active overlay, not per blit). */
+    void applyHardwarePalette() const;
+#endif
 
 
 
     void unload();
 
-    /** Amiga: remap composed pens to the nearest live env palette pen so the
-     *  overlay shares the single hardware palette (walls keep their colours). */
+    /** Legacy opt-in nearest-env remap — retail uses reserved pens 3-17 instead. */
     void setUseHostPalette(bool v) { use_host_palette_ = v; }
 
 
@@ -93,7 +92,7 @@ public:
 
 
     /** OP_0B / mode $17 @ 0x23C8C, clamped to viewport (8,8)–(215,127).
-     *  Simple path @ 0x23E24: dst (0x20, 0x40+8) plus composed-canvas origin. */
+     *  Simple path @ 0x23E24: sign_sprite_place(pos,$40,$20) → dst (64, 40). */
     void blitCentered(gfx::ScreenCompositor &c, int placement_index = 0) const;
 
     void blitAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) const;
@@ -102,7 +101,7 @@ public:
 
 private:
 
-    bool loadFromPath(const char *path, AnmLoopMode loop);
+    bool loadFromPath(const char *path, AnmLoopMode loop, bool apply_hw_palette);
 
     bool setComposedFrame(int frame_idx);
 

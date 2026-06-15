@@ -31,7 +31,14 @@ void fillCellRect(ScreenCompositor &c, int col, int row, int width_cells, int he
 /** Full-screen black + red console_box for in-game Quick Ref / character sheet. */
 void drawPlayModalBackdrop(ScreenCompositor &c);
 
+/** Black interior fills + red border/divider glyphs (no dynamic text). */
+void drawPlayScreenChromeStatic(ScreenCompositor &c);
+
 void drawPlayScreenChrome(ScreenCompositor &c);
+
+/** Red v-line col 0x1B rows 0..0x10 — repaint after 3D hood (walls overwrite x=216). */
+void drawPlayViewportDivider(ScreenCompositor &c);
+
 void drawPlayStatusBar(ScreenCompositor &c, int day, int year, char facing_key, bool new_game);
 void drawPlayPartyPanel(ScreenCompositor &c, const PlayPartySlot slots[8]);
 

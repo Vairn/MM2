@@ -1,6 +1,6 @@
 /**
  * Present .32 assets on the ACE playfield — planar blit only (no RGBA / chunky).
- * Rect fills use ACE blitRect; 8×8 text uses CPU pen plot (fast enough when cached).
+ * Rect fills use ACE blitRect; 8×8 text uses fast byte-row planar glyph plot.
  */
 
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
@@ -20,9 +20,15 @@
 #include <ace/utils/bitmap.h>
 #include <ace/utils/extview.h>
 
-static const mm2_image32_file *s_applied_palette_img;
+#ifdef ACE_USE_AGA_FEATURES
+#include <hardware/custom.h>
+#endif
 
-static UBYTE s_palette_dirty;
+static const mm2_image32_file *s_applied_palette_img;
+static const mm2_image32_file *s_play_world_palette_src;
+
+static UBYTE s_palette_dirty_world;
+static UBYTE s_palette_dirty_ui;
 
 static tBitMap *s_ui_cache_bm;
 static tBitMap *s_pixel_target;
@@ -31,12 +37,38 @@ static tBitMap *s_pixel_target;
 static tBitMap *s_viewport_cache_bm;
 static UBYTE s_viewport_cache_valid;
 
+static tBitMap *s_play_chrome_bm;
+
+/* Font LSB = left pixel → Amiga MSB in byte (matches put_pixel_pen bit math). */
+static UBYTE s_rev_byte[256];
+static UBYTE s_rev_byte_ready;
+
 #define MM2_VIEWPORT_CACHE_X 8u
 #define MM2_VIEWPORT_CACHE_Y 8u
 #define MM2_VIEWPORT_CACHE_W 208u
 #define MM2_VIEWPORT_CACHE_H 120u
 
 void mm2_amiga_push_palette(void);
+
+static void mm2_amiga_ensure_rev_byte(void)
+{
+    UWORD i;
+    UBYTE col;
+
+    if (s_rev_byte_ready) {
+        return;
+    }
+    for (i = 0; i < 256u; ++i) {
+        UBYTE rev = 0;
+        for (col = 0; col < 8u; ++col) {
+            if (i & (1u << col)) {
+                rev |= (UBYTE)(0x80u >> col);
+            }
+        }
+        s_rev_byte[i] = rev;
+    }
+    s_rev_byte_ready = 1;
+}
 
 static tBitMap *mm2_amiga_pixel_dest(void)
 {
@@ -137,25 +169,88 @@ void mm2_amiga_fill_rect_rgb(UWORD uwX, UWORD uwY, UWORD uwW, UWORD uwH, UBYTE u
     mm2_amiga_fill_rect_pen(uwX, uwY, uwW, uwH, mm2_amiga_rgb_to_ui_pen(ubR, ubG, ubB));
 }
 
+static void mm2_amiga_plot_glyph_row(UWORD uwX, UWORD uwY, UBYTE glyph_bits, UBYTE pen, tBitMap *pDst)
+{
+    const UWORD bpr = pDst->BytesPerRow;
+    const UWORD byte_x = uwX >> 3;
+    const UBYTE x_off = (UBYTE)(uwX & 7u);
+    const UBYTE rev = s_rev_byte[glyph_bits];
+    UBYTE pl;
+    UBYTE left;
+    UBYTE right = 0;
+
+    if (x_off == 0u) {
+        left = rev;
+    } else {
+        left = (UBYTE)(rev >> x_off);
+        right = (UBYTE)(rev << (8u - x_off));
+    }
+
+    for (pl = 0; pl < pDst->Depth; ++pl) {
+        UBYTE *p0 = pDst->Planes[pl] + (ULONG)uwY * (ULONG)bpr + (ULONG)byte_x;
+        UBYTE *p1 = NULL;
+        const UBYTE pen_bit = (UBYTE)((pen >> pl) & 1u);
+
+        if (x_off != 0u && byte_x + 1u < bpr) {
+            p1 = pDst->Planes[pl] + (ULONG)uwY * (ULONG)bpr + (ULONG)byte_x + 1u;
+        }
+
+        if (pen_bit) {
+            *p0 |= left;
+            if (p1) {
+                *p1 |= right;
+            }
+        } else {
+            *p0 &= (UBYTE)~left;
+            if (p1) {
+                *p1 &= (UBYTE)~right;
+            }
+        }
+    }
+}
+
 void mm2_amiga_draw_glyph8_pen(UWORD uwX, UWORD uwY, UBYTE ubCodepoint, UBYTE pen, UBYTE ubA)
 {
     const uint8_t *table;
     const uint8_t *glyph;
+    tBitMap *pDst;
     UBYTE row;
-    UBYTE col;
 
     if (ubA == 0 || ubCodepoint >= MM2_FONT8X8_GLYPHS) {
+        return;
+    }
+    mm2_amiga_ensure_rev_byte();
+    pDst = mm2_amiga_pixel_dest();
+    if (!pDst || uwX >= MM2_AGA_SCREEN_WIDTH || uwY + 8u > MM2_AGA_SCREEN_HEIGHT) {
         return;
     }
     table = mm2_font8x8_live();
     glyph = table + (ULONG)ubCodepoint * (ULONG)MM2_FONT8X8_ROWS;
     for (row = 0; row < MM2_FONT8X8_ROWS; ++row) {
-        const UBYTE bits = glyph[row];
-        for (col = 0; col < 8; ++col) {
-            if ((bits >> col) & 1u) {
-                mm2_amiga_put_pixel_pen(uwX + (UWORD)col, uwY + (UWORD)row, pen);
-            }
+        mm2_amiga_plot_glyph_row(uwX, uwY + (UWORD)row, glyph[row], pen, pDst);
+    }
+}
+
+void mm2_amiga_draw_text_pen(UWORD uwX, UWORD uwY, const char *text, UBYTE pen, UBYTE ubA)
+{
+    UWORD cx;
+
+    if (!text || ubA == 0) {
+        return;
+    }
+    cx = uwX;
+    for (const char *p = text; *p; ++p) {
+        if (*p == '\n') {
+            cx = uwX;
+            uwY += 8u;
+            continue;
         }
+        const unsigned uch = (unsigned)*p;
+        if (uch < 32u || uch > 127u) {
+            continue;
+        }
+        mm2_amiga_draw_glyph8_pen(cx, uwY, (UBYTE)uch, pen, ubA);
+        cx += 8u;
     }
 }
 
@@ -178,8 +273,8 @@ void mm2_amiga_apply_ui_palette(void)
     pPal[MM2_UI_PEN_GREY_FOOTER] = 0x00969696UL;
     pPal[MM2_UI_PEN_GREY_DIM] = 0x006E6E6EUL;
     pPal[MM2_UI_PEN_WARN] = 0x00FF8080UL;
-    s_applied_palette_img = NULL;
-    s_palette_dirty = 1;
+    pPal[MM2_UI_PEN_BLACK] = 0;
+    s_palette_dirty_ui = 1;
     mm2_amiga_push_palette();
 }
 
@@ -264,6 +359,68 @@ UBYTE mm2_amiga_ui_cache_ready(void)
     return s_ui_cache_bm != NULL;
 }
 
+UBYTE mm2_amiga_play_chrome_cache_create(void)
+{
+    if (s_play_chrome_bm) {
+        return 1;
+    }
+    s_play_chrome_bm =
+        bitmapCreate(MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
+    return s_play_chrome_bm != NULL;
+}
+
+void mm2_amiga_play_chrome_cache_begin(void)
+{
+    if (!s_play_chrome_bm) {
+        return;
+    }
+    s_pixel_target = s_play_chrome_bm;
+    mm2_amiga_brect(s_play_chrome_bm, 0, 0, MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, 0);
+}
+
+void mm2_amiga_play_chrome_cache_end(void)
+{
+    s_pixel_target = NULL;
+}
+
+void mm2_amiga_play_chrome_cache_present(void)
+{
+    tSimpleBufferManager *pBfr;
+    tBitMap *pDst;
+
+    if (!s_play_chrome_bm) {
+        return;
+    }
+    pBfr = mm2AmigaDisplayGetBuffer();
+    if (!pBfr || !pBfr->pBack) {
+        return;
+    }
+    pDst = pBfr->pBack;
+    if (!bitmapIsChip(s_play_chrome_bm) || !bitmapIsChip(pDst)) {
+        return;
+    }
+    blitCopy(s_play_chrome_bm, 0, 0, pDst, 0, 0, (WORD)MM2_AGA_SCREEN_WIDTH, (WORD)MM2_AGA_SCREEN_HEIGHT,
+             MINTERM_COPY);
+}
+
+void mm2_amiga_play_chrome_cache_invalidate(void)
+{
+    /* Bitmap kept alive — rebuild on next chrome_dirty_. */
+}
+
+void mm2_amiga_play_chrome_cache_destroy(void)
+{
+    if (s_play_chrome_bm) {
+        bitmapDestroy(s_play_chrome_bm);
+        s_play_chrome_bm = NULL;
+    }
+}
+
+UBYTE mm2_amiga_play_chrome_cache_ready(void)
+{
+    return s_play_chrome_bm != NULL;
+}
+
 UBYTE mm2_amiga_viewport_cache_create(void)
 {
     if (s_viewport_cache_bm) {
@@ -333,6 +490,7 @@ UBYTE mm2_amiga_copy_front_to_back(void)
     if (!bitmapIsChip(pFront) || !bitmapIsChip(pBack)) {
         return 0;
     }
+    blitWait();
     blitCopy(pFront, 0, 0, pBack, 0, 0, (WORD)MM2_AGA_SCREEN_WIDTH, (WORD)MM2_AGA_SCREEN_HEIGHT,
              MINTERM_COPY);
     return 1;
@@ -364,10 +522,32 @@ static void mm2_amiga_write_asset_palette(const mm2_image32_file *img)
 
 void mm2_amiga_stage_asset_palette(const mm2_image32_file *img)
 {
-    if (!img || img == s_applied_palette_img) {
+    if (!img) {
         return;
     }
     mm2_amiga_write_asset_palette(img);
+}
+
+void mm2_amiga_apply_play_world_palette(const mm2_image32_file *img)
+{
+    if (!img) {
+        return;
+    }
+    s_play_world_palette_src = img;
+    mm2_amiga_apply_palette(img);
+}
+
+void mm2_amiga_restore_play_world_palette(void)
+{
+    if (s_play_world_palette_src) {
+        mm2_amiga_apply_palette(s_play_world_palette_src);
+    }
+}
+
+void mm2_amiga_clear_play_world_palette(void)
+{
+    s_play_world_palette_src = NULL;
+    s_applied_palette_img = NULL;
 }
 
 void mm2_amiga_apply_palette(const mm2_image32_file *img)
@@ -376,7 +556,7 @@ void mm2_amiga_apply_palette(const mm2_image32_file *img)
         return;
     }
     mm2_amiga_write_asset_palette(img);
-    s_palette_dirty = 1;
+    s_palette_dirty_world = 1;
     mm2_amiga_push_palette();
 }
 
@@ -419,7 +599,6 @@ void mm2_amiga_blit_frame(const mm2_image32_file *img, uint16_t frame_index, UWO
         return;
     }
 
-    mm2_amiga_apply_palette(img);
     w = (WORD)frame->width;
     h = (WORD)frame->height;
     if (uwDstX + (UWORD)w > MM2_AGA_SCREEN_WIDTH) {
@@ -441,6 +620,30 @@ void mm2_amiga_blit_frame(const mm2_image32_file *img, uint16_t frame_index, UWO
     }
 }
 
+#ifdef ACE_USE_AGA_FEATURES
+static void mm2_amiga_push_aga_palette_bank_range(const ULONG *pPalette, UBYTE ubBank, UBYTE ubFirst,
+                                                  UBYTE ubLast)
+{
+    UBYTE i;
+
+    for (i = ubFirst; i <= ubLast; ++i) {
+        const ULONG ul = pPalette[((ULONG)ubBank * 32u) + i];
+        const UBYTE r = (UBYTE)(ul >> 16);
+        const UBYTE g = (UBYTE)(ul >> 8);
+        const UBYTE b = (UBYTE)ul;
+        g_pCustom->bplcon3 = (UWORD)(ubBank << 13);
+        g_pCustom->color[i] = (UWORD)(((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4));
+        g_pCustom->bplcon3 = (UWORD)((ubBank << 13) | (1u << 9));
+        g_pCustom->color[i] = (UWORD)(((0x0Fu & r) << 8) | ((0x0Fu & g) << 4) | (0x0Fu & b));
+    }
+}
+
+static void mm2_amiga_push_aga_palette_bank(const ULONG *pPalette, UBYTE ubBank)
+{
+    mm2_amiga_push_aga_palette_bank_range(pPalette, ubBank, 0, 31);
+}
+#endif
+
 void mm2_amiga_apply_anm_palette(const uint16_t palette_words[MM2_ANM_PALETTE_COLORS])
 {
     tVPort *pVp;
@@ -457,8 +660,7 @@ void mm2_amiga_apply_anm_palette(const uint16_t palette_words[MM2_ANM_PALETTE_CO
     }
 
     pPal = (ULONG *)pVp->pPalette;
-    pPal[0] = 0;
-    for (i = 1; i < MM2_ANM_PALETTE_COLORS; ++i) {
+    for (i = (int)MM2_ANM_OVERLAY_PALETTE_FIRST; i <= (int)MM2_ANM_OVERLAY_PALETTE_LAST; ++i) {
         const uint16_t w = palette_words[i];
         const uint8_t r = (uint8_t)(((w >> 8) & 0x0F) * 17);
         const uint8_t g = (uint8_t)(((w >> 4) & 0x0F) * 17);
@@ -466,8 +668,15 @@ void mm2_amiga_apply_anm_palette(const uint16_t palette_words[MM2_ANM_PALETTE_CO
         pPal[i] = ((ULONG)r << 16) | ((ULONG)g << 8) | (ULONG)b;
     }
 
-    s_applied_palette_img = NULL;
-    s_palette_dirty = 1;
+#ifdef ACE_USE_AGA_FEATURES
+    if (pVp->eFlags & VP_FLAG_AGA) {
+        mm2_amiga_push_aga_palette_bank_range(pPal, 0, (UBYTE)MM2_ANM_OVERLAY_PALETTE_FIRST,
+                                              (UBYTE)MM2_ANM_OVERLAY_PALETTE_LAST);
+        return;
+    }
+#endif
+    s_palette_dirty_world = 1;
+    mm2_amiga_push_palette();
 }
 
 void mm2_amiga_blit_anm_composed(const mm2_anm_composite_planar *img, UWORD uwDstX, UWORD uwDstY)
@@ -498,11 +707,6 @@ void mm2_amiga_blit_anm_composed(const mm2_anm_composite_planar *img, UWORD uwDs
         return;
     }
 
-    /* When the composite remapped its pens to the live env palette, leave pens
-     * 0-31 alone (walls keep their stone colours); otherwise load .anm pens. */
-    if (!img->map_to_host_palette) {
-        mm2_amiga_apply_anm_palette(img->palette_words);
-    }
     w = (WORD)img->width;
     h = (WORD)img->height;
     if (uwDstX + (UWORD)w > MM2_AGA_SCREEN_WIDTH) {
@@ -524,17 +728,42 @@ void mm2_amiga_blit_anm_composed(const mm2_anm_composite_planar *img, UWORD uwDs
  * the wait loop leaves a stale a2, so viewUpdateGlobalPalette reads garbage. */
 __attribute__((noinline)) void mm2_amiga_push_palette(void)
 {
+    tVPort *pVp;
     tView *pView;
-    if (!s_palette_dirty) {
+
+    if (!s_palette_dirty_world && !s_palette_dirty_ui) {
         return;
     }
-    pView = mm2AmigaDisplayGetVPort() ? mm2AmigaDisplayGetVPort()->pView : NULL;
-    if (!pView) {
-        s_palette_dirty = 0;
+    pVp = mm2AmigaDisplayGetVPort();
+    pView = pVp ? pVp->pView : NULL;
+    if (!pView || !pVp || !pVp->pPalette) {
+        s_palette_dirty_world = 0;
+        s_palette_dirty_ui = 0;
         return;
     }
+    if (!(pView->uwFlags & VIEW_FLAG_GLOBAL_PALETTE)) {
+        s_palette_dirty_world = 0;
+        s_palette_dirty_ui = 0;
+        return;
+    }
+
+#ifdef ACE_USE_AGA_FEATURES
+    if (pVp->eFlags & VP_FLAG_AGA) {
+        const ULONG *pPal = (const ULONG *)pVp->pPalette;
+        if (s_palette_dirty_world) {
+            mm2_amiga_push_aga_palette_bank(pPal, 0);
+            s_palette_dirty_world = 0;
+        }
+        if (s_palette_dirty_ui) {
+            mm2_amiga_push_aga_palette_bank(pPal, MM2_UI_PALETTE_BANK);
+            s_palette_dirty_ui = 0;
+        }
+        return;
+    }
+#endif
     viewUpdateGlobalPalette(pView);
-    s_palette_dirty = 0;
+    s_palette_dirty_world = 0;
+    s_palette_dirty_ui = 0;
 }
 
 void mm2_amiga_present_end(void)

@@ -77,16 +77,15 @@ void ScriptedSceneEngine::unload()
 
 bool ScriptedSceneEngine::tryLoadGhostAnm(const char *data_dir)
 {
-    /* Overlaid on the 3D hood — share the env palette so walls stay correct. */
-    ghost_sprite_.setUseHostPalette(true);
-    has_ghost_sprite_ = ghost_sprite_.loadFromDiskIndex(data_dir, kGhostAnmDisk);
+    /* Defer pens 3-17 until beginScene — Pegasus preload must not clobber ghost palette. */
+    has_ghost_sprite_ = ghost_sprite_.loadFromDiskIndex(data_dir, kGhostAnmDisk, gfx::AnmLoopMode::Loop, false);
     return has_ghost_sprite_;
 }
 
 bool ScriptedSceneEngine::tryLoadPegasusAnm(const char *data_dir)
 {
-    pegasus_sprite_.setUseHostPalette(true);
-    has_pegasus_sprite_ = pegasus_sprite_.loadFromDiskIndex(data_dir, kPegasusMonsterAnmDisk);
+    has_pegasus_sprite_ =
+        pegasus_sprite_.loadFromDiskIndex(data_dir, kPegasusMonsterAnmDisk, gfx::AnmLoopMode::Loop, false);
     return has_pegasus_sprite_;
 }
 
@@ -143,11 +142,23 @@ void ScriptedSceneEngine::beginScene(const SceneSpec *spec)
     pegasus_sign_.unload();
     has_pegasus_sign_ = false;
     if (spec->sign_anm_id > 0 && data_dir_) {
-        pegasus_sign_.setUseHostPalette(true);
-        has_pegasus_sign_ = pegasus_sign_.loadFromTableId(data_dir_, spec->sign_anm_id);
+        has_pegasus_sign_ = pegasus_sign_.loadFromTableId(data_dir_, spec->sign_anm_id, gfx::AnmLoopMode::Loop,
+                                                          false);
     }
     text_.reset();
     showSceneText(spec);
+#if MM2_HOST_AMIGA
+    if (gfx_type_ == ScriptedSceneType::ViewportSpriteOverlay) {
+        if (spec->id == ScriptedSceneId::CorakIntro && ghost_sprite_.loaded()) {
+            ghost_sprite_.applyHardwarePalette();
+        } else if (spec->id == ScriptedSceneId::PegasusC2 && pegasus_sprite_.loaded()) {
+            pegasus_sprite_.applyHardwarePalette();
+        }
+        if (has_pegasus_sign_ && pegasus_sign_.loaded()) {
+            pegasus_sign_.applyHardwarePalette();
+        }
+    }
+#endif
     text_.showSpacePrompt();
     waiting_space_ = true;
 }
@@ -245,17 +256,6 @@ bool ScriptedSceneEngine::hidesView3D() const
     return false;
 }
 
-void ScriptedSceneEngine::blitPegasusOverlay(gfx::ScreenCompositor &c) const
-{
-    if (has_pegasus_sprite_ && pegasus_sprite_.loaded()) {
-        const int dst_x = kView3DOriginX + (kView3DViewportW - pegasus_sprite_.width()) / 2;
-        const int dst_y = kView3DSkyY + 8;
-        pegasus_sprite_.blitAt(c, dst_x, dst_y);
-        return;
-    }
-    c.drawTextShadow(kView3DOriginX + 8, kView3DSkyY + 48, "(21.anm pegasus sprite missing)", 255, 200, 100);
-}
-
 void ScriptedSceneEngine::drawGhostPlaceholder(gfx::ScreenCompositor &c) const
 {
     const int cx = kView3DOriginX + kView3DViewportW / 2;
@@ -271,15 +271,41 @@ void ScriptedSceneEngine::drawGhostPlaceholder(gfx::ScreenCompositor &c) const
     c.drawTextShadow(gx - 4, gy + gh + 4, "ghost 51.anm candidate", 200, 200, 220);
 }
 
-void ScriptedSceneEngine::blitGhostOverlay(gfx::ScreenCompositor &c) const
+bool ScriptedSceneEngine::hasViewportSpriteOverlays() const
 {
-    if (has_ghost_sprite_ && ghost_sprite_.loaded()) {
-        const int dst_x = kView3DOriginX + (kView3DViewportW - ghost_sprite_.width()) / 2;
-        const int dst_y = kView3DSkyY + 8;
-        ghost_sprite_.blitAt(c, dst_x, dst_y);
+    if (!active() || gfx_type_ != ScriptedSceneType::ViewportSpriteOverlay) {
+        return false;
+    }
+    if (scene_id_ == ScriptedSceneId::PegasusC2) {
+        return has_pegasus_sprite_ || has_pegasus_sign_;
+    }
+    return has_ghost_sprite_ || has_pegasus_sign_;
+}
+
+void ScriptedSceneEngine::drawViewportSpriteOverlays(gfx::ScreenCompositor &c) const
+{
+    if (!active() || gfx_type_ != ScriptedSceneType::ViewportSpriteOverlay) {
         return;
     }
-    drawGhostPlaceholder(c);
+
+    /* Same path as OP_0B / sign_sprite_place @ 0x3266 → mode $17 @ 0x23C8C
+     * (pos, $40, $20) — blitCentered(), not viewport-centered blitAt(). */
+    if (scene_id_ == ScriptedSceneId::PegasusC2) {
+        if (has_pegasus_sprite_ && pegasus_sprite_.loaded()) {
+            pegasus_sprite_.blitCentered(c, 0);
+        } else {
+            c.drawTextShadow(kView3DOriginX + 8, kView3DSkyY + 48, "(21.anm pegasus sprite missing)", 255, 200,
+                             100);
+        }
+    } else if (has_ghost_sprite_ && ghost_sprite_.loaded()) {
+        ghost_sprite_.blitCentered(c, 0);
+    } else {
+        drawGhostPlaceholder(c);
+    }
+
+    if (has_pegasus_sign_) {
+        pegasus_sign_.blitCentered(c, 0);
+    }
 }
 
 void ScriptedSceneEngine::draw(gfx::ScreenCompositor &c)
@@ -288,21 +314,7 @@ void ScriptedSceneEngine::draw(gfx::ScreenCompositor &c)
         return;
     }
 
-    switch (gfx_type_) {
-    case ScriptedSceneType::ViewportSpriteOverlay:
-        if (scene_id_ == ScriptedSceneId::PegasusC2) {
-            blitPegasusOverlay(c);
-        } else {
-            blitGhostOverlay(c);
-        }
-        if (has_pegasus_sign_) {
-            pegasus_sign_.blitCentered(c, 0);
-        }
-        break;
-    default:
-        break;
-    }
-
+    drawViewportSpriteOverlays(c);
     text_.draw(c);
 }
 

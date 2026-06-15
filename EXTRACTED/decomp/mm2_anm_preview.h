@@ -48,9 +48,8 @@ typedef struct mm2_anm_composite_planar {
     uint16_t palette_words[MM2_ANM_PALETTE_COLORS];
     int width;
     int height;
-    /* Input hint (set by caller before first compose): when non-zero the composed
-     * pens are remapped to the nearest live host/env palette pen so the overlay
-     * shares the one hardware palette instead of clobbering pens 0-31. */
+    /* Input hint: when set, remaps .anm pens to nearest env pen (debug only — retail
+     * uses hardware pens 3-17 for overlays; see MM2_ANM_OVERLAY_PALETTE_*). */
     uint8_t map_to_host_palette;
 } mm2_anm_composite_planar;
 

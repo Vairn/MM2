@@ -59,6 +59,12 @@ public:
     /** Draw all active layers onto the compositor (after 3D view). */
     void draw(gfx::ScreenCompositor &c) const;
 
+    /** OP_04/05/06 text overlays inside the 3D viewport (cheap — partial redraw path). */
+    void drawPersistentViewportOverlays(gfx::ScreenCompositor &c) const;
+
+    /** OP_0B service sign .anm only (masked blit — skip when cel unchanged on idle frames). */
+    void drawServiceSignOverlay(gfx::ScreenCompositor &c) const;
+
     /** Advance OP_0B sign .anm one game tick; true when cel changed. */
     bool tickAnimation();
 

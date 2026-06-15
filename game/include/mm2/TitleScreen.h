@@ -72,8 +72,10 @@ public:
 
     bool controlsTick(const platform::KeyState &keys);
     void controlsDraw();
+    void controlsEnter();
     bool optionsTick(const platform::KeyState &keys);
     void optionsDraw();
+    void optionsEnter();
 
     void returnToMenu();
 
@@ -126,6 +128,8 @@ private:
     void blitTitleMenuBooks();
     void drawControls();
     void drawOptions();
+    void buildControlsCache();
+    void buildOptionsCache();
     void tickBookAnimation();
     void skipLogoToAttract();
     void skipLogoToMenu();
@@ -188,6 +192,8 @@ private:
     bool pegasus_painted_peeker_visible_ = false;
     bool title_menu_painted_ = false;
     int title_menu_painted_book_frame_ = -1;
+    bool controls_subscreen_painted_ = false;
+    bool options_subscreen_painted_ = false;
 #endif
 };
 

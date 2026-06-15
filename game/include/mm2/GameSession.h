@@ -74,6 +74,7 @@ private:
 #if MM2_HOST_AMIGA
     bool canUsePartialView3DRefresh() const;
     void renderFrameView3DOnly();
+    void renderFrameOverlayAnimOnly();
 #endif
     void renderView3D();
     void renderIndoorView3D();
@@ -100,6 +101,8 @@ private:
     void markTextDirty();
     void markOverlayAnimDirty();
 #endif
+    /** Quick Ref / character sheet / etc. replace the playfield — no viewport .anm. */
+    bool viewportHiddenByOverlay() const;
     gfx::PlayProtectValues protectValues() const;
 
     const char *data_dir_ = nullptr;

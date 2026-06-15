@@ -3,6 +3,10 @@
 #include "mm2/DataPath.h"
 #include "mm2/runtime/PathScratch.h"
 
+#if MM2_HOST_AMIGA
+#include "mm2/platform/amiga/Mm2AmigaPlanar.h"
+#endif
+
 namespace mm2::gfx {
 
 namespace {
@@ -105,8 +109,13 @@ bool EnvAssets::loadEnv(const char *data_dir, EnvKind kind)
         loadImage(data_dir, "outdoor2.32", &outdoor2_);
         loadImage(data_dir, "outdoor3.32", &outdoor3_);
         automap_ok_ = loadImage(data_dir, envSheetNames(kind).automap, &automap_);
-        env_ok_ = has_floor && has_h1;
-        return env_ok_;
+    env_ok_ = has_floor && has_h1;
+#if MM2_HOST_AMIGA
+    if (env_ok_) {
+        applyWorldPalette();
+    }
+#endif
+    return env_ok_;
     }
 
     const EnvSheetNames &names = envSheetNames(kind);
@@ -118,6 +127,11 @@ bool EnvAssets::loadEnv(const char *data_dir, EnvKind kind)
     const bool has_floor = loadImage(data_dir, names.floor, &floor_);
     automap_ok_ = names.automap && loadImage(data_dir, names.automap, &automap_);
     env_ok_ = has_walls && has_floor;
+#if MM2_HOST_AMIGA
+    if (env_ok_) {
+        applyWorldPalette();
+    }
+#endif
     return env_ok_;
 }
 
@@ -142,6 +156,22 @@ const mm2_image32_file &EnvAssets::biomeSheet(OutdoorBiome biome)
     return biomes_[idx];
 }
 
+void EnvAssets::applyWorldPalette() const
+{
+#if MM2_HOST_AMIGA
+    if (!env_ok_) {
+        return;
+    }
+    if (kind_ == EnvKind::Outdoor) {
+        if (floor_.frame_count > 0) {
+            mm2_amiga_apply_play_world_palette(&floor_);
+        }
+    } else if (walls_.frame_count > 0) {
+        mm2_amiga_apply_play_world_palette(&walls_);
+    }
+#endif
+}
+
 void EnvAssets::unloadAll()
 {
     mm2_image32_free(&walls_);
@@ -156,6 +186,9 @@ void EnvAssets::unloadAll()
     env_ok_ = false;
     sky_ok_ = false;
     data_dir_ = nullptr;
+#if MM2_HOST_AMIGA
+    mm2_amiga_clear_play_world_palette();
+#endif
 }
 
 }  // namespace mm2::gfx

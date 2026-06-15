@@ -206,7 +206,7 @@ TitleScreen::MenuAdvance AppHost::menuStep()
 
 void AppHost::menuDraw() { title_.menuDraw(); }
 
-void AppHost::controlsEnter() {}
+void AppHost::controlsEnter() { title_.controlsEnter(); }
 
 bool AppHost::controlsStep()
 {
@@ -222,7 +222,7 @@ bool AppHost::controlsStep()
 
 void AppHost::controlsDraw() { title_.controlsDraw(); }
 
-void AppHost::optionsEnter() {}
+void AppHost::optionsEnter() { title_.optionsEnter(); }
 
 bool AppHost::optionsStep()
 {

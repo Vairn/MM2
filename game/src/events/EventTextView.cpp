@@ -1,7 +1,12 @@
 #include "mm2/events/EventTextView.h"
 
+#include "mm2/Config.h"
 #include "mm2/events/ServiceSignResolver.h"
 #include "mm2/gfx/Mm2FontGlyphs.h"
+
+#if MM2_HOST_AMIGA
+#include "mm2/platform/amiga/Mm2AmigaConfig.h"
+#endif
 
 namespace mm2::events {
 
@@ -131,7 +136,12 @@ void printWrapped(gfx::ScreenCompositor &c, int start_col, int start_row, int en
 void fillSignInteriorRow(gfx::ScreenCompositor &c, int row)
 {
     // OP_06 @ 0x15AEE: win_print("           ") ×11 spaces, JAM2 bg pen 0 (doc 44 §3.6).
+    // On Amiga use UI pen black — world pen 0 is the .32 palette sky/terrain index.
+#if MM2_HOST_AMIGA
+    c.fillRectPen(8 * 8, row * 8, 11 * 8, 8, MM2_UI_PEN_BLACK);
+#else
     c.fillRect(8 * 8, row * 8, 11 * 8, 8, kPenSignFillR, kPenSignFillG, kPenSignFillB, 255);
+#endif
 }
 
 void fillSignInterior(gfx::ScreenCompositor &c)
@@ -337,7 +347,6 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, const GameS
 {
     sign_placement_ = placement;
     sign_overlay_.unload();
-    sign_overlay_.setUseHostPalette(true);
     bool has_sign = false;
     if (data_dir) {
         const int anm_id =
@@ -362,7 +371,6 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, int screen_
 {
     sign_placement_ = placement;
     sign_overlay_.unload();
-    sign_overlay_.setUseHostPalette(true);
     bool has_sign = false;
     if (data_dir) {
         const int anm_id = ServiceSignResolver::resolveForScreen(screen_id, attrib, str_idx);
@@ -396,6 +404,46 @@ bool EventTextView::tickAnimation()
     return sign_overlay_.tick();
 }
 
+void EventTextView::drawPersistentViewportOverlays(gfx::ScreenCompositor &c) const
+{
+    for (int i = 0; i < layer_count_; ++i) {
+        const EventTextLayer &layer = layers_[i];
+        switch (layer.op) {
+        case EventTextOp::Op04DoorLabel:
+            drawDoorLabel(c, layer.text);
+            break;
+        case EventTextOp::Op05PopupA: {
+            const int lines = countPopupLines(layer.text);
+            int row = (lines / 2 < 5) ? (4 - lines / 2) : 0;
+            row = 3 + row;
+            printWrapped(c, 4, row, 24, 13, layer.text, true);
+            break;
+        }
+        case EventTextOp::Op06Signpost:
+            drawSignpost(c, layer.text);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+void EventTextView::drawServiceSignOverlay(gfx::ScreenCompositor &c) const
+{
+    for (int i = 0; i < layer_count_; ++i) {
+        const EventTextLayer &layer = layers_[i];
+        if (layer.op != EventTextOp::Op0BServiceSign) {
+            continue;
+        }
+        if (sign_overlay_.loaded()) {
+            sign_overlay_.blitCentered(c, sign_placement_);
+        } else if (layer.text[0] != '\0') {
+            drawServiceSignStub(c, layer.text);
+        }
+        break;
+    }
+}
+
 void EventTextView::draw(gfx::ScreenCompositor &c) const
 {
     for (int i = 0; i < layer_count_; ++i) {
@@ -416,34 +464,13 @@ void EventTextView::draw(gfx::ScreenCompositor &c) const
             clearCells(c, 1, 17, 38, 22);
             printWrapped(c, 1, 17, 38, 22, layer.text, false);
             break;
-        case EventTextOp::Op04DoorLabel:
-            drawDoorLabel(c, layer.text);
-            break;
-        case EventTextOp::Op05PopupA: {
-            const int lines = countPopupLines(layer.text);
-            int row = (lines / 2 < 5) ? (4 - lines / 2) : 0;
-            row = 3 + row;
-            printWrapped(c, 4, row, 24, 13, layer.text, true);
-            break;
-        }
-        case EventTextOp::Op06Signpost:
-            drawSignpost(c, layer.text);
-            break;
-        case EventTextOp::Op0BServiceSign:
-            if (sign_overlay_.loaded()) {
-                /* OP_0B @ 0x15DB0 → sign_sprite_place @ 0x3266 mode $17 @ 0x23C8C:
-                 * all service signs blit over the 3D viewport (8,8)–(215,127).
-                 * Arg2 is a placement-table index (A4-$7538 → A4-$56E), not a
-                 * viewport-vs-panel switch — never route by sprite dimensions. */
-                sign_overlay_.blitCentered(c, sign_placement_);
-            } else if (layer.text[0] != '\0') {
-                drawServiceSignStub(c, layer.text);
-            }
-            break;
         default:
             break;
         }
     }
+
+    drawPersistentViewportOverlays(c);
+    drawServiceSignOverlay(c);
 
     if (space_prompt_) {
         textAt(c, 9, 23, "('Space' to continue)");

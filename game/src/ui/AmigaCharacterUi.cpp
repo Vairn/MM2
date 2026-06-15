@@ -340,7 +340,7 @@ void drawCellHorizRule(gfx::ScreenCompositor &c, int row, int col, int len, uint
                        uint8_t b = 255)
 {
     for (int i = 0; i < len; ++i) {
-        drawCellGlyph(c, row, col + i, gfx::font_glyphs::kHorizRule, r, g, b);
+        drawCellGlyph(c, row, col + i, '-', r, g, b);
     }
 }
 

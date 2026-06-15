@@ -105,6 +105,19 @@ void ScreenCompositor::fillRect(int x, int y, int w, int h, uint8_t r, uint8_t g
     clearRect(x, y, w, h, r, g, b, a);
 }
 
+void ScreenCompositor::fillRectPen(int x, int y, int w, int h, uint8_t pen, uint8_t a)
+{
+#if MM2_HOST_AMIGA
+    if (a == 0) {
+        return;
+    }
+    mm2_amiga_fill_rect_pen((UWORD)x, (UWORD)y, (UWORD)w, (UWORD)h, pen);
+#else
+    (void)pen;
+    clearRect(x, y, w, h, 0, 0, 0, a);
+#endif
+}
+
 void ScreenCompositor::blitRgba(const uint8_t *src, int src_w, int src_h, int dst_x, int dst_y,
                                 bool skip_transparent, uint8_t global_alpha)
 {
@@ -130,6 +143,49 @@ void ScreenCompositor::blitRgba(const uint8_t *src, int src_w, int src_h, int ds
             putPixel(ox, oy, sp[0], sp[1], sp[2], a);
         }
     }
+}
+
+void ScreenCompositor::drawGlyphPen(int x, int y, uint8_t codepoint, uint8_t pen, uint8_t a)
+{
+    if (codepoint >= MM2_FONT8X8_GLYPHS) {
+        return;
+    }
+#if MM2_HOST_AMIGA
+    mm2_amiga_draw_glyph8_pen((UWORD)x, (UWORD)y, codepoint, pen, a);
+#else
+    drawGlyph(x, y, codepoint, 255, 255, 255, a);
+#endif
+}
+
+void ScreenCompositor::drawTextPen(int x, int y, const char *text, uint8_t pen, uint8_t a)
+{
+    if (!text) {
+        return;
+    }
+#if MM2_HOST_AMIGA
+    mm2_amiga_draw_text_pen((UWORD)x, (UWORD)y, text, pen, a);
+    return;
+#endif
+    int cx = x;
+    for (const char *p = text; *p; ++p) {
+        if (*p == '\n') {
+            cx = x;
+            y += 8;
+            continue;
+        }
+        drawGlyphPen(cx, y, static_cast<uint8_t>(*p), pen, a);
+        cx += 8;
+    }
+}
+
+void ScreenCompositor::drawTextShadowPen(int x, int y, const char *text, uint8_t pen)
+{
+#if MM2_HOST_AMIGA
+    drawTextPen(x + 1, y + 1, text, 0, 255);
+    drawTextPen(x, y, text, pen, 255);
+#else
+    drawTextShadow(x, y, text, 255, 255, 255);
+#endif
 }
 
 void ScreenCompositor::drawGlyph(int x, int y, uint8_t codepoint, uint8_t r, uint8_t g, uint8_t b, uint8_t a)

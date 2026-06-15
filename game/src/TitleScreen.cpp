@@ -286,7 +286,7 @@ void TitleScreen::bootBeginLogoFade()
 #if MM2_HOST_AMIGA
     logo_fade_armed_ = true;
     if (has_nwcp_) {
-        mm2_amiga_stage_asset_palette(&nwcp_);
+        mm2_amiga_apply_palette(&nwcp_);
         platform::logoFadeCapturePalette();
     }
 #endif
@@ -710,7 +710,67 @@ bool TitleScreen::controlsTick(const platform::KeyState &keys)
     return keys.escape;
 }
 
-void TitleScreen::controlsDraw() { drawControls(); }
+void TitleScreen::controlsEnter()
+{
+#if MM2_HOST_AMIGA
+    controls_subscreen_painted_ = false;
+#endif
+}
+
+void TitleScreen::optionsEnter()
+{
+#if MM2_HOST_AMIGA
+    options_subscreen_painted_ = false;
+#endif
+}
+
+void TitleScreen::controlsDraw()
+{
+#if MM2_HOST_AMIGA
+    if (!controls_subscreen_painted_) {
+        buildControlsCache();
+    }
+    platform::applyUiPalette();
+    mm2_amiga_ui_cache_present();
+#else
+    drawControls();
+#endif
+}
+
+void TitleScreen::optionsDraw()
+{
+#if MM2_HOST_AMIGA
+    if (!options_subscreen_painted_) {
+        buildOptionsCache();
+    }
+    platform::applyUiPalette();
+    mm2_amiga_ui_cache_present();
+#else
+    drawOptions();
+#endif
+}
+
+void TitleScreen::buildControlsCache()
+{
+#if MM2_HOST_AMIGA
+    platform::applyUiPalette();
+    mm2_amiga_ui_cache_begin();
+    drawControls();
+    mm2_amiga_ui_cache_end();
+    controls_subscreen_painted_ = true;
+#endif
+}
+
+void TitleScreen::buildOptionsCache()
+{
+#if MM2_HOST_AMIGA
+    platform::applyUiPalette();
+    mm2_amiga_ui_cache_begin();
+    drawOptions();
+    mm2_amiga_ui_cache_end();
+    options_subscreen_painted_ = true;
+#endif
+}
 
 bool TitleScreen::optionsTick(const platform::KeyState &keys)
 {
@@ -720,8 +780,6 @@ bool TitleScreen::optionsTick(const platform::KeyState &keys)
     }
     return keys.escape;
 }
-
-void TitleScreen::optionsDraw() { drawOptions(); }
 
 void TitleScreen::returnToMenu()
 {
@@ -769,6 +827,9 @@ void TitleScreen::drawIntroPegasus(bool animate_overlays)
      * stale (e.g. nwcp logo) and causes a flash when ACE swaps front/back. */
     platform::clearScreen();
     if (has_intro_) {
+#if MM2_HOST_AMIGA
+        mm2_amiga_apply_palette(&intro_);
+#endif
         platform::blitImage32(&intro_, 0, kIntroBgX, kIntroBgY, 1);
     }
 #else
@@ -839,16 +900,14 @@ void TitleScreen::drawLogoSplash()
 {
 #if MM2_HOST_AMIGA
     if (has_nwcp_ && nwcp_.frames[0].bitmap) {
+        mm2_amiga_apply_palette(&nwcp_);
         if (logo_phase_ == LogoPhase::Static) {
-            mm2_amiga_stage_asset_palette(&nwcp_);
-            platform::applyUiPalette();
             platform::clearScreen();
             const int logo_y = (gfx::ScreenCompositor::kHeight - static_cast<int>(nwcp_.frames[0].height)) / 2;
             platform::blitImage32(&nwcp_, 0, logo_splash_x_, logo_y, 0);
             return;
         }
         if (logo_phase_ == LogoPhase::FadeIn && !logo_fade_armed_) {
-            mm2_amiga_stage_asset_palette(&nwcp_);
             platform::logoFadeCapturePalette();
             platform::logoFadeBeginIn(kFadeTicks);
             logo_fade_armed_ = true;
@@ -875,11 +934,9 @@ void TitleScreen::drawLogoSplash()
 
 void TitleScreen::drawControls()
 {
-#if MM2_HOST_AMIGA
-    platform::clearScreen();
-    platform::applyUiPalette();
-#else
     compositor_.clear(0, 0, 0, 255);
+#if MM2_HOST_AMIGA
+    platform::applyUiPalette();
 #endif
     drawRedFrame(compositor_, 8, 8, 304, 184);
     int y = 20;
@@ -916,11 +973,9 @@ void TitleScreen::drawControls()
 
 void TitleScreen::drawOptions()
 {
-#if MM2_HOST_AMIGA
-    platform::clearScreen();
-    platform::applyUiPalette();
-#else
     compositor_.clear(0, 0, 0, 255);
+#if MM2_HOST_AMIGA
+    platform::applyUiPalette();
 #endif
     drawRedFrame(compositor_, 40, 40, 240, 120);
     int y = 56;
@@ -964,8 +1019,11 @@ void TitleScreen::blitTitleMenuBooks()
 void TitleScreen::presentTitleMenu()
 {
 #if MM2_HOST_AMIGA
-    mm2_amiga_blit_sync();
+    if (has_book_ && book_.frame_count > 0) {
+        mm2_amiga_apply_palette(&book_);
+    }
     platform::applyUiPalette();
+    mm2_amiga_blit_sync();
     mm2_amiga_ui_cache_present();
     blitTitleMenuBooks();
 #else
@@ -976,6 +1034,9 @@ void TitleScreen::presentTitleMenu()
 void TitleScreen::buildTitleMenuCache()
 {
 #if MM2_HOST_AMIGA
+    if (has_book_ && book_.frame_count > 0) {
+        mm2_amiga_apply_palette(&book_);
+    }
     platform::applyUiPalette();
     mm2_amiga_ui_cache_begin();
 #endif

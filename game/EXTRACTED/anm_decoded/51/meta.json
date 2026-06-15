@@ -1,0 +1,148 @@
+{
+  "path": "C:\\_20260421_\\D-REC\\development\\MM2\\51.anm",
+  "file_size": 8368,
+  "file_magic": "00005456",
+  "prelude_frames": [
+    {
+      "x_offset": 3,
+      "y_offset": 1,
+      "width": 80,
+      "height": 77
+    },
+    {
+      "x_offset": 3,
+      "y_offset": 1,
+      "width": 80,
+      "height": 77
+    },
+    {
+      "x_offset": 3,
+      "y_offset": 1,
+      "width": 80,
+      "height": 77
+    },
+    {
+      "x_offset": 3,
+      "y_offset": 1,
+      "width": 80,
+      "height": 77
+    },
+    {
+      "x_offset": 3,
+      "y_offset": 1,
+      "width": 80,
+      "height": 77
+    }
+  ],
+  "prelude_offset": 4,
+  "seq_header_a": 28,
+  "seq_header_b": 1,
+  "seq_header_c": 5,
+  "sequences": [
+    [
+      1,
+      10,
+      2,
+      10,
+      3,
+      10,
+      4,
+      10,
+      5,
+      10
+    ],
+    [
+      4,
+      10,
+      3,
+      10,
+      2,
+      10,
+      1,
+      10,
+      0,
+      10
+    ]
+  ],
+  "image_chunk_offset": 76,
+  "image_frames": 6,
+  "image_depth": 3,
+  "image_width": 84,
+  "image_height": 86,
+  "image_frame_info": [
+    {
+      "width": 84,
+      "height": 86,
+      "flags": 0
+    },
+    {
+      "width": 80,
+      "height": 77,
+      "flags": 0
+    },
+    {
+      "width": 80,
+      "height": 77,
+      "flags": 0
+    },
+    {
+      "width": 80,
+      "height": 77,
+      "flags": 0
+    },
+    {
+      "width": 80,
+      "height": 77,
+      "flags": 0
+    },
+    {
+      "width": 80,
+      "height": 77,
+      "flags": 0
+    }
+  ],
+  "palette_words_be": [
+    0,
+    4095,
+    3584,
+    0,
+    1911,
+    1365,
+    1638,
+    1638,
+    1911,
+    2184,
+    2457,
+    2730,
+    2730,
+    3003,
+    3276,
+    3549,
+    2304,
+    0,
+    4080,
+    3936,
+    0,
+    0,
+    0,
+    64,
+    128,
+    160,
+    1056,
+    1584,
+    2368,
+    1092,
+    2184,
+    3276
+  ],
+  "decode_start_offset": 180,
+  "decoded_frame_consumed": [
+    1535,
+    1326,
+    1321,
+    1342,
+    1336,
+    1328
+  ],
+  "decode_end_offset": 8368
+}

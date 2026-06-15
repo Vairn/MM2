@@ -1,8 +1,13 @@
 #include "mm2/gfx/PlayScreenChrome.h"
 
 #include "mm2/CppStdCompat.h"
+#include "mm2/Config.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/PartyStatusFormat.h"
+
+#if MM2_HOST_AMIGA
+#include "mm2/platform/amiga/Mm2AmigaConfig.h"
+#endif
 
 // All draws happen on the 40x24 cell grid of the 8px font: x = col*8,
 // y = row*8 (text cursor -$7BFC -> 0x22108, glyph put -$7C62 -> 0x218EA).
@@ -42,25 +47,48 @@ constexpr uint8_t kGlyphVCapBottom = 0x08;
 constexpr uint8_t kGlyphVCapTop = 0x09;
 constexpr uint8_t kGlyphVSeg = 0x0B;
 
+#if MM2_HOST_AMIGA
+constexpr uint8_t kPenBorder = MM2_UI_PEN_RED;
+constexpr uint8_t kPenWhite = MM2_UI_PEN_WHITE;
+constexpr uint8_t kPenWarn = MM2_UI_PEN_WARN;
+#endif
+
 void glyphAt(ScreenCompositor &c, int col, int row, uint8_t glyph)
 {
+#if MM2_HOST_AMIGA
+    c.drawGlyphPen(col * 8, row * 8, glyph, kPenBorder);
+#else
     c.drawGlyph(col * 8, row * 8, glyph, kBorderR, kBorderG, kBorderB);
+#endif
 }
 
 void textAt(ScreenCompositor &c, int col, int row, const char *text, uint8_t r = 255, uint8_t g = 255,
             uint8_t b = 255)
 {
+#if MM2_HOST_AMIGA
+    if (r >= 200 && g <= 96 && b <= 96) {
+        c.drawTextPen(col * 8, row * 8, text, kPenWarn);
+    } else if (r >= 210 && g >= 210 && b >= 210) {
+        c.drawTextPen(col * 8, row * 8, text, kPenWhite);
+    } else {
+        c.drawText(col * 8, row * 8, text, r, g, b);
+    }
+#else
     c.drawText(col * 8, row * 8, text, r, g, b);
+#endif
 }
 
-/* The original prints control glyphs (arrows 0x18..0x1B, rule 0x05) through
- * the same putchar path -$7C62; drawText skips codes < 0x20, so render the
- * command-reference strings glyph by glyph. */
 void glyphTextAt(ScreenCompositor &c, int col, int row, const char *text)
 {
+#if MM2_HOST_AMIGA
+    for (int i = 0; text[i]; ++i) {
+        c.drawGlyphPen((col + i) * 8, row * 8, static_cast<uint8_t>(text[i]), kPenWhite);
+    }
+#else
     for (int i = 0; text[i]; ++i) {
         c.drawGlyph((col + i) * 8, row * 8, static_cast<uint8_t>(text[i]), 255, 255, 255);
     }
+#endif
 }
 
 /* h_line @ 0x4032: cap 6 at col0, glyph 5 cols col0+1..col1-1, cap 7 at col1. */
@@ -128,7 +156,7 @@ void drawPlayModalBackdrop(ScreenCompositor &c)
                  kPlayOverlayBorderH - 2);
 }
 
-void drawPlayScreenChrome(ScreenCompositor &c)
+void drawPlayScreenChromeStatic(ScreenCompositor &c)
 {
     /* play_screen_chrome_init @ 0x60F4 — black fills first, red glyphs on top. */
     playScreenInteriorFills(c);
@@ -142,6 +170,16 @@ void drawPlayScreenChrome(ScreenCompositor &c)
     vLine(c, 0x10, 0x12, 0x0C);
     vLine(c, 0x10, 0x12, 0x15);
     vLine(c, 0x10, 0x12, 0x1F);
+}
+
+void drawPlayScreenChrome(ScreenCompositor &c)
+{
+    drawPlayScreenChromeStatic(c);
+}
+
+void drawPlayViewportDivider(ScreenCompositor &c)
+{
+    vLine(c, 0, 0x10, 0x1B);
 }
 
 void drawPlayStatusBar(ScreenCompositor &c, int day, int year, char facing_key, bool new_game)

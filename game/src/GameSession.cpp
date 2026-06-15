@@ -261,6 +261,7 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
 
 #if MM2_HOST_AMIGA
     mm2_amiga_viewport_cache_create();
+    mm2_amiga_play_chrome_cache_create();
     bootstrapping_ = true;
     bootstrap_step_ = 0;
     markDirty();
@@ -399,6 +400,7 @@ void GameSession::shutdown()
     overlay_anim_dirty_ = false;
     play_buffer_valid_ = false;
     mm2_amiga_viewport_cache_invalidate();
+    mm2_amiga_play_chrome_cache_destroy();
     bootstrapping_ = false;
     bootstrap_step_ = 0;
 #else
@@ -810,6 +812,13 @@ bool GameSession::awaitingContinuePrompt() const
 
 void GameSession::tickOverlayAnimations()
 {
+    if (viewportHiddenByOverlay()) {
+#if MM2_HOST_AMIGA
+        overlay_anim_dirty_ = false;
+#endif
+        return;
+    }
+
     bool changed = false;
     if (scripted_loaded_ && scripted_scene_.active()) {
         changed |= scripted_scene_.tickAnimation();
@@ -1021,22 +1030,28 @@ void GameSession::renderFrame(bool overlay_anim_only)
 {
     const bool scripted_active = scripted_loaded_ && scripted_scene_.active();
 
-    /* Chrome (red -809E border frame + black interior fills) must be redrawn every
-     * frame: with double-buffering the borders live OUTSIDE the cached 3D viewport
-     * region, so the fast overlay path still has to paint them into the current
-     * back buffer or they vanish on alternating buffers. */
+    /* Chrome (red border + black fills) is cached in chip RAM and blitted each
+     * frame so double-buffer swaps do not drop HUD glyphs outside the 3D cache. */
 #if MM2_HOST_AMIGA
     if (!overlay_anim_only) {
-        compositor_.clear(0, 0, 0, 255);
+        if (chrome_dirty_ || !mm2_amiga_play_chrome_cache_ready()) {
+            if (!mm2_amiga_play_chrome_cache_ready()) {
+                mm2_amiga_play_chrome_cache_create();
+            }
+            mm2_amiga_play_chrome_cache_begin();
+            gfx::drawPlayScreenChromeStatic(compositor_);
+            mm2_amiga_play_chrome_cache_end();
+        }
+        mm2_amiga_play_chrome_cache_present();
     }
 #else
     (void)overlay_anim_only;
     compositor_.clear(0, 0, 0, 255);
-#endif
     gfx::drawPlayScreenChrome(compositor_);
+#endif
 
     if (!scripted_active || !scripted_scene_.hidesView3D()) {
-        if (overlay_ != PlayOverlay::Automap) {
+        if (overlay_ != PlayOverlay::Automap && !viewportHiddenByOverlay()) {
 #if MM2_HOST_AMIGA
             if (overlay_anim_only) {
                 /* Retail buf_copy_rect @ 0x171AC: restore the saved 3D viewport
@@ -1049,6 +1064,8 @@ void GameSession::renderFrame(bool overlay_anim_only)
 #else
             renderView3D();
 #endif
+            /* Walls blit past x=216 and erase the viewport/right-column divider. */
+            gfx::drawPlayViewportDivider(compositor_);
         }
     }
 
@@ -1073,15 +1090,31 @@ void GameSession::renderFrame(bool overlay_anim_only)
 
     renderOverlays();
 
-    if (events_loaded_ && !scripted_active) {
+    /* OP_04 door labels / OP_05/06/0B viewport overlays must not paint over modal
+     * sheets (character sheet, quick ref, etc.) — retail hides the 3D hood entirely. */
+    if (events_loaded_ && !scripted_active && !viewportHiddenByOverlay()) {
         events_.textView().draw(compositor_);
+    }
+}
+
+bool GameSession::viewportHiddenByOverlay() const
+{
+    switch (overlay_) {
+    case PlayOverlay::QuickRef:
+    case PlayOverlay::CharacterSheet:
+    case PlayOverlay::Controls:
+    case PlayOverlay::QuitConfirm:
+    case PlayOverlay::Automap:
+        return true;
+    default:
+        return false;
     }
 }
 
 #if MM2_HOST_AMIGA
 bool GameSession::canUsePartialView3DRefresh() const
 {
-    if (!play_buffer_valid_ || !view3d_dirty_ || chrome_dirty_ || overlay_anim_dirty_) {
+    if (!play_buffer_valid_ || !view3d_dirty_ || chrome_dirty_) {
         return false;
     }
     if (!assets_ok_ || overlay_ != PlayOverlay::None) {
@@ -1091,6 +1124,27 @@ bool GameSession::canUsePartialView3DRefresh() const
         return false;
     }
     return true;
+}
+
+void GameSession::renderFrameOverlayAnimOnly()
+{
+    if (!mm2_amiga_copy_front_to_back()) {
+        renderFrame(false);
+        play_buffer_valid_ = true;
+        return;
+    }
+
+    if (overlay_ != PlayOverlay::Automap) {
+        mm2_amiga_viewport_cache_restore();
+        gfx::drawPlayViewportDivider(compositor_);
+    }
+
+    if (scripted_loaded_ && scripted_scene_.active()) {
+        scripted_scene_.drawViewportSpriteOverlays(compositor_);
+    } else if (events_loaded_) {
+        events_.textView().drawPersistentViewportOverlays(compositor_);
+        events_.textView().drawServiceSignOverlay(compositor_);
+    }
 }
 
 void GameSession::renderFrameView3DOnly()
@@ -1104,6 +1158,7 @@ void GameSession::renderFrameView3DOnly()
     if (overlay_ != PlayOverlay::Automap) {
         renderView3D();
         mm2_amiga_viewport_cache_save();
+        gfx::drawPlayViewportDivider(compositor_);
     }
 
     if (text_dirty_) {
@@ -1111,22 +1166,28 @@ void GameSession::renderFrameView3DOnly()
         gfx::drawPlayStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
                                gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
     }
+
+    if (events_loaded_) {
+        events_.textView().drawPersistentViewportOverlays(compositor_);
+        events_.textView().drawServiceSignOverlay(compositor_);
+    }
 }
 #endif
 
 void GameSession::render()
 {
 #if MM2_HOST_AMIGA
-    /* Overlay-animation-only frame (ghost/sign cel changed, nothing else): keep the
-     * borders + panel + text, restore the cached 3D viewport, repaint the sprite. */
+    /* Sign / portrait cel tick: copy HUD from front, restore cached 3D hood, repaint overlays. */
     if (overlay_anim_dirty_ && !view3d_dirty_ && !chrome_dirty_ && !text_dirty_ &&
-        mm2_amiga_viewport_cache_valid()) {
-        renderFrame(true);
+        mm2_amiga_viewport_cache_valid() && !viewportHiddenByOverlay()) {
+        renderFrameOverlayAnimOnly();
+        play_buffer_valid_ = true;
         return;
     }
 
     if (canUsePartialView3DRefresh()) {
         renderFrameView3DOnly();
+        play_buffer_valid_ = true;
         return;
     }
 #endif

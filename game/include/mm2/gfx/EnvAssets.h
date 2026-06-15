@@ -65,6 +65,9 @@ public:
     const mm2_image32_file &horizonSheet(OutdoorHorizonSheet sheet) const;
     const mm2_image32_file &biomeSheet(OutdoorBiome biome);
 
+    /** Amiga: load pens 0-31 from the active env sheet (once per loadEnv). */
+    void applyWorldPalette() const;
+
 private:
     static bool loadImage(const char *data_dir, const char *name, mm2_image32_file *out);
 

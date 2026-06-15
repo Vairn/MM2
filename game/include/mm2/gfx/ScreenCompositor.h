@@ -19,12 +19,20 @@ public:
     void clearRect(int x, int y, int w, int h, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t a = 255);
     void fillRect(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
 
+    /** Amiga UI pen index (32..41); opaque fill over the 3D viewport. */
+    void fillRectPen(int x, int y, int w, int h, uint8_t pen, uint8_t a = 255);
+
     void blitRgba(const uint8_t *src, int src_w, int src_h, int dst_x, int dst_y, bool skip_transparent = true,
                   uint8_t global_alpha = 255);
 
     /** Draw one font-8 glyph by codepoint (0..127). */
     void drawGlyph(int x, int y, uint8_t codepoint, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255,
                    uint8_t a = 255);
+
+    /** Amiga UI pen index (32..41); skips RGB heuristic on host Amiga. */
+    void drawGlyphPen(int x, int y, uint8_t codepoint, uint8_t pen, uint8_t a = 255);
+    void drawTextPen(int x, int y, const char *text, uint8_t pen, uint8_t a = 255);
+    void drawTextShadowPen(int x, int y, const char *text, uint8_t pen);
 
     void drawText(int x, int y, const char *text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
     void drawTextShadow(int x, int y, const char *text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255);
