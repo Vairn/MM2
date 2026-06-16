@@ -67,7 +67,57 @@ const char *mageGuildSpellIntro(int location_id)
     return kIntro[0];
 }
 
+void captureServiceTitle(const char *text, char *out, size_t cap)
+{
+    if (!out || cap == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (!text) {
+        return;
+    }
+    size_t j = 0;
+    for (size_t i = 0; text[i] != '\0' && j + 1 < cap; ++i) {
+        if (text[i] == '\n') {
+            if (j == 0) {
+                continue;
+            }
+            break;
+        }
+        out[j++] = text[i];
+    }
+    out[j] = '\0';
+}
+
+void applyPartyProgressOp(GameStateView &gs, uint8_t op, uint8_t val, bool masked, uint8_t and_m,
+                          uint8_t or_m)
+{
+    if (op != 0x74) {
+        return;
+    }
+    uint8_t progress = mm2_gs_u8(gs.a4(), MM2_GS_PARTY_PROGRESS);
+    if (masked) {
+        progress = static_cast<uint8_t>((progress & and_m) | or_m);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PARTY_PROGRESS, progress);
+        return;
+    }
+    mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, (progress & val) != 0 ? 1 : 0);
+}
+
 }  // namespace
+
+void EventRuntime::showServiceUnavailableStub()
+{
+    char buf[256];
+    if (service_title_[0] != '\0') {
+        std::snprintf(buf, sizeof(buf), "%s\n(Service not yet available.)", service_title_);
+    } else {
+        std::snprintf(buf, sizeof(buf), "(Service not yet available.)");
+    }
+    text_.showOp02(buf, 19);
+    text_.showSpacePrompt();
+    wait_ = EventVmWait::Space;
+}
 
 bool EventRuntime::load(const char *data_dir)
 {
@@ -96,6 +146,7 @@ void EventRuntime::unload()
     script_active_ = false;
     wait_ = EventVmWait::None;
     screen_changed_ = false;
+    service_title_[0] = '\0';
     text_.reset();
     ::memset(work_buf_, 0, sizeof(work_buf_));
 }
@@ -125,6 +176,7 @@ bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world
 
     script_active_ = false;
     wait_ = EventVmWait::None;
+    service_title_[0] = '\0';
     text_.reset();
     return true;
 }
@@ -289,6 +341,15 @@ void EventRuntime::endScript(GameStateView &gs)
     (void)redraw_roster;
     (void)redraw_divider;
     mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
+    script_active_ = false;
+    wait_ = EventVmWait::None;
+}
+
+void EventRuntime::abortScript(GameStateView &gs)
+{
+    /* VM loop @ 0x17540: abort set → skip $171AC cleanup; OP_02 message stays visible. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
     script_active_ = false;
     wait_ = EventVmWait::None;
 }
@@ -315,6 +376,9 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
     case 0x03: {
         const uint8_t idx = readU8(gs);
         text_.showOp03(resolveString(idx, text_buf, sizeof(text_buf)));
+        if (location_id_ == 11 && idx == 5 && data_dir_) {
+            text_.showPegasusIllustration(data_dir_);
+        }
         mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
                       static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 3));
         break;
@@ -364,6 +428,18 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         }
         break;
     }
+    case 0x22: {
+        /* event_op22_era_gate @ 0x16A9E: cond = (MM2_GS_ERA_LOW in [lo..hi]). */
+        const uint8_t lo = readU8(gs);
+        const uint8_t hi = readU8(gs);
+        const uint8_t era = mm2_gs_u8(gs.a4(), MM2_GS_ERA_LOW);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, (era >= lo && era <= hi) ? 1 : 0);
+        break;
+    }
+    case 0x29:
+        /* event_op29_force_abort @ 0x16D08: stop script before fall-through (e.g. C2 evt 22). */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+        break;
     case 0x0C: {
         const uint8_t dest_screen = readU8(gs);
         const uint8_t dest_tile = readU8(gs);
@@ -381,9 +457,23 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
                           static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
             wait_ = EventVmWait::YesNo;
             break;
+        case 0x03:
+            text_.showOp02("Temple services are not yet available in this port.", 19);
+            text_.showSpacePrompt();
+            wait_ = EventVmWait::Space;
+            break;
+        case 0x11:
+            text_.showOp02("Portal travel is not yet available in this port.", 19);
+            text_.showSpacePrompt();
+            wait_ = EventVmWait::Space;
+            break;
+        case 0x0A:
+            text_.showOp02("The goblet is not yet available in this port.", 19);
+            text_.showSpacePrompt();
+            wait_ = EventVmWait::Space;
+            break;
         default:
-            /* GAP: quest handlers (0xC9..0xCF) and other selectors — no-op in stub;
-             * original runs handler then returns to the event VM (Lord Slayer evt 15). */
+            showServiceUnavailableStub();
             break;
         }
         break;
@@ -391,6 +481,8 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
     case 0x0B: {
         const uint8_t str_idx = readU8(gs);
         const uint8_t placement = readU8(gs);
+        captureServiceTitle(resolveString(str_idx, text_buf, sizeof(text_buf)), service_title_,
+                            sizeof(service_title_));
         /* OP_0B @ 0x15DB0 / 0x15756: str_idx is table key (not text, not .anm id).
          * env = A4-$79E3 (area_env_lookup @ 0x18AE on map load @ 0x1C44).
          * anm = table[env][str_idx-1] → sign_sprite_load @ 0x316E.
@@ -398,6 +490,23 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         text_.showOp0B(nullptr, data_dir_, gs, &world.attrib(), str_idx, placement);
         mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
                       static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 4));
+        break;
+    }
+    case 0x15: {
+        const uint8_t count = readU8(gs);
+        const uint8_t op = readU8(gs);
+        const uint8_t val = readU8(gs);
+        (void)count;
+        applyPartyProgressOp(gs, op, val, false, 0, 0);
+        break;
+    }
+    case 0x18: {
+        const uint8_t count = readU8(gs);
+        const uint8_t op = readU8(gs);
+        const uint8_t and_m = readU8(gs);
+        const uint8_t or_m = readU8(gs);
+        (void)count;
+        applyPartyProgressOp(gs, op, 0, true, and_m, or_m);
         break;
     }
     case 0x2B: {
@@ -458,6 +567,10 @@ bool EventRuntime::runVmLoop(GameStateView &gs, world::MapWorld &world)
         }
 
         dispatchOp(gs, world, op);
+        if (mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT)) {
+            abortScript(gs);
+            break;
+        }
         if (wait_ != EventVmWait::None || !script_active_) {
             break;
         }

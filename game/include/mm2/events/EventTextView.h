@@ -56,6 +56,10 @@ public:
     /** True when OP_0B loaded an .anm portrait/sign overlay. */
     bool hasServicePortrait() const { return sign_overlay_.loaded(); }
 
+    /** Loc 11 evt 04 OP_03 str[5]: Pegasus monster #131 → 21.anm over the 3D hood. */
+    void showPegasusIllustration(const char *data_dir);
+    bool hasPegasusIllustration() const { return pegasus_overlay_.loaded(); }
+
     /** Draw all active layers onto the compositor (after 3D view). */
     void draw(gfx::ScreenCompositor &c) const;
 
@@ -64,6 +68,9 @@ public:
 
     /** OP_0B service sign .anm only (masked blit — skip when cel unchanged on idle frames). */
     void drawServiceSignOverlay(gfx::ScreenCompositor &c) const;
+
+    /** Pegasus 21.anm illustration (drawn above sign overlay when both active). */
+    void drawPegasusIllustration(gfx::ScreenCompositor &c) const;
 
     /** Advance OP_0B sign .anm one game tick; true when cel changed. */
     bool tickAnimation();
@@ -91,6 +98,7 @@ private:
     bool exit_bit1_ = false;
 
     gfx::ViewportAnmOverlay sign_overlay_{};
+    gfx::ViewportAnmOverlay pegasus_overlay_{};
     uint8_t sign_placement_ = 0;
 };
 

@@ -44,6 +44,7 @@ public:
     const EventTextView &textView() const { return text_; }
 
 private:
+    void showServiceUnavailableStub();
     void initParsed(GameStateView &gs);
     int poolSeek(uint8_t event_id) const;
     uint8_t contextMask(const GameStateView &gs) const;
@@ -57,6 +58,7 @@ private:
     bool runVmLoop(GameStateView &gs, world::MapWorld &world);
     void dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t op);
     void endScript(GameStateView &gs);
+    void abortScript(GameStateView &gs);
     void applyMapTransition(GameStateView &gs, world::MapWorld &world, uint8_t dest_screen,
                             uint8_t dest_tile);
 
@@ -70,6 +72,7 @@ private:
     bool script_active_ = false;
     EventVmWait wait_ = EventVmWait::None;
     bool screen_changed_ = false;
+    char service_title_[128]{};
     EventTextView text_{};
 };
 

@@ -30,6 +30,7 @@
 #define MM2_GS_COORD_A          (-0x79F0)  /* byte  ($8610) */
 #define MM2_GS_SCRIPT_ABORT     (-0x79EA)  /* byte  ($8616) */
 #define MM2_GS_FIRST_TIME_FLAG  (-0x79E9)  /* byte  ($8617) */
+#define MM2_GS_PARTY_PROGRESS   (-0x79E8)  /* byte  ($8618) quest bits via apply_party op 0x74 */
 #define MM2_GS_SCREEN_MODE_PREV (-0x79E6)  /* byte  ($861A) */
 #define MM2_GS_SIGN_ENV_ID      (-0x79E3)  /* byte  ($861D) OP_0B table pick @ 0x15772 */
 #define MM2_GS_BUSY_STATUS      (-0x79E5)  /* byte  ($861B) */

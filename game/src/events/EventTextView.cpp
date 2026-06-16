@@ -276,6 +276,7 @@ void EventTextView::reset()
     exit_bit0_ = false;
     exit_bit1_ = false;
     sign_overlay_.unload();
+    pegasus_overlay_.unload();
     sign_placement_ = 0;
     for (EventTextLayer &layer : layers_) {
         layer.op = EventTextOp::None;
@@ -389,6 +390,14 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, int screen_
     }
 }
 
+void EventTextView::showPegasusIllustration(const char *data_dir)
+{
+    pegasus_overlay_.unload();
+    if (data_dir) {
+        pegasus_overlay_.loadFromDiskIndex(data_dir, 21, gfx::AnmLoopMode::Loop, false);
+    }
+}
+
 void EventTextView::showSpacePrompt()
 {
     space_prompt_ = true;
@@ -401,7 +410,11 @@ void EventTextView::clearSpacePrompt()
 
 bool EventTextView::tickAnimation()
 {
-    return sign_overlay_.tick();
+    bool changed = sign_overlay_.tick();
+    if (pegasus_overlay_.loaded()) {
+        changed |= pegasus_overlay_.tick();
+    }
+    return changed;
 }
 
 void EventTextView::drawPersistentViewportOverlays(gfx::ScreenCompositor &c) const
@@ -444,6 +457,13 @@ void EventTextView::drawServiceSignOverlay(gfx::ScreenCompositor &c) const
     }
 }
 
+void EventTextView::drawPegasusIllustration(gfx::ScreenCompositor &c) const
+{
+    if (pegasus_overlay_.loaded()) {
+        pegasus_overlay_.blitCentered(c, 0);
+    }
+}
+
 void EventTextView::draw(gfx::ScreenCompositor &c) const
 {
     for (int i = 0; i < layer_count_; ++i) {
@@ -471,6 +491,7 @@ void EventTextView::draw(gfx::ScreenCompositor &c) const
 
     drawPersistentViewportOverlays(c);
     drawServiceSignOverlay(c);
+    drawPegasusIllustration(c);
 
     if (space_prompt_) {
         textAt(c, 9, 23, "('Space' to continue)");
@@ -516,6 +537,7 @@ void EventTextView::clearPersistentOverlays()
     }
     layer_count_ = kept;
     sign_overlay_.unload();
+    pegasus_overlay_.unload();
     sign_placement_ = 0;
 }
 
@@ -546,6 +568,7 @@ void EventTextView::scriptCleanup(bool *redraw_status, bool *redraw_roster, bool
     space_prompt_ = false;
     exit_bit0_ = false;
     exit_bit1_ = false;
+    pegasus_overlay_.unload();
 }
 
 }  // namespace mm2::events

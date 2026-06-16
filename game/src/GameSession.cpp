@@ -433,7 +433,7 @@ void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
             }
         }
         if (scripted_loaded_) {
-            maybeQueueScriptedScenes(true);
+            maybeQueueScriptedScenes(false);
         }
         automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_,
                                                launch_);
@@ -449,19 +449,17 @@ void GameSession::maybeQueueScriptedScenes(bool on_start)
         return;
     }
 
+    /* Area enter @ 0x6E84: first_time_flag until Corak prologue at (7,4) (FAQ x,y). */
     if (on_start && gs_.screenId() == 0 && !gs_.corakIntroSeen()) {
         gs_.setFirstTimeFlag(true);
-        scripted_scene_.queueScene(events::ScriptedSceneId::CorakIntro);
-        gs_.setCorakIntroSeen(true);
-        markDirty();
         return;
     }
 
-    /* Guardian Pegasus: loc 11 (sector C2) evt 04 @ tile (y,x)=(4,7) ENTER — FAQ (7,4)^. */
-    if (!on_start && gs_.screenId() == 11 && gs_.coordY() == 4 && gs_.coordX() == 7 &&
-        !gs_.pegasusIntroSeen()) {
-        scripted_scene_.queueScene(events::ScriptedSceneId::PegasusC2);
-        gs_.setPegasusIntroSeen(true);
+    if (!on_start && gs_.screenId() == 0 && gs_.coordX() == 7 && gs_.coordY() == 4 &&
+        gs_.firstTimeFlag() && !gs_.corakIntroSeen()) {
+        scripted_scene_.queueScene(events::ScriptedSceneId::CorakIntro);
+        gs_.setCorakIntroSeen(true);
+        gs_.setFirstTimeFlag(false);
         markDirty();
     }
 }
@@ -823,7 +821,8 @@ void GameSession::tickOverlayAnimations()
     if (scripted_loaded_ && scripted_scene_.active()) {
         changed |= scripted_scene_.tickAnimation();
     }
-    if (events_loaded_ && events_.textView().hasServicePortrait()) {
+    if (events_loaded_ &&
+        (events_.textView().hasServicePortrait() || events_.textView().hasPegasusIllustration())) {
         changed |= events_.textView().tickAnimation();
     }
     if (changed) {
@@ -1144,6 +1143,7 @@ void GameSession::renderFrameOverlayAnimOnly()
     } else if (events_loaded_) {
         events_.textView().drawPersistentViewportOverlays(compositor_);
         events_.textView().drawServiceSignOverlay(compositor_);
+        events_.textView().drawPegasusIllustration(compositor_);
     }
 }
 
@@ -1170,6 +1170,7 @@ void GameSession::renderFrameView3DOnly()
     if (events_loaded_) {
         events_.textView().drawPersistentViewportOverlays(compositor_);
         events_.textView().drawServiceSignOverlay(compositor_);
+        events_.textView().drawPegasusIllustration(compositor_);
     }
 }
 #endif

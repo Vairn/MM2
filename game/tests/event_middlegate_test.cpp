@@ -203,6 +203,9 @@ int main(int argc, char **argv)
     mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
     expect(runtime.scanAndRun(gs, world), "event 24 temple fires at (4,6) facing W", fails);
     expect(runtime.textView().layerCount() > 0, "OP_0B temple sign persists after OP_0E", fails);
+    expect(runtime.textView().containsText("Temple services"),
+           "OP_0E 0x03 temple shows unavailable stub", fails);
+    expect(runtime.blocksMovement(), "temple OP_0E waits for SPACE", fails);
 
     /* Blacksmith shop @ (4,4) DIR_W — not on N/E/S. */
     runtime.enterLocation(0, gs, world);
@@ -385,6 +388,36 @@ int main(int argc, char **argv)
     expectTableIdLoadsAnm(data_dir, mg_blacksmith_id, fails);
     expectTableIdLoadsAnm(data_dir, mg_inn_id, fails);
     expect(mg_blacksmith_id != mg_inn_id, "inn tile must not reuse blacksmith sign id", fails);
+
+    /* C2 loc 11 evt 22 @ (14,8)/N: era 9 (Year 900 / 10th century) shows ruins, must not OP_0C to 59. */
+    world.enterScreen(11);
+    gs.setScreenId(11);
+    runtime.enterLocation(11, gs, world);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_ERA, 9);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ERA_LOW, 9);
+    gs.setCoordX(14);
+    gs.setCoordY(8);
+    gs.setFacingKey('N');
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+    const uint8_t c2_screen_before = gs.screenId();
+    expect(runtime.scanAndRun(gs, world), "C2 evt 22 Castle Xabran gate at (14,8) N", fails);
+    expect(gs.screenId() == c2_screen_before, "era 9 must not teleport to Castle Xabran (59)", fails);
+    expect(runtime.textView().containsText("Ruins"), "era 9 shows ruins text not enter prompt", fails);
+
+    /* C2 loc 11 evt 04 @ (4,7)/N: Pegasus greeting via event VM (not scripted-scene hack). */
+    gs.setPartyProgress(0);
+    runtime.enterLocation(11, gs, world);
+    mm2::events::ServiceSignResolver::syncSignEnvId(gs.a4(), 11, &world.attrib());
+    gs.setCoordX(7);
+    gs.setCoordY(4);
+    gs.setFacingKey('N');
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+    expect(runtime.scanAndRun(gs, world), "C2 evt 04 Pegasus at (4,7) facing N", fails);
+    expect(runtime.textView().containsText("Guardian Pegasus"),
+           "Pegasus OP_03 shows greeting text", fails);
+    expect(runtime.textView().hasPegasusIllustration(), "Pegasus OP_03 loads 21.anm overlay", fails);
+    expect(runtime.blocksMovement(), "Pegasus evt waits for SPACE", fails);
+    expect((gs.partyProgress() & 0x40) != 0, "Pegasus OP_18 sets seen bit 0x40", fails);
 
     if (fails == 0) {
         std::printf("OK: event_middlegate_test\n");
