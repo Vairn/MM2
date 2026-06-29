@@ -1,6 +1,8 @@
 /** MM2 8×8 font UI — ports game/src/gfx/ScreenCompositor.cpp + EventTextView.cpp. */
 "use strict";
 
+import { formatEncounterFlowLine } from "./eventVm.js";
+
 /** @type {number[][] | null} */
 let font = null;
 
@@ -312,6 +314,63 @@ export function drawMinimapSignpost(ctx, cx, cy, tw, th) {
   ctx.fillRect(cx + Math.floor(tw / 2) - 1, by + bh, 2, Math.max(3, Math.floor(th * 0.45)));
 }
 
+/** Tile indices (y<<4|x) that have an event.dat trigger on this screen. */
+export function scriptedEventPositions(sc) {
+  const out = new Set();
+  if (!sc?.events) return out;
+  for (const evtData of Object.values(sc.events)) {
+    for (const trig of evtData.triggers) out.add(trig.pos);
+  }
+  return out;
+}
+
+/** Walkable floor: at least one edge is not a solid wall (map.dat page 1). */
+export function tileWalkable(collisionByte) {
+  if (((collisionByte >> 0) & 3) !== 1) return true;
+  if (((collisionByte >> 2) & 3) !== 1) return true;
+  if (((collisionByte >> 4) & 3) !== 1) return true;
+  if ((collisionByte & 0x40) === 0) return true;
+  return false;
+}
+
+/**
+ * Per-screen step random encounters (attrib +0x09 roll @ asm 0x10A2).
+ * Town interiors keep a rate byte but the cavern/dungeon/castle paths gate the roll.
+ */
+export function screenHasAmbientSteps(sc) {
+  if (!sc || sc.outdoor) return false;
+  const rate = sc.encounter?.stepRate ?? 0;
+  if (rate <= 0) return false;
+  const env = sc.env || "";
+  return env === "cavern" || env === "dungeon" || env === "castle" || env === "other";
+}
+
+/** Collision 0x80 with no event.dat script — map-flagged ambient encounter tiles. */
+export function collisionAmbientPositions(sc) {
+  const scripted = scriptedEventPositions(sc);
+  const out = new Set();
+  if (!sc?.collision) return out;
+  for (let idx = 0; idx < sc.collision.length; idx++) {
+    if ((sc.collision[idx] & 0x80) && !scripted.has(idx)) out.add(idx);
+  }
+  return out;
+}
+
+/** Walkable tile eligible for ambient step roll (no scripted trigger on tile). */
+export function isAmbientStepTile(sc, idx) {
+  if (!screenHasAmbientSteps(sc)) return false;
+  if (!sc.collision || idx < 0 || idx >= sc.collision.length) return false;
+  if (!tileWalkable(sc.collision[idx])) return false;
+  return !scriptedEventPositions(sc).has(idx);
+}
+
+/** Sidebar / status line for ambient step encounters. */
+export function formatAmbientStepMessage(sc) {
+  const rate = sc?.encounter?.stepRate ?? 0;
+  if (rate <= 0) return null;
+  return `Ambient random encounter (1-in-${rate} step)`;
+}
+
 /** @typedef {'sign'|'wall'|'door'|'encFixed'|'encRandom'} MinimapMarkerKind */
 
 function pseudoLineSummary(line) {
@@ -334,6 +393,49 @@ function serviceSignLabel(pseudo) {
   const m = pseudo?.match(/service_sign\([^)]*\)/);
   if (m) return "Shop sign";
   return "Sign";
+}
+
+/** Numbered decompiled flow for the events sidebar (all nodes in script order). */
+export function formatEventScriptFlow(evtData, manifest = null, vmTrace = null) {
+  if (!evtData) return "No events.";
+  const lines = [];
+  const nodes = evtData.nodes;
+  const traceByNode = new Map();
+  if (vmTrace?.length) {
+    for (const t of vmTrace) traceByNode.set(t.nodeIndex, t);
+  }
+  if (nodes?.length) {
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      const num = String(i).padStart(2, "0");
+      let line;
+      if (n.op === -1) {
+        const preview = String(n.text || "").replace(/\n/g, " / ").slice(0, 72);
+        line = `${num}: text_record: "${preview}"`;
+      } else if ((n.op === 0x12 || n.op === 0x13) && manifest) {
+        line = `${num}: ${formatEncounterFlowLine(manifest, n)}`;
+      } else {
+        line = `${num}: ${n.pseudo || `OP_${n.op.toString(16).toUpperCase()}`}`;
+      }
+      const tr = traceByNode.get(i);
+      if (tr) {
+        const branch =
+          tr.detail && (tr.detail.includes("skip") || tr.detail.includes("cond"))
+            ? ` ← ${tr.detail}`
+            : tr.detail
+              ? ` ← ${tr.detail}`
+              : "";
+        line = `▶ ${line}${branch} [cond=${tr.cond}]`;
+      }
+      lines.push(line);
+    }
+    return lines.join("\n");
+  }
+  const script = evtData.script || [];
+  for (let i = 0; i < script.length; i++) {
+    lines.push(`${String(i).padStart(2, "0")}: ${script[i]}`);
+  }
+  return lines.length ? lines.join("\n") : "(empty script)";
 }
 
 /** First user-visible opcode label for sidebar (never OP_12/13 — use encounterLabelForEvent). */
@@ -523,6 +625,31 @@ export function drawMinimapMarker(ctx, cx, cy, tw, th, kind) {
   }
 }
 
+/**
+ * Ambient encounter territory — dotted overlay (step zone) or solid dot (collision 0x80 only).
+ * @param {{ flagged?: boolean }} opts — flagged = map collision event bit without script
+ */
+export function drawMinimapAmbient(ctx, cx, cy, tw, th, { flagged = false } = {}) {
+  const mx = cx + Math.floor(tw / 2);
+  const my = cy + Math.floor(th / 2);
+  ctx.fillStyle = flagged ? "rgba(200,70,200,0.9)" : "rgba(200,70,200,0.35)";
+  if (flagged) {
+    ctx.beginPath();
+    ctx.arc(mx, my, Math.max(2, Math.floor(Math.min(tw, th) * 0.18)), 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  const r = Math.max(1, Math.floor(Math.min(tw, th) * 0.12));
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if ((dx + dy) & 1) continue;
+      ctx.beginPath();
+      ctx.arc(mx + dx * r * 2, my + dy * r * 2, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
 /** Minimap icon: orange X (fixed) or magenta asterisk (random) — distinct from sign/wall/event dot. */
 export function drawMinimapEncounter(ctx, cx, cy, tw, th, kind = "fixed") {
   const mx = cx + Math.floor(tw / 2);
@@ -609,8 +736,9 @@ export function drawSpacePromptRow23(ctx) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ op?: number, text: string, showSpace?: boolean }} opts
  */
-export function drawNarrativePanel(ctx, { op = 0x01, text, showSpace = false }) {
-  switch (op) {
+export function drawNarrativePanel(ctx, { op = 0x01, text, showSpace = false, vmOp = null }) {
+  const layoutOp = resolveNarrativeLayoutOp(text, vmOp ?? op);
+  switch (layoutOp) {
     case 0x02:
       drawOp02Narrative(ctx, text);
       break;
@@ -624,10 +752,42 @@ export function drawNarrativePanel(ctx, { op = 0x01, text, showSpace = false }) 
   if (showSpace) drawSpacePromptRow23(ctx);
 }
 
-/** Pick OP_01 vs OP_02 when the caller did not pass an explicit opcode. */
-export function inferNarrativeOp(text) {
+/** Wrapped line count in the narrative band (cols 1..38). */
+function countNarrativeLines(text) {
+  let lines = 1;
+  let col = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\n") {
+      lines++;
+      col = 0;
+      continue;
+    }
+    col++;
+    if (col >= 38) {
+      lines++;
+      col = 0;
+    }
+  }
+  return lines;
+}
+
+/**
+ * Map event VM opcode + text to OP_01/02/03 layout (screen-global rows 17..23).
+ * VM opcodes like OP_0E/0x0B are not layout ops — service intros use OP_02 @ rows 19..22
+ * (EventTownServices.cpp showServiceIntro / showServiceTitle).
+ * @param {string} text
+ * @param {number | null | undefined} vmOp — raw script opcode, or null to infer from text only
+ */
+export function resolveNarrativeLayoutOp(text, vmOp) {
+  if (vmOp >= 0x01 && vmOp <= 0x03) return vmOp;
+  if (vmOp === 0x0b || vmOp === 0x0e || vmOp === 0x12 || vmOp === 0x13) return 0x02;
   if (!text) return 0x01;
-  if (text.includes("\n")) return 0x02;
-  if (text.length > 38) return 0x02;
+  if (countNarrativeLines(text) > 4) return 0x03;
+  if (text.includes("\n") || text.length > 38) return 0x02;
   return 0x01;
+}
+
+/** Pick OP_01 vs OP_02/03 from text alone (no VM opcode). */
+export function inferNarrativeOp(text) {
+  return resolveNarrativeLayoutOp(text, null);
 }

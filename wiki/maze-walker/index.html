@@ -53,7 +53,20 @@
 
         <section id="miniWrap" class="panel miniPanel">
           <h2>Minimap</h2>
-          <canvas id="minimap" width="224" height="176" aria-label="Minimap"></canvas>
+          <div class="miniPanelCanvasWrap">
+            <canvas id="minimap" width="224" height="176" aria-label="Minimap"></canvas>
+          </div>
+        </section>
+
+        <section class="panel partyPanel">
+          <h2>Party (walker stub)</h2>
+          <div class="partyStateWrap">
+            <pre id="partyState"></pre>
+          </div>
+          <div class="partyEdit">
+            <label title="Party gold for OP_24 checks">Gold <input type="number" id="editGold" min="0" step="100" value="5000"></label>
+            <label title="Game day for OP_23 gates">Day <input type="number" id="editDay" min="1" max="180" value="1"></label>
+          </div>
         </section>
 
         <section id="eventWrap" class="panel eventPanel">
@@ -67,8 +80,11 @@
             <li><span class="swatch swatch-sign"></span> Gold board — signpost (OP_06)</li>
             <li><span class="swatch swatch-text"></span> White lines — wall text (OP_05)</li>
             <li><span class="swatch swatch-fixed"></span> Orange X — fixed encounter (OP_12)</li>
-            <li><span class="swatch swatch-random"></span> Magenta ✳ — random encounter (OP_13)</li>
-            <li><span class="swatch swatch-other"></span> Red dot — other event tile</li>
+            <li><span class="swatch swatch-random"></span> Magenta ✳ — seeded random encounter (OP_13)</li>
+            <li><span class="swatch swatch-ambient-flag"></span> Magenta dot — ambient tile (collision 0x80, no script)</li>
+            <li><span class="swatch swatch-ambient-zone"></span> Faint magenta dots — ambient step zone (1-in-N roll)</li>
+            <li><span class="swatch swatch-other"></span> Red dot — other scripted event (treasure, transition, …)</li>
+            <li><span class="swatch swatch-cleared"></span> Gray dot — event flag cleared (OP_14, this session)</li>
           </ul>
         </section>
 

@@ -101,6 +101,7 @@ def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
         "sheets": {},
         "anm": {},
         "monsters": load_monster_records(data_dir),
+        "items": try_load_default_items(),
         "terrainLookup": load_terrain_lookup(),
         "cartoTile": list(K_CARTO_TILE),
         "font": load_font(),
@@ -148,7 +149,11 @@ def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
             frames_meta[str(fi)] = {"w": img.width, "h": img.height}
             exported += 1
         if frames_meta:
-            manifest["anm"][key] = {"file": sheet, "frames": frames_meta}
+            manifest["anm"][key] = {
+                "file": sheet,
+                "frames": frames_meta,
+                "flipbookDelay": 5,
+            }
             
     print(f"  sprites: {exported} frames across {len(manifest['sheets'])} sheets and {len(manifest['anm'])} anms")
     return manifest, sprites
@@ -212,9 +217,17 @@ def build_maps_payload(attrib: list[bytes], screens: list[tuple[bytes, bytes]], 
                 "name": area_name(sid, attrib),
                 "outdoor": rec.is_outdoor,
                 "env": rec.env_name,
+                "mapCategory": rec.map_category,
                 "surface": rec.surface_flag,
                 "entry": [rec.entry_coord[0], rec.entry_coord[1]],
                 "neighbors": list(rec.neighbors),
+                "encounter": {
+                    "stepRate": a[0x09],
+                    "groupGate": a[0x0A],
+                    "maxMonsters": a[0x0B],
+                    "minMonsters": a[0x0C],
+                    "retreat": a[0x0D],
+                },
                 "sector": a[0x15],
                 # attrib +0x20..+0x3F: 256 roof bits → sky.32 frame 1 (ceiling) vs 0 (open)
                 "roof": list(a[0x20:0x40]),

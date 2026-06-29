@@ -15,6 +15,7 @@ import {
   cartoFrame,
   tileLabel,
   torchBlitFor,
+  TORCH_PHASE_COUNT,
   K_CARTO_TILE_FALLBACK,
 } from "./view3d.js";
 import { StitchedOutdoor, buildOutdoorScene } from "./outdoor3d.js";
@@ -23,11 +24,24 @@ import {
   resolveEventText,
   drawViewportOverlay,
   drawNarrativePanel,
-  inferNarrativeOp,
+  resolveNarrativeLayoutOp,
   buildMinimapMarkers,
   drawMinimapMarker,
   eventTitleForEvent,
+  scriptedEventPositions,
+  collisionAmbientPositions,
+  screenHasAmbientSteps,
+  isAmbientStepTile,
+  formatAmbientStepMessage,
+  drawMinimapAmbient,
+  formatEventScriptFlow,
 } from "./ui.js";
+import { runEventScript } from "./eventVm.js";
+import {
+  createSessionState,
+  formatSessionPartyPanel,
+  isTileCleared as sessionTileCleared,
+} from "./sessionState.js";
 import {
   SCREEN_W,
   SCREEN_H,
@@ -41,6 +55,16 @@ import {
 const SCALE = 3;
 const MINI_TW = 14;
 const MINI_TH = 11;
+
+/** Indoor torch flicker: one phase step per poll of key_read_3d @0x1E9CE (~vblank). */
+const TORCH_TICKS_PER_PHASE = 2;
+/** ViewportAnmOverlay flipbook fallback when no sequence table (62.anm etc.). */
+const ANM_FLIPBOOK_DELAY = 5;
+
+let animTick = 0;
+let animRafId = 0;
+let lastAnimTorchPhase = -1;
+let lastAnimSpriteKey = "";
 
 const state = {
   screen: 0,
@@ -71,7 +95,17 @@ const locFacing = document.getElementById("locFacing");
 const locMode = document.getElementById("locMode");
 const locCeiling = document.getElementById("locCeiling");
 const eventScriptEl = document.getElementById("eventScript");
+const partyStateEl = document.getElementById("partyState");
+const editGoldEl = document.getElementById("editGold");
+const editDayEl = document.getElementById("editDay");
 const chkNoclip = document.getElementById("chkNoclip");
+
+/** @type {ReturnType<createSessionState>} */
+let session = createSessionState();
+/** @type {object[] | null} */
+let lastVmTrace = null;
+/** @type {number | null} */
+let lastVmCond = null;
 
 function cartoTable() {
   return manifest?.cartoTile || K_CARTO_TILE_FALLBACK;
@@ -168,14 +202,32 @@ function blitTransparent(ctx, sheetKey, frame, x, y) {
   ctx.drawImage(img, x, y);
 }
 
-function renderIndoorView(ctx, sc, scene) {
+function torchPhase() {
+  return Math.floor(animTick / TORCH_TICKS_PER_PHASE) % TORCH_PHASE_COUNT;
+}
+
+function anmFrameCount(sheetKey) {
+  const entry = manifest?.anm?.[sheetKey];
+  if (!entry?.frames) return 0;
+  return Object.keys(entry.frames).length;
+}
+
+/** Cycle composed .anm cel index (ViewportAnmOverlay flipbook / sequence fallback). */
+function resolveAnmFrame(sheetKey, baseFrame = 0) {
+  const n = anmFrameCount(sheetKey);
+  if (n <= 1) return String(baseFrame);
+  const step = Math.floor(animTick / ANM_FLIPBOOK_DELAY) % n;
+  return String(step);
+}
+
+function renderIndoorView(ctx, sc, scene, phase) {
   const sheets = selectIndoorSheets(sc.env);
   const skyFrame = skyFrameFor(sc, state.x, state.y);
   blitTransparent(ctx, sheets.floor, "0", ORIGIN_X, FLOOR_Y);
   blitTransparent(ctx, sheets.sky, String(skyFrame), ORIGIN_X, SKY_Y);
   for (const b of scene.blits) {
     blitTransparent(ctx, sheets.walls, String(b.frame), b.x, b.y);
-    const tb = torchBlitFor(b);
+    const tb = torchBlitFor(b, phase);
     if (tb) blitTransparent(ctx, sheets.torch, String(tb.frame), tb.x, tb.y);
   }
 }
@@ -234,6 +286,9 @@ function renderMinimap(sc) {
   const sheetKey = sc.outdoor ? "outb_32" : "townb_32";
   const table = cartoTable();
   const minimapMarkers = buildMinimapMarkers(sc);
+  const ambientFlagged = collisionAmbientPositions(sc);
+  const scriptedTiles = scriptedEventPositions(sc);
+  const showStepZone = screenHasAmbientSteps(sc);
 
   for (let sy = 0; sy < MAP_GRID; sy++) {
     const diskY = MAP_GRID - 1 - sy;
@@ -249,11 +304,22 @@ function renderMinimap(sc) {
       const marker = minimapMarkers.get(idx);
       if (marker) {
         drawMinimapMarker(miniCtx, px, py, MINI_TW, MINI_TH, marker);
-      } else if (sc.collision[idx] & 0x80) {
-        miniCtx.fillStyle = "rgba(255,65,65,0.85)";
-        miniCtx.beginPath();
-        miniCtx.arc(px + MINI_TW / 2, py + MINI_TH / 2, 2, 0, Math.PI * 2);
-        miniCtx.fill();
+      } else if (ambientFlagged.has(idx)) {
+        drawMinimapAmbient(miniCtx, px, py, MINI_TW, MINI_TH, { flagged: true });
+      } else if (showStepZone && isAmbientStepTile(sc, idx)) {
+        drawMinimapAmbient(miniCtx, px, py, MINI_TW, MINI_TH, { flagged: false });
+      } else if (sc.collision[idx] & 0x80 && scriptedTiles.has(idx)) {
+        if (sessionTileCleared(session, state.screen, idx)) {
+          miniCtx.fillStyle = "rgba(120,120,120,0.55)";
+          miniCtx.beginPath();
+          miniCtx.arc(px + MINI_TW / 2, py + MINI_TH / 2, 2, 0, Math.PI * 2);
+          miniCtx.fill();
+        } else {
+          miniCtx.fillStyle = "rgba(255,65,65,0.85)";
+          miniCtx.beginPath();
+          miniCtx.arc(px + MINI_TW / 2, py + MINI_TH / 2, 2, 0, Math.PI * 2);
+          miniCtx.fill();
+        }
       }
     }
   }
@@ -272,7 +338,7 @@ function renderMinimap(sc) {
   miniCtx.strokeRect(0, 0, w, h);
 }
 
-/** @type {{ type: 'text'|'prompt', op: number, text: string, showSpace: boolean, resolve: Function, sprite?: object } | null} */
+/** @type {{ type: 'text'|'prompt', layoutOp: number, vmOp: number | null, text: string, showSpace: boolean, resolve: Function, sprite?: object } | null} */
 let uiState = null;
 
 function drawUI() {
@@ -287,7 +353,8 @@ function drawUI() {
     /* Narrative modal — lower console band rows 17..23 (EventTextView / doc 44),
      * NOT centered on the 208×120 viewport. */
     drawNarrativePanel(uiCtx, {
-      op: uiState.op,
+      op: uiState.layoutOp,
+      vmOp: uiState.vmOp,
       text: uiState.text,
       showSpace: uiState.type === "text" && uiState.showSpace,
     });
@@ -301,12 +368,52 @@ function updateUI() {
   }
 }
 
-function waitForSpace(text, sprite = null, op = null) {
+function animNeedsRedraw() {
+  if (!maps) return false;
+  const sc = maps.screens[state.screen];
+  const tp = torchPhase();
+  if (!sc.outdoor && tp !== lastAnimTorchPhase) return true;
+  if (uiState?.sprite) {
+    const key = `${uiState.sprite.sheet}:${resolveAnmFrame(uiState.sprite.sheet, Number(uiState.sprite.frame) || 0)}`;
+    if (key !== lastAnimSpriteKey) return true;
+  }
+  return false;
+}
+
+function syncAnimCache() {
+  if (!maps) return;
+  const sc = maps.screens[state.screen];
+  lastAnimTorchPhase = sc.outdoor ? -1 : torchPhase();
+  if (uiState?.sprite) {
+    lastAnimSpriteKey = `${uiState.sprite.sheet}:${resolveAnmFrame(
+      uiState.sprite.sheet,
+      Number(uiState.sprite.frame) || 0
+    )}`;
+  } else {
+    lastAnimSpriteKey = "";
+  }
+}
+
+function startAnimLoop() {
+  if (animRafId) return;
+  const loop = () => {
+    animTick++;
+    if (animNeedsRedraw()) {
+      syncAnimCache();
+      draw();
+    }
+    animRafId = requestAnimationFrame(loop);
+  };
+  animRafId = requestAnimationFrame(loop);
+}
+
+function waitForSpace(text, sprite = null, vmOp = null) {
   const resolved = resolveEventText(text);
   return new Promise(resolve => {
     uiState = {
       type: "text",
-      op: op ?? inferNarrativeOp(resolved),
+      layoutOp: resolveNarrativeLayoutOp(resolved, vmOp),
+      vmOp,
       text: resolved,
       showSpace: true,
       resolve,
@@ -317,12 +424,43 @@ function waitForSpace(text, sprite = null, op = null) {
   });
 }
 
-function promptYesNo(text, sprite = null, op = null) {
+function promptCombatResult(enc) {
+  const text = `${enc.heading}!\n\nPress V = victory (set combat latch)\nPress N = flee (abort script)`;
+  return new Promise((resolve) => {
+    uiState = {
+      type: "prompt",
+      layoutOp: 0x02,
+      vmOp: 0x12,
+      text,
+      showSpace: false,
+      resolve: (v) => resolve(v),
+      combatPrompt: true,
+    };
+    draw();
+    updateUI();
+  });
+}
+
+function syncPartyEditorsFromSession() {
+  if (editGoldEl) editGoldEl.value = String(session.gold);
+  if (editDayEl) editDayEl.value = String(session.day);
+  if (partyStateEl) partyStateEl.textContent = formatSessionPartyPanel(session, manifest);
+}
+
+function applyPartyEditorsToSession() {
+  if (editGoldEl) session.gold = Math.max(0, parseInt(editGoldEl.value, 10) || 0);
+  if (editDayEl) session.day = Math.max(1, parseInt(editDayEl.value, 10) || 1);
+  syncPartyEditorsFromSession();
+  draw();
+}
+
+function promptYesNo(text, sprite = null, vmOp = null) {
   const resolved = resolveEventText(text);
   return new Promise(resolve => {
     uiState = {
       type: "prompt",
-      op: op ?? inferNarrativeOp(resolved),
+      layoutOp: resolveNarrativeLayoutOp(resolved, vmOp),
+      vmOp,
       text: resolved,
       showSpace: false,
       resolve,
@@ -344,6 +482,25 @@ function handleUIKey(ev) {
     return true;
   }
   if (uiState.type === "prompt") {
+    if (uiState.combatPrompt) {
+      if (ev.key.toLowerCase() === "v") {
+        const resolve = uiState.resolve;
+        uiState = null;
+        uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+        resolve(true);
+        draw();
+        return true;
+      }
+      if (ev.key.toLowerCase() === "n" || ev.code === "Space" || ev.key === "Escape") {
+        const resolve = uiState.resolve;
+        uiState = null;
+        uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+        resolve(false);
+        draw();
+        return true;
+      }
+      return true;
+    }
     if (ev.key.toLowerCase() === "y") {
       const resolve = uiState.resolve;
       uiState = null;
@@ -394,7 +551,7 @@ function draw() {
   } else {
     const grid = new StitchedVisual(maps.screens, state.screen);
     const scene = buildIndoorScene(grid, state.x, state.y, state.facing);
-    renderIndoorView(viewCtx, sc, scene);
+    renderIndoorView(viewCtx, sc, scene, torchPhase());
     locMode.textContent = `${sc.env} interior`;
   }
 
@@ -406,7 +563,8 @@ function draw() {
 
   /* OP_0B / encounter sprites over the 3D hood while narrative text sits in the lower band. */
   if (uiState?.sprite) {
-    const img = spriteImg(uiState.sprite.sheet, uiState.sprite.frame);
+    const frame = resolveAnmFrame(uiState.sprite.sheet, Number(uiState.sprite.frame) || 0);
+    const img = spriteImg(uiState.sprite.sheet, frame);
     if (img) {
       const sx = 8 + Math.floor((208 - img.width) / 2);
       const sy = 8 + Math.floor((120 - img.height) / 2);
@@ -430,9 +588,9 @@ function draw() {
   // Update events sidebar + standing-tile event hint
   let eventText = "No events.";
   let standingEventHint = null;
+  const pos = (state.y << 4) | state.x;
+  const tileEvents = [];
   if (sc.events) {
-    const pos = (state.y << 4) | state.x;
-    const tileEvents = [];
     for (const [evtId, evtData] of Object.entries(sc.events)) {
       for (const trig of evtData.triggers) {
         if (trig.pos === pos) {
@@ -444,7 +602,8 @@ function draw() {
       eventText = tileEvents.map(e => {
         const flagStr = `0x${e.flags.toString(16).padStart(2, '0').toUpperCase()}`;
         const title = `--- ${eventTitleForEvent(e.data)} — Event ${e.id} (cond: ${flagStr}) ---`;
-        return `${title}\n${e.data.script.join('\n')}`;
+        const flow = formatEventScriptFlow(e.data, manifest, lastVmTrace);
+        return `${title}\n${flow}`;
       }).join('\n\n');
       for (const e of tileEvents) {
         if (!triggerMatchesFacing(e.flags, state.facing)) continue;
@@ -453,7 +612,30 @@ function draw() {
       }
     }
   }
+  if (tileEvents.length === 0) {
+    const ambientMsg = formatAmbientStepMessage(sc);
+    if (ambientMsg && isAmbientStepTile(sc, pos)) {
+      eventText = ambientMsg;
+      if (!standingEventHint) standingEventHint = "Ambient random encounter";
+    } else if (ambientMsg && collisionAmbientPositions(sc).has(pos)) {
+      eventText = `${ambientMsg}\n(collision event flag, no script)`;
+      if (!standingEventHint) standingEventHint = "Ambient random encounter";
+    }
+  }
   eventScriptEl.textContent = eventText;
+  if (lastVmCond != null && !isEventRunning) {
+    eventScriptEl.textContent = `${eventText}\n\n--- VM ---\nlast cond=${lastVmCond}`;
+  }
+  if (lastEventNotes.length && !uiState && !isEventRunning) {
+    const noteBlock = lastEventNotes.map(n => `[walker] ${n}`).join("\n");
+    const base = eventScriptEl.textContent;
+    if (base !== "No events.") {
+      eventScriptEl.textContent = `${base}\n\n--- last run ---\n${noteBlock}`;
+    } else if (noteBlock) {
+      eventScriptEl.textContent = `--- last run ---\n${noteBlock}`;
+    }
+  }
+  syncPartyEditorsFromSession();
   if (standingEventHint && !uiState && !isEventRunning) {
     statusEl.textContent = `${standingEventHint} at ${tileLabel(state.x, state.y)} — step or turn to trigger`;
   }
@@ -477,6 +659,7 @@ function applyMove(next) {
   state.x = next.x;
   state.y = next.y;
   viewportOverlay = null;
+  lastEventNotes = [];
   screenSelect.value = String(state.screen);
   statusEl.textContent = crossed
     ? `Entered screen ${next.screen} — ${maps.screens[next.screen].name}`
@@ -514,120 +697,65 @@ function jumpEntry() {
 let isEventRunning = false;
 /** @type {import('./ui.js').ViewportOverlay} */
 let viewportOverlay = null;
+/** @type {string[]} */
+let lastEventNotes = [];
 
 async function runEvent(evtData, strings) {
   isEventRunning = true;
-  let lastSignSprite = null;
+  lastVmTrace = [];
   try {
-    for (const node of evtData.nodes) {
-      if (node.op === -1) {
-        await waitForSpace(resolveEventText(node.text));
-        continue;
-      }
-      
-      const op = node.op;
-      const args = node.args;
-      
-      // OP_01 to OP_06: text ops — 04/05/06 are persistent viewport overlays
-      if (op >= 0x01 && op <= 0x06) {
-        const strIdx = args[0];
-        if (strIdx < strings.length) {
-          const text = resolveEventText(strings[strIdx]);
-          if (op === 0x04) {
-            viewportOverlay = { type: "door", text };
-          } else if (op === 0x05) {
-            viewportOverlay = { type: "wall", text };
-          } else if (op === 0x06) {
-            viewportOverlay = { type: "signpost", text };
-          } else if (op === 0x01 || op === 0x02 || op === 0x03) {
-            await waitForSpace(text, null, op);
-          } else {
-            await waitForSpace(text);
-          }
-          draw();
-        }
-      }
-      // OP_0C: Map transition
-      else if (op === 0x0C) {
-        const targetScreen = args[0];
-        const targetTile = args[1];
-        const ty = (targetTile >> 4) & 0xF;
-        const tx = targetTile & 0xF;
-        if (await promptYesNo(`Map transition to screen ${targetScreen}\nat (${tx}, ${ty}). Proceed?`)) {
-          state.screen = targetScreen;
-          state.x = tx;
-          state.y = ty;
-          screenSelect.value = String(state.screen);
-          draw();
-          checkEvents();
-          return;
-        }
-      }
-      // OP_0B: Signboard
-      else if (op === 0x0B) {
-        let sprite = null;
-        const m = node.pseudo.match(/\[(\d+)\.anm\]/);
-        if (m) {
-          sprite = { sheet: `${m[1]}_anm`, frame: "0" };
-        }
-        lastSignSprite = sprite;
-        await waitForSpace(node.pseudo, sprite);
-      }
-      // OP_0E: Exec selector — prefer preceding OP_0B sign sprite; fallback map
-      // matches in-game service ids (verified walker testing, doc 28 §2).
-      else if (op === 0x0E) {
-        const SELECTOR_SPRITES = {
-          0x01: "68_anm", // Inn
-          0x02: "67_anm", // Training
-          0x03: "63_anm", // Tavern
-          0x04: "66_anm", // Temple
-          0x05: "37_anm", // Mages Guild
-          0x06: "62_anm", // Blacksmith
-          0x07: null,     // General store (no default sprite)
-          0x08: null,     // Arena / special shop
-        };
-        const fallbackSheet = SELECTOR_SPRITES[args[0]];
-        const sprite = lastSignSprite
-          ?? (fallbackSheet ? { sheet: fallbackSheet, frame: "0" } : null);
-        lastSignSprite = null;
-        await waitForSpace(node.pseudo, sprite);
-      }
-    // OP_12, OP_13: Encounter
-    else if (op === 0x12 || op === 0x13) {
-      let sprite = null;
-      let mNames = [];
-      for (let i = 0; i < 10; i++) {
-        const mId = args[i];
-        if (mId > 0 && mId < 256 && manifest.monsters) {
-          const mDef = manifest.monsters.find(m => m.index === mId);
-          if (mDef) {
-            mNames.push(mDef.name);
-            if (!sprite && mDef.sprite) {
-              const sheetKey = `${String(mDef.sprite).padStart(2, '0')}_anm`;
-              sprite = { sheet: sheetKey, frame: "0" };
-            }
-          }
-        }
-      }
-      
-      const nameCounts = {};
-      for (const name of mNames) {
-        nameCounts[name] = (nameCounts[name] || 0) + 1;
-      }
-      
-      const nameList = Object.entries(nameCounts)
-        .map(([name, count]) => count > 1 ? `${count} ${name}` : name)
-        .join('\n');
-        
-      const heading = op === 0x13 ? "Random encounter" : "Fixed encounter";
-      const text = mNames.length > 0 ? `${heading}:\n${nameList}` : `${heading}!`;
-      await waitForSpace(text, sprite);
+    const result = await runEventScript({
+      evtData,
+      strings,
+      screenId: state.screen,
+      tileX: state.x,
+      tileY: state.y,
+      manifest,
+      maps,
+      session,
+      resolveEventText,
+      waitForSpace,
+      promptYesNo,
+      promptCombatResult,
+      onDraw: () => draw(),
+      onSessionChange: () => syncPartyEditorsFromSession(),
+      onVmStep: ({ trace, cond }) => {
+        lastVmTrace = trace;
+        lastVmCond = cond;
+        draw();
+      },
+      onViewportOverlay: (overlay) => {
+        viewportOverlay = overlay;
+        draw();
+      },
+      onTeleport: (dest, tx, ty) => {
+        state.screen = dest;
+        state.x = tx;
+        state.y = ty;
+        viewportOverlay = null;
+        session.combatVictory = false;
+        screenSelect.value = String(state.screen);
+        statusEl.textContent = `Entered ${maps.screens[dest]?.name ?? `screen ${dest}`}`;
+        draw();
+      },
+      onPatchTile: (ty, tx, visual, collision) => {
+        const sc = maps.screens[state.screen];
+        if (!sc) return;
+        const idx = (ty << 4) | tx;
+        if (visual != null && sc.visual) sc.visual[idx] = visual;
+        if (collision != null && sc.collision) sc.collision[idx] = collision;
+      },
+    });
+    lastEventNotes = result.notes;
+    lastVmTrace = result.trace ?? lastVmTrace;
+    lastVmCond = session.cond;
+    syncPartyEditorsFromSession();
+    if (result.teleported) {
+      checkEvents();
+    } else if (result.notes.length) {
+      statusEl.textContent = result.notes[result.notes.length - 1];
     }
-      // OP_2A: Treasure
-      else if (op === 0x2A) {
-        await waitForSpace(`Treasure!`, { sheet: "70_anm", frame: "0" });
-      }
-    }
+    draw();
   } finally {
     isEventRunning = false;
   }
@@ -674,10 +802,13 @@ function bindControls() {
       const resolve = uiState.resolve;
       uiState = null;
       uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
-      resolve(x < rect.width / 2); // Left half = Yes, Right half = No
+      resolve(x < rect.width / 2);
       draw();
     }
   });
+
+  if (editGoldEl) editGoldEl.addEventListener("change", applyPartyEditorsToSession);
+  if (editDayEl) editDayEl.addEventListener("change", applyPartyEditorsToSession);
 
   miniCanvas.addEventListener("click", (ev) => {
     if (uiState) return;
@@ -772,7 +903,10 @@ async function init() {
   }
 
   state.screen = 0;
+  syncPartyEditorsFromSession();
   jumpEntry();
+  syncAnimCache();
+  startAnimLoop();
   statusEl.textContent = "W/↑ forward · S/↓ back · A/D turn · like view3d_indoor.py";
 }
 
