@@ -75,7 +75,7 @@ npm run dev
 | `wiki/scripts/export-wiki-diagrams.py` | PNG flowcharts → `gh-wiki/images/diagrams/` |
 | `wiki/wiki_enrichments.py` | Per-page nav, TOC, diagrams, See also footers |
 | `tools/mm2_gfx_export.py` | Core sprite decoder/exporter |
-| `tools/export_map_walker.py` | Export `maps.json` for the HTML map walker |
+| `tools/export_map_walker.py` | Export `walker-bundle.js` for the HTML map walker |
 
 ---
 
@@ -88,16 +88,19 @@ sprites, sky/floor backdrops, cartography minimap).
 **https://vairn.github.io/MM2/maze-walker/**
 
 ```powershell
-python tools/export_map_walker.py   # writes wiki/maze-walker/walker-bundle.js (~550 KiB)
+python tools/export_map_walker.py   # writes wiki/maze-walker/walker-bundle.js (~3.3 MiB)
 cd wiki/maze-walker
 python -m http.server 8080
 # http://localhost:8080/
 ```
 
-The bundle embeds all 60 map screens plus `.32` sprite frames as base64 — commit
+The bundle embeds all 60 map screens plus `.32`/`.anm` sprite frames as base64 — commit
 `walker-bundle.js` and Pages works with no game data on CI. Requires local
-`map.dat` **and** `attrib.dat` (roof/ceiling mask bytes +0x20..+0x3F, env, neighbours).
-Use `--split` for loose PNG debugging only.
+`map.dat`, `attrib.dat` (env, neighbours, roof/ceiling mask +0x20..+0x3F, per-screen
+encounter rates +0x09..+0x0D), and `event.dat` (decoded scripts for the minimap/sidebar).
+Minimap legend includes ambient random-encounter zones (attrib step rate on cavern/dungeon
+tiles) and collision `0x80` tiles without an `event.dat` script. Use `--split` for loose
+PNG debugging only.
 
 Controls match the Python/C++ viewers: **W/↑** step forward, **S/↓** back,
 **A/←** turn left, **D/→** turn right.

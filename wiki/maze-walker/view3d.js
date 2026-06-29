@@ -53,7 +53,7 @@ function movementToCollisionDir(facing) {
 }
 
 /** Block step using map.dat page 1; outdoor impassable terrain uses page-0 high bits. */
-export function movementBlocked(sc, x, y, facing) {
+export function movementBlocked(sc, x, y, facing, terrainLookup = null) {
   const d = facing & 3;
   const cd = movementToCollisionDir(d);
   const col = sc.collision;
@@ -67,7 +67,16 @@ export function movementBlocked(sc, x, y, facing) {
   if (collisionFieldWall(col[destIdx], back)) return true;
   if (sc.outdoor) {
     const destV = sc.visual[destIdx];
-    if ((destV & 0x60) === 0x60 || (destV & 0x80) !== 0) return true;
+    if (terrainLookup) {
+      const id = destV & 0x1f;
+      const tClass = terrainLookup[id];
+      // 1=mountain, 3=solid trees
+      if (tClass === 1 || tClass === 3) return true;
+      // 4=deep water, swamp, snow, desert, etc. Only block deep water (ID 10).
+      if (tClass === 4 && id === 10) return true;
+    } else {
+      if ((destV & 0x60) === 0x60 || (destV & 0x80) !== 0) return true;
+    }
   }
   return false;
 }
@@ -321,9 +330,9 @@ export function buildIndoorScene(grid, x, y, facing) {
   return { hood, slots, blits: collectBlits(slots) };
 }
 
-export function stepParty(facing, x, y, screen, screens) {
+export function stepParty(facing, x, y, screen, screens, terrainLookup = null, noclip = false) {
   const rec = screens[screen];
-  if (movementBlocked(rec, x, y, facing)) {
+  if (!noclip && movementBlocked(rec, x, y, facing, terrainLookup)) {
     return { screen, x, y };
   }
   x += STEP_DX[facing & 3];
@@ -390,24 +399,49 @@ export function tileLabel(x, y) {
   return `${String.fromCharCode(97 + x)}${y + 1}`;
 }
 
-export function torchBlitFor(wb) {
-  if (wb.code !== 3 || wb.depth > 2) return null;
+/** key_read_3d @0x1E9CE: torch frame += phase from A4-$667A (0..2, wraps at 3). */
+export const TORCH_PHASE_COUNT = 3;
+
+export function torchBlitFor(wb, phase = 0) {
+  /* map.dat page-0 field 2 = wall+torch (not door=3). */
+  if (wb.code !== 2 || wb.depth > 2) return null;
+  const flicker = ((phase % TORCH_PHASE_COUNT) + TORCH_PHASE_COUNT) % TORCH_PHASE_COUNT;
   if (wb.kind === "front") {
-    return { frame: 0x12 + wb.depth * 3, x: [105, 108, 107][wb.depth], y: [44, 52, 60][wb.depth] };
+    return {
+      frame: 0x12 + wb.depth * 3 + flicker,
+      x: [105, 108, 107][wb.depth],
+      y: [44, 52, 60][wb.depth],
+    };
   }
   if (wb.kind === "left") {
     if ([12, 14, 2, 3].includes(wb.frame)) {
       if (wb.depth === 0) return null;
-      return { frame: 0x12 + wb.depth * 3, x: [8, 16, 64][wb.depth], y: [44, 52, 60][wb.depth] };
+      return {
+        frame: 0x12 + wb.depth * 3 + flicker,
+        x: [8, 16, 64][wb.depth],
+        y: [44, 52, 60][wb.depth],
+      };
     }
-    return { frame: wb.depth * 3, x: [8, 43, 73][wb.depth], y: [49, 55, 59][wb.depth] };
+    return {
+      frame: wb.depth * 3 + flicker,
+      x: [8, 43, 73][wb.depth],
+      y: [49, 55, 59][wb.depth],
+    };
   }
   if (wb.kind === "right") {
     if ([13, 15, 2, 3].includes(wb.frame)) {
       if (wb.depth === 0) return null;
-      return { frame: 0x12 + wb.depth * 3, x: [202, 199, 152][wb.depth], y: [44, 52, 60][wb.depth] };
+      return {
+        frame: 0x12 + wb.depth * 3 + flicker,
+        x: [202, 199, 152][wb.depth],
+        y: [44, 52, 60][wb.depth],
+      };
     }
-    return { frame: 9 + wb.depth * 3, x: [196, 166, 142][wb.depth], y: [49, 55, 59][wb.depth] };
+    return {
+      frame: 9 + wb.depth * 3 + flicker,
+      x: [196, 166, 142][wb.depth],
+      y: [49, 55, 59][wb.depth],
+    };
   }
   return null;
 }
