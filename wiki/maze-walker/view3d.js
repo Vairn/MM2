@@ -158,7 +158,8 @@ export function buildFrustum(hood, f) {
   }
 
   function norm(a, bb) {
-    if (slots[a] !== 0 && slots[bb] === 2) slots[bb] = 1;
+    // Door (3) beside an open side → plain wall (1) @0x2B6A..0x2BBC.
+    if (slots[a] !== 0 && slots[bb] === 3) slots[bb] = 1;
   }
   norm(S_F20, S_F13);
   norm(S_F1C, S_F0F);
@@ -181,60 +182,71 @@ export function collectBlits(slots) {
   const leftBase = [12, 14, 2, 3];
   const rightBase = [13, 15, 2, 3];
   const blits = [];
+  /** Populated at paint time for field===2 only (ASM -$4F62/-$4F76/-$4F8A). */
+  const torchBlits = [];
 
   function paint(kind, paintDepth, code) {
     if (code === 0) return;
     const depth = (paintDepth & 0x7f) - 1;
     if (depth < 0 || depth >= 4) return;
     const mirror = paintDepth >= 0x80;
-    const isDoor = code === 2;
+    const isTorchWall = code === 2;
+    let entry;
     if (kind === "front") {
-      blits.push({
+      entry = {
         kind,
         depth,
-        frame: depth + (isDoor ? 0x10 : 0),
+        frame: depth + (isTorchWall ? 0x10 : 0),
         x: frontX[depth],
         y: frontY[depth] + (depth === 0 ? 1 : 0),
         code,
-      });
+      };
     } else if (kind === "left") {
       if (mirror) {
-        blits.push({
+        entry = {
           kind,
           depth,
-          frame: leftBase[depth] + (isDoor ? 0x10 : 0),
+          mirror: true,
+          frame: leftBase[depth] + (isTorchWall ? 0x10 : 0),
           x: leftX2[depth],
           y: leftY2[depth],
           code,
-        });
+        };
       } else {
-        blits.push({
+        entry = {
           kind,
           depth,
-          frame: depth + 4 + (isDoor ? 0x10 : 0),
+          mirror: false,
+          frame: depth + 4 + (isTorchWall ? 0x10 : 0),
           x: leftX1[depth],
           y: leftY1[depth],
           code,
-        });
+        };
       }
     } else if (mirror) {
-      blits.push({
+      entry = {
         kind,
         depth,
-        frame: rightBase[depth] + (isDoor ? 0x10 : 0),
+        mirror: true,
+        frame: rightBase[depth] + (isTorchWall ? 0x10 : 0),
         x: rightX2[depth],
         y: rightY2[depth],
         code,
-      });
+      };
     } else {
-      blits.push({
+      entry = {
         kind,
         depth,
-        frame: depth + 8 + (isDoor ? 0x10 : 0),
+        mirror: false,
+        frame: depth + 8 + (isTorchWall ? 0x10 : 0),
         x: rightX1[depth],
         y: rightY1[depth],
         code,
-      });
+      };
+    }
+    blits.push(entry);
+    if (isTorchWall && depth <= 2) {
+      torchBlits.push(entry);
     }
   }
 
@@ -259,7 +271,7 @@ export function collectBlits(slots) {
   paint("right", 1, s[S_F1C]);
   paint("right", 0x81, s[S_F10]);
   paint("front", 1, s[S_F18]);
-  return blits;
+  return { blits, torchBlits };
 }
 
 /** Stitched page-0 sampler (view3d_indoor.StitchedVisual). */
@@ -327,7 +339,8 @@ export function refreshHood(grid, px, py, facing) {
 export function buildIndoorScene(grid, x, y, facing) {
   const hood = refreshHood(grid, x, y, facing);
   const slots = buildFrustum(hood, setFacing(facing));
-  return { hood, slots, blits: collectBlits(slots) };
+  const { blits, torchBlits } = collectBlits(slots);
+  return { hood, slots, blits, torchBlits };
 }
 
 export function stepParty(facing, x, y, screen, screens, terrainLookup = null, noclip = false) {
@@ -402,10 +415,18 @@ export function tileLabel(x, y) {
 /** key_read_3d @0x1E9CE: torch frame += phase from A4-$667A (0..2, wraps at 3). */
 export const TORCH_PHASE_COUNT = 3;
 
+const LEFT_FAR_FRAMES = [12, 14, 2, 3];
+const RIGHT_FAR_FRAMES = [13, 15, 2, 3];
+
+function wallBaseFrame(wb) {
+  return wb.code === 2 ? wb.frame - 0x10 : wb.frame;
+}
+
 export function torchBlitFor(wb, phase = 0) {
-  /* map.dat page-0 field 2 = wall+torch (not door=3). */
+  /* map.dat page-0 field 2 = wall+torch (not door=3). Caller passes torchBlits[] only. */
   if (wb.code !== 2 || wb.depth > 2) return null;
   const flicker = ((phase % TORCH_PHASE_COUNT) + TORCH_PHASE_COUNT) % TORCH_PHASE_COUNT;
+  const baseFrame = wallBaseFrame(wb);
   if (wb.kind === "front") {
     return {
       frame: 0x12 + wb.depth * 3 + flicker,
@@ -414,7 +435,7 @@ export function torchBlitFor(wb, phase = 0) {
     };
   }
   if (wb.kind === "left") {
-    if ([12, 14, 2, 3].includes(wb.frame)) {
+    if (wb.mirror || LEFT_FAR_FRAMES.includes(baseFrame)) {
       if (wb.depth === 0) return null;
       return {
         frame: 0x12 + wb.depth * 3 + flicker,
@@ -429,7 +450,7 @@ export function torchBlitFor(wb, phase = 0) {
     };
   }
   if (wb.kind === "right") {
-    if ([13, 15, 2, 3].includes(wb.frame)) {
+    if (wb.mirror || RIGHT_FAR_FRAMES.includes(baseFrame)) {
       if (wb.depth === 0) return null;
       return {
         frame: 0x12 + wb.depth * 3 + flicker,

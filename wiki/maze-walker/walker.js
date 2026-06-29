@@ -227,6 +227,9 @@ function renderIndoorView(ctx, sc, scene, phase) {
   blitTransparent(ctx, sheets.sky, String(skyFrame), ORIGIN_X, SKY_Y);
   for (const b of scene.blits) {
     blitTransparent(ctx, sheets.walls, String(b.frame), b.x, b.y);
+  }
+  for (const b of scene.torchBlits ?? []) {
+    if (b.code !== 2) continue;
     const tb = torchBlitFor(b, phase);
     if (tb) blitTransparent(ctx, sheets.torch, String(tb.frame), tb.x, tb.y);
   }
