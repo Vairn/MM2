@@ -71,7 +71,7 @@
 ```
 
 ```
-00: set_service_context(str[17] "All are content.", mode=0x00)
+00: service_sign(idx=0x11 -> sign 75 [75.anm], pos=0x00)
 01: show_text_block(str[2] ""There's no dungeon that I enjoy / killing in more than level two of / L")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)
@@ -133,7 +133,7 @@
 ```
 
 ```
-00: set_service_context(str[22] "*** Backpacks Full ***", mode=0x00)
+00: service_sign(idx=0x16 -> sign 56 [56.anm], pos=0x00)
 01: exec_selector(0xF9)
 ```
 

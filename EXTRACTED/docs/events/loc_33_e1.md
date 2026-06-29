@@ -79,7 +79,7 @@
 ```
 
 ```
-00: set_service_context(str[23], mode=0x00)
+00: service_sign(idx=0x17 -> sign 3 [3.anm], pos=0x00)
 01: show_text_block(str[1] "Surrounded by porous crags, Vulcania / swelters before you. Enter (y/n)?")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)

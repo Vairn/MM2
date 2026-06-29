@@ -4,6 +4,8 @@
 
 #include "mm2/DataPath.h"
 
+#include "mm2/gameplay/SpellBook.h"
+
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/PartyStatusFormat.h"
 #include "mm2/gfx/PlayScreenChrome.h"
@@ -18,6 +20,10 @@ namespace {
 
 using namespace mm2::ui::amiga_layout;
 using namespace mm2::gfx::play_layout;
+
+/* Food trade ($E3C6 @ 0xE444): a transfer is rejected if the target's food would
+   exceed 0x28 (40), the per-character food maximum. */
+constexpr int kSheetMaxFood = 0x28;
 
 static const char *kClassNames[] = {
     "Knight", "Paladin", "Archer", "Cleric", "Sorcerer", "Robber", "Ninja", "Barbarian",
@@ -188,7 +194,7 @@ void itemLabel(char *out, size_t cap, const Mm2ItemsFile *items, uint8_t item_id
 int firstEmptyEquip(const Mm2RosterRecord &rec)
 {
     for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
-        if (rec.equipped[i].item_id == 0) {
+        if (rec.equipped_id[i] == 0) {
             return i;
         }
     }
@@ -198,7 +204,7 @@ int firstEmptyEquip(const Mm2RosterRecord &rec)
 int firstEmptyBackpack(const Mm2RosterRecord &rec)
 {
     for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
-        if (rec.backpack[i].item_id == 0) {
+        if (rec.backpack_id[i] == 0) {
             return i;
         }
     }
@@ -269,6 +275,11 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
         return;
     }
 
+    if (session && session->sub_mode == SheetSubMode::SpellBook) {
+        renderSpellBook(c, roster, launch, party_slot);
+        return;
+    }
+
     const Mm2RosterRecord &rec = roster.records[roster_idx];
     const char disp_char = static_cast<char>('1' + party_slot);
 
@@ -329,16 +340,16 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
     for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
         const int row = kSheetEquipRowBase + i;
         char eline[24];
-        if (rec.equipped[i].item_id) {
-            itemLabel(iname, sizeof(iname), items, rec.equipped[i].item_id);
+        if (rec.equipped_id[i]) {
+            itemLabel(iname, sizeof(iname), items, rec.equipped_id[i]);
             std::snprintf(eline, sizeof(eline), "%d) %-10s", i + 1, iname);
         } else {
             std::snprintf(eline, sizeof(eline), "%d)", i + 1);
         }
         drawCellText(c, row, kSheetEquipCol, eline, 220, 220, 220);
 
-        if (rec.backpack[i].item_id) {
-            itemLabel(iname, sizeof(iname), items, rec.backpack[i].item_id);
+        if (rec.backpack_id[i]) {
+            itemLabel(iname, sizeof(iname), items, rec.backpack_id[i]);
             std::snprintf(eline, sizeof(eline), "%c) %-10s", kPackLetters[i], iname);
         } else {
             std::snprintf(eline, sizeof(eline), "%c)", kPackLetters[i]);
@@ -406,6 +417,96 @@ void InGameCharacterSheet::renderQuickRef(gfx::ScreenCompositor &c, const Mm2Ros
     drawModalEscFooter(c);
 }
 
+void InGameCharacterSheet::renderSpellBook(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
+                                           const Mm2PartyLaunch &launch, int party_slot) const
+{
+    gfx::drawPlayModalBackdrop(c);
+
+    const int roster_idx = rosterIndexForPartySlot(launch, party_slot);
+    if (roster_idx < 0 || roster_idx >= MM2_ROSTER_RECORD_COUNT) {
+        drawCellText(c, 2, 2, "No character selected.");
+        drawModalEscFooter(c);
+        return;
+    }
+
+    const Mm2RosterRecord &rec = roster.records[roster_idx];
+    const SpellSchool school = spellSchoolForClass(rec.class_id);
+
+    char name[16];
+    mm2_roster_name_to_cstr(&rec, name, sizeof(name));
+
+    char header[80];
+    std::snprintf(header, sizeof(header), "%c) %s -- Spell Book", static_cast<char>('1' + party_slot), name);
+    drawBorderIntegratedTextAt(c, kPlayOverlayBorderRow, kSheetHeaderCol, header);
+
+    /* Non-casters (Knight/Robber/Ninja/Barbarian) have no spell book. The retail
+       cast picker @ 0x65fa is only opened for caster classes. */
+    if (school == SpellSchool::None) {
+        drawCellText(c, kSheetStatRowBase + 2, kSheetStatColLeft, "This class has no spell book.", 220, 220, 220);
+        drawSheetEscFooter(c);
+        return;
+    }
+
+    const SpellMeta *table = schoolSpellTable(school);
+    char sub[40];
+    std::snprintf(sub, sizeof(sub), "School: %s    Known: %d/%d", schoolName(school),
+                  knownSpellCount(rec, school), kSpellsPerSchool);
+    drawCellText(c, kSheetStatRowBase - 1, kSheetStatColLeft, sub, 200, 200, 200);
+
+    /* Two columns of known spells, grouped (in flat school/level order). The
+       "Sn/m" tag carries school + level + number, so level grouping is implicit
+       in the ordering (matching the 0x65fa grid's level columns). */
+    constexpr int kListTopRow = kSheetStatRowBase + 1;
+    constexpr int kListBottomRow = 21;
+    constexpr int kColLeft = kSheetStatColLeft;   // 0x02
+    constexpr int kColRight = 0x14;               // 20
+    const int rows_per_col = kListBottomRow - kListTopRow + 1;
+    const int capacity = rows_per_col * 2;
+
+    int shown = 0;
+    int hidden = 0;
+    for (int n = 0; n < kSpellsPerSchool; ++n) {
+        if (!spellKnownInBook(rec, n)) {
+            continue;
+        }
+        if (shown >= capacity) {
+            ++hidden;
+            continue;
+        }
+        const SpellMeta &m = table[n];
+
+        char cost[12];
+        if (m.per_level) {
+            std::snprintf(cost, sizeof(cost), "%u/L", m.sp);
+        } else {
+            std::snprintf(cost, sizeof(cost), "%uSP", m.sp);
+        }
+        if (m.gems > 0) {
+            char gem[8];
+            std::snprintf(gem, sizeof(gem), "+%uG", m.gems);
+            std::strncat(cost, gem, sizeof(cost) - std::strlen(cost) - 1);
+        }
+
+        char line[24];
+        std::snprintf(line, sizeof(line), "%c%u/%u %-8.8s %s", schoolTag(school), m.level, m.number, m.name, cost);
+
+        const int col = (shown < rows_per_col) ? kColLeft : kColRight;
+        const int row = kListTopRow + (shown % rows_per_col);
+        drawCellText(c, row, col, line, 230, 230, 230);
+        ++shown;
+    }
+
+    if (shown == 0) {
+        drawCellText(c, kListTopRow + 1, kColLeft, "No spells learned yet.", 220, 220, 220);
+    } else if (hidden > 0) {
+        char more[32];
+        std::snprintf(more, sizeof(more), "...and %d more", hidden);
+        drawCellText(c, kListBottomRow, kColRight, more, 200, 200, 160);
+    }
+
+    drawSheetEscFooter(c);
+}
+
 SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session, Mm2RosterFile &roster,
                                                 const Mm2PartyLaunch &launch, const Mm2ItemsFile *items)
 {
@@ -418,7 +519,7 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         session.sub_mode = SheetSubMode::Normal;
         if (key >= 'A' && key <= 'F') {
             const int bp = key - 'A';
-            const Mm2RosterItemSlot &src = rec->backpack[bp];
+            const Mm2RosterItemSlot src = mm2_roster_backpack(rec, bp);
             if (src.item_id == 0) {
                 setStatus(session, "Empty slot.");
                 return SheetKeyOutcome::None;
@@ -433,10 +534,8 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
                 setStatus(session, "No empty equip slot.");
                 return SheetKeyOutcome::None;
             }
-            rec->equipped[eq] = src;
-            rec->backpack[bp].item_id = 0;
-            rec->backpack[bp].bonus = 0;
-            rec->backpack[bp].flags = 0;
+            mm2_roster_set_equipped(rec, eq, src);
+            mm2_roster_set_backpack(rec, bp, Mm2RosterItemSlot{});
             setStatus(session, "Equipped.");
             return SheetKeyOutcome::None;
         }
@@ -448,7 +547,7 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         session.sub_mode = SheetSubMode::Normal;
         if (key >= '1' && key <= '6') {
             const int eq = key - '1';
-            Mm2RosterItemSlot &src = rec->equipped[eq];
+            const Mm2RosterItemSlot src = mm2_roster_equipped(rec, eq);
             if (src.item_id == 0) {
                 setStatus(session, "Empty slot.");
                 return SheetKeyOutcome::None;
@@ -458,10 +557,8 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
                 setStatus(session, "Backpack full.");
                 return SheetKeyOutcome::None;
             }
-            rec->backpack[bp] = src;
-            src.item_id = 0;
-            src.bonus = 0;
-            src.flags = 0;
+            mm2_roster_set_backpack(rec, bp, src);
+            mm2_roster_set_equipped(rec, eq, Mm2RosterItemSlot{});
             setStatus(session, "Removed.");
             return SheetKeyOutcome::None;
         }
@@ -473,24 +570,20 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         session.sub_mode = SheetSubMode::Normal;
         if (key >= '1' && key <= '6') {
             const int eq = key - '1';
-            if (rec->equipped[eq].item_id == 0) {
+            if (rec->equipped_id[eq] == 0) {
                 setStatus(session, "Empty slot.");
             } else {
-                rec->equipped[eq].item_id = 0;
-                rec->equipped[eq].bonus = 0;
-                rec->equipped[eq].flags = 0;
+                mm2_roster_set_equipped(rec, eq, Mm2RosterItemSlot{});
                 setStatus(session, "Dropped.");
             }
             return SheetKeyOutcome::None;
         }
         if (key >= 'A' && key <= 'F') {
             const int bp = key - 'A';
-            if (rec->backpack[bp].item_id == 0) {
+            if (rec->backpack_id[bp] == 0) {
                 setStatus(session, "Empty slot.");
             } else {
-                rec->backpack[bp].item_id = 0;
-                rec->backpack[bp].bonus = 0;
-                rec->backpack[bp].flags = 0;
+                mm2_roster_set_backpack(rec, bp, Mm2RosterItemSlot{});
                 setStatus(session, "Dropped.");
             }
             return SheetKeyOutcome::None;
@@ -499,26 +592,186 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         return SheetKeyOutcome::None;
     }
 
-    if (session.sub_mode == SheetSubMode::CastPicker) {
+    /* Spell-book view (cast picker grid @ 0x65fa). The grid is a read-only view of
+       the known spells; cast execution ($CD90 / LAB_CDB8 after the 0x79C6 picker)
+       is a documented GAP. Swallow non-ESC keys so the book stays open (ESC is
+       consumed upstream and returns to the sheet). */
+    if (session.sub_mode == SheetSubMode::SpellBook) {
+        return SheetKeyOutcome::None;
+    }
+
+    /* Gather ($8050): '1' pools all party gold ($7F68), '2' pools gems ($7FF8) into
+       the current character. Each member's amount is summed then zeroed, total -> rec. */
+    if (session.sub_mode == SheetSubMode::GatherPick) {
         session.sub_mode = SheetSubMode::Normal;
-        /* GAP: spell execution via $CD90 / LAB_CDB8 after 0x79C6 picker. */
-        setStatus(session, "Cast execution not yet wired.");
+        if (key == '1') {
+            uint32_t total = 0;
+            for (int i = 0; i < launch.party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                Mm2RosterRecord *m = rosterMut(roster, launch, i);
+                if (!m) {
+                    continue;
+                }
+                total += m->gold;
+                m->gold = 0;
+            }
+            rec->gold = total;
+            setStatus(session, "Gold gathered.");
+            return SheetKeyOutcome::None;
+        }
+        if (key == '2') {
+            uint32_t total = 0;
+            for (int i = 0; i < launch.party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                Mm2RosterRecord *m = rosterMut(roster, launch, i);
+                if (!m) {
+                    continue;
+                }
+                total += m->gems;
+                m->gems = 0;
+            }
+            rec->gems = static_cast<uint16_t>(total);
+            setStatus(session, "Gems gathered.");
+            return SheetKeyOutcome::None;
+        }
+        setStatus(session, "");
+        return SheetKeyOutcome::None;
+    }
+
+    /* Trade ($E61C): pick type then a target member. The retail menu prompts keys
+       '1'..'4' (prompt range $31..$34 @ 0xE678): '1' gold ($E2D0, rec +$66 u32),
+       '2' gems ($E35A, +$5C u16), '3' food ($E3C6, +$25 u8), '4' item ($E492, moves
+       one backpack slot id/charges/flags @ +$3A/+$40/+$46). Retail prompts for an
+       amount on gold/gems/food; the single-key port moves the full balance. */
+    if (session.sub_mode == SheetSubMode::TradePickType) {
+        if (key == '1') {
+            session.trade_kind = SheetTradeKind::Gold;
+            session.sub_mode = SheetSubMode::TradePickTarget;
+            setStatus(session, "Trade gold to which? (1-8)");
+            return SheetKeyOutcome::None;
+        }
+        if (key == '2') {
+            session.trade_kind = SheetTradeKind::Gems;
+            session.sub_mode = SheetSubMode::TradePickTarget;
+            setStatus(session, "Trade gems to which? (1-8)");
+            return SheetKeyOutcome::None;
+        }
+        if (key == '3') {
+            session.trade_kind = SheetTradeKind::Food;
+            session.sub_mode = SheetSubMode::TradePickTarget;
+            setStatus(session, "Trade food to which? (1-8)");
+            return SheetKeyOutcome::None;
+        }
+        if (key == '4') {
+            session.trade_kind = SheetTradeKind::Items;
+            session.sub_mode = SheetSubMode::TradePickTarget;
+            setStatus(session, "Trade item to which? (1-8)");
+            return SheetKeyOutcome::None;
+        }
+        session.sub_mode = SheetSubMode::Normal;
+        session.trade_kind = SheetTradeKind::None;
+        setStatus(session, "");
+        return SheetKeyOutcome::None;
+    }
+
+    if (session.sub_mode == SheetSubMode::TradePickTarget) {
+        const SheetTradeKind kind = session.trade_kind;
+        if (key >= '1' && key <= '8') {
+            const int target_slot = key - '1';
+            if (target_slot == session.party_slot) {
+                session.sub_mode = SheetSubMode::Normal;
+                session.trade_kind = SheetTradeKind::None;
+                setStatus(session, "Same character.");
+                return SheetKeyOutcome::None;
+            }
+            Mm2RosterRecord *tgt = rosterMut(roster, launch, target_slot);
+            if (!tgt) {
+                session.sub_mode = SheetSubMode::Normal;
+                session.trade_kind = SheetTradeKind::None;
+                setStatus(session, "No such member.");
+                return SheetKeyOutcome::None;
+            }
+            if (kind == SheetTradeKind::Gold) {
+                tgt->gold += rec->gold;
+                rec->gold = 0;
+                setStatus(session, "Traded gold.");
+            } else if (kind == SheetTradeKind::Gems) {
+                tgt->gems = static_cast<uint16_t>(tgt->gems + rec->gems);
+                rec->gems = 0;
+                setStatus(session, "Traded gems.");
+            } else if (kind == SheetTradeKind::Food) {
+                /* $E3C6 rejects the transfer if the target would exceed kMaxFood. */
+                if (static_cast<int>(tgt->food) + static_cast<int>(rec->food) > kSheetMaxFood) {
+                    setStatus(session, "Too much food.");
+                } else {
+                    tgt->food = static_cast<uint8_t>(tgt->food + rec->food);
+                    rec->food = 0;
+                    setStatus(session, "Traded food.");
+                }
+            } else if (kind == SheetTradeKind::Items) {
+                /* $E492 prompts for the source backpack letter AFTER the target is
+                   chosen; defer to the backpack-letter sub-mode. */
+                session.trade_target_slot = target_slot;
+                session.sub_mode = SheetSubMode::TradePickItemSlot;
+                setStatus(session, "Trade which pack item? (A-F)");
+                return SheetKeyOutcome::None;
+            }
+            session.sub_mode = SheetSubMode::Normal;
+            session.trade_kind = SheetTradeKind::None;
+            return SheetKeyOutcome::None;
+        }
+        session.sub_mode = SheetSubMode::Normal;
+        session.trade_kind = SheetTradeKind::None;
+        setStatus(session, "");
+        return SheetKeyOutcome::None;
+    }
+
+    /* Item trade backpack pick ($E492): A-F selects the source's backpack slot; the
+       item (id/charges/flags @ +$3A/+$40/+$46) moves to the target's first empty
+       backpack slot. Rejected if the source slot is empty or the target pack is full. */
+    if (session.sub_mode == SheetSubMode::TradePickItemSlot) {
+        const int target_slot = session.trade_target_slot;
+        session.sub_mode = SheetSubMode::Normal;
+        session.trade_kind = SheetTradeKind::None;
+        session.trade_target_slot = -1;
+        if (key >= 'A' && key <= 'F') {
+            const int bp = key - 'A';
+            Mm2RosterRecord *tgt = rosterMut(roster, launch, target_slot);
+            if (!tgt) {
+                setStatus(session, "No such member.");
+                return SheetKeyOutcome::None;
+            }
+            const Mm2RosterItemSlot src = mm2_roster_backpack(rec, bp);
+            if (src.item_id == 0) {
+                setStatus(session, "Empty slot.");
+                return SheetKeyOutcome::None;
+            }
+            const int dst = firstEmptyBackpack(*tgt);
+            if (dst < 0) {
+                setStatus(session, "Pack full.");
+                return SheetKeyOutcome::None;
+            }
+            mm2_roster_set_backpack(tgt, dst, src);
+            mm2_roster_set_backpack(rec, bp, Mm2RosterItemSlot{});
+            setStatus(session, "Traded item.");
+            return SheetKeyOutcome::None;
+        }
+        setStatus(session, "");
         return SheetKeyOutcome::None;
     }
 
     switch (key) {
-    case 'C':
-        if (rec->condition >= 0x80 || (rec->condition & 0x70) != 0) {
-            setStatus(session, "Cannot cast now.");
+    case 'C': {
+        /* 'C' (Cast) opens the spell-book grid (cast picker @ 0x65fa). Only caster
+           classes have a spell book; non-casters get the empty case. School and
+           known spells are derived from the roster record ($51..$56 bitfield). */
+        const SpellSchool school = spellSchoolForClass(rec->class_id);
+        if (school == SpellSchool::None) {
+            setStatus(session, "No spell book.");
             break;
         }
-        if (rec->spell_level == 0) {
-            setStatus(session, "Not a spell caster.");
-            break;
-        }
-        session.sub_mode = SheetSubMode::CastPicker;
-        setStatus(session, "Spell book (GAP $6E08) — ESC cancels.");
+        session.sub_mode = SheetSubMode::SpellBook;
+        setStatus(session, "");
         break;
+    }
     case 'D':
         session.sub_mode = SheetSubMode::DropPickSlot;
         setStatus(session, "Drop equip 1-6 or pack A-F:");
@@ -528,8 +781,8 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         setStatus(session, "Equip which? (A-F)");
         break;
     case 'G':
-        /* GAP: gather gold via $8050. */
-        setStatus(session, "Gather not yet wired ($8050).");
+        session.sub_mode = SheetSubMode::GatherPick;
+        setStatus(session, "Gather: 1) Gold  2) Gems");
         break;
     case 'R':
         session.sub_mode = SheetSubMode::RemovePickEquip;
@@ -540,8 +793,10 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         setStatus(session, "Share not yet wired ($7DCC).");
         break;
     case 'T':
-        /* GAP: trade via $E61C. */
-        setStatus(session, "Trade not yet wired ($E61C).");
+        session.sub_mode = SheetSubMode::TradePickType;
+        session.trade_kind = SheetTradeKind::None;
+        session.trade_target_slot = -1;
+        setStatus(session, "Trade: 1)Gold 2)Gems 3)Food 4)Item");
         break;
     case 'U':
         /* GAP: item use via $E94A / combat_use_item_handler 0x133EC. */

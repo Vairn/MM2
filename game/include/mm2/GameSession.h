@@ -2,6 +2,7 @@
 
 #include "mm2/GameState.h"
 
+#include "mm2/gameplay/ExploreActions.h"
 #include "mm2/gameplay/InGameCharacterSheet.h"
 #include "mm2/gameplay/InGameControlsScreen.h"
 #include "mm2/gameplay/PlaySessionInput.h"
@@ -15,6 +16,7 @@
 #include "mm2/events/EventRuntime.h"
 #include "mm2/events/ScriptedSceneEngine.h"
 #include "mm2/platform/Platform.h"
+#include "mm2/ui/PlayTownServiceUi.h"
 #include "mm2/world/MapWorld.h"
 
 #include "mm2_party_launch.h"
@@ -66,7 +68,7 @@ public:
     int currentScreenId() const { return world_.currentScreen(); }
 
 private:
-    enum class PlayOverlay : uint8_t { None, QuickRef, CharacterSheet, QuitConfirm, Controls, StatusMessage, Automap };
+    enum class PlayOverlay : uint8_t { None, QuickRef, CharacterSheet, QuitConfirm, Controls, StatusMessage, Automap, TownService, RestConfirm };
 
     static const char *townName(uint8_t town_filter);
 
@@ -85,6 +87,13 @@ private:
     void tickOverlayInput(const platform::KeyState &keys);
     void tickPlayInput(const platform::KeyState &keys);
     void handleExploreCommand(gameplay::PlaySessionAction action);
+    /* Bash door @ 0x9B48 / Unlock door @ 0x20CA2 — detect the wall field ahead
+     * and run the faithful Might / thievery rolls (gameplay::ExploreActions). */
+    void handleBashDoor();
+    void handleUnlockDoor();
+    /* Rest execution @ 0x19E20 -> 0x19AD6 (pay) / 0x19D64 (encounter) / 0x19B28
+     * (heal + 0x55-tick advance), run after the Y/N confirm overlay resolves. */
+    void executeRest();
     bool overlayBlocksInput() const;
     void tickEventInput(const platform::KeyState &keys);
     void tickOverlayAnimations();
@@ -94,6 +103,8 @@ private:
     void refreshEventsForScreen();
     void refreshWorldAfterEventTransition();
     void maybeQueueScriptedScenes(bool on_start);
+    /** Open the interactive town-service overlay when an OP_0E selector requested it. */
+    void maybeOpenTownServiceMenu();
     void showStatusMessage(const char *msg);
     void markDirty();
 #if MM2_HOST_AMIGA
@@ -126,6 +137,9 @@ private:
     PlayOverlay overlay_ = PlayOverlay::None;
     char status_message_[64] = {};
 
+    /* rng(min,max) source for Bash/Unlock/Rest rolls (0x22BC6 contract). */
+    gameplay::Rng rng_;
+
     gfx::PlayRightPanel right_panel_ = gfx::PlayRightPanel::Protect;
 
     static constexpr std::size_t kGsImageBytes = static_cast<std::size_t>(MM2_A4_ANCHOR) + 0x8000u;
@@ -136,8 +150,13 @@ private:
     events::EventRuntime events_;
     bool events_loaded_ = false;
 
+    ui::PlayTownServiceUi town_service_ui_;
+
     events::ScriptedSceneEngine scripted_scene_;
     bool scripted_loaded_ = false;
+    /* Port-side one-shot for the Corak new-game prologue scene scheduling (the
+     * classic intro is not a per-character quest bit). */
+    bool corak_intro_seen_ = false;
 
 #if MM2_HOST_AMIGA
     bool view3d_dirty_ = false;

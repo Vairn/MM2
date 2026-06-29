@@ -53,7 +53,7 @@ function movementToCollisionDir(facing) {
 }
 
 /** Block step using map.dat page 1; outdoor impassable terrain uses page-0 high bits. */
-export function movementBlocked(sc, x, y, facing) {
+export function movementBlocked(sc, x, y, facing, terrainLookup = null) {
   const d = facing & 3;
   const cd = movementToCollisionDir(d);
   const col = sc.collision;
@@ -67,7 +67,16 @@ export function movementBlocked(sc, x, y, facing) {
   if (collisionFieldWall(col[destIdx], back)) return true;
   if (sc.outdoor) {
     const destV = sc.visual[destIdx];
-    if ((destV & 0x60) === 0x60 || (destV & 0x80) !== 0) return true;
+    if (terrainLookup) {
+      const id = destV & 0x1f;
+      const tClass = terrainLookup[id];
+      // 1=mountain, 3=solid trees
+      if (tClass === 1 || tClass === 3) return true;
+      // 4=deep water, swamp, snow, desert, etc. Only block deep water (ID 10).
+      if (tClass === 4 && id === 10) return true;
+    } else {
+      if ((destV & 0x60) === 0x60 || (destV & 0x80) !== 0) return true;
+    }
   }
   return false;
 }
@@ -321,9 +330,9 @@ export function buildIndoorScene(grid, x, y, facing) {
   return { hood, slots, blits: collectBlits(slots) };
 }
 
-export function stepParty(facing, x, y, screen, screens) {
+export function stepParty(facing, x, y, screen, screens, terrainLookup = null, noclip = false) {
   const rec = screens[screen];
-  if (movementBlocked(rec, x, y, facing)) {
+  if (!noclip && movementBlocked(rec, x, y, facing, terrainLookup)) {
     return { screen, x, y };
   }
   x += STEP_DX[facing & 3];

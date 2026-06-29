@@ -476,7 +476,7 @@ void EventSection::drawGraph(App& app, EventLocation& loc) {
                         ImNodes::BeginStaticAttribute(kStaticAttr(evt, oi));
 
                     ImGui::PushID(oi);
-                    std::string desc = describeOp(op.op, live, strAt, itemAt);
+                    std::string desc = describeOp(op.op, live, strAt, itemAt, loc.id);
                     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 420.0f);
                     ImGui::Text("%02d: %s", oi, desc.c_str());
                     ImGui::PopTextWrapPos();

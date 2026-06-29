@@ -22,16 +22,19 @@ void RosterRecord::setName(const std::string& s) {
     }
 }
 
+// On-disk layout is Structure-of-Arrays: id run, then charges run, then flags
+// run (each kRosterItemSlots long). `base` points at the id run (kEquipped /
+// kBackpack); the charges/flags runs follow at +6 / +12.
 RosterItemSlot RosterRecord::slot(int base, int idx) const {
-    const uint8_t* p = raw.data() + base + idx * 3;
-    return RosterItemSlot{p[0], p[1], p[2]};
+    const uint8_t* p = raw.data() + base + idx;
+    return RosterItemSlot{p[0], p[roster_off::kItemChargesRun], p[2 * roster_off::kItemChargesRun]};
 }
 
 void RosterRecord::setSlot(int base, int idx, const RosterItemSlot& s) {
-    uint8_t* p = raw.data() + base + idx * 3;
+    uint8_t* p = raw.data() + base + idx;
     p[0] = s.itemId;
-    p[1] = s.bonus;
-    p[2] = s.flags;
+    p[roster_off::kItemChargesRun] = s.charges;
+    p[2 * roster_off::kItemChargesRun] = s.flags;
 }
 
 bool RosterRecord::isEmpty() const {

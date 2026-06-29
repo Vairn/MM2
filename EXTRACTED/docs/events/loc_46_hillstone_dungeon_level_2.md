@@ -123,7 +123,7 @@
 ```
 
 ```
-00: set_service_context(str[21], mode=0x00)
+00: service_sign(idx=0x15 -> sign 60 [60.anm], pos=0x00)
 01: show_text_block(str[5] ""I can lead you to level two of / Woodhaven Dungeon if you want." / Foll")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)

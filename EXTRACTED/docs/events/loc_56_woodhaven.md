@@ -229,7 +229,7 @@
 ```
 
 ```
-00: set_service_context(str[14] "Guard Tower", mode=0x00)
+00: service_sign(idx=0x0E -> sign 49 [49.anm], pos=0x00)
 01: cond = load_cond_from_var(0x04)
 02: if not cond: skip_tokens(1)
     # skip -> show_text_block(str[20] "Lord Hoardall proclaims, "Only a / Crusader can help me with my never / ")
@@ -318,7 +318,7 @@
 ```
 
 ```
-00: set_service_context(str[1] "No Entry", mode=0x00)
+00: service_sign(idx=0x01 -> sign 1 [1.anm], pos=0x00)
 01: show_text_basic(str[15] "Take castle treasure (y/n)?")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(5)
@@ -338,7 +338,7 @@
 ```
 
 ```
-00: set_service_context(str[1] "No Entry", mode=0x00)
+00: service_sign(idx=0x01 -> sign 1 [1.anm], pos=0x00)
 01: show_text_basic(str[15] "Take castle treasure (y/n)?")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(5)
@@ -375,7 +375,7 @@
 ```
 
 ```
-00: set_service_context(str[5] "Grand Hall", mode=0x00)
+00: service_sign(idx=0x05 -> sign 72 [72.anm], pos=0x00)
 01: exec_selector(0xF7)
 ```
 
@@ -481,7 +481,7 @@
 ```
 
 ```
-00: set_service_context(str[13] "After removing the object and cleaning / it off, you notice the inscript", mode=0x00)
+00: service_sign(idx=0x0D -> sign 5 [5.anm], pos=0x00)
 01: show_text_basic(str[10] "Here's the joke of the day:")
 02: exec_selector(0xE2)  # special_226
 ```

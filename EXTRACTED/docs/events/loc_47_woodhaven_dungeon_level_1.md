@@ -148,7 +148,7 @@
 ```
 
 ```
-00: set_service_context(str[3] "You have found a Sapphire Pin!", mode=0x00)
+00: service_sign(idx=0x03 -> sign 44 [44.anm], pos=0x00)
 01: show_text_block(str[8] ""There's a secret passage to / Pinehurst Dungeon here. If you / haven't ")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)

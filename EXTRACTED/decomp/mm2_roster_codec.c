@@ -33,26 +33,21 @@ static void write_le32(uint8_t *p, uint32_t v)
     p[3] = (uint8_t)((v >> 24) & 0xFF);
 }
 
-static void decode_item_slots(const uint8_t *src, Mm2RosterItemSlot *dst)
+/* Items 0x28..0x4B are Structure-of-Arrays on disk: a 6-byte id run, then a
+ * 6-byte charges run, then a 6-byte flags run, for equipped then backpack.
+ * (Confirmed in 68k ASM OP_16 @0x16520 / OP_19 @0x165D8 and the Blitz3D editor.) */
+static void decode_item_group(const uint8_t *src, uint8_t *id, uint8_t *charges, uint8_t *flags)
 {
-    int i;
-    for (i = 0; i < MM2_ROSTER_ITEM_SLOTS; i++) {
-        dst[i].item_id = src[0];
-        dst[i].bonus = src[1];
-        dst[i].flags = src[2];
-        src += MM2_ROSTER_ITEM_SLOT_SIZE;
-    }
+    memcpy(id, src + 0, MM2_ROSTER_ITEM_SLOTS);
+    memcpy(charges, src + MM2_ROSTER_ITEM_SLOTS, MM2_ROSTER_ITEM_SLOTS);
+    memcpy(flags, src + 2 * MM2_ROSTER_ITEM_SLOTS, MM2_ROSTER_ITEM_SLOTS);
 }
 
-static void encode_item_slots(const Mm2RosterItemSlot *src, uint8_t *dst)
+static void encode_item_group(const uint8_t *id, const uint8_t *charges, const uint8_t *flags, uint8_t *dst)
 {
-    int i;
-    for (i = 0; i < MM2_ROSTER_ITEM_SLOTS; i++) {
-        dst[0] = src[i].item_id;
-        dst[1] = src[i].bonus;
-        dst[2] = src[i].flags;
-        dst += MM2_ROSTER_ITEM_SLOT_SIZE;
-    }
+    memcpy(dst + 0, id, MM2_ROSTER_ITEM_SLOTS);
+    memcpy(dst + MM2_ROSTER_ITEM_SLOTS, charges, MM2_ROSTER_ITEM_SLOTS);
+    memcpy(dst + 2 * MM2_ROSTER_ITEM_SLOTS, flags, MM2_ROSTER_ITEM_SLOTS);
 }
 
 static void decode_record(const uint8_t *src, Mm2RosterRecord *dst)
@@ -82,8 +77,8 @@ static void decode_record(const uint8_t *src, Mm2RosterRecord *dst)
     dst->condition = src[0x26];
     dst->endurance_current = src[0x27];
 
-    decode_item_slots(src + 0x28, dst->equipped);
-    decode_item_slots(src + 0x3A, dst->backpack);
+    decode_item_group(src + 0x28, dst->equipped_id, dst->equipped_charges, dst->equipped_flags);
+    decode_item_group(src + 0x3A, dst->backpack_id, dst->backpack_charges, dst->backpack_flags);
     memcpy(dst->spells, src + 0x4C, MM2_ROSTER_SPELL_BYTES);
 
     dst->sp_max = read_le16(src + 0x58);
@@ -140,8 +135,8 @@ static void encode_record(const Mm2RosterRecord *src, uint8_t *dst)
     dst[0x26] = src->condition;
     dst[0x27] = src->endurance_current;
 
-    encode_item_slots(src->equipped, dst + 0x28);
-    encode_item_slots(src->backpack, dst + 0x3A);
+    encode_item_group(src->equipped_id, src->equipped_charges, src->equipped_flags, dst + 0x28);
+    encode_item_group(src->backpack_id, src->backpack_charges, src->backpack_flags, dst + 0x3A);
     memcpy(dst + 0x4C, src->spells, MM2_ROSTER_SPELL_BYTES);
 
     write_le16(dst + 0x58, src->sp_max);
@@ -299,6 +294,52 @@ Mm2RosterError mm2_roster_save_file(const char *path, const Mm2RosterFile *roste
         return MM2_ROSTER_ERR_IO;
     }
     return MM2_ROSTER_OK;
+}
+
+Mm2RosterItemSlot mm2_roster_equipped(const Mm2RosterRecord *record, int idx)
+{
+    Mm2RosterItemSlot s;
+    s.item_id = 0;
+    s.charges = 0;
+    s.flags = 0;
+    if (record && idx >= 0 && idx < MM2_ROSTER_ITEM_SLOTS) {
+        s.item_id = record->equipped_id[idx];
+        s.charges = record->equipped_charges[idx];
+        s.flags = record->equipped_flags[idx];
+    }
+    return s;
+}
+
+Mm2RosterItemSlot mm2_roster_backpack(const Mm2RosterRecord *record, int idx)
+{
+    Mm2RosterItemSlot s;
+    s.item_id = 0;
+    s.charges = 0;
+    s.flags = 0;
+    if (record && idx >= 0 && idx < MM2_ROSTER_ITEM_SLOTS) {
+        s.item_id = record->backpack_id[idx];
+        s.charges = record->backpack_charges[idx];
+        s.flags = record->backpack_flags[idx];
+    }
+    return s;
+}
+
+void mm2_roster_set_equipped(Mm2RosterRecord *record, int idx, Mm2RosterItemSlot slot)
+{
+    if (record && idx >= 0 && idx < MM2_ROSTER_ITEM_SLOTS) {
+        record->equipped_id[idx] = slot.item_id;
+        record->equipped_charges[idx] = slot.charges;
+        record->equipped_flags[idx] = slot.flags;
+    }
+}
+
+void mm2_roster_set_backpack(Mm2RosterRecord *record, int idx, Mm2RosterItemSlot slot)
+{
+    if (record && idx >= 0 && idx < MM2_ROSTER_ITEM_SLOTS) {
+        record->backpack_id[idx] = slot.item_id;
+        record->backpack_charges[idx] = slot.charges;
+        record->backpack_flags[idx] = slot.flags;
+    }
 }
 
 int mm2_roster_slot_is_empty(const Mm2RosterRecord *record)

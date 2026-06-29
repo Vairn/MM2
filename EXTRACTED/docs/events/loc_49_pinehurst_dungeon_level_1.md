@@ -67,7 +67,7 @@
 ```
 
 ```
-00: set_service_context(str[15] "No / Knights!", mode=0x00)
+00: service_sign(idx=0x0F -> sign 24 [24.anm], pos=0x00)
 01: show_text_block(str[3] ""If you like fighting bad guys as much / as I do, then take this portal ")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)

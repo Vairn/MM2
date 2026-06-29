@@ -30,7 +30,13 @@
 #define MM2_GS_COORD_A          (-0x79F0)  /* byte  ($8610) */
 #define MM2_GS_SCRIPT_ABORT     (-0x79EA)  /* byte  ($8616) */
 #define MM2_GS_FIRST_TIME_FLAG  (-0x79E9)  /* byte  ($8617) */
-#define MM2_GS_PARTY_PROGRESS   (-0x79E8)  /* byte  ($8618) quest bits via apply_party op 0x74 */
+/* -$79E8 ($8618): a real engine boolean flag (set to 1 / tst / clr in ~15 sites,
+ * e.g. 0x6DFE/0x8C98/0x8E2C) — purpose not fully traced (screen/redraw/state).
+ * It is NOT party quest progress; the port previously misused it as such. Party
+ * class-quest/guild bits live PER CHARACTER at roster record +0x79
+ * (class_quest_guild_mask), written by OP_15/18 selector 0x74. Define kept for
+ * the offset record only; do not use it for quest bits. */
+#define MM2_GS_ENGINE_FLAG_79E8 (-0x79E8)  /* byte  ($8618) untraced engine flag */
 #define MM2_GS_SCREEN_MODE_PREV (-0x79E6)  /* byte  ($861A) */
 #define MM2_GS_SIGN_ENV_ID      (-0x79E3)  /* byte  ($861D) OP_0B table pick @ 0x15772 */
 #define MM2_GS_BUSY_STATUS      (-0x79E5)  /* byte  ($861B) */
@@ -59,8 +65,77 @@
 #define MM2_GS_COND_FLAG        (-0x7951)  /* byte  ($86AF) */
 #define MM2_GS_EXIT_FLAGS       (-0x7950)  /* byte  ($86B0) */
 #define MM2_GS_COMBAT_VICTORY_LATCH (-0x77BD)  /* byte  ($8843) OP_2B skip gate @ 0x16D74 */
+
+/* ---- Combat / encounter setup block (OP_12/OP_13 @ 0x16300) ----
+ *
+ * The event VM seeds these fields; the combat engine (-$7EDE @ 0x051C2)
+ * consumes them. Layout (all A4-relative):
+ *
+ *   struct Mm2EncounterSetup {
+ *       uint8_t  monster_slot[10];   // A4-$11DE: up to 10 visible monster-type ids
+ *       uint8_t  overflow_type;      // A4-$11D4: type id for monsters beyond the
+ *                                    //   10 slots; also the breed/multiply target
+ *                                    //   (0x100B0) and XP-budget tier for the
+ *                                    //   overflow group (0x120E2). Acts as a flag:
+ *                                    //   if !=0, `count` is added to the live total.
+ *       uint8_t  mode;               // A4-$796B: 0x80 = fixed/pre-filled fight
+ *                                    //   (skip random picker 0x1213E); 0 = seeded
+ *                                    //   random (OP_13 lets 0x1213E top up by XP
+ *                                    //   budget + attrib min/max). Other engine
+ *                                    //   modes: 3 = rest ambush (0x19D64).
+ *       uint8_t  live_count;         // A4-$77BE: live monster count. Combat setup
+ *                                    //   @ 0x12CE0 recomputes:
+ *                                    //     j = #non-zero monster_slot entries
+ *                                    //     if overflow_type != 0: j += live_count
+ *                                    //     live_count = j
+ *   };
+ *
+ * OP_12 (mode=0x80) reads 12 inline bytes: monster_slot[0..9] + overflow_type +
+ *   live_count. OP_13 (mode=0) reads only the 10 monster_slot bytes and clears
+ *   overflow_type and live_count to 0 (then the random picker augments).
+ */
+#define MM2_GS_MONSTER_SLOTS        (-0x11DE)  /* byte[11] ($EE22) monster-type ids; [10]=overflow_type */
+#define MM2_GS_ENCOUNTER_OVERFLOW_TYPE (-0x11D4)  /* byte ($EE2C) overflow/breed monster type */
+#define MM2_GS_ENCOUNTER_MODE       (-0x796B)  /* byte  ($8693) 0x80=fixed fight, 0=seeded-random */
+#define MM2_GS_MONSTER_COUNT        (-0x77BE)  /* byte  ($8842) live monster count */
+#define MM2_GS_ENCOUNTER_REDRAW     (-0x4F4E)  /* word  ($B0B2) combat/redraw flag (cleared by OP_12) */
+#define MM2_GS_MONSTER_SLOT_COUNT   10
+/* ---- Found-item / treasure-reward buffer (OP_2A @ 0x16D16, OP_19 overflow @ 0x16618) ----
+ *
+ * A 16-byte shared "pending loot" buffer in the A4 block. It is filled by event
+ * treasure blocks (OP_2A) and by OP_19 give-item *backpack-overflow*, then later
+ * consumed/displayed by the Search payoff (Search key handler @ 0x4800 →
+ * `-$7D1C` → 0x1B19C, the "you found..." distribution flow — not yet ported).
+ *
+ * Memory layout (ascending A4 displacement), traced from the ASM stores:
+ *   -$3F1C  byte[3]  item ids       (OP_2A `move.b d0,(-$3F1C,a0,i)`; OP_19 `(a0)=id`)
+ *   -$3F19  byte[3]  item flags     (OP_2A 3rd byte/triplet; OP_19 attr3 → `-$3F19`)
+ *   -$3F16  byte[3]  item charges   (OP_2A 2nd byte/triplet; OP_19 attr2 → `-$3F16`)
+ *   -$3F13  byte     unused pad
+ *   -$3F12  word     gems  (big-endian, `move.w d0,-$3F12`)
+ *   -$3F10  long     gold/exp (big-endian, `move.l d0,-$3F10`; value is 24-bit)
+ *
+ * The fill/overflow handlers set the sentinel byte -$794C := 0xFF. The main
+ * loop (0x1276) auto-runs Search when -$794C == 0xFE (combat-victory loot drop),
+ * bumping it to 0xFF first. The Search handler treats the buffer as "has loot"
+ * when any id[0..2]!=0 OR gold!=0 OR gems!=0 (0x4832..0x4870), else "Nothing
+ * Here!" ($48AB). NOTE: gold/gems are stored big-endian in RAM (68k move.l/.w),
+ * matching the endian-safe mm2_gs_u16/u32 accessors above — this is RAM, not a
+ * .dat file, so the CLAUDE.md little-endian-on-disk rule does not apply here.
+ */
+#define MM2_GS_FOUND_ITEM_ID      (-0x3F1C)  /* byte[3] ($C0E4) found-item ids */
+#define MM2_GS_FOUND_ITEM_FLAGS   (-0x3F19)  /* byte[3] ($C0E7) found-item flags (OP_19 attr3) */
+#define MM2_GS_FOUND_ITEM_CHARGES (-0x3F16)  /* byte[3] ($C0EA) found-item charges (OP_19 attr2) */
+#define MM2_GS_FOUND_GEMS         (-0x3F12)  /* word  ($C0EE) gems (big-endian) */
+#define MM2_GS_FOUND_GOLD_EXP     (-0x3F10)  /* long  ($C0F0) gold/exp (big-endian, 24-bit) */
+#define MM2_GS_FOUND_SENTINEL     (-0x794C)  /* byte  ($86B4) 0xFF=filled, 0xFE=auto-search pending */
+#define MM2_GS_FOUND_ITEM_SLOTS   3
+#define MM2_GS_FOUND_SENTINEL_FILLED  0xFF
+#define MM2_GS_FOUND_SENTINEL_PENDING 0xFE
+
 #define MM2_GS_EVENT_SCRIPT_START (-0x5C44)  /* word  ($A3BC) */
 #define MM2_GS_QUEUED_EVENT_ID  (-0x5D46)  /* byte  ($A2BA) */
+#define MM2_GS_SELECTED_MEMBER  (-0x5D43)  /* byte  ($A2BD) OP_26/27 pick 1..8 */
 #define MM2_GS_SAVED_COND_FLAG  (-0x5D42)  /* byte  ($A2BE) */
 #define MM2_GS_STRING_WALK_INDEX (-0x5D44)  /* word  ($A2BC) */
 #define MM2_GS_FACING_INDEX     (-0x55D7)  /* byte  ($AA29) */
@@ -76,6 +151,23 @@
 #define MM2_GS_TIME_SUBDAY      (-0x79B4)  /* word  ($864C) 256 = 1 day */
 #define MM2_GS_PERIOD_FLAG_A    (-0x798C)  /* byte  ($8674) */
 #define MM2_GS_PERIOD_FLAG_B    (-0x798D)  /* byte  ($8673) */
+#define MM2_GS_GATE_BANK_B      (-0x7995)  /* byte[4] ($867B) quest gates 0x80..0x83 */
+#define MM2_GS_GUARDIAN_CAVE    (-0x7996)  /* byte  ($867A) */
+/* NOTE: these two are NOT quest counters. They are the Wizard Eye / Eagle Eye
+ * overhead-vision step timers (g=0x2C / g=0x2B), decremented one-per-step by the
+ * ticker @ 0x4672 and set by the spell handlers @ 0xAD20 / 0xA91C (5/level). The
+ * stale names are kept until the spell-effect system lands; offsets are correct.
+ * See docs/06-roster-format.md + docs/19-spells-and-item-use.md. */
+#define MM2_GS_QUEST_COUNTER_B  (-0x799F)  /* byte  ($8671) = Wizard Eye step timer (g=0x2C) */
+#define MM2_GS_CLASS_QUEST_CNT  (-0x79A0)  /* byte  ($8670) = Eagle Eye step timer  (g=0x2B) */
+#define MM2_GS_TALISMAN_BASE    (-0x79A4)  /* byte[4] ($866C) ids 0x27..0x2A */
+#define MM2_GS_TEMPLE_DONATION  (-0x799E)  /* byte  ($8672) OP_0E temple quest bits */
+#define MM2_GS_EVENT_VAR_BANK   (-0x798B)  /* byte[24] ($8685) g=0x00..0x17 */
+#define MM2_GS_TUNDRA_LEVER     (-0x7990)  /* byte  ($8680) */
+#define MM2_GS_XABRAN_GATE      (-0x798F)  /* byte  ($8681) */
+#define MM2_GS_DAWN_GATE        (-0x798E)  /* byte  ($8682) */
+#define MM2_GS_SCRIPT_COUNTER   (-0x79B8)  /* byte  ($8646) OP_2C global counter */
+#define MM2_GS_INPUT_BUF        (-0x5C50)  /* byte[] OP_2F/OP_30 answer buffer */
 #define MM2_GS_ERA_COUNT        10
 
 /* Lookup-table bases */

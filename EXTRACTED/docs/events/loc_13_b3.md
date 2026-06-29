@@ -59,7 +59,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "A knight proclaims, / "None shall pass!" Attack (y/n)?", mode=0x00)
+00: service_sign(idx=0x07 -> sign 74 [74.anm], pos=0x00)
 01: show_text_block(str[1] "Upon heavy wooden doors of an ancient / fortress is scrawled: Sorcerers ")
 02: cond = prompt_yes_no(mode=1)
 03: if cond: skip_tokens(1)

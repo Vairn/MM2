@@ -388,6 +388,39 @@ void buildHorizonBlits(std::array<uint8_t, kOutdoorLaneCols> c6,
 
 }  // namespace
 
+int buildOutdoorStars(int facing, std::array<OutdoorStarBlit, kOutdoorStarCount> &out)
+{
+    /* 16-entry star coordinate tables — big-endian words from
+     * EXTRACTED/ghidra/mm2_data_00.bin: X = -$73a8(a4) @ file 0xC56,
+     * Y = -$7388(a4) @ file 0xC76. (LE decode gives out-of-range garbage; BE
+     * keeps x=X*8+8 and y inside the (8,8)-(215,67) sky band.) */
+    static constexpr uint8_t kStarX[16] = {3, 9, 13, 13, 2, 4, 9, 12, 2, 4, 9, 13, 3, 5, 7, 10};
+    static constexpr uint8_t kStarY[16] = {30, 53, 11, 12, 23, 54, 56, 20, 55, 22, 50, 10, 37, 18, 25, 45};
+
+    /* Facing key char -$79b1 maps N->0, W->1, S->2, E->3 (@0x68b2..0x68d8),
+     * then *4 (@0x68e2). Engine facing is 0=N,1=E,2=S,3=W, so remap to the
+     * ASM order before scaling. */
+    static constexpr int kFacingStarBase[4] = {0, 3, 2, 1};
+    int base = kFacingStarBase[facing & 3] * 4;
+
+    uint8_t pen = kOutdoorStarPenA;
+    for (int i = 0; i < kOutdoorStarCount; ++i) {
+        const int idx = base + i;  // @0x68ea: base + i, both <16 here
+        int sx = kStarX[idx];
+        const int sy = kStarY[idx];
+        if (i >= 4) {
+            sx += 12;  // @0x691e: addi.w #$c before the *8 shift
+        }
+        out[static_cast<size_t>(i)] = {sx * 8 + 8, sy, pen};  // @0x6936 asl.w #3 + addq.w #8
+
+        if (base + (i + 1) >= 16) {  // @0x6946: wrap base to 0 once base+i hits 16
+            base = 0;
+        }
+        pen = (pen == kOutdoorStarPenA) ? kOutdoorStarPenB : kOutdoorStarPenA;  // @0x6958 toggle
+    }
+    return kOutdoorStarCount;
+}
+
 const char *outdoorBiomeFilename(OutdoorBiome biome)
 {
     switch (biome) {

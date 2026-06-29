@@ -1635,14 +1635,14 @@ private:
             const int row = kSheetEquipRowBase + i;
             char iname[20];
             char eline[24];
-            itemName(rec.equipped[i].item_id, iname, sizeof(iname));
+            itemName(rec.equipped_id[i], iname, sizeof(iname));
             if (iname[0]) {
                 std::snprintf(eline, sizeof(eline), "%d) %s", i + 1, iname);
             } else {
                 std::snprintf(eline, sizeof(eline), "%d)", i + 1);
             }
             drawCellText(c, row, kSheetEquipCol, eline, 220, 220, 220);
-            itemName(rec.backpack[i].item_id, iname, sizeof(iname));
+            itemName(rec.backpack_id[i], iname, sizeof(iname));
             if (iname[0]) {
                 std::snprintf(eline, sizeof(eline), "%c) %s", kPackLetters[i], iname);
             } else {

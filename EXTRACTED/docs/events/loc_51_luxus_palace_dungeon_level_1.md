@@ -91,7 +91,7 @@
 ```
 
 ```
-00: set_service_context(str[23] "<EMPTY>", mode=0x00)
+00: service_sign(idx=0x17 -> sign 29 [29.anm], pos=0x00)
 01: show_text_block(str[2] ""What's a nice party like you doing / in a drab dungeon like this? Hills")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)

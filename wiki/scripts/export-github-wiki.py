@@ -36,11 +36,19 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("EXTRACTED/docs/07-anm-tv-format.md", "ANM-TV-Format"),
     ("EXTRACTED/docs/07-dat-files-and-formats.md", "dat-Files-and-Formats"),
     ("EXTRACTED/docs/07-event-script-opcodes.md", "Event-Script-Opcodes"),
+    ("EXTRACTED/docs/42-event-dsl-format.md", "Event-Script-DSL"),
+    ("EXTRACTED/docs/44-event-text-rendering.md", "Event-Text-Rendering"),
+    ("EXTRACTED/docs/45-event-graphics-opcodes.md", "Event-Graphics-Opcodes"),
+    ("EXTRACTED/docs/46-scripted-scene-graphics.md", "Scripted-Scene-Graphics"),
+    ("EXTRACTED/docs/47-amiga-3d-render-process.md", "Amiga-3D-Render-Process"),
+    ("EXTRACTED/docs/48-amiga-cpp-play-screen-draw-walkthrough.md", "Amiga-Cpp-Play-Screen-Draw"),
     ("EXTRACTED/docs/08-event-runtime.md", "Event-Runtime"),
     ("EXTRACTED/docs/12-attrib-dat-format.md", "attrib-dat-Format"),
     ("EXTRACTED/docs/21-map-dat-format.md", "map-dat-Format"),
     ("EXTRACTED/docs/13-time-era-calendar.md", "Time-Era-Calendar"),
     ("EXTRACTED/docs/14-game-state-struct.md", "Game-State-Struct"),
+    ("EXTRACTED/docs/49-data-hunk-mm2_data_00.md", "Data-Hunk-mm2-data-00"),
+    ("EXTRACTED/docs/43-exploration-input-and-ingame-options.md", "Exploration-Input-and-Options"),
     ("EXTRACTED/docs/15-3d-view-and-game-screen.md", "3D-View-and-Game-Screen"),
     ("EXTRACTED/docs/16-monster-ability-format.md", "monsters-dat-Format"),
     ("EXTRACTED/docs/17-combat-system.md", "Combat-System"),
@@ -346,8 +354,9 @@ def write_home(*, out: Path = OUT) -> None:
 <li><a href="{WIKI_BASE}/Town-Services">Town services</a> — pub, temple, guild, training</li>
 <li><a href="{WIKI_BASE}/Spell-Sources">Spell sources</a> — where every spell is obtained</li>
 <li><a href="{WIKI_BASE}/Audio-Sounds-Music">Audio / SFX / music</a> — <code>audio.device</code>, Controls menu</li>
-<li><a href="{WIKI_BASE}/3D-View-and-Game-Screen">3D view &amp; collision</a> — wall pages, auto-map</li>
-<li><a href="{WIKI_BASE}/Events-by-Location">Events per map</a> · <a href="{WIKI_BASE}/Event-Script-Opcodes">opcodes</a> · <a href="{WIKI_BASE}/Event-to-String-Path">script → text</a></li>
+<li><a href="{WIKI_BASE}/3D-View-and-Game-Screen">3D view &amp; collision</a> — wall pages, auto-map · <a href="{WIKI_BASE}/Exploration-Input-and-Options">exploration keys</a></li>
+<li><a href="{WIKI_BASE}/Events-by-Location">Events per map</a> · <a href="{WIKI_BASE}/Event-Script-Opcodes">opcodes</a> · <a href="{WIKI_BASE}/Event-Text-Rendering">text rendering</a> · <a href="{WIKI_BASE}/Event-to-String-Path">script → text</a></li>
+<li><a href="{WIKI_BASE}/Data-Hunk-mm2-data-00">Data hunk</a> — static <code>A4</code> tables · <a href="{WIKI_BASE}/Town-Services">town services</a></li>
 <li><a href="{WIKI_BASE}/Main-Loop-and-Map">Main loop &amp; map</a> · <a href="{WIKI_BASE}/Copy-Protection">copy protection</a></li>
 <li><a href="{WIKI_BASE}/Title-Screen-Animation">Title screen</a> · <a href="{WIKI_BASE}/Character-UI-View-Create">character UI</a></li>
 </ul>
@@ -437,7 +446,11 @@ def write_home(*, out: Path = OUT) -> None:
 | MM1 map cross-walk | [MM1 MAZEDATA](MM1-MAZEDATA-Format) · [MM1 outdoor](MM1-to-MM2-Outdoor) |
 | Browse decoded art | [Gallery](Gallery) |
 | See what's still unknown | [Open Questions](Open-Questions) |
-| Boot &amp; memory map | [Startup and Init](Startup-and-Init) · [Runtime Memory Map](Runtime-Memory-Map) |
+| Boot &amp; memory map | [Startup and Init](Startup-and-Init) · [Runtime Memory Map](Runtime-Memory-Map) · [Data Hunk](Data-Hunk-mm2-data-00) |
+| Exploration keys &amp; options | [Exploration Input and Options](Exploration-Input-and-Options) |
+| Event script authoring | [Event Script DSL](Event-Script-DSL) · [Event Text Rendering](Event-Text-Rendering) |
+| 3D renderer deep-dive | [Amiga 3D Render Process](Amiga-3D-Render-Process) · [Scripted Scene Graphics](Scripted-Scene-Graphics) |
+| Remake draw path | [Amiga Cpp Play Screen Draw](Amiga-Cpp-Play-Screen-Draw) · [Game Remake](Game-Remake) |
 | RE tooling | [RE Tools](RE-Tools) |
 
 </details>
@@ -472,19 +485,25 @@ def write_sidebar() -> None:
 - [Startup and Init](Startup-and-Init)
 - [Runtime Memory Map](Runtime-Memory-Map)
 - [Main Loop and Map](Main-Loop-and-Map)
+- [Exploration Input and Options](Exploration-Input-and-Options)
 - [Party and Session](Party-and-Session)
 - [Game State Struct](Game-State-Struct)
+- [Data Hunk mm2 data 00](Data-Hunk-mm2-data-00)
 - [Time Era Calendar](Time-Era-Calendar)
 
 #### Graphics
 - [GFX Loading](GFX-Loading)
 - [ANM TV Format](ANM-TV-Format)
 - [3D View and Game Screen](3D-View-and-Game-Screen)
+- [Amiga 3D Render Process](Amiga-3D-Render-Process)
+- [Scripted Scene Graphics](Scripted-Scene-Graphics)
+- [Event Graphics Opcodes](Event-Graphics-Opcodes)
 - [Title Screen Assets](Title-Screen-Assets)
 - [Title Screen Animation](Title-Screen-Animation)
 
 #### UI
 - [Character UI View Create](Character-UI-View-Create)
+- [Amiga Cpp Play Screen Draw](Amiga-Cpp-Play-Screen-Draw)
 
 #### Data formats (.dat)
 - [Format inventory](dat-Files-and-Formats)
@@ -498,6 +517,9 @@ def write_sidebar() -> None:
 - [Events by location](Events-by-Location) ← **71 maps**
 - [Events hub (numbered)](Events-By-Location-Hub)
 - [Event Script Opcodes](Event-Script-Opcodes)
+- [Event Script DSL](Event-Script-DSL) ← **`.mm2evt` authoring**
+- [Event Text Rendering](Event-Text-Rendering)
+- [Event Graphics Opcodes](Event-Graphics-Opcodes)
 
 #### Combat
 - [Combat Overview](Combat-Overview)

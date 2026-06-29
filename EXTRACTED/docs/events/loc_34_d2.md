@@ -96,7 +96,7 @@
 ```
 00: skip_tokens(14)
     # skip -> map_transition(0x3A, 0x07)
-01: set_service_context(str[6] "Guards rudely deny access, exclaiming, / "No key, no admittance!" Attack", mode=0x00)
+01: service_sign(idx=0x06 -> sign 47 [47.anm], pos=0x00)
 02: show_text_block(str[5] "The Great Luxus Palace Royale stands / before you majestically. Banners ")
 03: wait_key()
 04: show_text_block(str[13] "flutter from every turret while / colorfully clad guardsman pace / the b")
@@ -125,7 +125,7 @@
 ```
 00: skip_tokens(6)
     # skip -> clear_current_tile_event_flag()
-01: set_service_context(str[6] "Guards rudely deny access, exclaiming, / "No key, no admittance!" Attack", mode=0x00)
+01: service_sign(idx=0x06 -> sign 47 [47.anm], pos=0x00)
 02: show_text_block(str[7] "Dreary Mandagual's Keep casts a dark / shadow. A chill crawls up your sp")
 03: cond = prompt_yes_no(mode=1)
 04: if cond: skip_tokens(1)

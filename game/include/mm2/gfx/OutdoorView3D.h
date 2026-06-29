@@ -69,6 +69,43 @@ struct OutdoorSpriteBlit {
     int y = 0;
 };
 
+/* Night sky + stars — outdoor_3d_master @0x18870 calls the night routine
+ * (thunk -$7e78 -> @0x0687C) instead of the daytime sky.32 blit whenever
+ * MM2_GS_TIME_SUBDAY (-$79b4, word, 256 = 1 day) >= 0x80 (the second half of
+ * the day). The routine fills the sky band black then plots 7 star pixels. */
+
+/* Night is the second half of the day cycle (cmpi.w #$80,-$79b4 @0x18898). */
+constexpr int kOutdoorNightSubdayThreshold = 0x80;
+
+/* Black sky fill — fill-rect primitive @0x217ba paints horizontal lines from
+ * x=8..215 over rows y=8..67 inclusive, i.e. the 208x60 sky.32 footprint. */
+constexpr int kOutdoorSkyFillX = kView3DOriginX;   // 8
+constexpr int kOutdoorSkyFillY = kView3DSkyY;      // 8
+constexpr int kOutdoorSkyFillW = kView3DViewportW; // 208 (cols 8..215)
+constexpr int kOutdoorSkyFillH = 60;               // rows 8..67
+constexpr uint8_t kOutdoorSkyFillPen = 0;          // pen 0 (black) @0x6888
+
+/* Star palette pens (indices into the active sky.32 palette): color A from
+ * -$7a4d (ghidra/mm2_data_00.bin @0x5B1 = 20), color B from -$7a52 (@0x5AC = 1).
+ * The plot loop toggles A/B per star starting on A. In sky.32 pen 20 is light
+ * blue, pen 1 is white. */
+constexpr uint8_t kOutdoorStarPenA = 20;
+constexpr uint8_t kOutdoorStarPenB = 1;
+constexpr int kOutdoorStarCount = 7;
+
+struct OutdoorStarBlit {
+    int x = 0;
+    int y = 0;
+    uint8_t pen = 0;
+};
+
+/* Replicates the star plot loop @0x68ea: starting table index = facing*4
+ * (N=0,W=4,S=8,E=12 from facing key char -$79b1), 7 consecutive entries with
+ * the @0x6946 wrap-to-0, screen x = X[idx]*8 + 8 (+12 columns for stars 4..6
+ * @0x691e), y = Y[idx]. Returns kOutdoorStarCount. `facing` uses the engine
+ * 0=N,1=E,2=S,3=W convention. */
+int buildOutdoorStars(int facing, std::array<OutdoorStarBlit, kOutdoorStarCount> &out);
+
 struct OutdoorScene {
     std::array<std::array<uint8_t, kOutdoorHoodRowLen>, 3> rowsRaw{};
     std::array<uint8_t, kOutdoorHoodRowLen> laneC6{};

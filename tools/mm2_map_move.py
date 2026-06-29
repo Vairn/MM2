@@ -36,7 +36,7 @@ def movement_blocked_collision(
     *,
     outdoor: bool = False,
 ) -> bool:
-    """Block step using map.dat page 1; outdoor terrain uses page-0 high bits (no collision flag)."""
+    """Block step using map.dat page 1; outdoor terrain uses terrain_lookup."""
     d = facing & 3
     cd = movement_to_collision_dir(d)
     cell = collision_at(collision, x, y)
@@ -55,6 +55,18 @@ def movement_blocked_collision(
 
     if outdoor:
         dest_v = visual[(ny << 4) | nx]
-        if (dest_v & 0x60) == 0x60 or (dest_v & 0x80) != 0:
-            return True
+        try:
+            from view3d_outdoor import terrain_lookup
+            t_id = dest_v & 0x1F
+            t_class = terrain_lookup()[t_id]
+            # 1=mountain, 3=solid trees
+            if t_class in (1, 3):
+                return True
+            # 4=water/swamp/snow/desert. Only block deep water (ID 10).
+            if t_class == 4 and t_id == 10:
+                return True
+        except ImportError:
+            # Fallback
+            if (dest_v & 0x60) == 0x60 or (dest_v & 0x80) != 0:
+                return True
     return False

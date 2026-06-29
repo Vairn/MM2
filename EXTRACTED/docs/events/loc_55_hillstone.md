@@ -254,7 +254,7 @@
 ```
 
 ```
-00: set_service_context(str[14] "You have found an N-19 Capitor.", mode=0x00)
+00: service_sign(idx=0x0E -> sign 49 [49.anm], pos=0x00)
 01: cond = load_cond_from_var(0x04)
 02: if not cond: skip_tokens(1)
     # skip -> show_text_block(str[21] "Lord Slayer will only bestow a / quest unto a Crusader.")
@@ -285,7 +285,7 @@
 ```
 
 ```
-00: set_service_context(str[5] "Zookeeper", mode=0x00)
+00: service_sign(idx=0x05 -> sign 72 [72.anm], pos=0x00)
 01: cond = consume_item(item_id=113, name="Red Key", probe=1)
 02: if not cond: skip_tokens(44)
     # skip -> show_text_block(str[18] "The Bishop of Red Battle is locked in / a cage.")
@@ -379,7 +379,7 @@
 ```
 
 ```
-00: set_service_context(str[13] "Food is stacked to the ceiling. Take / some (y/n)?", mode=0x00)
+00: service_sign(idx=0x0D -> sign 5 [5.anm], pos=0x00)
 01: show_text_basic(str[20] "Here's the joke of the day:")
 02: exec_selector(0xE2)  # special_226
 ```

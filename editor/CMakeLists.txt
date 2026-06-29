@@ -82,9 +82,16 @@ add_library(imgui STATIC
 target_include_directories(imgui PUBLIC
   ${imgui_SOURCE_DIR}
   ${imgui_SOURCE_DIR}/backends
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
-target_compile_definitions(imgui PUBLIC IMGUI_ENABLE_DOCKING)
+# PUBLIC so imgui, imnodes, and MM2ED all parse imgui.h with identical config.
+# IMGUI_USER_CONFIG pulls in mm2_imconfig.h which switches to 32-bit draw indices
+# (see that header for why: the imnodes event graph overflows 16-bit indices).
+target_compile_definitions(imgui PUBLIC
+  IMGUI_ENABLE_DOCKING
+  IMGUI_USER_CONFIG="mm2_imconfig.h"
+)
 
 # ---------------------------------------------------------------------------
 # imnodes (compiled directly; depends on imgui)

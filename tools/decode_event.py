@@ -207,14 +207,14 @@ OPCODES: dict[int, dict[str, object]] = {
 }
 
 SELECTOR_NAMES = {
-    0x01: "open_tavern_food",
-    0x02: "open_inn_lodging",
-    0x03: "open_temple",
-    0x04: "open_training",
+    0x01: "open_inn_lodging",
+    0x02: "open_training",
+    0x03: "open_tavern_food",
+    0x04: "open_temple",
     0x05: "open_mages_guild",
     0x06: "open_blacksmith_shop",
     0x07: "open_general_store",
-    0x08: "open_special_shop",
+    0x08: "open_arena_shop",
     0x0A: "goblet_quest",
     0x0D: "enroll_mages_guild",
     0x64: "portal_travel_100",
@@ -239,6 +239,80 @@ TRANSITION_NAMES = {
     (0x0B, 0x37): "overland_area_c3",
     (0x11, 0x8F): "cavern_of_middlegate",
 }
+
+# ---------------------------------------------------------------------------
+# OP_0B service-signboard resolver (handler 0x15DB0 -> 0x15756).
+#
+# ASM-confirmed (mm2.capstone.annotated.asm): OP_0B does NOT print event-local
+# or str.dat text. It loads a signboard `.anm` sprite over the 3D viewport.
+#   - arg0 = sign index (str_idx); arg1 = placement slot.
+#   - 0x15756 maps arg0 -> a sign id ("NN.anm"):
+#       * arg0 >= 0x80            -> sign id 0x4B            (0x15760: cmp #$80 / moveq #$4B)
+#       * else  sign id = TABLE[env][arg0 - 1]              (0x1576C subq #1; (a0,d0) fetch)
+#   - env id = area_env_lookup(screen) (0x18AE; A4-$79E3 set at 0x1C44).
+#     Ranges (data @0x09AA): screen in [lo..hi] -> env; unmatched -> 7.
+#   - env -> one of five 24-byte sign tables (A4-$6C62, -$6C4C, -$6C32, -$6C1A,
+#     -$6C02). Mapping mirrors game/src/events/ServiceSignResolver.cpp, which is
+#     test-validated against the real `.anm` assets (e.g. C2 portcullis 29.anm,
+#     Hillstone Lord Slayer 49.anm):
+#       env 0->Middlegate, 1->Atlantium, 2->Tundara, 3->Vulcania,
+#       4->Sandsobar, 5->Sandsobar, 6->Vulcania.
+#     (The literal 0x157D2 jump table reads as a different permutation; the net
+#     screen->sign result still matches the port + assets, so we keep the port's
+#     mapping for consistency. Non-town envs are lower-confidence — see
+#     ServiceSignResolver.cpp.)
+#
+# The tables overlap by 2 bytes (bases are 0x16 apart) and are slices of one
+# 112-byte block. Same bytes as ServiceSignResolver.cpp.
+_SIGN_BLOCK = bytes([
+    70, 62, 63, 66, 67, 68, 65,  2, 19, 26, 51, 54, 53, 12, 60, 27, 39,  4, 45, 37, 57, 47, 73, 33,
+    42, 43, 17, 14, 69, 34,  9, 26, 24, 52, 53, 21, 25, 28, 44, 49, 11, 31, 55, 36,  1, 61,
+    18, 47, 72, 16, 10, 23,  6, 51, 15,  8,  5, 49, 40, 11, 30, 39,  4, 46, 20, 36,  1, 57,
+    13, 58, 18, 47, 74, 42,  2, 17, 14, 69, 19, 34,  9, 26, 24, 52, 54,  8, 21, 25,  3, 29,
+    44, 50, 27, 39, 61, 48, 71, 59, 33, 19, 35, 10, 24,  6, 75, 51, 15,  7, 60, 56, 29,  5,
+])
+
+# area_env_lookup @ 0x18AE (ranges A4-$7654 / -$764D / -$765B).
+_SIGN_ENV_RANGE_LO = (0, 5, 17, 33, 41, 45, 55)
+_SIGN_ENV_RANGE_HI = (4, 16, 32, 40, 44, 54, 59)
+_SIGN_ENV_RANGE_ID = (0, 3, 1, 6, 4, 5, 2)
+
+# env id -> offset of its 24-byte table inside _SIGN_BLOCK. Base offsets:
+# Middlegate 0, Atlantium 22, Tundara 44, Vulcania 66, Sandsobar 88.
+# (Matches ServiceSignResolver::tableForEnv.)
+_SIGN_ENV_TO_OFFSET = {0: 0, 1: 22, 2: 44, 3: 66, 4: 88, 5: 88, 6: 66}
+
+# Fixed sign id returned for arg0 >= 0x80 (0x15766 moveq #$4B).
+SIGN_ID_HIGH = 0x4B
+
+
+def sign_env_for_screen(screen_id: int) -> int:
+    """area_env_lookup(screen) -> env id (0..6), or 7 when unmatched."""
+    for lo, hi, env in zip(_SIGN_ENV_RANGE_LO, _SIGN_ENV_RANGE_HI, _SIGN_ENV_RANGE_ID):
+        if lo <= screen_id <= hi:
+            return env
+    return 7
+
+
+def resolve_service_sign(loc_id: int | None, str_idx: int) -> int | None:
+    """OP_0B arg0 -> signboard `.anm` id (0x15756). None if unresolved.
+
+    `loc_id` is the event.dat location id, which equals the map screen id for
+    locations 0..59 (overlay banks 60..70 have env 7 -> no sign table).
+    """
+    if str_idx >= 0x80:
+        return SIGN_ID_HIGH
+    if loc_id is None:
+        return None
+    env = sign_env_for_screen(loc_id)
+    off = _SIGN_ENV_TO_OFFSET.get(env)
+    if off is None:
+        return None
+    # 0x1576C subtracts 1 before the table fetch; retail does no bounds check.
+    i = off + (str_idx - 1)
+    if 0 <= i < len(_SIGN_BLOCK):
+        return _SIGN_BLOCK[i]
+    return None
 
 # Field observations (user-verified):
 # - Atlantium Location 1 shop-sign tiles are text-only retriggerers.
@@ -410,20 +484,38 @@ def parse_segment_stream_nodes(seg: bytes) -> list[dict[str, object]]:
     return out
 
 
-def _advance_one_token(seg: bytes, pos: int) -> int | None:
-    """Best-effort token skipper for branch target recovery."""
-    if pos >= len(seg):
-        return None
-    op = seg[pos]
+# Real VM token-skip length table (A4-$6CC8), read from the ROM data hunk by
+# tools/dump_event_token_table.py. The skip helper @ 0x157FC advances
+# event_parse_pos by ROM_SKIP_LEN[token] for each skipped token — this is NOT
+# always 1+argc. Verified exceptions vs the handler arg counts:
+#   - OP_00: ROM delta 0 (invalid op, never legitimately skipped)
+#   - OP_25: ROM delta 2 (opcode + 1) even though the handler reads 2 arg bytes
+# Every other opcode 0x01..0x32 equals 1+argc.
+ROM_SKIP_LEN: dict[int, int] = {0x00: 0, 0x25: 2}
+
+
+def _token_skip_len(op: int) -> int | None:
+    """Bytes the skip helper advances for a single token starting with ``op``."""
+    if op in ROM_SKIP_LEN:
+        return ROM_SKIP_LEN[op]
     spec = OPCODES.get(op)
     if spec is None:
         return None
     argc = spec["argc"]
     if argc is None:
-        # Variable-length token family (`*_SKIPTOK`) reads one selector byte.
-        return pos + 2 if pos + 1 < len(seg) else None
-    argc_i = int(argc)
-    end = pos + 1 + argc_i
+        # Variable-length token family (`*_SKIPTOK`): selector byte only.
+        return 2
+    return 1 + int(argc)
+
+
+def _advance_one_token(seg: bytes, pos: int) -> int | None:
+    """Best-effort token skipper for branch target recovery (uses ROM lengths)."""
+    if pos >= len(seg):
+        return None
+    delta = _token_skip_len(seg[pos])
+    if delta is None or delta <= 0:
+        return None
+    end = pos + delta
     return end if end <= len(seg) else None
 
 
@@ -573,7 +665,13 @@ def _fmt_strings_hint(strings: list[str], idx: int) -> str:
     return f"str[{idx}]"
 
 
-def decompile_op(op: int, args: list[int], strings: list[str], items: list[str]) -> str:
+def decompile_op(
+    op: int,
+    args: list[int],
+    strings: list[str],
+    items: list[str],
+    loc_id: int | None = None,
+) -> str:
     if op == 0x01 and args:
         return f"show_text_basic({_fmt_strings_hint(strings, args[0])})"
     if op == 0x02 and args:
@@ -664,7 +762,15 @@ def decompile_op(op: int, args: list[int], strings: list[str], items: list[str])
             return f"exec_selector(0x{sel:02X})  # {label}"
         return f"exec_selector(0x{sel:02X})"
     if op == 0x0B and len(args) >= 2:
-        return f"set_service_context({_fmt_strings_hint(strings, args[0])}, mode=0x{args[1]:02X})"
+        # OP_0B loads a signboard `.anm` sprite (NOT event-local / str.dat text).
+        # arg0 -> sign id via per-environment table (0x15756); arg1 = placement.
+        sign = resolve_service_sign(loc_id, args[0])
+        if sign is not None:
+            return (
+                f"service_sign(idx=0x{args[0]:02X} -> sign {sign} [{sign}.anm], "
+                f"pos=0x{args[1]:02X})"
+            )
+        return f"service_sign(idx=0x{args[0]:02X}, pos=0x{args[1]:02X})"
     if op == 0x0C and len(args) >= 2:
         name = TRANSITION_NAMES.get((args[0], args[1]))
         if name:
@@ -719,7 +825,7 @@ def decompile_op(op: int, args: list[int], strings: list[str], items: list[str])
     name = str(spec["name"]) if spec else f"OP_{op:02X}"
     if args:
         arg_text = ", ".join(f"0x{x:02X}" for x in args)
-        if op in (0x0B, 0x0C) and args[0] < len(strings):
+        if op == 0x0C and args[0] < len(strings):
             return f"{name.lower()}({arg_text})  # {_fmt_strings_hint(strings, args[0])}"
         return f"{name.lower()}({arg_text})"
     return f"{name.lower()}()"
@@ -785,7 +891,7 @@ def dump_decompiled(data: bytes) -> None:
             for idx, node in enumerate(parsed_nodes):
                 op = int(node["op"])
                 args = [int(x) for x in node["args"]]
-                pseudo = decompile_op(op, args, loc["strings"], items)
+                pseudo = decompile_op(op, args, loc["strings"], items, loc_id)
                 print(f"    {idx:02d}: {pseudo}")
                 if op == 0x00:
                     print("        # invalid opcode boundary; likely alternate token stream follows")
@@ -803,7 +909,7 @@ def dump_decompiled(data: bytes) -> None:
                             if argc is not None:
                                 argc_i = int(argc)
                                 targs = list(seg[target + 1 : target + 1 + argc_i])
-                                target_pseudo = decompile_op(target_op, targs, loc["strings"], items)
+                                target_pseudo = decompile_op(target_op, targs, loc["strings"], items, loc_id)
                                 print(f"        # skip target +0x{target:02X}: {target_pseudo}")
                             else:
                                 print(f"        # skip target +0x{target:02X}: variable token opcode 0x{target_op:02X}")

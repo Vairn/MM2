@@ -16,15 +16,21 @@ SECTIONS: dict[str, str] = {
     "Startup-and-Init": "Runtime & engine",
     "Runtime-Memory-Map": "Runtime & engine",
     "Main-Loop-and-Map": "Runtime & engine",
+    "Exploration-Input-and-Options": "Runtime & engine",
     "Party-and-Session": "Runtime & engine",
     "Game-State-Struct": "Runtime & engine",
+    "Data-Hunk-mm2-data-00": "Runtime & engine",
     "Time-Era-Calendar": "Runtime & engine",
     "GFX-Loading": "Graphics",
     "ANM-TV-Format": "Graphics",
     "3D-View-and-Game-Screen": "Graphics",
+    "Amiga-3D-Render-Process": "Graphics",
+    "Scripted-Scene-Graphics": "Graphics",
+    "Event-Graphics-Opcodes": "Graphics",
     "Title-Screen-Assets": "Title screen & UI",
     "Title-Screen-Animation": "Title screen & UI",
     "Character-UI-View-Create": "Title screen & UI",
+    "Amiga-Cpp-Play-Screen-Draw": "Title screen & UI",
     "Game-Remake": "Title screen & UI",
     "Docs-Wiki-Hub": "Getting started",
     "dat-Files-and-Formats": "Data formats",
@@ -38,6 +44,9 @@ SECTIONS: dict[str, str] = {
     "Events-by-Location": "Data formats",
     "Events-By-Location-Hub": "Data formats",
     "Event-Script-Opcodes": "Data formats",
+    "Event-Script-DSL": "Data formats",
+    "Event-Text-Rendering": "Data formats",
+    "Event-Graphics-Opcodes": "Data formats",
     "Combat-Overview": "Combat",
     "Combat-System": "Combat",
     "Encounter-Tables": "Combat",
@@ -184,6 +193,54 @@ RELATED: dict[str, list[tuple[str, str]]] = {
         ("Event-to-String-Path", "When exe text vs str.dat"),
         ("Town-Services", "Inn & service prompts"),
     ],
+    "Data-Hunk-mm2-data-00": [
+        ("Game-State-Struct", "A4 field layout (BSS beyond hunk end)"),
+        ("Runtime-Memory-Map", "Thunk tables + workspace"),
+        ("Town-Services", "Blacksmith / donation tables in hunk"),
+        ("Encounter-Tables", "Random-step tables"),
+    ],
+    "Exploration-Input-and-Options": [
+        ("Main-Loop-and-Map", "Scheduler + overland loop"),
+        ("3D-View-and-Game-Screen", "Viewport refresh after input"),
+        ("Character-UI-View-Create", "P/C char sheet entry"),
+        ("Game-Remake", "Input backends in C++ port"),
+    ],
+    "Event-Script-DSL": [
+        ("event-dat-Format", "Container layout"),
+        ("Event-Script-Opcodes", "Opcode reference"),
+        ("Events-by-Location", "Per-map script pages"),
+        ("MM2ED-Editor", "Node-graph editor (alternative)"),
+    ],
+    "Event-Text-Rendering": [
+        ("Event-Script-Opcodes", "OP_01..06 text ops"),
+        ("Event-to-String-Path", "str.dat vs exe strings"),
+        ("Embedded-Exe-Strings", "Code-hunk prompts"),
+        ("MM2ED-Editor", "Edit scripts in node graph"),
+    ],
+    "Event-Graphics-Opcodes": [
+        ("Scripted-Scene-Graphics", "Corak / Pegasus scenes"),
+        ("Title-Screen-Animation", "Title pegasus overlays"),
+        ("GFX-Loading", ".32 asset table"),
+        ("Event-Script-Opcodes", "OP_0B opcode trace"),
+    ],
+    "Scripted-Scene-Graphics": [
+        ("Event-Graphics-Opcodes", "OP_0B in-game sprites"),
+        ("Title-Screen-Animation", "Shared pegasus art path"),
+        ("Known-Songs-Catalog", "play_song_scripted ids"),
+        ("Event-Script-Opcodes", "Scene trigger opcodes"),
+    ],
+    "Amiga-3D-Render-Process": [
+        ("3D-View-and-Game-Screen", "ASM-confirmed reference"),
+        ("Amiga-Cpp-Play-Screen-Draw", "Remake implementation"),
+        ("map-dat-Format", "Page 0 wall bits"),
+        ("GFX-Loading", "town/cave/castle .32 sheets"),
+    ],
+    "Amiga-Cpp-Play-Screen-Draw": [
+        ("Game-Remake", "Build targets & phases"),
+        ("Amiga-3D-Render-Process", "Original blit pipeline"),
+        ("3D-View-and-Game-Screen", "68k viewport layout"),
+        ("Map-Walker", "HTML5 frustum preview"),
+    ],
 }
 
 # PNG byte-strips / charts (path relative to wiki root, alt text)
@@ -280,16 +337,40 @@ MERMAID: dict[str, str] = {
   op -- OP_0E --> hdl["Service handler"]
   hdl --> str["str.dat A4-$703e"]
   hdl --> exe["Code hunk ASCII"]""",
+    "Data-Hunk-mm2-data-00": """flowchart TD
+  bin["mm2_data_00.bin<br/>8604 bytes BE"] --> jmp["JSR d(A4) jump table"]
+  bin --> init["Initialized A4 fields<br/>EA = file offset"]
+  init --> shop["Blacksmith tables<br/>-$68EE..-$6858"]
+  init --> town["Town commerce<br/>-$6720..-$66B1"]
+  init --> enc["Encounter tables"]
+  bss["EA >= 0x219C<br/>BSS / runtime only"] -.-> gs["Game State Struct doc"]""",
+    "Exploration-Input-and-Options": """flowchart TD
+  pump["Main loop pump"] --> key["Key dispatch 0x1482"]
+  key --> move["Step / turn / search"]
+  key --> ui["Options / Protect panels"]
+  key --> sheet["Char sheet P / cast C"]
+  move --> refresh["Viewport refresh 0x5382"]
+  refresh --> v3d["3D view 0x2ECE"]""",
+    "Event-Script-DSL": """flowchart LR
+  dat["event.dat"] --> dec["mm2_event_lang decompile"]
+  dec --> evt[".mm2evt readable scripts"]
+  evt --> patch["patch-loc merge"]
+  patch --> dat
+  dec --> rt["roundtrip 71/71"]""",
 }
 
 TOC_PAGES = {
     "Combat-System",
     "3D-View-and-Game-Screen",
     "Event-Script-Opcodes",
+    "Event-Text-Rendering",
+    "Data-Hunk-mm2-data-00",
+    "Exploration-Input-and-Options",
+    "Town-Services",
+    "Scripted-Scene-Graphics",
     "Full-Analysis",
     "Runtime-Memory-Map",
     "Audio-Sounds-Music",
-    "Town-Services",
     "Spell-Sources",
     "Event-to-String-Path",
     "Embedded-Exe-Strings",
@@ -311,7 +392,9 @@ that are easier to evolve while reversing and decompiling.
 |-------|------|----------|
 | Boot | [Startup and Init](Startup-and-Init) | Hunk entry, DOS/Exec, MANX heap |
 | Memory | [Runtime Memory Map](Runtime-Memory-Map) | `A4` workspace, thunk tables |
+| Data hunk | [Data Hunk mm2 data 00](Data-Hunk-mm2-data-00) | Static `A4` tables, `file_offset==EA` |
 | World | [Main Loop and Map](Main-Loop-and-Map) | Scheduler `LAB_1280`, overland renderer |
+| Input | [Exploration Input and Options](Exploration-Input-and-Options) | Key dispatch `$1482`, Options/Protect |
 | Party | [Party and Session](Party-and-Session) | New game, session restart |
 | Open items | [Open Questions](Open-Questions) | Unknowns and TODOs |
 | Graphics | [GFX Loading](GFX-Loading) | `.32`/`.dat` asset table |
@@ -482,11 +565,12 @@ flowchart LR
 ### Trace game logic
 
 1. [Main Loop and Map](Main-Loop-and-Map) - scheduler
-2. [Combat Overview](Combat-Overview) -> [Combat System](Combat-System)
-3. [Events by location](Events-by-Location) - all 71 map scripts
-4. [Event Script Opcodes](Event-Script-Opcodes) - script VM
-5. [Town Services](Town-Services) - pub, temple, guild, training
-6. [3D View and Game Screen](3D-View-and-Game-Screen) - renderer
+2. [Exploration Input and Options](Exploration-Input-and-Options) - key dispatch
+3. [Combat Overview](Combat-Overview) -> [Combat System](Combat-System)
+4. [Events by location](Events-by-Location) - all 71 map scripts
+5. [Event Script Opcodes](Event-Script-Opcodes) - script VM · [Event Script DSL](Event-Script-DSL)
+6. [Town Services](Town-Services) - pub, temple, guild, training, blacksmith
+7. [3D View and Game Screen](3D-View-and-Game-Screen) - renderer · [Data Hunk](Data-Hunk-mm2-data-00)
 
 </td>
 </tr>

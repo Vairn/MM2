@@ -48,7 +48,7 @@
 ```
 
 ```
-00: set_service_context(str[8] "Yellow / Message 9", mode=0x00)
+00: service_sign(idx=0x08 -> sign 42 [42.anm], pos=0x00)
 01: cond = consume_item(item_id=218, name="Cupie Doll", probe=0)
 02: if not cond: skip_tokens(4)
     # skip -> show_text_block(str[1] "A mad old man ignores you while / ranting about a Cupie Doll.")

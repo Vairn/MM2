@@ -78,7 +78,9 @@ void ViewportAnmOverlay::unload()
 
 #if MM2_HOST_AMIGA
 
-    mm2_anm_composite_planar_free(&planar_);
+    mm2_anm_composite_cache_free(&cache_);
+
+    cur_cel_ = nullptr;
 
 #else
 
@@ -144,31 +146,41 @@ bool ViewportAnmOverlay::setComposedFrame(int frame_idx)
 
     }
 
-    if (frame_idx == composed_frame_ && loaded()) {
-
-        return false;
-
-    }
+    const bool same = (frame_idx == composed_frame_);
 
 
 
 #if MM2_HOST_AMIGA
 
-    /* Recompose into the persistent planar buffer — its chip bitmap + mask are
-     * allocated once and reused across cels (no per-frame bitmapCreate). */
-    planar_.map_to_host_palette = use_host_palette_ ? 1 : 0;
+    /* Cels are pre-composed at load (mm2_anm_composite_build_cache) — selecting a
+     * frame is just a pointer + dimension swap, no software composite/remap. */
+    const mm2_anm_composite_planar *cel = mm2_anm_composite_cache_at(&cache_, frame_idx);
 
-    if (!mm2_anm_composite_frame_planar(&anm_, frame_idx, &planar_)) {
+    if (!cel) {
 
         return false;
 
     }
 
-    w_ = planar_.width;
+    if (same && cur_cel_ == cel) {
 
-    h_ = planar_.height;
+        return false;
+
+    }
+
+    cur_cel_ = cel;
+
+    w_ = cel->width;
+
+    h_ = cel->height;
 
 #else
+
+    if (same && rgba_) {
+
+        return false;
+
+    }
 
     mm2_anm_composite_rgba comp{};
 
@@ -203,7 +215,7 @@ bool ViewportAnmOverlay::setComposedFrame(int frame_idx)
 
     composed_frame_ = frame_idx;
 
-    return true;
+    return !same;
 
 }
 
@@ -280,6 +292,20 @@ bool ViewportAnmOverlay::loadFromPath(const char *path, AnmLoopMode loop, bool a
     }
 
     anm_loaded_ = true;
+
+#if MM2_HOST_AMIGA
+
+    /* A: build one chip BOB+mask per composed cel up front, with the pen remap
+     * computed once (C). Steady-state playback is then a single hardware blit. */
+    if (!mm2_anm_composite_build_cache(&anm_, use_host_palette_ ? 1 : 0, &cache_)) {
+
+        unload();
+
+        return false;
+
+    }
+
+#endif
 
     resetPlayback(loop);
 
@@ -437,13 +463,13 @@ void ViewportAnmOverlay::blitAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) 
 
     (void)c;
 
-    if (!planar_.bitmap) {
+    if (!cur_cel_ || !cur_cel_->bitmap) {
 
         return;
 
     }
 
-    platform::blitAnmComposed(&planar_, dst_x, dst_y);
+    platform::blitAnmComposed(cur_cel_, dst_x, dst_y);
 
 #else
 

@@ -133,33 +133,11 @@ public:
     bool firstTimeFlag() const { return mm2_gs_u8(a4_, MM2_GS_FIRST_TIME_FLAG) != 0; }
     void setFirstTimeFlag(bool v) { mm2_gs_set_u8(a4_, MM2_GS_FIRST_TIME_FLAG, v ? 1 : 0); }
 
-    /* apply_party / apply_party_masked op 0x74 @ event_op15_party_state_apply 0x16426. */
-    uint8_t partyProgress() const { return mm2_gs_u8(a4_, MM2_GS_PARTY_PROGRESS); }
-    void setPartyProgress(uint8_t v) { mm2_gs_set_u8(a4_, MM2_GS_PARTY_PROGRESS, v); }
-
-    bool pegasusIntroSeen() const { return (partyProgress() & 0x40) != 0; }
-    void setPegasusIntroSeen(bool v)
-    {
-        uint8_t b = partyProgress();
-        if (v) {
-            b |= 0x40;
-        } else {
-            b &= static_cast<uint8_t>(~0x40);
-        }
-        setPartyProgress(b);
-    }
-
-    bool corakIntroSeen() const { return (partyProgress() & 0x01) != 0; }
-    void setCorakIntroSeen(bool v)
-    {
-        uint8_t b = partyProgress();
-        if (v) {
-            b |= 0x01;
-        } else {
-            b &= static_cast<uint8_t>(~0x01);
-        }
-        setPartyProgress(b);
-    }
+    /* Party class-quest/guild bits (e.g. "seen Pegasus" 0x40) live PER CHARACTER
+     * at roster record offset 0x79 (Mm2RosterRecord::class_quest_guild_mask),
+     * written by OP_15/18 selector 0x74. They are no longer mirrored in a global
+     * here; read them from the relevant party member's record. The Corak-intro
+     * one-shot is tracked by GameSession (port scene scheduling), not game state. */
 
 private:
     int eraClamped() const

@@ -133,7 +133,7 @@
 ```
 
 ```
-00: set_service_context(str[22] "Sorry, benefits are given only once / per moon phase.", mode=0x00)
+00: service_sign(idx=0x16 -> sign 56 [56.anm], pos=0x00)
 01: show_text(str[2] ""For a magical time and bargains / galore, take this portal to Pinehurst")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)

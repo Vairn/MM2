@@ -36,6 +36,7 @@ public:
 
     int currentScreen() const { return screen_; }
     const Mm2MapFile &mapFile() const { return map_; }
+    Mm2MapFile &mapFileMut() { return map_; }
     const Mm2AttribFile &attribFile() const { return attrib_; }
     const Mm2AttribRecord &attrib() const { return attrib_.records[screen_]; }
 

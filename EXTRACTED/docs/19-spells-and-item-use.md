@@ -147,6 +147,29 @@ the FAQ align with this doc. Guild/temple **prices** in the FAQ are approximate
 and often wrong — use [`31-spell-sources.md`](31-spell-sources.md) /
 [`shop_tables.json`](../shop_tables.json) (ASM tables).
 
+## Runtime effect state — Eagle Eye / Wizard Eye (vision timers)
+
+Two of the few spell effects already wired into the event VM are the overhead
+"eye" vision spells, which persist as **per-step duration timers** in game state:
+
+| Spell | Type | A4 timer | Event var group |
+|-------|------|----------|-----------------|
+| S2/1 Eagle Eye | Outdoor 5×5 overhead | `-$79A0` | `0x2B` |
+| S3/6 Wizard Eye | Indoor/maze 5×5 overhead | `-$799F` | `0x2C` |
+
+- **Cast:** Eagle Eye handler @ `0xA91C` sets `-$79A0`; Wizard Eye @ `0xAD20` sets
+  `-$799F`. Each adds `5` per caster level (manual "5 steps/L"), clamped to
+  `0xFA`/`0xFF`.
+- **Tick:** `0x4672` runs per step — picks the timer for the current view mode
+  (`-$79E2`: outdoor → Eagle Eye, dungeon → Wizard Eye), `subq #1` while nonzero,
+  and renders the overhead while active.
+- **Fountain of Clairvoyance** (Middlegate event 42) writes both timers to `50`
+  via `store_var8`/`OP_1A` (groups `0x2B`/`0x2C`) — see
+  [`06-roster-format.md`](06-roster-format.md).
+- **Port TODO:** `mm2_gamestate.h` still names these `MM2_GS_CLASS_QUEST_CNT` /
+  `MM2_GS_QUEST_COUNTER_B` (correct offsets, stale names). Rename + implement the
+  decrement/overhead render when the spell-effect system is built.
+
 ## Tools / code
 
 - `tools/mm2_spells.py` — spell tables, `decode_effect(byte)` (items), full

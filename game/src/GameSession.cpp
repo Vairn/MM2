@@ -235,6 +235,7 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     back_to_title_ = false;
     assets_ok_ = false;
     overlay_ = PlayOverlay::None;
+    town_service_ui_.close();
     automap_.clearAll();
     sheet_session_ = {};
     sheet_session_.party_slot = 0;
@@ -285,6 +286,9 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     assets_ok_ = has_world && has_env && has_sky;
     events_loaded_ = events_.load(data_dir_);
     if (events_loaded_) {
+        events_.bindParty(&roster_, &launch_);
+        events_.bindItems(has_items_ ? &items_ : nullptr);
+        events_.bindTownServiceUi(&town_service_ui_);
         refreshEventsForScreen();
     }
 
@@ -355,6 +359,9 @@ void GameSession::tickBootstrap()
         MM2_DBG("MM2 GOTO: bootstrap events load\n");
         events_loaded_ = events_.load(data_dir_);
         if (events_loaded_) {
+            events_.bindParty(&roster_, &launch_);
+            events_.bindItems(has_items_ ? &items_ : nullptr);
+            events_.bindTownServiceUi(&town_service_ui_);
             refreshEventsForScreen();
         }
         bootstrap_step_ = 4;
@@ -449,16 +456,18 @@ void GameSession::maybeQueueScriptedScenes(bool on_start)
         return;
     }
 
-    /* Area enter @ 0x6E84: first_time_flag until Corak prologue at (7,4) (FAQ x,y). */
-    if (on_start && gs_.screenId() == 0 && !gs_.corakIntroSeen()) {
+    /* Area enter @ 0x6E84: first_time_flag until Corak prologue at (7,4) (FAQ x,y).
+     * corak_intro_seen_ is a port-side one-shot (the prologue is scene scheduling,
+     * not a per-character quest bit). */
+    if (on_start && gs_.screenId() == 0 && !corak_intro_seen_) {
         gs_.setFirstTimeFlag(true);
         return;
     }
 
     if (!on_start && gs_.screenId() == 0 && gs_.coordX() == 7 && gs_.coordY() == 4 &&
-        gs_.firstTimeFlag() && !gs_.corakIntroSeen()) {
+        gs_.firstTimeFlag() && !corak_intro_seen_) {
         scripted_scene_.queueScene(events::ScriptedSceneId::CorakIntro);
-        gs_.setCorakIntroSeen(true);
+        corak_intro_seen_ = true;
         gs_.setFirstTimeFlag(false);
         markDirty();
     }
@@ -565,7 +574,7 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
 {
     switch (action) {
     case gameplay::PlaySessionAction::BashDoor:
-        showStatusMessage("Bash Door (GAP 0x9B48).");
+        handleBashDoor();
         break;
     case gameplay::PlaySessionAction::Controls:
         overlay_ = PlayOverlay::Controls;
@@ -589,29 +598,286 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
         showStatusMessage("Search (GAP $4800 / 0x1B19C).");
         break;
     case gameplay::PlaySessionAction::Unlock:
-        showStatusMessage("Unlock door (GAP 0x20CA2).");
+        handleUnlockDoor();
         break;
-    case gameplay::PlaySessionAction::Rest: {
-        /* Minimal stub: restore HP/SP for party. GAP: full 0x19E20 prompt/pay/day advance. */
-        for (int i = 0; i < launch_.party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
-            const int idx = launch_.roster_slots[i];
-            if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
-                continue;
-            }
-            Mm2RosterRecord &rec = roster_.records[idx];
-            rec.hp_current = rec.hp_max;
-            rec.sp_current = rec.sp_max;
-        }
-        showStatusMessage("Party rested (stub 0x19E20).");
+    case gameplay::PlaySessionAction::Rest:
+        /* Rest @ 0x19E20: set the modal flag, then put up the Y/N confirm overlay.
+         * Execution (pay / encounter / heal / day-advance) runs on confirm in
+         * executeRest(). The original's "Too dangerous!" pre-check (0x19E32
+         * btst #3,-$55D6) reads the re-bundled per-tile flag table that the port
+         * does not maintain yet, so it is DEFERRED (no false blocking). */
+        mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 1); /* 0x19E24: -$7950 := 1 */
+        overlay_ = PlayOverlay::RestConfirm;
+        markDirty();
         break;
-    }
     default:
         break;
     }
 }
 
+namespace {
+
+/* Wall field directly ahead, read from the centre cell of the active screen's
+ * VISUAL page (the original's -$55BA source, MapWorld.h). 2-bit field per the
+ * port codec: 0 open, 1 wall, 2 wall+torch, 3 door (MM2_MAP_WALL_*). This is
+ * the same extraction View3D uses for the forward wall slot (cell & mask, then
+ * >> shift). NOTE: the original bash/unlock read a re-bundled table where the
+ * door field is 2; the port's raw visual page uses 3 (the renderer's
+ * convention). Door detection therefore follows the port convention. */
+int forwardWallField(const mm2::world::MapWorld &world, int x, int y, char facing)
+{
+    const uint8_t cell = world.visualPage()[static_cast<size_t>((y << 4) | (x & 0x0F))];
+    return (cell >> mm2_map_facing_shift(facing)) & 3;
+}
+
+}  // namespace
+
+void GameSession::handleBashDoor()
+{
+    /* Bash door @ 0x9B48. */
+    const int x = gs_.coordX();
+    const int y = gs_.coordY();
+    const char facing = gs_.facingKey();
+    const int field = forwardWallField(world_, x, y, facing);
+
+    /* 0x9B7A/0x9B82: outdoor, or no wall ahead -> a plain forward step + tick. */
+    if (world_.isOutdoor() || field == MM2_MAP_WALL_OPEN) {
+        gameplay::MoveResult move = gameplay::step(world_, gs_, true);
+        refreshWorldAfterMove(move);
+        return;
+    }
+
+    /* 0x9BB4: a non-door wall (1 solid / 2 torch) -> "Solid!". */
+    if (field != MM2_MAP_WALL_DOOR) {
+        showStatusMessage(gameplay::obstructionMessage(gameplay::ObstructionMsg::Solid));
+        return;
+    }
+
+    /* 0x9BCA door: bash strength = char0 +$6B (might base) [+ char1 if party>1]. */
+    int might_sum = 0;
+    for (int i = 0; i < launch_.party_count && i < 2; ++i) {
+        const int idx = launch_.roster_slots[i];
+        if (idx >= 0 && idx < MM2_ROSTER_RECORD_COUNT) {
+            might_sum += roster_.records[idx].might_base; /* roster +$6B */
+        }
+    }
+
+    /* GAP: the door-strength byte -$5608 (compared at 0x9C2A) and the bash trap
+     * springs path (-$7D22/-$7D28 victim+damage @ 0x9C88) are part of the door /
+     * combat runtime state the port does not model yet (door tables are built by
+     * map_row_sampler 0x190C; -$5608 is never written in traced code). Without a
+     * door-strength source the success/fail comparison cannot be resolved
+     * faithfully, so the in-game bash on a real door is reported as deferred. The
+     * full strength + trap-roll decision IS implemented and unit-tested in
+     * gameplay::bashDoorRoll (explore_commands_test). */
+    (void)might_sum;
+    showStatusMessage("Bash: door strength (-$5608) not modeled (0x9BCA).");
+}
+
+void GameSession::handleUnlockDoor()
+{
+    /* Unlock door @ 0x20CA2. */
+    if (world_.isOutdoor()) {
+        return; /* 0x20CAE: outdoor -> silent exit. */
+    }
+
+    const int x = gs_.coordX();
+    const int y = gs_.coordY();
+    const char facing = gs_.facingKey();
+    const int field = forwardWallField(world_, x, y, facing);
+
+    /* 0x20CE4: must be a door ahead, else exit silently. */
+    if (field != MM2_MAP_WALL_DOOR) {
+        return;
+    }
+
+    /* GAP: the locked-bit test (0x20CF0 vs -$55D6) reads the re-bundled tile
+     * flag table that the port does not maintain; we treat a door as lockable
+     * and attempt the pick. The "Not Locked!" early-out is therefore deferred. */
+
+    /* GAP: the "who tries to unlock" character picker (0x1AE2E) is its own modal
+     * UI (not yet ported); use party slot 0 as the picker. */
+    int picker = -1;
+    for (int i = 0; i < launch_.party_count; ++i) {
+        const int idx = launch_.roster_slots[i];
+        if (idx >= 0 && idx < MM2_ROSTER_RECORD_COUNT) {
+            picker = idx;
+            break;
+        }
+    }
+    if (picker < 0) {
+        return;
+    }
+
+    /* Picker thievery = roster +$1E (read at 0x20D44). doc 06 labels +$16 the
+     * "Thievery %" creation stat; the unlock handler AND the party-thievery sum
+     * (0x4B7C) both read +$1E, so we follow the ASM (record byte 0x1E ==
+     * unknown_1a_20[4], contiguous run with no struct padding before age@0x21). */
+    const int thievery = roster_.records[picker].unknown_1a_20[4];
+
+    const int lock_d100 = rng_.range(1, 100);  /* 0x20D2E */
+    const int trap_d100 = rng_.range(1, 100);  /* 0x20D64 (only used on a failed pick) */
+
+    /* GAP: the trap byte -$5607 (0x20D6E) is unported door/combat state; on a
+     * failed pick the port reports the faithfully-known "Locked!" outcome and
+     * the trap-springs branch (-$7D22/-$7D28 @ 0x20D8A) is deferred. Passing a
+     * trap_byte >= roll keeps unlockDoorRoll on that branch. */
+    const gameplay::UnlockDecision d =
+        gameplay::unlockDoorRoll(thievery, lock_d100, /*trap_byte*/ 0xFF, trap_d100);
+
+    /* GAP: clearing the lock on success (-$7F02 @ 0x4B06) mutates the re-bundled
+     * -$54BA/-$55D6 tables the port does not maintain, so the unlocked state is
+     * not persisted here yet. */
+    showStatusMessage(gameplay::obstructionMessage(
+        d.outcome == gameplay::UnlockOutcome::Success ? gameplay::ObstructionMsg::Success
+                                                      : gameplay::ObstructionMsg::Locked));
+}
+
+void GameSession::executeRest()
+{
+    uint8_t *a4 = gs_.a4();
+
+    /* --- 0x19AD6 hireling daily-pay check --------------------------------- */
+    uint32_t hireling_pay = 0;
+    for (int i = 0; i < launch_.party_count; ++i) {
+        const int idx = launch_.roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        if (idx >= 0x18) { /* roster index >= 24 -> hireling (doc 33 / 0x19AE4) */
+            hireling_pay += roster_.records[idx].gold; /* +$66 daily fee */
+        }
+    }
+    if (hireling_pay > 0) {
+        /* The pooled-gold spend routine -$7E6C (0x19B1E) is not traced; pool the
+         * party's gold to decide affordability. DEFER the exact distribution. */
+        uint32_t pool = 0;
+        for (int i = 0; i < launch_.party_count; ++i) {
+            const int idx = launch_.roster_slots[i];
+            if (idx >= 0 && idx < MM2_ROSTER_RECORD_COUNT) {
+                pool += roster_.records[idx].gold;
+            }
+        }
+        if (pool < hireling_pay) {
+            /* 0x19EA0 inline string. */
+            mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
+            showStatusMessage("Not enough gold - Dismiss hirelings");
+            return;
+        }
+        uint32_t remaining = hireling_pay;
+        for (int i = 0; i < launch_.party_count && remaining > 0; ++i) {
+            const int idx = launch_.roster_slots[i];
+            if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+                continue;
+            }
+            const uint32_t take = roster_.records[idx].gold < remaining ? roster_.records[idx].gold
+                                                                        : remaining;
+            roster_.records[idx].gold -= take;
+            remaining -= take;
+        }
+    }
+
+    /* --- 0x19D64 rest-interruption (encounter) check ---------------------- */
+    /* Conditions that suppress the encounter (all -> no roll): event tile, an
+     * active guard dog, or a non-zero move counter -$796C. */
+    const uint8_t move_counter = mm2_gs_u8(a4, -0x796C);
+    mm2_gs_set_u8(a4, -0x796C, 0); /* 0x19D76: clr -$796C */
+    const bool on_event_tile = (world_.collisionAt(gs_.coordX(), gs_.coordY()) & MM2_MAP_COLL_EVENT) != 0;
+    const bool guard_dog = mm2_gs_u8(a4, MM2_GS_GUARD_DOG_FLAG) != 0;
+
+    bool encounter = false;
+    if (!on_event_tile && !guard_dog && move_counter == 0) {
+        encounter = (rng_.range(1, 50) == 2); /* 0x19D98: rng(1,50)==2 */
+    }
+    if (encounter) {
+        /* 0x19DAC: wakes the party (sets condition bit 4) and starts a fixed
+         * fight (-$796B := 3, -$7EDE combat setup @ 0x051C2). DEFER the combat
+         * engine; faithfully skip the heal + day advance (rest interrupted). */
+        mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
+        showStatusMessage("Rest interrupted by monsters (combat 0x051C2 deferred).");
+        return;
+    }
+
+    /* --- 0x19B28 rest execution: clear buffs, heal, advance the clock ------ */
+    /* 0x19B2C..0x19B5C: clear the 13 contiguous temporary-buff bytes
+     * (-$79AB light .. -$799F wizard-eye), exactly the set the ASM zeroes. */
+    for (int32_t off = -0x79AB; off <= -0x799F; ++off) {
+        mm2_gs_set_u8(a4, off, 0);
+    }
+
+    for (int i = 0; i < launch_.party_count; ++i) {
+        const int idx = launch_.roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        Mm2RosterRecord &rec = roster_.records[idx];
+
+        if (rec.condition >= 0x80) {
+            continue; /* 0x19B80: dead/stone/eradicated -> not healed. */
+        }
+
+        rec.condition &= 0x0D; /* 0x19B8C: keep bits 0,2,3; clear the rest. */
+
+        /* 0x19B96: age >= 0x50 -> 50%-ish chance to fall ill (condition = 0x81). */
+        if (rec.age >= 0x50 && rng_.range(1, 100) < 0x32) {
+            rec.condition = 0x81;
+        }
+
+        if (rec.hp_max == 0) {
+            rec.hp_max = 1; /* 0x19BC4 */
+        }
+
+        /* 0x19BD0: poisoned (condition bit 3) heals HP_current to half; otherwise
+         * restore HP_current to the permanent max in +$60 (hp_aux). */
+        if (rec.condition & 0x08) {
+            rec.hp_current = static_cast<uint16_t>(rec.hp_current / 2);
+        } else {
+            rec.hp_current = rec.hp_aux;
+        }
+
+        /* 0x19C06: with no food, HP_current is restored but the rest of the
+         * refresh (HP_max sync, food spend, SP) is skipped for this member. */
+        if (rec.food == 0) {
+            continue;
+        }
+        rec.food = static_cast<uint8_t>(rec.food - 1); /* 0x19C12 */
+
+        if (!(rec.condition & 0x04)) {
+            rec.hp_max = rec.hp_current; /* 0x19C2A */
+        }
+
+        /* 0x19C30 SP recompute: sp_current = (stat_bonus+3) * spell_level for
+         * casters (+$23), then sp_max = sp_current. The bonus lookup -$7F56 and
+         * the exact field semantics are not ported; restore SP to the stored max
+         * (the rested end state for an undrained caster). DEFER exact recompute. */
+        rec.sp_current = rec.sp_max;
+    }
+
+    /* 0x19CEC: advance the clock by 0x55 sub-day units (one rest = ~85 ticks),
+     * rolling the calendar over so the day/night cycle progresses. */
+    gameplay::advanceTimeTick(gs_, 0x55);
+
+    /* DEFER 0x19CF6: era==9 endgame timeline-shuffle (rng(1,60) -> map reload). */
+
+    mm2_gs_set_u8(a4, MM2_GS_PENDING_EVENT_LATCH, 1); /* dispatcher epilogue $1420 */
+    mm2_gs_set_u8(a4, MM2_GS_BUSY_STATUS, 1);
+    mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
+
+    showStatusMessage("Rest complete, no encounters."); /* 0x19D46 inline string */
+}
+
 void GameSession::tickOverlayInput(const platform::KeyState &keys)
 {
+    if (overlay_ == PlayOverlay::TownService) {
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        town_service_ui_.handleKey(ch, keys.escape);
+        if (!town_service_ui_.active()) {
+            overlay_ = PlayOverlay::None;
+        }
+        markDirty();
+        return;
+    }
+
     if (overlay_ == PlayOverlay::StatusMessage) {
         if (keys.escape || keys.any_key) {
             overlay_ = PlayOverlay::None;
@@ -638,6 +904,26 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
         if (ch >= '1' && ch <= '4') {
             controls_screen_.handleKey(ch, gs_);
+            markDirty();
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::RestConfirm) {
+        /* 0x19E50 prompt loop: read a key, toupper, accept only Y / N (the ASM
+         * loops on anything else). ESC is treated as N here for parity with the
+         * other confirm overlays. */
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (ch == 'Y') {
+            overlay_ = PlayOverlay::None;
+            executeRest();
+            markDirty();
+            return;
+        }
+        if (keys.escape || ch == 'N') {
+            /* 0x19E8E: repaint chrome, clear -$7950, abort. */
+            mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+            overlay_ = PlayOverlay::None;
             markDirty();
         }
         return;
@@ -909,6 +1195,20 @@ void GameSession::tick(const platform::KeyState &keys)
 
     runPendingEvents();
     refreshWorldAfterEventTransition();
+    maybeOpenTownServiceMenu();
+}
+
+void GameSession::maybeOpenTownServiceMenu()
+{
+    /* An OP_0E temple/training/smith selector fired during scanAndRun and the bound
+     * PlayTownServiceUi recorded the request (presentation deferred to here so input
+     * runs per-frame, not blocking inside the event VM). Open the modal overlay. */
+    if (!town_service_ui_.pending() || overlay_ != PlayOverlay::None) {
+        return;
+    }
+    town_service_ui_.begin();
+    overlay_ = PlayOverlay::TownService;
+    markDirty();
 }
 
 void GameSession::renderView3D()
@@ -961,7 +1261,35 @@ void GameSession::renderOutdoorView()
 
     /* Paint order @ outdoor_3d_master 0x18870: floor, sky, decor, horizon layers. */
     blitImageFrame(compositor_, env_.floor(), 0, kView3DOriginX, kView3DFloorY, 1);
-    blitImageFrame(compositor_, env_.sky(), 0, kView3DOriginX, kView3DSkyY, 1);
+
+    /* Day vs night sky @0x18898: cmpi.w #$80,-$79b4 — subday < 0x80 draws the
+     * sky.32 backdrop; >= 0x80 (night) fills the band black + plots stars
+     * (night routine @0x0687C). */
+    const uint16_t subday = mm2_gs_u16(gs_.a4(), MM2_GS_TIME_SUBDAY);
+    if (subday < static_cast<uint16_t>(kOutdoorNightSubdayThreshold)) {
+        blitImageFrame(compositor_, env_.sky(), 0, kView3DOriginX, kView3DSkyY, 1);
+    } else {
+        const mm2_image32_file &sky = env_.sky();
+        auto penRgb = [&sky](uint8_t pen, uint8_t &r, uint8_t &g, uint8_t &b) {
+            const uint8_t *c = sky.palette_rgba[pen & (MM2_IMAGE32_PALETTE_COLORS - 1)];
+            r = c[0];
+            g = c[1];
+            b = c[2];
+        };
+        uint8_t fr = 0, fg = 0, fb = 0;
+        penRgb(kOutdoorSkyFillPen, fr, fg, fb);
+        compositor_.fillRect(kOutdoorSkyFillX, kOutdoorSkyFillY, kOutdoorSkyFillW, kOutdoorSkyFillH,
+                             fr, fg, fb);
+
+        std::array<OutdoorStarBlit, kOutdoorStarCount> stars{};
+        const int nstars = buildOutdoorStars(camera.facing, stars);
+        for (int i = 0; i < nstars; ++i) {
+            uint8_t r = 0, g = 0, b = 0;
+            penRgb(stars[static_cast<size_t>(i)].pen, r, g, b);
+            compositor_.fillRect(stars[static_cast<size_t>(i)].x, stars[static_cast<size_t>(i)].y, 1, 1,
+                                 r, g, b);
+        }
+    }
 
     const OutdoorScene scene = buildOutdoorScene(world_, camera);
 
@@ -1019,6 +1347,14 @@ void GameSession::renderOverlays()
     case PlayOverlay::QuitConfirm:
         gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
         compositor_.drawText(8, 17 * 8, "Quit without game save (y/n)?", 255, 80, 80, 255);
+        break;
+    case PlayOverlay::RestConfirm:
+        /* 0x19ECB inline string, drawn on the status row like the other prompts. */
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
+        compositor_.drawText(8, 17 * 8, "Rest here? (Y/N)", 255, 255, 128, 255);
+        break;
+    case PlayOverlay::TownService:
+        town_service_ui_.render(compositor_);
         break;
     default:
         break;
@@ -1078,7 +1414,10 @@ void GameSession::renderFrame(bool overlay_anim_only)
                            gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
     renderPartyPanel();
 
-    if (overlay_ == PlayOverlay::None || overlay_ == PlayOverlay::StatusMessage) {
+    if (overlay_ == PlayOverlay::None || overlay_ == PlayOverlay::StatusMessage ||
+        overlay_ == PlayOverlay::TownService) {
+        /* Town services render in the lower console band only (faithful, not a
+         * fullscreen modal) — keep the 3D view + right column on screen. */
         const gfx::PlayProtectValues prot = protectValues();
         gfx::drawPlayRightColumn(compositor_, panel, protect_panel ? &prot : nullptr);
     }
@@ -1105,6 +1444,8 @@ bool GameSession::viewportHiddenByOverlay() const
     case PlayOverlay::QuitConfirm:
     case PlayOverlay::Automap:
         return true;
+    /* TownService is NOT here: its menu draws only in the lower console band, so
+     * the 3D viewport stays visible (faithful non-fullscreen presentation). */
     default:
         return false;
     }

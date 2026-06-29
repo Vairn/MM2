@@ -272,7 +272,7 @@
 18: cond = consume_item(item_id=221, name="Fire Talon", probe=1)
 19: cond = consume_item(item_id=222, name="Earth Talon", probe=1)
 20: cond = consume_item(item_id=223, name="Element Orb", probe=1)
-21: set_service_context(str[18], mode=0x00)
+21: service_sign(idx=0x12 -> sign 52 [52.anm], pos=0x00)
 22: show_text(str[10] "King Kalohn the Conjurer thanks you / greatly. He then engages in an epi")
 23: apply_party_masked(count=0x00, set=0x7F, and=0xFD, or=0x02)
 24: wait_key()

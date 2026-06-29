@@ -106,7 +106,10 @@ EXTRA_EVENT_LOC: dict[int, str] = {
     70: "Meta bank (HoS, bishops, puzzles)",
 }
 
-TEXT_OPS = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x0B}
+# Opcodes whose first arg is an event-local string-table index. OP_0B is NOT
+# here: it loads a signboard `.anm` sprite via the per-env sign table (0x15756),
+# not an event.dat string (see decode_event.resolve_service_sign).
+TEXT_OPS = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06}
 
 
 def default_event_dat() -> Path:
@@ -184,6 +187,7 @@ def format_event_segment(
     strings: list[str],
     items: list[str],
     triggers: list[tuple[int, int, int]] | None = None,
+    loc_id: int | None = None,
 ) -> list[str]:
     lines: list[str] = []
     if triggers:
@@ -222,7 +226,7 @@ def format_event_segment(
     for idx, node in enumerate(parsed):
         op = int(node["op"])
         args = [int(x) for x in node["args"]]
-        pseudo = decompile_op(op, args, strings, items)
+        pseudo = decompile_op(op, args, strings, items, loc_id)
         lines.append(f"{idx:02d}: {pseudo}")
         if op in (0x10, 0x11, 0x2B) and args:
             base = int(node["off"]) + 2
@@ -234,7 +238,7 @@ def format_event_segment(
                     argc_i = int(spec["argc"])
                     targs = list(seg[target + 1 : target + 1 + argc_i])
                     lines.append(
-                        f"    # skip -> {decompile_op(t_op, targs, strings, items)}"
+                        f"    # skip -> {decompile_op(t_op, targs, strings, items, loc_id)}"
                     )
     lines.append("```")
     lines.append("")
@@ -322,7 +326,9 @@ def render_location_markdown(
             continue
         seg = segments[evt]
         lines.extend(
-            format_event_segment(evt, seg, loc["strings"], items, triggers or None)
+            format_event_segment(
+                evt, seg, loc["strings"], items, triggers or None, loc_id
+            )
         )
         str_used |= string_indices_in_segment(seg)
 
@@ -414,7 +420,7 @@ def render_class_quest_compact(
                 op = int(node["op"])
                 args = [int(x) for x in node["args"]]
                 if op in (0x30, 0x18, 0x12, 0x0E, 0x03, 0x06, 0x05):
-                    picked.append(decompile_op(op, args, loc["strings"], items))
+                    picked.append(decompile_op(op, args, loc["strings"], items, loc_id))
                 if op in TEXT_OPS and args:
                     str_used.add(args[0])
             lines.append(f"- Key ops: {'; '.join(picked) if picked else '(see loc doc)'}")
@@ -423,7 +429,7 @@ def render_class_quest_compact(
             for node in nodes:
                 op = int(node["op"])
                 args = [int(x) for x in node["args"]]
-                lines.append(f"  - {decompile_op(op, args, loc['strings'], items)}")
+                lines.append(f"  - {decompile_op(op, args, loc['strings'], items, loc_id)}")
                 if op in TEXT_OPS and args:
                     str_used.add(args[0])
         lines.append("")

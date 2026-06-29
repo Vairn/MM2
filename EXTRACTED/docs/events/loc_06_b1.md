@@ -63,7 +63,7 @@
 ```
 
 ```
-00: set_service_context(str[14] "< Shortcut / Pinehurst", mode=0x00)
+00: service_sign(idx=0x0E -> sign 34 [34.anm], pos=0x00)
 01: cond = load_var8(group=0x32, index=0x00)
 02: if not cond: skip_tokens(3)
     # skip -> show_text_block(str[3] ""I am your Guardian Pegasus. / What is my name?"")
@@ -107,7 +107,7 @@
 ```
 
 ```
-00: set_service_context(str[4] ""Incorrect. I cannot reward you."", mode=0x00)
+00: service_sign(idx=0x04 -> sign 58 [58.anm], pos=0x00)
 01: show_text_block(str[8] "Chopping the tall trees of the Timber- / lands, muscular men sing, "Oh, ")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(7)
@@ -223,7 +223,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "The water in this fountain is frozen / solid. Break it (y/n)?", mode=0x00)
+00: service_sign(idx=0x07 -> sign 74 [74.anm], pos=0x00)
 01: show_text_block(str[15] "Before you rests antiquated Haart / Hold. Request an audience with Lord ")
 02: cond = prompt_yes_no(mode=1)
 03: if cond: skip_tokens(1)

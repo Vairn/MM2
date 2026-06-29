@@ -105,6 +105,60 @@ bool resolveScreenEdge(world::MapWorld &world, GameStateView &gs, int *x, int *y
     return true;
 }
 
+/* Day rollover @ 0x6A06: once subday reaches one full day (0x100), advance the
+ * per-era calendar and fold subday back into [0,0x100). Shared by the per-step
+ * tick (n=1) and the multi-tick advance (Rest n=0x55). Arithmetic mirrors the
+ * ASM exactly. */
+void applyDayRollover(GameStateView &gs)
+{
+    uint8_t *a4 = gs.a4();
+    uint16_t subday = mm2_gs_u16(a4, MM2_GS_TIME_SUBDAY);
+    /* 006a0e: cmpi.w #$100,-$79b4; blt -> nothing to do. */
+    if (subday < 0x100) {
+        return;
+    }
+
+    /* 006a18: era index (raw word, asl.l #1 -> word stride). era is held to
+     * 0..9 at every write site, so the array access stays in bounds. */
+    const int era = static_cast<int>(gs.era());
+    const int32_t day_off = MM2_GS_DAY + era * 2;
+    const int32_t year_off = MM2_GS_YEAR + era * 2;
+
+    /* 006a24: ++day[era]; 006a28: keep the just-incremented value. */
+    const uint16_t day = static_cast<uint16_t>(mm2_gs_u16(a4, day_off) + 1);
+    mm2_gs_set_u16(a4, day_off, day);
+
+    /* 006a2e: subday = subday mod 0x100 (divs.w #$100 + swap = remainder).
+     * For the positive [0x100,0x1FF] range that a single step (n=1) or a Rest
+     * (n=0x55, prior subday <= 0xFF) produces, this is the low byte; matches the
+     * signed-divide remainder. */
+    subday = static_cast<uint16_t>(subday % 0x100);
+    mm2_gs_set_u16(a4, MM2_GS_TIME_SUBDAY, subday);
+
+    /* DEFER: per-party-member aging @ 0x6988 (jsr $6988): increments each
+     * roster member's age-day byte (record +$22), rolling to ++age-year
+     * (+$21) at >=0xB5. Needs roster-record access (owned elsewhere). */
+
+    /* 006a42/4a/52: period-flag clears at day 60 / 120 / 180. */
+    if (day == 60 || day == 120 || day == 180) {
+        mm2_gs_set_u8(a4, MM2_GS_PERIOD_FLAG_A, 0); /* -$798c */
+        mm2_gs_set_u8(a4, MM2_GS_PERIOD_FLAG_B, 0); /* -$798d */
+    }
+
+    /* 006a6e: day[era] > 180 -> new year (day resets to 1, year++ capped 999). */
+    if (day > 180) {
+        mm2_gs_set_u16(a4, day_off, 1);
+        const uint16_t year = mm2_gs_u16(a4, year_off);
+        if (year != 0x3E7) { /* 006a94: cap at 999, no further increment */
+            mm2_gs_set_u16(a4, year_off, static_cast<uint16_t>(year + 1));
+        }
+        mm2_gs_set_u8(a4, MM2_GS_GUARDIAN_CAVE, 0); /* 006aac: clr -$7996 */
+    }
+
+    /* DEFER: date-display redraw thunks @ 0x6abe (jsr -$7c3e / jsr $62c8),
+     * guarded by n==1 && -$79e5==0 — pure UI repaint, no state change. */
+}
+
 }  // namespace
 
 void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest)
@@ -114,6 +168,7 @@ void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest)
     subday = static_cast<uint16_t>(subday + 1);
     mm2_gs_set_u16(gs.a4(), MM2_GS_TIME_SUBDAY, subday);
 
+    /* 0069e8: light drain only fires for n==1 (a step), not the multi-tick Rest. */
     if (mm2_map_collision_is_dark(collision_cell_at_dest)) {
         const uint8_t light = mm2_gs_u8(gs.a4(), kGsLightFactor);
         if (light > 0) {
@@ -122,7 +177,18 @@ void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest)
         }
     }
 
-    /* GAP: subday >= 0x100 day rollover @ 0x6A06 not implemented yet. */
+    applyDayRollover(gs);
+}
+
+void advanceTimeTick(GameStateView &gs, uint16_t n)
+{
+    /* time_tick @ 0x69DC(n!=1): subday += n then day rollover. The light-drain
+     * (0069e8) and date-redraw (006abe) branches are gated on n==1, so a Rest
+     * advance (n=0x55 @ 0x19CEC) skips both — it only moves the clock. */
+    uint16_t subday = mm2_gs_u16(gs.a4(), MM2_GS_TIME_SUBDAY);
+    subday = static_cast<uint16_t>(subday + n);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_TIME_SUBDAY, subday);
+    applyDayRollover(gs);
 }
 
 MoveResult turn(world::MapWorld &world, GameStateView &gs, bool right_cw)

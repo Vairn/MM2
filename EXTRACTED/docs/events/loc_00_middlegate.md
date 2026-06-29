@@ -141,7 +141,7 @@
 ```
 
 ```
-00: exec_selector(0x08)  # open_special_shop
+00: exec_selector(0x08)  # open_arena_shop
 ```
 
 **Event 10** — triggers: (6,14)/DIR_S?
@@ -234,7 +234,7 @@
 00: apply_party(count=0x00, op=0x74, val=0x01)
 01: if cond: skip_tokens(2)
     # skip -> clear_current_tile_event_flag()
-02: set_service_context(str[11] "Lock and Key LTD", mode=0x00)
+02: service_sign(idx=0x0B -> sign 51 [51.anm], pos=0x00)
 03: exec_selector(0x09)
 04: clear_current_tile_event_flag()
 ```
@@ -246,7 +246,7 @@
 ```
 
 ```
-00: set_service_context(str[20] "Fool, you have no farthing to flick!", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: exec_selector(0x0D)  # enroll_mages_guild
 ```
 
@@ -282,7 +282,7 @@
 ```
 
 ```
-00: set_service_context(str[2] "S.J. Blacksmith", mode=0x00)
+00: service_sign(idx=0x02 -> sign 62 [62.anm], pos=0x00)
 01: exec_selector(0x06)  # open_blacksmith_shop
 ```
 
@@ -293,8 +293,8 @@
 ```
 
 ```
-00: set_service_context(str[5] "Turkov's Training", mode=0x00)
-01: exec_selector(0x04)  # open_training
+00: service_sign(idx=0x05 -> sign 67 [67.anm], pos=0x00)
+01: exec_selector(0x04)  # open_temple
 ```
 
 **Event 24** — triggers: (6,4)/DIR_W?
@@ -304,8 +304,8 @@
 ```
 
 ```
-00: set_service_context(str[4] "Gateway Temple", mode=0x00)
-01: exec_selector(0x03)  # open_temple
+00: service_sign(idx=0x04 -> sign 66 [66.anm], pos=0x00)
+01: exec_selector(0x03)  # open_tavern_food
 ```
 
 **Event 25** — triggers: (3,7)/DIR_S?
@@ -315,8 +315,8 @@
 ```
 
 ```
-00: set_service_context(str[3] "Slaughtered Lamb", mode=0x00)
-01: exec_selector(0x01)  # open_tavern_food
+00: service_sign(idx=0x03 -> sign 63 [63.anm], pos=0x00)
+01: exec_selector(0x01)  # open_inn_lodging
 ```
 
 **Event 26** — triggers: (7,10)/DIR_E?
@@ -326,8 +326,8 @@
 ```
 
 ```
-00: set_service_context(str[6] "Arena Entrance Only!", mode=0x00)
-01: exec_selector(0x02)  # open_inn_lodging
+00: service_sign(idx=0x06 -> sign 68 [68.anm], pos=0x00)
+01: exec_selector(0x02)  # open_training
 ```
 
 **Event 27** — triggers: (14,7)/DIR_N?
@@ -337,7 +337,7 @@
 ```
 
 ```
-00: set_service_context(str[20] "Fool, you have no farthing to flick!", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: exec_selector(0x05)  # open_mages_guild
 ```
 
@@ -373,7 +373,7 @@
 ```
 
 ```
-00: set_service_context(str[20] "Fool, you have no farthing to flick!", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: exec_selector(0x0A)  # goblet_quest
 ```
 

@@ -54,7 +54,7 @@
 ```
 00: skip_tokens(12)
     # skip -> map_transition(0x38, 0x08)
-01: set_service_context(str[7] "Carved onto a tree, the spell Holy / Word is now yours to utter when / n", mode=0x00)
+01: service_sign(idx=0x07 -> sign 74 [74.anm], pos=0x00)
 02: show_text_block(str[1] "The drawbridge of Castle Woodhaven is / raised. Request lowering (y/n)?")
 03: cond = prompt_yes_no(mode=1)
 04: if cond: skip_tokens(1)
@@ -100,7 +100,7 @@
 ```
 
 ```
-00: set_service_context(str[16] "Remnants of Devil's Food are strewn / about the clearing.", mode=0x00)
+00: service_sign(idx=0x10 -> sign 26 [26.anm], pos=0x00)
 01: show_text_block(str[4] "Mark, a whistling hermit, yells, / "Where are my keys!?!"")
 02: wait_key()
 03: cond = check_monster_present(0x00, 0xD6)

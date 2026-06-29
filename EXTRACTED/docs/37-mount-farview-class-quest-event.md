@@ -286,7 +286,7 @@ Strings: [8] The Jouster will only battle Knights!; [9] A flurry of motion perva
 ### Location 22 — Corak's Cave (map **22**)
 
 **Event 03** — Cleric — Admit 8 Pass gate
-- Triggers: (6,7) `0x67` DIR_N?, (6,8) `0x68` DIR_N?
+- Triggers: (6,7) `0x67` DIR_S?, (6,8) `0x68` DIR_S?
 - Hex: `28 01 c1 11 02 01 04 29 02 05 07 0d 09 0c 16 77`
 - Pseudo:
   - cond = consume_item(item_id=193, name="Admit 8 Pass", probe=1)
@@ -299,7 +299,7 @@ Strings: [8] The Jouster will only battle Knights!; [9] A flurry of motion perva
   - map_transition(0x16, 0x77)
 
 **Event 04** — Cleric — guide opens Hero's Tomb
-- Triggers: (3,13) `0x3D` ENTER+SPECIAL
+- Triggers: (3,13) `0x3D` DIR_N?+DIR_E?
 - Hex: `2d 03 05 10 02 02 06 29 16 01 e5 10 02 02 07 29 02 08 21 37 00 02 21 38 00 02 21 27 08 22 21 28 08 22 07 14`
 - Pseudo:
   - cond = check_member_attr(fields=0x03, value=0x05)
@@ -337,7 +337,7 @@ Strings: [8] The Jouster will only battle Knights!; [9] A flurry of motion perva
   - exec_selector(0x65)
 
 **Event 06** — Cleric prep — Holy Word popup
-- Triggers: (0,13) `0x0D` ALWAYS
+- Triggers: (0,13) `0x0D` DIR_W?
 - Hex: `05 0d`
 - Key ops: show_text_popup_style_a(str[13] "Holy Word -H. Gibson / Look south on a tree / in Lost Soul's Woods / it ")
 
@@ -346,7 +346,7 @@ Strings: [4] Your Admit 8 Pass is taken at the door; [5] Ticket takers at the do
 ### Location 28 — Forbidden Forest Cavern (map **28**)
 
 **Event 03** — Paladin arena
-- Triggers: (8,8) `0x88` DIR_N?
+- Triggers: (8,8) `0x88` DIR_S?
 - Hex: `2b 03 2d 01 05 11 05 12 94 00 00 00 00 00 00 00 00 00 00 00 18 00 75 fe 01 02 0f 07 14 02 03 07 0d 09 0c 1c 8f`
 - Pseudo:
   - skip_tokens(3)
@@ -367,7 +367,7 @@ Strings: [3] The sign says, "Paladins Only!" Can't / you read!; [15] You have pr
 ### Location 30 — Dawn's Mist Bog (map **30**)
 
 **Event 04** — Ninja — Dawn's throne
-- Triggers: (9,8) `0x98` DIR_N?
+- Triggers: (9,8) `0x98` DIR_S?
 - Hex: `2b 01 12 f9 ac ac 00 00 00 00 00 00 00 00 00 18 00 7b df 20 2d 06 05 10 01 14 18 00 75 fe 01 02 1a 07 14`
 - Pseudo:
   - skip_tokens(1)
@@ -421,17 +421,17 @@ Strings: [7] Only the barbaric may speak / to Brutal Bruno.; [8] Bruno, Chief of
 ### Location 53 — Ancients (Good) (map **53**)
 
 **Event 04** — Sorcerer Good — access code (46)
-- Triggers: (10,2) `0xA2` DIR_N?
+- Triggers: (10,2) `0xA2` DIR_S?
 - Hex: `01 28 2f 30 e6 e4 fa fa fa fa fa fa fa fa 10 02 01 29 29 18 00 75 fb 04 01 2a 07 14`
 - Key ops: cond = check_answer("46"); apply_party_masked(count=0x00, set=0x75, and=0xFB, or=0x04)
 
 **Event 05** — Sorcerer Good — access code (23)
-- Triggers: (10,4) `0xA4` DIR_N?
+- Triggers: (10,4) `0xA4` DIR_S?
 - Hex: `01 28 2f 30 e8 e7 fa fa fa fa fa fa fa fa 10 02 01 29 29 18 00 75 f7 08 01 2a 07 14`
 - Key ops: cond = check_answer("23"); apply_party_masked(count=0x00, set=0x75, and=0xF7, or=0x08)
 
 **Event 06** — Sorcerer Good — free Ybmug / completion
-- Triggers: (10,3) `0xA3` DIR_N?
+- Triggers: (10,3) `0xA3` DIR_S?
 - Hex: `2d 04 05 11 09 15 00 75 02 10 02 15 00 75 80 11 02 02 27 29 15 00 75 0c 1b 0c 10 02 02 04 29 01 2b 15 00 75 40 10 03 02 2c 18 00 75 73 80 29 02 2d 18 00 75 00 03 29`
 - Pseudo:
   - cond = check_member_attr(fields=0x04, value=0x05)
@@ -462,17 +462,17 @@ Strings: [4] In the central chamber, locked / in a stasis field, lies the / evil
 ### Location 54 — Ancients (Evil) (map **54**)
 
 **Event 04** — Sorcerer Evil — access code (64)
-- Triggers: (5,11) `0x5B` ENTER
+- Triggers: (5,11) `0x5B` DIR_N?
 - Hex: `01 29 2f 30 e4 e6 fa fa fa fa fa fa fa fa 10 02 01 2a 29 18 00 75 ef 10 01 2b 07 14`
 - Key ops: cond = check_answer("64"); apply_party_masked(count=0x00, set=0x75, and=0xEF, or=0x10)
 
 **Event 05** — Sorcerer Evil — access code (32)
-- Triggers: (5,13) `0x5D` ENTER
+- Triggers: (5,13) `0x5D` DIR_N?
 - Hex: `01 29 2f 30 e7 e8 fa fa fa fa fa fa fa fa 10 02 01 2a 29 18 00 75 df 20 01 2b 07 14`
 - Key ops: cond = check_answer("32"); apply_party_masked(count=0x00, set=0x75, and=0xDF, or=0x20)
 
 **Event 06** — Sorcerer Evil — free Yekop / completion
-- Triggers: (5,12) `0x5C` ENTER
+- Triggers: (5,12) `0x5C` DIR_N?
 - Hex: `2d 04 05 11 09 15 00 75 02 10 02 15 00 75 40 11 02 02 28 29 15 00 75 30 1b 30 10 02 02 03 29 01 2c 15 00 75 80 10 03 02 2d 18 00 75 8f 40 29 18 00 75 00 03 02 2e 29`
 - Pseudo:
   - cond = check_member_attr(fields=0x04, value=0x05)

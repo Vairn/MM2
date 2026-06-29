@@ -13,9 +13,14 @@ pull text from **`str.dat`** or the **executable** instead. ASM references:
 (string index, `OP_0E` selector byte, gold amount, etc.). They **do not** open
 `str.dat` directly.
 
-- **`OP_01`–`OP_06`** and **`OP_0B`** resolve text from the **current location’s
-  `event.dat` string bank** (copied into workspace `A4-$47C8`, indexed via
-  `A4-$86AC` / `A4-$5D3C`).
+- **`OP_01`–`OP_06`** resolve text from the **current location’s `event.dat`
+  string bank** (copied into workspace `A4-$47C8`, indexed via `A4-$86AC` /
+  `A4-$5D3C`).
+- **`OP_0B`** does **not** display text at all (neither `event.dat` nor
+  `str.dat`). It loads a **signboard `.anm` sprite**: `0x15756` maps the opcode's
+  first byte through a per-environment sign table to a sign id (`NN.anm`). The
+  decoders treat its arg0 as a **sign index**, not a string index — see §2.2 and
+  [`45-event-graphics-opcodes.md`](45-event-graphics-opcodes.md).
 - **`OP_0E`** passes one **selector byte** into a **C-like service handler**
   (pub, inn, temple, training, guild, smith, …). That handler loads UI strings
   from **`str.dat`** (`A4-$703e` base, drawn with `-$7BE4`) and/or **embedded
@@ -42,7 +47,7 @@ mostly **exe-embedded** prompts (`0x19D00`…, doc 29).
 
 ---
 
-## 2. Event-local text (`OP_01`–`OP_06`, `OP_0B`)
+## 2. Event-local text (`OP_01`–`OP_06`) + the `OP_0B` sign sprite
 
 ### 2.1 Index → string bytes
 
@@ -69,7 +74,7 @@ loops, restore behavior) are traced in
 | `04` | `0x159F4` | event.dat | `-$7BE4` → `0x22376` (JAM1) | door label, **row 3**, centered on col 14, over 3D view |
 | `05` | `0x15A46` | event.dat | `-$7C74`→`0x21624` window + `-$7BE4` | popup cells **(4,3)-(24,13)**, centered, transparent |
 | `06` | `0x15AEE` | event.dat | glyph signpost + post, pen `$7A50` | outdoor sign **(7,7)-(19,14)** |
-| `0B` | `0x15DB0` | event.dat (`0x15756` resolves index) | `-$7FC2`→`0x316E` sprite + `-$7FBC`→`0x3266` place | **service** signboard sprite over viewport |
+| `0B` | `0x15DB0` | **sign `.anm`** (no text; `0x15756` maps arg0→sign id) | `-$7FC2`→`0x316E` sprite + `-$7FBC`→`0x3266` place | **service** signboard sprite over viewport |
 
 **`OP_09` / `OP_0A`:** y/n prompts (`0x15D3C`, Y → cond `A4-$7951`); question
 text still comes from prior **event** opcodes, not `str.dat`. **`OP_07`/`08`**

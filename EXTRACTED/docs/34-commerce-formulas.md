@@ -26,6 +26,15 @@ Training cost (gp) = current_level × training_town_index × 50
 
 Map index → training index array: **`[1, 5, 2, 4, 2]`** (map 0..4). [ASM confirmed: `28-town-services.md` §9.1]
 
+> **Ported (remake).** This cost + the stat-training leaf (`0x1C898`), the temple
+> heal/restore/donation leaves, and the **blacksmith buy** leaf (`0x1BE44` price
+> `0x1BF16` over items.dat gold; `mm2_smith_inventory`/`mm2_smith_price`) are
+> implemented byte-exact in `game/src/events/TownServiceTransactions.{h,cpp}` +
+> `TownServiceMenu.{h,cpp}` (constants/tables:
+> `EXTRACTED/decomp/mm2_town_tables.{h,c}` + `tools/mm2_town_tables.py`), driven by
+> the swappable `ITownServiceUi` menu backend. See `28-town-services.md`
+> §1.4.1/§1.4.2/§4.1.1 and `07-event-script-opcodes.md` §OP_0E.
+
 **Healing cost (FAQ §3-6):**
 
 ```
@@ -165,6 +174,14 @@ Available at all town pubs (handler `0x1A132`, menu B). Six drinks; getting sick
 
 **Status: FAQ-sourced.** Drink stat effects not yet ASM-confirmed (drink handler at `0x18F78`).
 
+> **Port status (remake): DEFERRED (engine/RNG/VM-gated).** The drink cost
+> (`0x18F78`) is RNG-encoded (`-$7BB4`) into roster `+$78`; the sick/success roll
+> is `0x19D64` (`RNG(50)==2`) / stat-reset `0x19B28`; per-drink stat bonuses are
+> applied by unported VM opcode handlers via counters `A4-$79A6`–`$79AB`. The pub
+> menu itself routes through the runtime vtable thunk `-$7D40` (selectors
+> `0xC9`/`0xCA` → `0x1980A`). See `28-town-services.md` §13.3.1. Not ported (no
+> deterministic leaf to faithfully model).
+
 ---
 
 ## 6. Bar food entrees + event trigger coordinates [FAQ §3-10-1]
@@ -192,6 +209,13 @@ After eating an entree (roster `$78` flag), various event tiles become active in
 > Costs confirmed by ASM data hunk `A4-$6760` (BE u16 per town × menu slot):
 > see [`28-town-services.md`](28-town-services.md) §13.3. Event coordinates from **[FAQ §3-10-1]**.
 > Bar tip hints in the FAQ (§3-10-2) cross-reference these coords — e.g. "Meal C, then C1 1,8".
+
+> **Port status (remake): DEFERRED.** The pub feeding-frenzy path (`0x18EC0` →
+> `0x019030`) is RNG-gated and writes an encoding byte to roster `+$78`/`+$7C`
+> rather than deducting these gp; the `A4-$6760` gp table's only confirmed static
+> consumer is a temple-style food UI (`0x1CAC4`/`0x1CEA4` + `0x1C9C0`), so whether
+> the pub reuses it is unconfirmed. Not ported to avoid fabrication — see
+> `28-town-services.md` §13.3.1.
 
 Bar rumor hints also appear in pub menu E (listen for rumors); same hints as seen in
 [`EXTRACTED/embedded_strings.txt`](../embedded_strings.txt) and `str.dat`.

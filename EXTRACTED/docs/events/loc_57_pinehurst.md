@@ -296,7 +296,7 @@
 ```
 
 ```
-00: set_service_context(str[5] "The", mode=0x00)
+00: service_sign(idx=0x05 -> sign 72 [72.anm], pos=0x00)
 01: cond = consume_item(item_id=112, name="Yellow Key", probe=0)
 02: if not cond: skip_tokens(44)
     # skip -> show_text_block(str[18] "The Bishop of Yellow Battle is locked / in a cage.")
@@ -388,7 +388,7 @@
 ```
 
 ```
-00: set_service_context(str[14] "1000", mode=0x00)
+00: service_sign(idx=0x0E -> sign 49 [49.anm], pos=0x00)
 01: exec_selector(0xF3)
 ```
 

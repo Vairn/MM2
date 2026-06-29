@@ -245,7 +245,7 @@
 ```
 
 ```
-00: set_service_context(str[5] "Corak's Study", mode=0x00)
+00: service_sign(idx=0x05 -> sign 72 [72.anm], pos=0x00)
 01: cond = consume_item(item_id=114, name="Black Key", probe=1)
 02: if not cond: skip_tokens(52)
     # skip -> show_text_block(str[16] "The Bishop of Black Battle is locked / in a cage.")
@@ -344,14 +344,14 @@
 00: apply_party(count=0x00, op=0x7F, val=0x10)
 01: if cond: skip_tokens(2)
     # skip -> apply_party(count=0x00, op=0x7F, val=0x02)
-02: set_service_context(str[20] "*** Backpacks Full ***", mode=0x00)
+02: service_sign(idx=0x14 -> sign 46 [46.anm], pos=0x00)
 03: exec_selector(0xE3)
 04: apply_party(count=0x00, op=0x7F, val=0x02)
 05: if cond: skip_tokens(2)
-    # skip -> set_service_context(str[14] "Stairs to Dungeon. Descend (y/n)?", mode=0x00)
-06: set_service_context(str[20] "*** Backpacks Full ***", mode=0x00)
+    # skip -> service_sign(idx=0x0E -> sign 49 [49.anm], pos=0x00)
+06: service_sign(idx=0x14 -> sign 46 [46.anm], pos=0x00)
 07: exec_selector(0xE4)
-08: set_service_context(str[14] "Stairs to Dungeon. Descend (y/n)?", mode=0x00)
+08: service_sign(idx=0x0E -> sign 49 [49.anm], pos=0x00)
 09: exec_selector(0xE5)
 ```
 
@@ -362,7 +362,7 @@
 ```
 
 ```
-00: set_service_context(str[13] "Funny Room", mode=0x00)
+00: service_sign(idx=0x0D -> sign 5 [5.anm], pos=0x00)
 01: show_text_basic(str[21] "Here's the joke of the day:")
 02: exec_selector(0xE2)  # special_226
 ```
@@ -392,7 +392,7 @@
 00: cond = load_var8(group=0x3B, index=0x00)
 01: if cond: skip_tokens(2)
     # skip -> show_text_basic(str[23] "Dust covers everything.")
-02: set_service_context(str[23] "Dust covers everything.", mode=0x00)
+02: service_sign(idx=0x17 -> sign 1 [1.anm], pos=0x00)
 03: exec_selector(0xF2)
 04: show_text_basic(str[23] "Dust covers everything.")
 05: set_abort_and_exit()

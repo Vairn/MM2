@@ -226,8 +226,8 @@
 ```
 
 ```
-00: set_service_context(str[3] "Boar's Tongue Tavern", mode=0x00)
-01: exec_selector(0x01)  # open_tavern_food
+00: service_sign(idx=0x03 -> sign 63 [63.anm], pos=0x00)
+01: exec_selector(0x01)  # open_inn_lodging
 ```
 
 **Event 17** — triggers: (13,6)/DIR_S?
@@ -237,7 +237,7 @@
 ```
 
 ```
-00: set_service_context(str[2] "Drewnhald Ironworks", mode=0x00)
+00: service_sign(idx=0x02 -> sign 62 [62.anm], pos=0x00)
 01: exec_selector(0x06)  # open_blacksmith_shop
 ```
 
@@ -248,8 +248,8 @@
 ```
 
 ```
-00: set_service_context(str[5] "Beautify Atlantium", mode=0x00)
-01: exec_selector(0x04)  # open_training
+00: service_sign(idx=0x05 -> sign 67 [67.anm], pos=0x00)
+01: exec_selector(0x04)  # open_temple
 ```
 
 **Event 19** — triggers: (4,5)/DIR_W?
@@ -259,7 +259,7 @@
 ```
 
 ```
-00: set_service_context(str[20] "Not enough gold!", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: exec_selector(0x05)  # open_mages_guild
 ```
 
@@ -270,8 +270,8 @@
 ```
 
 ```
-00: set_service_context(str[6] "The Mystic Portal", mode=0x00)
-01: exec_selector(0x02)  # open_inn_lodging
+00: service_sign(idx=0x06 -> sign 68 [68.anm], pos=0x00)
+01: exec_selector(0x02)  # open_training
 ```
 
 **Event 21** — triggers: (10,12)/DIR_E?
@@ -281,8 +281,8 @@
 ```
 
 ```
-00: set_service_context(str[4] "Island Training", mode=0x00)
-01: exec_selector(0x03)  # open_temple
+00: service_sign(idx=0x04 -> sign 66 [66.anm], pos=0x00)
+01: exec_selector(0x03)  # open_tavern_food
 ```
 
 **Event 22** — triggers: (15,15)/DIR_E?
@@ -463,7 +463,7 @@
 ```
 
 ```
-00: set_service_context(str[20] "Not enough gold!", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: exec_selector(0x12)
 ```
 
@@ -624,7 +624,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Cabalist Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x24)
 ```
 
@@ -635,7 +635,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Cabalist Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x1D)
 ```
 
@@ -646,7 +646,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Cabalist Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x1E)
 ```
 
@@ -657,7 +657,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Cabalist Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x1F)
 ```
 
@@ -668,7 +668,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Cabalist Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x20)
 ```
 
@@ -679,7 +679,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Cabalist Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x21)
 ```
 
@@ -690,7 +690,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Cabalist Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x22)
 ```
 
@@ -701,7 +701,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Cabalist Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x23)
 ```
 
@@ -726,7 +726,7 @@
 ```
 
 ```
-00: exec_selector(0x08)  # open_special_shop
+00: exec_selector(0x08)  # open_arena_shop
 ```
 
 ## String table

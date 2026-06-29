@@ -1,10 +1,16 @@
 #include "mm2/events/EventRuntime.h"
 
 #include "mm2/DataPath.h"
+#include "mm2/events/EventCombatEncounter.h"
+#include "mm2/events/EventPartyEffects.h"
+#include "mm2/events/EventTownServices.h"
+#include "mm2/events/EventVmHelpers.h"
 #include "mm2/events/ServiceSignResolver.h"
 #include "mm2/runtime/PathScratch.h"
 
 #include "mm2_attrib_codec.h"
+#include "mm2_found_items.h"
+#include "mm2_party_launch.h"
 
 namespace mm2::events {
 
@@ -42,31 +48,6 @@ int tokenDelta(uint8_t tok)
     return 1;
 }
 
-/* str.dat hall intros @ ~328–342 (doc 28 §6.3) — shown by open_mages_guild (OP_0E 0x05). */
-const char *mageGuildSpellIntro(int location_id)
-{
-    static const char *kIntro[] = {
-        "Sages in multi-hued robes congregate\n"
-        "in the hall.  The archmage offers\n"
-        "spells for sale.  Interested (y/n)?",
-        "The meeting shifts towards entropy as\n"
-        "you step in.  A cabalist approaches\n"
-        "you with a spell list.  Buy (y/n)?",
-        "Lounging next to a roaring fire which\n"
-        "burns no wood, mystics offer spells.\n"
-        "Buy (y/n)?",
-        "Magicians clad in furry robes sip\n"
-        "wine and chat softly.  Listen (y/n)?",
-        "Sorcerers sort phials of sands on\n"
-        "the shelves.  A man barks, \"Spells\n"
-        "(y/n)?\"",
-    };
-    if (location_id >= 0 && location_id < static_cast<int>(sizeof(kIntro) / sizeof(kIntro[0]))) {
-        return kIntro[location_id];
-    }
-    return kIntro[0];
-}
-
 void captureServiceTitle(const char *text, char *out, size_t cap)
 {
     if (!out || cap == 0) {
@@ -89,34 +70,24 @@ void captureServiceTitle(const char *text, char *out, size_t cap)
     out[j] = '\0';
 }
 
-void applyPartyProgressOp(GameStateView &gs, uint8_t op, uint8_t val, bool masked, uint8_t and_m,
+void applyPartyProgressOp(GameStateView &gs, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                          uint8_t count, uint8_t op, uint8_t val, bool masked, uint8_t and_m,
                           uint8_t or_m)
 {
-    if (op != 0x74) {
-        return;
+    bool cond = false;
+    eventVmApplyPartyByteOp(gs.a4(), roster, launch, count, op, val, masked, and_m, or_m, !masked,
+                            &cond);
+    if (!masked) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, cond ? 1 : 0);
     }
-    uint8_t progress = mm2_gs_u8(gs.a4(), MM2_GS_PARTY_PROGRESS);
-    if (masked) {
-        progress = static_cast<uint8_t>((progress & and_m) | or_m);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_PARTY_PROGRESS, progress);
-        return;
-    }
-    mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, (progress & val) != 0 ? 1 : 0);
 }
 
 }  // namespace
 
-void EventRuntime::showServiceUnavailableStub()
+void EventRuntime::bindParty(Mm2RosterFile *roster, const Mm2PartyLaunch *launch)
 {
-    char buf[256];
-    if (service_title_[0] != '\0') {
-        std::snprintf(buf, sizeof(buf), "%s\n(Service not yet available.)", service_title_);
-    } else {
-        std::snprintf(buf, sizeof(buf), "(Service not yet available.)");
-    }
-    text_.showOp02(buf, 19);
-    text_.showSpacePrompt();
-    wait_ = EventVmWait::Space;
+    roster_ = roster;
+    launch_ = launch;
 }
 
 bool EventRuntime::load(const char *data_dir)
@@ -140,6 +111,8 @@ void EventRuntime::unload()
         mm2_event_free(&file_);
         loaded_ = false;
     }
+    roster_ = nullptr;
+    launch_ = nullptr;
     data_dir_ = nullptr;
     location_id_ = -1;
     loc_ = nullptr;
@@ -148,6 +121,7 @@ void EventRuntime::unload()
     screen_changed_ = false;
     service_title_[0] = '\0';
     text_.reset();
+    pending_portal_active_ = false;
     ::memset(work_buf_, 0, sizeof(work_buf_));
 }
 
@@ -331,6 +305,33 @@ void EventRuntime::applyMapTransition(GameStateView &gs, world::MapWorld &world,
     screen_changed_ = true;
 }
 
+bool EventRuntime::finishPendingPortal(GameStateView &gs, world::MapWorld &world, bool accepted)
+{
+    if (!pending_portal_active_) {
+        return false;
+    }
+    pending_portal_active_ = false;
+
+    if (!accepted) {
+        return false;
+    }
+
+    const uint32_t have = eventVmPartyGoldTotal(gs.a4(), roster_, launch_);
+    if (have < pending_portal_.cost) {
+        text_.showOp02("Not enough gold!", 19);
+        text_.showSpacePrompt();
+        wait_ = EventVmWait::Space;
+        return true;
+    }
+
+    if (pending_portal_.cost > 0) {
+        eventVmDeductPartyGold(gs.a4(), roster_, launch_, pending_portal_.cost);
+    }
+    applyMapTransition(gs, world, pending_portal_.dest_screen, pending_portal_.dest_tile);
+    endScript(gs);
+    return true;
+}
+
 void EventRuntime::endScript(GameStateView &gs)
 {
     bool redraw_status = false;
@@ -449,33 +450,8 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
     }
     case 0x0E: {
         const uint8_t sel = readU8(gs);
-        switch (sel) {
-        case 0x05:
-            /* -$7D10 open_mages_guild @ 0x1E3E6: str.dat hall intro rows 19..22, then -$7D46 Y/N. */
-            text_.showOp02(mageGuildSpellIntro(location_id_), 19);
-            mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                          static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
-            wait_ = EventVmWait::YesNo;
-            break;
-        case 0x03:
-            text_.showOp02("Temple services are not yet available in this port.", 19);
-            text_.showSpacePrompt();
-            wait_ = EventVmWait::Space;
-            break;
-        case 0x11:
-            text_.showOp02("Portal travel is not yet available in this port.", 19);
-            text_.showSpacePrompt();
-            wait_ = EventVmWait::Space;
-            break;
-        case 0x0A:
-            text_.showOp02("The goblet is not yet available in this port.", 19);
-            text_.showSpacePrompt();
-            wait_ = EventVmWait::Space;
-            break;
-        default:
-            showServiceUnavailableStub();
-            break;
-        }
+        eventExecTownSelector(*this, gs, world, sel, roster_, launch_, items_, text_, wait_,
+                              location_id_, service_title_);
         break;
     }
     case 0x0B: {
@@ -496,8 +472,7 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         const uint8_t count = readU8(gs);
         const uint8_t op = readU8(gs);
         const uint8_t val = readU8(gs);
-        (void)count;
-        applyPartyProgressOp(gs, op, val, false, 0, 0);
+        applyPartyProgressOp(gs, roster_, launch_, count, op, val, false, 0, 0);
         break;
     }
     case 0x18: {
@@ -505,8 +480,375 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         const uint8_t op = readU8(gs);
         const uint8_t and_m = readU8(gs);
         const uint8_t or_m = readU8(gs);
-        (void)count;
-        applyPartyProgressOp(gs, op, 0, true, and_m, or_m);
+        applyPartyProgressOp(gs, roster_, launch_, count, op, 0, true, and_m, or_m);
+        break;
+    }
+    case 0x00:
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+        break;
+    case 0x0D: {
+        /* OP_0D @ 0x15EC4 -> thunk -$7E42 -> 0x06FB8: play canned on-screen
+         * sequence #idx (presentation only; no game-state side effects — see
+         * eventVmExecEngineCall). The handler consumes the 1 index byte. */
+        const uint8_t idx = readU8(gs);
+        eventVmExecEngineCall(gs.a4(), idx, &world);
+        break;
+    }
+    case 0x14:
+        eventVmClearTileEventFlag(gs.a4(), gs.coordY(), gs.coordX());
+        break;
+    case 0x16: {
+        /* event_op16_scan_party_items @ 0x16520: reads 2 bytes (arg1 read then
+         * OVERWRITTEN by arg2 — only arg2 is used). Scans each party member's
+         * record (get_party_member_ptr_by_slot @ 0x477E, bound = party count
+         * A4-$795A); for m in 0..5 increments cond_flag when record[0x3A+m] OR
+         * record[0x28+m] == arg2, then breaks at the first member with any match.
+         * +0x28/+0x3A are the equipped/backpack item-id runs (6 ids each) — so this
+         * is an "any party member carrying item arg2" check. cond reflects the
+         * match count of that first member. */
+        readU8(gs);
+        const uint8_t want = readU8(gs);
+        uint8_t cond = 0;
+        if (launch_ && roster_) {
+            for (int i = 0; i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                const auto *rec = reinterpret_cast<const uint8_t *>(
+                    &roster_->records[launch_->roster_slots[i]]);
+                for (int m = 0; m < 6; ++m) {
+                    if (rec[0x3A + m] == want || rec[0x28 + m] == want) {
+                        ++cond;
+                    }
+                }
+                if (cond != 0) {
+                    break;
+                }
+            }
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, cond);
+        break;
+    }
+    case 0x17: {
+        /* event_op17_load_cond_var @ 0x165A4: cond_flag = *resolve(id) — the RAW
+         * variable byte (`move.b (a0),-$7951`), NOT a 0/1 bool. OP_1B compares
+         * cond against a threshold, so booleanizing here broke threshold gates.
+         * The handler reads the id byte, then reads+discards a 2nd byte. */
+        const uint8_t group = readU8(gs);
+        const uint8_t index = readU8(gs);
+        (void)index;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, eventVmLoadVar(gs.a4(), group, index));
+        break;
+    }
+    case 0x19: {
+        /* event_op19_give_item @ 0x165D8: give one item to the first party member
+         * with a free backpack slot; set cond_flag=1 on success (0 on entry).
+         * Reads 4 bytes: arg1 (member-spec), id, attr2, attr3.
+         *   - If arg1 >= 0x80, the item id is taken from cond_flag (captured at
+         *     entry, BEFORE cond_flag is cleared) instead of the literal id byte.
+         *   - Per member, scan the backpack item-id run rec[0x3A+m] (m=0..5) for
+         *     the first empty (==0) slot and write id->rec[0x3A+m],
+         *     attr2->rec[0x40+m], attr3->rec[0x46+m]. These are the SoA backpack
+         *     id/bonus/flag runs (see OP_16; raw-byte access matches the file
+         *     bytes — the roster struct's AoS item slots mislabel them, flagged
+         *     for the roster agent).
+         *   - If every backpack is full the ROM drops the item into the shared
+         *     found-item buffer (overflow tail @ 0x166A0): it scans buffer id[0],
+         *     id[1] for the first empty slot (else slot 2), writing id->A4-$3F1C,
+         *     attr3->A4-$3F19 (flags), attr2->A4-$3F16 (charges) and raising the
+         *     sentinel A4-$794C=0xFF. cond_flag stays 0 in that case (the item was
+         *     NOT placed on a member). The buffer's "you found..." pickup is the
+         *     deferred Search payoff (0x1B19C) — we model the buffer state here. */
+        const uint8_t arg1 = readU8(gs);
+        uint8_t id = readU8(gs);
+        const uint8_t attr2 = readU8(gs);
+        const uint8_t attr3 = readU8(gs);
+        if (arg1 >= 0x80) {
+            id = mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG);
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
+        bool placed = false;
+        if (launch_ && roster_) {
+            for (int i = 0; !placed && i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS;
+                 ++i) {
+                auto *rec = reinterpret_cast<uint8_t *>(
+                    &roster_->records[launch_->roster_slots[i]]);
+                for (int m = 0; m < 6; ++m) {
+                    if (rec[0x3A + m] == 0) {
+                        rec[0x3A + m] = id;
+                        rec[0x40 + m] = attr2;
+                        rec[0x46 + m] = attr3;
+                        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 1);
+                        placed = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!placed) {
+            mm2_found_items_overflow_append(gs.a4(), id, attr2, attr3);
+        }
+        break;
+    }
+    case 0x1A: {
+        /* event_op1a_store_var @ 0x166F8: reads ONLY 2 bytes — var id then value
+         * (the pointer resolver $15620 keys on the id alone). Reading a 3rd byte
+         * desynced every script that used OP_1A. */
+        const uint8_t group = readU8(gs);
+        const uint8_t val = readU8(gs);
+        eventVmStoreVar(gs.a4(), group, 0, val);
+        break;
+    }
+    case 0x1B: {
+        const uint8_t threshold = readU8(gs);
+        if (mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG) < threshold) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
+        }
+        break;
+    }
+    case 0x1C:
+        /* event_op1c_engine_query @ 0x16742: cond_flag = engineQuery(1, arg1),
+         * where engineQuery is the A4 function-pointer slot -$7BB4 (jsr (d16,a4),
+         * resolved at runtime — NOT a static thunk). The query result is engine
+         * state we cannot compute here, so this stays a documented stub that
+         * consumes the 1 arg byte and writes the neutral cond_flag=0. Partial. */
+        readU8(gs);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
+        break;
+    case 0x1D:
+        /* event_op1d_engine_indexed @ 0x16762: calls engine pointer -$7E84 with
+         * index (arg1*7 + 1). No VM-level state change (no cond_flag / GS write):
+         * pure engine dispatch. Consume 1 arg byte; behaviour deferred. Partial. */
+        readU8(gs);
+        break;
+    case 0x1E:
+        /* event_op1e_timed_wait @ 0x16780: busy-wait `arg1` iterations, each
+         * delay(10) via engine pointer -$7BC0 then poll input -$7BD2, breaking
+         * early on a keypress. Presentation/timing only — no game-state effect.
+         * Consume 1 arg byte; the delay is a no-op in the headless port. Partial. */
+        readU8(gs);
+        break;
+    case 0x1F:
+    case 0x20: {
+        uint8_t args[5];
+        const uint8_t sel = readU8(gs);
+        for (int i = 0; i < 5; ++i) {
+            args[i] = readU8(gs);
+        }
+        eventApplyPartyEffect(gs, roster_, launch_, sel, args, op == 0x20);
+        break;
+    }
+    case 0x21: {
+        const uint8_t pos = readU8(gs);
+        const uint8_t visual = readU8(gs);
+        const uint8_t collision = readU8(gs);
+        eventVmPatchMapTile(world, (pos >> 4) & 0xF, pos & 0xF, visual, collision);
+        break;
+    }
+    case 0x23: {
+        /* event_op23_day_gate @ 0x16ADA: cond = day-of-year predicate.
+         * The day byte is the LOW byte of the current era's day word
+         * (-$79DE[era], read as `move.b $1(a0,era*2)` — big-endian RAM word, so
+         * +1 is the low 8 bits; day is 1..180 so this == day & 0xFF). arg1 is
+         * read first, arg2 second (both always consumed → argc 2):
+         *   arg1 == 0xB5 -> cond = (day bit0 set)   — odd-day gate
+         *   arg1 == 0xB6 -> cond = (day bit0 clear)  — even-day gate
+         *   else         -> cond = (arg1 <= day <= arg2)  — inclusive byte range
+         * (Previously only the range path existed; the 0xB5/0xB6 moon/odd-even
+         * gates silently fell through to a bogus range compare.) */
+        const uint8_t arg1 = readU8(gs);
+        const uint8_t arg2 = readU8(gs);
+        const uint8_t day = static_cast<uint8_t>(gs.day() & 0xFF);
+        uint8_t cond;
+        if (arg1 == 0xB5) {
+            cond = (day & 1) ? 1 : 0;
+        } else if (arg1 == 0xB6) {
+            cond = (day & 1) ? 0 : 1;
+        } else {
+            cond = (day >= arg1 && day <= arg2) ? 1 : 0;
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, cond);
+        break;
+    }
+    case 0x24: {
+        const uint8_t lo = readU8(gs);
+        const uint8_t hi = readU8(gs);
+        const uint32_t need = static_cast<uint32_t>(lo | (hi << 8));
+        const uint32_t have = eventVmPartyGoldTotal(gs.a4(), roster_, launch_);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, have >= need ? 1 : 0);
+        break;
+    }
+    case 0x25: {
+        const uint8_t hi = readU8(gs);
+        const uint8_t lo = readU8(gs);
+        const uint16_t code = static_cast<uint16_t>((hi << 8) | lo);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG,
+                      eventVmCheckCode16(gs.a4(), roster_, launch_, code) ? 1 : 0);
+        break;
+    }
+    case 0x26:
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SAVED_COND_FLAG, mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG));
+        text_.showOp02("Who will learn this skill (1-8)?", 19);
+        wait_ = EventVmWait::MemberSelect;
+        break;
+    case 0x27:
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SAVED_COND_FLAG, mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG));
+        text_.showOp02("Select a party member (1-8):", 19);
+        wait_ = EventVmWait::MemberSelect;
+        break;
+    case 0x28: {
+        const uint8_t probe = readU8(gs);
+        const uint8_t item_id = readU8(gs);
+        const bool consume = probe == 0;
+        const bool has = eventVmPartyHasItem(gs.a4(), roster_, launch_, item_id, consume);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, has ? 1 : 0);
+        break;
+    }
+    case 0x2A: {
+        uint8_t block[14];
+        for (int i = 0; i < 14; ++i) {
+            block[i] = readU8(gs);
+        }
+        eventVmApplyTreasure(gs.a4(), roster_, launch_, block);
+        break;
+    }
+    case 0x2C: {
+        /* event_op2c_adjust_state @ 0x16D98: WORD add of the u8 arg into the
+         * counter at -$79B8 (add.w), then set exit-flag bit0 (redraw). */
+        const uint8_t add = readU8(gs);
+        const uint16_t cur = mm2_gs_u16(gs.a4(), MM2_GS_SCRIPT_COUNTER);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_SCRIPT_COUNTER, static_cast<uint16_t>(cur + add));
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
+                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 1));
+        break;
+    }
+    case 0x2D: {
+        /* event_op2d_check_member_attr @ 0x16DBA: match each party member's
+         * attribute field against a value nibble; set cond=1 if the predicate
+         * holds across the party.
+         *   arg1 bit7 -> race (+0xE), bit6 -> sex (+0xC), neither -> class (+0xF);
+         *   bit5 -> "any member matches" mode, else "all members match" mode;
+         *   low nibble of arg1 = primary match value. If arg1 has no high bits
+         *   (& 0xE0 == 0), arg2's low nibble is a 2nd accepted value (field may
+         *   equal val1 OR val2). The loop breaks at the first member that fails
+         *   the desired predicate; cond reflects the last-examined member. */
+        const uint8_t arg1 = readU8(gs);
+        const uint8_t arg2 = readU8(gs);
+        const bool useRace = (arg1 & 0x80) != 0;
+        const bool useSex = (arg1 & 0x40) != 0;
+        const bool useClass = !useRace && !useSex;
+        const bool anyMode = (arg1 & 0x20) != 0;
+        const uint8_t val1 = static_cast<uint8_t>(arg1 & 0x0F);
+        const uint8_t val2 =
+            ((arg1 & 0xE0) == 0) ? static_cast<uint8_t>(arg2 & 0x0F) : val1;
+
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
+        bool match = false;
+        if (launch_ && roster_) {
+            for (int i = 0; i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                const Mm2RosterRecord *rec = &roster_->records[launch_->roster_slots[i]];
+                /* fields evaluated in ASM order (class, sex, race); each active
+                 * field overwrites `match`, so the last active field wins. */
+                match = false;
+                if (useClass) {
+                    match = (rec->class_id == val1);
+                }
+                if (useSex) {
+                    match = (rec->sex == val1);
+                }
+                if (useRace) {
+                    match = (rec->race == val1);
+                }
+                if (!match) {
+                    if (useClass) {
+                        match = (rec->class_id == val2);
+                    }
+                    if (useSex) {
+                        match = (rec->sex == val2);
+                    }
+                    if (useRace) {
+                        match = (rec->race == val2);
+                    }
+                }
+                /* break at first member that violates the predicate:
+                 * all-mode breaks on a non-match, any-mode breaks on a match. */
+                if (anyMode ? match : !match) {
+                    break;
+                }
+            }
+        }
+        if (match) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 1);
+        }
+        break;
+    }
+    case 0x2E: {
+        /* event_op2e_set_attr_bit @ 0x16F50: OR arg2 into a per-member byte, but
+         * only for members of two specific classes.
+         *   class pair = {4, 2}; if arg1 >= 0x80 -> pair {3, 1} and arg1 &= 0x7F.
+         *   target byte = member + (uint8)(arg1 - 0x6E) + 0x51; *target |= arg2.
+         * (arg1 ~ 0x6E selects field +0x51, the class-quest bit region near the
+         * +0x50 title nibble read by OP_32.) */
+        uint8_t arg1 = readU8(gs);
+        const uint8_t arg2 = readU8(gs);
+        uint8_t cls_a = 4;
+        uint8_t cls_b = 2;
+        if (arg1 >= 0x80) {
+            cls_a = 3;
+            cls_b = 1;
+            arg1 = static_cast<uint8_t>(arg1 & 0x7F);
+        }
+        const int field_off =
+            static_cast<int>(static_cast<uint8_t>(arg1 - 0x6E)) + 0x51;
+        if (launch_ && roster_ && field_off >= 0 &&
+            field_off < static_cast<int>(MM2_ROSTER_RECORD_SIZE)) {
+            for (int i = 0; i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                Mm2RosterRecord *rec = &roster_->records[launch_->roster_slots[i]];
+                if (rec->class_id == cls_a || rec->class_id == cls_b) {
+                    reinterpret_cast<uint8_t *>(rec)[field_off] |=
+                        static_cast<uint8_t>(arg2);
+                }
+            }
+        }
+        break;
+    }
+    case 0x2F:
+        for (int i = 0; i < 16; ++i) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_INPUT_BUF + i, 0);
+        }
+        break;
+    case 0x30: {
+        uint8_t expected[10];
+        for (int i = 0; i < 10; ++i) {
+            expected[i] = readU8(gs);
+        }
+        const bool ok =
+            eventVmCheckOp30Password(gs.a4() + MM2_GS_INPUT_BUF, expected, sizeof(expected));
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, ok ? 1 : 0);
+        break;
+    }
+    case 0x31: {
+        /* event_op31_party_engine_op @ 0x170BC: sets EXIT_FLAGS bit1 (block-text
+         * exit) at entry, then reads a member-spec byte + a 16-bit value (read as
+         * 2 bytes here — argc=3, token delta 4). It resolves the target member set
+         * (0=all party, 9=selected member, 1..8=that member; arg1>=0x80 takes the
+         * value from cond_flag) and calls the per-member engine op-pointer -$7F08
+         * (a combat/spell field op writing scratch outputs), then -$7F14 which can
+         * set the script-abort flag. -$7F08/-$7F14 are runtime A4 pointers (engine,
+         * not portable), so only the EXIT_FLAGS side effect is replicated. Partial. */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
+                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
+        readU8(gs);
+        readU8(gs);
+        readU8(gs);
+        break;
+    }
+    case 0x32: {
+        /* event_op32 @ 0x17190: cond_flag = party class-nibble count (RAW byte,
+         * `move.b d0,-$7951`). The handler calls thunk -$7F2C, which the A4 thunk
+         * map resolves to 0x04614 (NOT a variable load): sum over living members
+         * of the nibbles of record+0x50 equal to `id` (helper 0x45C4). The prior
+         * port read a GS flag via eventVmLoadVar, which was wrong. */
+        const uint8_t id = readU8(gs);
+        const int count = eventVmCountPartyNibbleMatches(gs.a4(), roster_, launch_, id);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, static_cast<uint8_t>(count));
         break;
     }
     case 0x2B: {
@@ -517,12 +859,22 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         }
         break;
     }
-    case 0x12:
-    case 0x13:
-        /* GAP: combat encounter setup — abort script. */
-        mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
-        endScript(gs);
+    case 0x12: {
+        uint8_t block[12];
+        for (int i = 0; i < 12; ++i) {
+            block[i] = readU8(gs);
+        }
+        eventRunFixedEncounter(gs, text_, wait_, block, 12, false);
         break;
+    }
+    case 0x13: {
+        uint8_t block[10];
+        for (int i = 0; i < 10; ++i) {
+            block[i] = readU8(gs);
+        }
+        eventRunFixedEncounter(gs, text_, wait_, block, 10, true);
+        break;
+    }
     default:
         if (op >= 0x33) {
             mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
@@ -617,9 +969,16 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
         }
 
         if (a == party_tile && eventCondMatches(c, ctx)) {
-            if (eraGateOpen(gs, world)) {
-                const int script_off = poolSeek(b);
-                if (script_off >= 0) {
+            const int script_off = poolSeek(b);
+            /* event_handler_pool_seek @ 0x17262: seek to record N, then read its
+             * first opcode. The screen era gate (attrib byte $560B == era_low,
+             * @ 0x172BC) is applied ONLY when that opcode is NOT OP_22 — records
+             * starting with OP_22 range-check the era themselves and must run
+             * regardless of the screen gate. Applying the gate to every event
+             * (the previous behaviour) wrongly suppressed era/time-travel events. */
+            if (script_off >= 0 && script_off < loc_->string_table_offset) {
+                const uint8_t first_op = work_buf_[script_off];
+                if (first_op == 0x22 || eraGateOpen(gs, world)) {
                     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, static_cast<uint16_t>(script_off));
                     script_active_ = true;
                     wait_ = EventVmWait::None;
@@ -662,11 +1021,35 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
             return true;
         }
         mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, ch == 'Y' ? 1 : 0);
+        if (hasPendingPortal()) {
+            if (finishPendingPortal(gs, world, ch == 'Y')) {
+                return script_active_ || wait_ != EventVmWait::None;
+            }
+        }
         wait_ = EventVmWait::None;
         if (script_active_) {
             runVmLoop(gs, world);
         }
         return script_active_ || wait_ != EventVmWait::None;
+    }
+
+    if (wait_ == EventVmWait::MemberSelect) {
+        const char ch = keys.last_ascii;
+        if (ch == 27) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+            abortScript(gs);
+            return false;
+        }
+        if (ch >= '1' && ch <= '8') {
+            eventVmSetSelectedPartySlot(gs.a4(), ch - '0');
+            mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 1);
+            wait_ = EventVmWait::None;
+            if (script_active_) {
+                runVmLoop(gs, world);
+            }
+            return script_active_ || wait_ != EventVmWait::None;
+        }
+        return true;
     }
 
     return false;

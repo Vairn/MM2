@@ -44,7 +44,7 @@
 ```
 
 ```
-00: set_service_context(str[24], mode=0x00)
+00: service_sign(idx=0x18 -> sign 29 [29.anm], pos=0x00)
 01: show_text_block(str[1] "A giant portcullis slowly raises, / offering admittance to Middlegate. /")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)
@@ -98,7 +98,7 @@
 00: apply_party(count=0x00, op=0x74, val=0x40)
 01: if cond: skip_tokens(4)
     # skip -> clear_current_tile_event_flag()
-02: set_service_context(str[14] "<- Castle / Pinehurst", mode=0x00)
+02: service_sign(idx=0x0E -> sign 34 [34.anm], pos=0x00)
 03: show_text(str[5] ""Greetings! I'm your Guardian Pegasus. / Welcome to the outer world of C")
 04: apply_party_masked(count=0x00, set=0x74, and=0xBF, or=0x40)
 05: wait_key()
@@ -365,7 +365,7 @@
     # skip -> cond = (era in [9..9])
 02: skip_tokens(7)
     # skip -> map_transition(0x3B, 0x80)
-03: set_service_context(str[7] "Not enough gold!", mode=0x00)
+03: service_sign(idx=0x07 -> sign 74 [74.anm], pos=0x00)
 04: exec_selector(0x5A)
 05: cond = (era in [9..9])
 06: if cond: skip_tokens(1)

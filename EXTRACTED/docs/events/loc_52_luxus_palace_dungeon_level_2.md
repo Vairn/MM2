@@ -161,7 +161,7 @@
 ```
 
 ```
-00: set_service_context(str[13] "The sign said NO SORCERERS!", mode=0x00)
+00: service_sign(idx=0x0D -> sign 35 [35.anm], pos=0x00)
 01: show_text_block(str[10] ""Looking for some help? Hey, I know / that we have all gotten a raw deal")
 02: wait_key()
 03: show_text_block(str[9] "one million gold, I'll sell you all / the hit points you SHOULD have." /")
@@ -267,7 +267,7 @@
 ```
 
 ```
-00: set_service_context(str[16] "The spirits of Cron grant / you increased strength.", mode=0x00)
+00: service_sign(idx=0x10 -> sign 6 [6.anm], pos=0x00)
 01: show_text_block(str[18] ""Hey! I just saw Sir Elvis in / Hillstone Dungeon, level two. I knew / t")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)

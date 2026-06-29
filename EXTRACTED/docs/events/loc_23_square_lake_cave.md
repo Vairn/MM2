@@ -239,13 +239,13 @@
 
 ```
 00: skip_tokens(4)
-    # skip -> set_service_context(str[137], mode=0x00)
+    # skip -> service_sign(idx=0x89 -> sign 75 [75.anm], pos=0x00)
 01: apply_party(count=0x00, op=0x7F, val=0x20)
 02: if not cond: skip_tokens(4)
     # skip -> show_text_block(str[18] "You shouldn't be here until you save / the King in the 9th century.")
-03: set_service_context(str[3] "Hope so!", mode=0x00)
+03: service_sign(idx=0x03 -> sign 42 [42.anm], pos=0x00)
 04: exec_selector(0xFD)  # special_253
-05: set_service_context(str[137], mode=0x00)
+05: service_sign(idx=0x89 -> sign 75 [75.anm], pos=0x00)
 06: exec_selector(0xFE)
 07: show_text_block(str[18] "You shouldn't be here until you save / the King in the 9th century.")
 08: wait_for_space()

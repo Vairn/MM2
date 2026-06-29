@@ -82,7 +82,7 @@
 ```
 00: skip_tokens(12)
     # skip -> map_transition(0x37, 0xF7)
-01: set_service_context(str[6] "Farm of Fear. Enter (y/n)?", mode=0x00)
+01: service_sign(idx=0x06 -> sign 47 [47.anm], pos=0x00)
 02: show_text_block(str[3] "The marble walls of Castle Hillstone / gleam before you. Enter (y/n)?")
 03: cond = prompt_yes_no(mode=1)
 04: if cond: skip_tokens(1)

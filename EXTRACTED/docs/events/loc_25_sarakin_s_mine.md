@@ -191,7 +191,7 @@
 ```
 
 ```
-00: set_service_context(str[6] "Sir Kill and Jed I jump at the sight / of your party. Trapped by the cav", mode=0x00)
+00: service_sign(idx=0x06 -> sign 14 [14.anm], pos=0x00)
 01: show_text_basic(str[7] ""I am Sarakin. Leave my home ore die!"")
 02: wait_key()
 03: end_script()

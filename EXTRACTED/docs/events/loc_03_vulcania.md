@@ -180,7 +180,7 @@
 ```
 
 ```
-00: set_service_context(str[2] "Bestway Blacksmith", mode=0x00)
+00: service_sign(idx=0x02 -> sign 62 [62.anm], pos=0x00)
 01: exec_selector(0x06)  # open_blacksmith_shop
 ```
 
@@ -191,8 +191,8 @@
 ```
 
 ```
-00: set_service_context(str[5] "Vulcanian Transport", mode=0x00)
-01: exec_selector(0x04)  # open_training
+00: service_sign(idx=0x05 -> sign 67 [67.anm], pos=0x00)
+01: exec_selector(0x04)  # open_temple
 ```
 
 **Event 15** — triggers: (2,3)/DIR_W?
@@ -202,8 +202,8 @@
 ```
 
 ```
-00: set_service_context(str[4] "Training Academy", mode=0x00)
-01: exec_selector(0x03)  # open_temple
+00: service_sign(idx=0x04 -> sign 66 [66.anm], pos=0x00)
+01: exec_selector(0x03)  # open_tavern_food
 ```
 
 **Event 16** — triggers: (0,7)/DIR_S?
@@ -213,8 +213,8 @@
 ```
 
 ```
-00: set_service_context(str[3] "Belinthra's Bar", mode=0x00)
-01: exec_selector(0x01)  # open_tavern_food
+00: service_sign(idx=0x03 -> sign 63 [63.anm], pos=0x00)
+01: exec_selector(0x01)  # open_inn_lodging
 ```
 
 **Event 17** — triggers: (3,4)/DIR_W?
@@ -224,8 +224,8 @@
 ```
 
 ```
-00: set_service_context(str[6] "Vulcanian Export Co.", mode=0x00)
-01: exec_selector(0x02)  # open_inn_lodging
+00: service_sign(idx=0x06 -> sign 68 [68.anm], pos=0x00)
+01: exec_selector(0x02)  # open_training
 ```
 
 **Event 18** — triggers: (5,11)/DIR_S?
@@ -235,7 +235,7 @@
 ```
 
 ```
-00: set_service_context(str[20] "Not enough gold!", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: exec_selector(0x05)  # open_mages_guild
 ```
 
@@ -341,7 +341,7 @@
 ```
 
 ```
-00: set_service_context(str[20] "Not enough gold!", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: show_text_block(str[19] "A silver-tongued illusionist will / allow you to join the prestigious / ")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(3)
@@ -419,7 +419,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Blackrock Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x41)
 ```
 
@@ -430,7 +430,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Blackrock Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x42)
 ```
 
@@ -441,7 +441,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Blackrock Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x43)
 ```
 
@@ -452,7 +452,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Blackrock Mage Guild", mode=0x00)
+00: service_sign(idx=0x07 -> sign 65 [65.anm], pos=0x00)
 01: exec_selector(0x44)
 ```
 

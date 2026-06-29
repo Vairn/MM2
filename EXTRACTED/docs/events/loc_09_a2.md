@@ -50,7 +50,7 @@
 ```
 00: skip_tokens(12)
     # skip -> map_transition(0x39, 0x8F)
-01: set_service_context(str[7] "A snow drift sweeps the party away!", mode=0x00)
+01: service_sign(idx=0x07 -> sign 74 [74.anm], pos=0x00)
 02: show_text_block(str[1] "Before you stands the hold of Lord / Peabody, Castle Pinehurst. / Enter ")
 03: cond = prompt_yes_no(mode=1)
 04: if cond: skip_tokens(1)
@@ -92,7 +92,7 @@
 ```
 00: skip_tokens(6)
     # skip -> set_treasure(gold/exp=0, gems=0, items=[226, 0, 0])
-01: set_service_context(str[4] "Pool of pestilence. Jump in (y/n)?", mode=0x00)
+01: service_sign(idx=0x04 -> sign 58 [58.anm], pos=0x00)
 02: show_text_block(str[3] "Burly mountain men guard the Sword of / Valor. Challenge them for it (y/")
 03: cond = prompt_yes_no(mode=1)
 04: if cond: skip_tokens(1)
@@ -242,7 +242,7 @@
 ```
 00: skip_tokens(14)
     # skip -> clear_current_tile_event_flag()
-01: set_service_context(str[23], mode=0x00)
+01: service_sign(idx=0x17 -> sign 3 [3.anm], pos=0x00)
 02: show_text_block(str[12] "Suddenly, the party is ensnared in a / massive web! The treacherous Deat")
 03: wait_key()
 04: show_text_block(str[15] "unless you answer this riddle. / What has Mark lost?"")

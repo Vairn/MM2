@@ -69,7 +69,7 @@
 ```
 
 ```
-00: set_service_context(str[14] "Sharp Tooth Den", mode=0x00)
+00: service_sign(idx=0x0E -> sign 21 [21.anm], pos=0x00)
 01: show_text_block(str[2] "The infamous master thief Rinaldo Jr. / will train your thieves in the /")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(47)
@@ -148,7 +148,7 @@
 ```
 
 ```
-00: set_service_context(str[14] "Sharp Tooth Den", mode=0x00)
+00: service_sign(idx=0x0E -> sign 21 [21.anm], pos=0x00)
 01: show_text_block(str[5] "The Thieving Fiend Maxwell will teach / all your thieves the intricacies")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(39)
@@ -211,7 +211,7 @@
 ```
 
 ```
-00: set_service_context(str[24], mode=0x00)
+00: service_sign(idx=0x18 -> sign 61 [61.anm], pos=0x00)
 01: show_text_block(str[8] "A foul-smelling zombie hands you an / Admit 8 Pass and says, "This will ")
 02: wait_key()
 03: add_party_entity(0x01, f3a=0xC1, f40=0x00, f46=0x00)

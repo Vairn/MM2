@@ -61,6 +61,34 @@ typedef struct mm2_anm_composite_planar {
 int mm2_anm_composite_frame_planar(const mm2_anm_file *anm, int frame_idx, mm2_anm_composite_planar *out);
 
 void mm2_anm_composite_planar_free(mm2_anm_composite_planar *img);
+
+/**
+ * Pre-composed planar cels: one chip bitmap+mask per composed frame, built ONCE
+ * at load time. Playback then becomes a single index select + hardware
+ * blitCopyMask per tick — no per-frame software composite or palette search.
+ * Trade-off: holds frame_count chip bitmaps (each canvas WxH x playfield depth +
+ * 1bpp mask); overlay/sign .anm cel counts are small, but very large sprites with
+ * many cels cost more chip RAM than the single-buffer mm2_anm_composite_frame_planar.
+ */
+typedef struct mm2_anm_planar_cache {
+    mm2_anm_composite_planar *cels; /* array[count]; each owns its bitmap+mask */
+    int count;
+    int width;  /* shared canvas width  (frame-independent union) */
+    int height; /* shared canvas height */
+} mm2_anm_planar_cache;
+
+/**
+ * Compose every frame (0..frame_count-1) into its own planar cel. The pen remap
+ * is computed ONCE and shared across all cels (see map_to_host_palette). Frees any
+ * previous contents of `out` first. Returns 0 (and frees) on allocation failure.
+ */
+int mm2_anm_composite_build_cache(const mm2_anm_file *anm, uint8_t map_to_host_palette,
+                                  mm2_anm_planar_cache *out);
+
+/** Selected cel, or NULL when idx is out of range / cache empty. */
+const mm2_anm_composite_planar *mm2_anm_composite_cache_at(const mm2_anm_planar_cache *cache, int frame_idx);
+
+void mm2_anm_composite_cache_free(mm2_anm_planar_cache *cache);
 #endif
 
 #ifdef __cplusplus

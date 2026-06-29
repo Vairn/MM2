@@ -59,7 +59,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "Off in the distance is Atlantium.", mode=0x00)
+00: service_sign(idx=0x07 -> sign 74 [74.anm], pos=0x00)
 01: show_text_block(str[1] "On heavy wooden doors of an old / fortress is scrawled: Sorcerers ONLY! ")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(5)

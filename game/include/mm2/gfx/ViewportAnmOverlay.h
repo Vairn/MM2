@@ -111,7 +111,11 @@ private:
 
 #if MM2_HOST_AMIGA
 
-    mm2_anm_composite_planar planar_{};
+    /* All composed cels are pre-built into chip BOBs once at load; per-tick
+     * playback just re-points cur_cel_ and issues one blitCopyMask. */
+    mm2_anm_planar_cache cache_{};
+
+    const mm2_anm_composite_planar *cur_cel_ = nullptr;
 
 #else
 

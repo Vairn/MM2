@@ -28,9 +28,11 @@ enum class SheetSubMode : uint8_t {
     RemovePickEquip,
     DropPickSlot,
     CastPicker,
+    SpellBook,
     GatherPick,
     TradePickType,
     TradePickTarget,
+    TradePickItemSlot,
 };
 
 enum class SheetTradeKind : uint8_t {
@@ -56,6 +58,7 @@ struct SheetSession {
     int party_slot = 0;
     SheetSubMode sub_mode = SheetSubMode::Normal;
     SheetTradeKind trade_kind = SheetTradeKind::None;
+    int trade_target_slot = -1; /* Item trade ($E492): target chosen before backpack-letter pick. */
     char status_line[48] = {};
 };
 
@@ -68,6 +71,12 @@ public:
 
     void renderQuickRef(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
                         const Mm2PartyLaunch &launch) const;
+
+    /** Spell-book view (cast picker grid @ 0x65fa). Lists the character's known
+        spells grouped by school/level with manual SP/gem costs. Rendered in-place
+        by renderSheet when the session is in the SpellBook sub-mode. */
+    void renderSpellBook(gfx::ScreenCompositor &c, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
+                         int party_slot) const;
 
     /** Sheet sub-menu @ $8EA6 (C/D/E/G/R/S/T/U). Mutates roster on equip/remove/drop. */
     SheetKeyOutcome handleKey(char key, SheetSession &session, Mm2RosterFile &roster,

@@ -62,7 +62,7 @@
 ```
 
 ```
-00: set_service_context(str[13] "No Barbarians!", mode=0x00)
+00: service_sign(idx=0x0D -> sign 35 [35.anm], pos=0x00)
 01: show_text(str[2] ""I told one bad orc joke too many, and / Lord Slayer threw me in the dun")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)
@@ -211,7 +211,7 @@
 ```
 
 ```
-00: set_service_context(str[11] "No Half-Orcs", mode=0x00)
+00: service_sign(idx=0x0B -> sign 33 [33.anm], pos=0x00)
 01: show_text(str[15] ""Everybody's always picking on me / because I am as stupid as an Orc. / ")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(7)

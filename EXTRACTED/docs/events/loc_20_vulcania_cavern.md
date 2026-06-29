@@ -125,7 +125,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "<Endurance / Help[", mode=0x00)
+00: service_sign(idx=0x07 -> sign 69 [69.anm], pos=0x00)
 01: show_text_block(str[5] "You cringe as a lumbering giant sings / a popular ballad very badly. / S")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(33)

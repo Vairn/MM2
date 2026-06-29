@@ -34,4 +34,9 @@ MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward);
 /* time_tick @ 0x69DC(n): n==1 on successful step drains light on dark tiles. */
 void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest);
 
+/* time_tick @ 0x69DC(n): advance the clock by n sub-day units and roll the
+ * calendar over at 0x100. No light drain / no UI redraw (those are n==1 only).
+ * Used by Rest (n=0x55 @ 0x19CEC). */
+void advanceTimeTick(GameStateView &gs, uint16_t n);
+
 }  // namespace mm2::gameplay

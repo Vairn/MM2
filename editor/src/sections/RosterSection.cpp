@@ -508,7 +508,7 @@ void RosterSection::drawCharacterSheet(RosterRecord& r) {
                     dirty = true;
                 }
                 ImGui::SameLine();
-                ImGui::TextDisabled("(low bits gate mage guild @ 0x1E41A)");
+                ImGui::TextDisabled("(class-quest/guild bits; 0x40 = seen Pegasus, OP_18 sel 0x74)");
             });
         flagsGrid.row2(
             "Script work flag (+0x78)", [&] {
@@ -543,7 +543,7 @@ void RosterSection::drawEquipment(App& app, RosterRecord& r) {
         ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 28.f);
         ImGui::TableSetupColumn("Item ID", ImGuiTableColumnFlags_WidthFixed, 72.f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Bonus", ImGuiTableColumnFlags_WidthFixed, 72.f);
+        ImGui::TableSetupColumn("Charges", ImGuiTableColumnFlags_WidthFixed, 72.f);
         ImGui::TableSetupColumn("Flags", ImGuiTableColumnFlags_WidthFixed, 72.f);
         ImGui::TableHeadersRow();
 
@@ -570,10 +570,10 @@ void RosterSection::drawEquipment(App& app, RosterRecord& r) {
             ImGui::TextUnformatted(app.itemName(s.itemId).c_str());
 
             ImGui::TableNextColumn();
-            int bonus = s.bonus;
+            int charges = s.charges;
             ui::SetFieldStretch();
-            if (ImGui::InputInt("##bonus", &bonus, 0, 0)) {
-                s.bonus = static_cast<uint8_t>(bonus & 0xFF);
+            if (ImGui::InputInt("##charges", &charges, 0, 0)) {
+                s.charges = static_cast<uint8_t>(charges & 0xFF);
                 r.setSlot(base, i, s);
                 dirty = true;
             }
@@ -605,6 +605,10 @@ void RosterSection::drawSpells(RosterRecord& r) {
 
     ImGui::SeparatorText("Spell Book");
     ImGui::TextDisabled("Game-style %s spell grid.", schoolName);
+    ImGui::TextDisabled(
+        "NOTE: the +0x4C..0x57 \"spells\" bitset is UNVERIFIED (MM2 gates spells by "
+        "spell-level, not per-spell flags). Byte +0x50 is NOT a spell field -- it is a "
+        "packed alignment/profession-title nibble pair (event VM OP_32).");
 
     // roster.dat stores the 48-spell bitset in reverse byte order:
     // low-level spells live at +0x51, while high-level spells are at +0x4C.
@@ -834,10 +838,10 @@ void RosterSection::drawGlobalOverlay() {
         known.row("g=0x13 A4-$799E (temple donation bits)", [&] {
             ImGui::Text("0x%02X", tailU8(G::kTempleDonation));
         });
-        known.row("g=0x23 / 0x2B / 0x2C", [&] {
+        known.row("g=0x23 special / 0x2B Eagle Eye / 0x2C Wizard Eye step timer", [&] {
             ImGui::Text("0x23@-$79A8=%02X  0x2B@-$79A0=%02X  0x2C@-$799F=%02X",
-                        tailU8(G::kSpecialQuest), tailU8(G::kClassQuestCounter),
-                        tailU8(G::kSecondaryQuestCounter));
+                        tailU8(G::kSpecialQuest), tailU8(G::kEagleEyeStepTimer),
+                        tailU8(G::kWizardEyeStepTimer));
         });
         known.row("g=0x80..0x83 gate bank A4-$7995..-$7992", [&] {
             ImGui::Text("%02X %02X %02X %02X", tailU8(G::kGateG80), tailU8(G::kGateG81),

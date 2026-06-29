@@ -229,7 +229,7 @@
 ```
 
 ```
-00: set_service_context(str[2] "Big Al's Accessories", mode=0x00)
+00: service_sign(idx=0x02 -> sign 62 [62.anm], pos=0x00)
 01: exec_selector(0x06)  # open_blacksmith_shop
 ```
 
@@ -240,8 +240,8 @@
 ```
 
 ```
-00: set_service_context(str[5] "Sheik Training Arena", mode=0x00)
-01: exec_selector(0x04)  # open_training
+00: service_sign(idx=0x05 -> sign 67 [67.anm], pos=0x00)
+01: exec_selector(0x04)  # open_temple
 ```
 
 **Event 18** — triggers: (11,4)/DIR_N?
@@ -251,8 +251,8 @@
 ```
 
 ```
-00: set_service_context(str[4] "Temple Benedictus", mode=0x00)
-01: exec_selector(0x03)  # open_temple
+00: service_sign(idx=0x04 -> sign 66 [66.anm], pos=0x00)
+01: exec_selector(0x03)  # open_tavern_food
 ```
 
 **Event 19** — triggers: (10,3)/DIR_E?
@@ -262,8 +262,8 @@
 ```
 
 ```
-00: set_service_context(str[3] "Red Lantern Tavern", mode=0x00)
-01: exec_selector(0x01)  # open_tavern_food
+00: service_sign(idx=0x03 -> sign 63 [63.anm], pos=0x00)
+01: exec_selector(0x01)  # open_inn_lodging
 ```
 
 **Event 20** — triggers: (7,3)/DIR_E?
@@ -273,8 +273,8 @@
 ```
 
 ```
-00: set_service_context(str[6] "Monster Bowl", mode=0x00)
-01: exec_selector(0x02)  # open_inn_lodging
+00: service_sign(idx=0x06 -> sign 68 [68.anm], pos=0x00)
+01: exec_selector(0x02)  # open_training
 ```
 
 **Event 21** — triggers: (7,6)/DIR_E?
@@ -284,7 +284,7 @@
 ```
 
 ```
-00: set_service_context(str[20] "A desert trader stands next to a / glowing aura of power. "Hi! I sell / ", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: exec_selector(0x05)  # open_mages_guild
 ```
 
@@ -345,7 +345,7 @@
 ```
 
 ```
-00: set_service_context(str[20] "A desert trader stands next to a / glowing aura of power. "Hi! I sell / ", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: show_text_block(str[21] "Drunk beyond belief, a sorcerer / mumbles, "... Join da Magesh Gill... /")
 02: cond = prompt_yes_no(mode=1)
 03: if cond: skip_tokens(1)
@@ -368,7 +368,7 @@
 ```
 
 ```
-00: exec_selector(0x08)  # open_special_shop
+00: exec_selector(0x08)  # open_arena_shop
 ```
 
 **Event 27** — triggers: (1,10)/DIR_E?
@@ -411,7 +411,7 @@
 ```
 00: skip_tokens(2)
     # skip -> clear_current_tile_event_flag()
-01: set_service_context(str[18] "Not enough gold!", mode=0x00)
+01: service_sign(idx=0x12 -> sign 4 [4.anm], pos=0x00)
 02: exec_selector(0x4B)
 03: clear_current_tile_event_flag()
 ```
@@ -425,7 +425,7 @@
 ```
 00: skip_tokens(2)
     # skip -> clear_current_tile_event_flag()
-01: set_service_context(str[14] "Enter the Plains of Peril (y/n)?", mode=0x00)
+01: service_sign(idx=0x0E -> sign 12 [12.anm], pos=0x00)
 02: exec_selector(0x4A)
 03: clear_current_tile_event_flag()
 ```
@@ -553,7 +553,7 @@
 ```
 
 ```
-00: set_service_context(str[14] "Enter the Plains of Peril (y/n)?", mode=0x00)
+00: service_sign(idx=0x0E -> sign 12 [12.anm], pos=0x00)
 01: exec_selector(0x51)
 ```
 
