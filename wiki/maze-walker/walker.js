@@ -290,6 +290,69 @@ function eventOverlayPreviewAt(sc, x, y, facing) {
   return null;
 }
 
+const WALL_DIR_SHIFT = [6, 4, 2, 0]; // N, E, S, W — matches view3d setFacing / view3d_indoor.py
+
+function wallNibble(v, dir) {
+  return (v >> WALL_DIR_SHIFT[dir & 3]) & 3;
+}
+
+const WALL_MINI_COLORS = [
+  null,
+  "rgba(110,110,125,0.95)",
+  "rgba(220,176,56,0.95)",
+  "rgba(96,196,112,0.95)",
+];
+
+function drawWallMinimapCell(sc, idx, px, py, wallW) {
+  const v = sc.visual[idx];
+  const c = sc.collision[idx];
+  const blocked = [0, 1, 2, 3].some((d) => (c >> (d * 2)) & 1);
+  miniCtx.fillStyle = blocked ? "#3a2828" : "#524038";
+  miniCtx.fillRect(px, py, MINI_TW, MINI_TH);
+  for (let d = 0; d < 4; d++) {
+    const code = wallNibble(v, d);
+    const col = WALL_MINI_COLORS[code];
+    if (!col) continue;
+    miniCtx.fillStyle = col;
+    if (d === 0) miniCtx.fillRect(px, py, MINI_TW, wallW);
+    if (d === 1) miniCtx.fillRect(px + MINI_TW - wallW, py, wallW, MINI_TH);
+    if (d === 2) miniCtx.fillRect(px, py + MINI_TH - wallW, MINI_TW, wallW);
+    if (d === 3) miniCtx.fillRect(px, py, wallW, MINI_TH);
+  }
+}
+
+function drawMinimapCellOverlays(
+  sc,
+  idx,
+  px,
+  py,
+  minimapMarkers,
+  ambientFlagged,
+  scriptedTiles,
+  showStepZone
+) {
+  const marker = minimapMarkers.get(idx);
+  if (marker) {
+    drawMinimapMarker(miniCtx, px, py, MINI_TW, MINI_TH, marker);
+  } else if (ambientFlagged.has(idx)) {
+    drawMinimapAmbient(miniCtx, px, py, MINI_TW, MINI_TH, { flagged: true });
+  } else if (showStepZone && isAmbientStepTile(sc, idx)) {
+    drawMinimapAmbient(miniCtx, px, py, MINI_TW, MINI_TH, { flagged: false });
+  } else if (sc.collision[idx] & 0x80 && scriptedTiles.has(idx)) {
+    if (sessionTileCleared(session, state.screen, idx)) {
+      miniCtx.fillStyle = "rgba(120,120,120,0.55)";
+      miniCtx.beginPath();
+      miniCtx.arc(px + MINI_TW / 2, py + MINI_TH / 2, 2, 0, Math.PI * 2);
+      miniCtx.fill();
+    } else {
+      miniCtx.fillStyle = "rgba(255,65,65,0.85)";
+      miniCtx.beginPath();
+      miniCtx.arc(px + MINI_TW / 2, py + MINI_TH / 2, 2, 0, Math.PI * 2);
+      miniCtx.fill();
+    }
+  }
+}
+
 function renderMinimap(sc) {
   const w = MAP_GRID * MINI_TW;
   const h = MAP_GRID * MINI_TH;
@@ -303,6 +366,7 @@ function renderMinimap(sc) {
   const ambientFlagged = collisionAmbientPositions(sc);
   const scriptedTiles = scriptedEventPositions(sc);
   const showStepZone = screenHasAmbientSteps(sc);
+  const wallW = Math.max(1, Math.floor(MINI_TW / 5));
 
   for (let sy = 0; sy < MAP_GRID; sy++) {
     const diskY = MAP_GRID - 1 - sy;
@@ -310,31 +374,25 @@ function renderMinimap(sc) {
       const idx = (diskY << 4) | sx;
       const px = sx * MINI_TW;
       const py = sy * MINI_TH;
-      miniCtx.fillStyle = "#444450";
-      miniCtx.fillRect(px, py, MINI_TW, MINI_TH);
-      const frame = cartoFrame(state.screen, sc.visual[idx], sc.outdoor, table);
-      const img = spriteImg(sheetKey, String(frame));
-      if (img) miniCtx.drawImage(img, px, py, MINI_TW, MINI_TH);
-      const marker = minimapMarkers.get(idx);
-      if (marker) {
-        drawMinimapMarker(miniCtx, px, py, MINI_TW, MINI_TH, marker);
-      } else if (ambientFlagged.has(idx)) {
-        drawMinimapAmbient(miniCtx, px, py, MINI_TW, MINI_TH, { flagged: true });
-      } else if (showStepZone && isAmbientStepTile(sc, idx)) {
-        drawMinimapAmbient(miniCtx, px, py, MINI_TW, MINI_TH, { flagged: false });
-      } else if (sc.collision[idx] & 0x80 && scriptedTiles.has(idx)) {
-        if (sessionTileCleared(session, state.screen, idx)) {
-          miniCtx.fillStyle = "rgba(120,120,120,0.55)";
-          miniCtx.beginPath();
-          miniCtx.arc(px + MINI_TW / 2, py + MINI_TH / 2, 2, 0, Math.PI * 2);
-          miniCtx.fill();
-        } else {
-          miniCtx.fillStyle = "rgba(255,65,65,0.85)";
-          miniCtx.beginPath();
-          miniCtx.arc(px + MINI_TW / 2, py + MINI_TH / 2, 2, 0, Math.PI * 2);
-          miniCtx.fill();
-        }
+      if (sc.outdoor) {
+        miniCtx.fillStyle = "#444450";
+        miniCtx.fillRect(px, py, MINI_TW, MINI_TH);
+        const frame = cartoFrame(state.screen, sc.visual[idx], sc.outdoor, table);
+        const img = spriteImg(sheetKey, String(frame));
+        if (img) miniCtx.drawImage(img, px, py, MINI_TW, MINI_TH);
+      } else {
+        drawWallMinimapCell(sc, idx, px, py, wallW);
       }
+      drawMinimapCellOverlays(
+        sc,
+        idx,
+        px,
+        py,
+        minimapMarkers,
+        ambientFlagged,
+        scriptedTiles,
+        showStepZone
+      );
     }
   }
 
@@ -345,9 +403,11 @@ function renderMinimap(sc) {
   miniCtx.strokeRect(px + 0.5, py + 0.5, MINI_TW - 1, MINI_TH - 1);
   miniCtx.fillStyle = "rgba(255,220,0,0.25)";
   miniCtx.fillRect(px + 1, py + 1, MINI_TW - 2, MINI_TH - 2);
-  const dirFrame = [0x20, 0x22, 0x21, 0x23][state.facing & 3];
-  const arr = spriteImg(sheetKey, String(dirFrame));
-  if (arr) miniCtx.drawImage(arr, px, py, MINI_TW, MINI_TH);
+  if (sc.outdoor) {
+    const dirFrame = [0x20, 0x22, 0x21, 0x23][state.facing & 3];
+    const arr = spriteImg(sheetKey, String(dirFrame));
+    if (arr) miniCtx.drawImage(arr, px, py, MINI_TW, MINI_TH);
+  }
   miniCtx.strokeStyle = "#787887";
   miniCtx.strokeRect(0, 0, w, h);
 }
