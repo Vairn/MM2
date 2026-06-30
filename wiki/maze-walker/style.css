@@ -17,16 +17,13 @@
   --toolbar-h: 44px;
   --status-width: 22rem;
   --meta-panel-h: 6.25rem;
-  --mini-panel-h: 9.5rem;
+  --mini-panel-h: 19.5rem;
   --mini-canvas-w: 224px;
   --mini-canvas-h: 176px;
   --party-panel-h: 6.875rem;
   --legend-panel-h: 3.5rem;
   --controls-panel-h: 3.75rem;
-  --event-panel-h: calc(
-    var(--sidebar-inner-h) - var(--meta-panel-h) - var(--mini-panel-h) -
-      var(--party-panel-h) - var(--legend-panel-h) - var(--controls-panel-h)
-  );
+  --event-panel-h: 9rem;
 }
 
 * {
@@ -185,10 +182,9 @@ canvas {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   max-width: var(--sidebar-width);
-  height: var(--game-panel-outer-h);
+  height: auto;
   min-height: var(--game-panel-outer-h);
-  max-height: var(--game-panel-outer-h);
-  overflow: hidden;
+  overflow: visible;
   flex-shrink: 0;
 }
 
@@ -248,10 +244,13 @@ canvas {
 
 .miniPanel canvas {
   display: block;
-  width: min(var(--mini-canvas-w), 100%);
+  /* Size by sidebar width; height follows the 224:176 aspect so the minimap is
+   * as large as the panel allows and never squashed. */
+  width: 100%;
   height: auto;
-  max-height: calc(var(--mini-panel-h) - 2rem);
-  aspect-ratio: 224 / 176;
+  max-height: 100%;
+  aspect-ratio: 1 / 1;
+  image-rendering: pixelated;
   margin: 0;
 }
 

@@ -92,6 +92,7 @@ bool EnvAssets::loadEnv(const char *data_dir, EnvKind kind)
     data_dir_ = data_dir;
     mm2_image32_free(&walls_);
     mm2_image32_free(&floor_);
+    mm2_image32_free(&torches_);
     mm2_image32_free(&automap_);
     automap_ok_ = false;
     mm2_image32_free(&outdoor1_);
@@ -125,6 +126,9 @@ bool EnvAssets::loadEnv(const char *data_dir, EnvKind kind)
 
     const bool has_walls = loadImage(data_dir, names.walls, &walls_);
     const bool has_floor = loadImage(data_dir, names.floor, &floor_);
+    if (names.ceiling) {
+        loadImage(data_dir, names.ceiling, &torches_);
+    }
     automap_ok_ = names.automap && loadImage(data_dir, names.automap, &automap_);
     env_ok_ = has_walls && has_floor;
 #if MM2_HOST_AMIGA
@@ -176,6 +180,7 @@ void EnvAssets::unloadAll()
 {
     mm2_image32_free(&walls_);
     mm2_image32_free(&floor_);
+    mm2_image32_free(&torches_);
     mm2_image32_free(&automap_);
     automap_ok_ = false;
     mm2_image32_free(&sky_);

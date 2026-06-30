@@ -398,7 +398,7 @@ def compose_with_panel(view: Image.Image, n0: Image.Image, c1: Image.Image, c2: 
     d.text((mx + 2, my + 2), "normal", fill=(220, 220, 230, 255))
     d.text((mx + cell_w + gap + 2, my + 2), "code=1", fill=(220, 220, 230, 255))
     d.text((mx + 2, my + cell_h + gap + 2), "code=2 door", fill=(220, 220, 230, 255))
-    d.text((mx + cell_w + gap + 2, my + cell_h + gap + 2), "code=3", fill=(220, 220, 230, 255))
+    d.text((mx + cell_w + gap + 2, my + cell_h + gap + 2), "code=3 torch", fill=(220, 220, 230, 255))
     nz = [f"{SLOT_NAMES[i]}={v}" for i, v in enumerate(slots) if v]
     d.text((mx, out_h - pad - 22), "Slots:", fill=(180, 180, 200, 255))
     d.text((mx + 40, out_h - pad - 22), " ".join(nz[:4]), fill=(180, 180, 200, 255))

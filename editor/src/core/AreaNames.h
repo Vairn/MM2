@@ -71,8 +71,8 @@ inline const char* areaNameRaw(int area) {
         case 50: return "Pinehurst Dungeon Level 2";
         case 51: return "Luxus Palace Dungeon Level 1";
         case 52: return "Luxus Palace Dungeon Level 2";
-        case 53: return "Ancients (Good)";
-        case 54: return "Ancients (Evil)";
+        case 53: return "Ancients (Evil)";
+        case 54: return "Ancients (Good)";
         case 55: return "Hillstone";
         case 56: return "Woodhaven";
         case 57: return "Pinehurst";

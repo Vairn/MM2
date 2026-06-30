@@ -838,7 +838,7 @@ void MapSection::drawMinimap() {
 }
 
 void MapSection::drawVisualDecode(uint8_t cell) {
-    static const char* kWall[] = {"open", "wall", "door", "torch"};
+    static const char* kWall[] = {"open", "wall", "torch", "door"};
     auto name = [&](int v) -> const char* {
         return (v >= 0 && v <= 3) ? kWall[v] : "?";
     };

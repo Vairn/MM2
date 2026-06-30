@@ -194,6 +194,21 @@ inline int strncmp(const char *s1, const char *s2, size_t n)
     return 0;
 }
 
+inline char *strncat(char *dest, const char *src, size_t n)
+{
+    char *d = dest;
+    while (*d != '\0') {
+        ++d;
+    }
+    size_t i = 0;
+    while (i < n && src[i] != '\0') {
+        d[i] = src[i];
+        ++i;
+    }
+    d[i] = '\0';
+    return dest;
+}
+
 template <typename T, size_t N>
 constexpr size_t size(const T (&)[N])
 {
@@ -236,6 +251,7 @@ using mm2_freestanding::array;
 using mm2_freestanding::max;
 using mm2_freestanding::min;
 using mm2_freestanding::size;
+using mm2_freestanding::strncat;
 using mm2_freestanding::strncmp;
 using mm2_freestanding::unique_ptr;
 using mm2_freestanding::vector;

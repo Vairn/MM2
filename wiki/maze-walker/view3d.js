@@ -158,8 +158,8 @@ export function buildFrustum(hood, f) {
   }
 
   function norm(a, bb) {
-    // Door (3) beside an open side → plain wall (1) @0x2B6A..0x2BBC.
-    if (slots[a] !== 0 && slots[bb] === 3) slots[bb] = 1;
+    // Door (2) beside an open side → plain wall (1) @0x2B6A..0x2BBC.
+    if (slots[a] !== 0 && slots[bb] === 2) slots[bb] = 1;
   }
   norm(S_F20, S_F13);
   norm(S_F1C, S_F0F);
@@ -190,13 +190,13 @@ export function collectBlits(slots) {
     const depth = (paintDepth & 0x7f) - 1;
     if (depth < 0 || depth >= 4) return;
     const mirror = paintDepth >= 0x80;
-    const isTorchWall = code === 2;
+    const isDoor = code === 2;
     let entry;
     if (kind === "front") {
       entry = {
         kind,
         depth,
-        frame: depth + (isTorchWall ? 0x10 : 0),
+        frame: depth + (isDoor ? 0x10 : 0),
         x: frontX[depth],
         y: frontY[depth] + (depth === 0 ? 1 : 0),
         code,
@@ -207,7 +207,7 @@ export function collectBlits(slots) {
           kind,
           depth,
           mirror: true,
-          frame: leftBase[depth] + (isTorchWall ? 0x10 : 0),
+          frame: leftBase[depth] + (isDoor ? 0x10 : 0),
           x: leftX2[depth],
           y: leftY2[depth],
           code,
@@ -217,7 +217,7 @@ export function collectBlits(slots) {
           kind,
           depth,
           mirror: false,
-          frame: depth + 4 + (isTorchWall ? 0x10 : 0),
+          frame: depth + 4 + (isDoor ? 0x10 : 0),
           x: leftX1[depth],
           y: leftY1[depth],
           code,
@@ -228,7 +228,7 @@ export function collectBlits(slots) {
         kind,
         depth,
         mirror: true,
-        frame: rightBase[depth] + (isTorchWall ? 0x10 : 0),
+        frame: rightBase[depth] + (isDoor ? 0x10 : 0),
         x: rightX2[depth],
         y: rightY2[depth],
         code,
@@ -238,14 +238,14 @@ export function collectBlits(slots) {
         kind,
         depth,
         mirror: false,
-        frame: depth + 8 + (isTorchWall ? 0x10 : 0),
+        frame: depth + 8 + (isDoor ? 0x10 : 0),
         x: rightX1[depth],
         y: rightY1[depth],
         code,
       };
     }
     blits.push(entry);
-    if (isTorchWall && depth <= 2) {
+    if (code === 3 && depth <= 2) {
       torchBlits.push(entry);
     }
   }
@@ -418,15 +418,12 @@ export const TORCH_PHASE_COUNT = 3;
 const LEFT_FAR_FRAMES = [12, 14, 2, 3];
 const RIGHT_FAR_FRAMES = [13, 15, 2, 3];
 
-function wallBaseFrame(wb) {
-  return wb.code === 2 ? wb.frame - 0x10 : wb.frame;
-}
-
 export function torchBlitFor(wb, phase = 0) {
-  /* map.dat page-0 field 2 = wall+torch (not door=3). Caller passes torchBlits[] only. */
-  if (wb.code !== 2 || wb.depth > 2) return null;
+  /* map.dat page-0 field 3 = wall+torch (NEVER door=2). Caller passes torchBlits[] (code===3) only. */
+  if (wb.code !== 3 || wb.depth > 2) return null;
   const flicker = ((phase % TORCH_PHASE_COUNT) + TORCH_PHASE_COUNT) % TORCH_PHASE_COUNT;
-  const baseFrame = wallBaseFrame(wb);
+  const baseFrame = wb.frame;
+  
   if (wb.kind === "front") {
     return {
       frame: 0x12 + wb.depth * 3 + flicker,
@@ -434,6 +431,7 @@ export function torchBlitFor(wb, phase = 0) {
       y: [44, 52, 60][wb.depth],
     };
   }
+  
   if (wb.kind === "left") {
     if (wb.mirror || LEFT_FAR_FRAMES.includes(baseFrame)) {
       if (wb.depth === 0) return null;

@@ -115,12 +115,12 @@ FAQ: section 4-11 (overview), 6-1..6-7 (per class), 9-1/9-2 (Sorcerer castles)
 
 | | |
 |--|--|
-| **Where** | Isle of Ancients - **Castle of Good** (loc **53**) and **Castle of Evil** (loc **54**); walk-on-water or teleport to island |
-| **Prerequisites** | Sorcerer (+ robbers); **S3-4 Lightning Bolt** for 3x Iron Wizard (`6D`); FAQ door route **1-3-1-7-A-C-G-I** (Good) / mirror (Evil) |
-| **Steps** | 1. Enter both castles (order arbitrary). 2. Solve numbered/lettered door riddles (clues on plaques). 3. Optional: Iron Wizards at **(4,1)** Good / **(11,14)** Evil. 4. Enter access codes: **Good** evt **04**=`**46**`, evt **05**=`**23**`; **Evil** evt **04**=`**64**`, evt **05**=`**32**` (FAQ: Ybmug left 23 right 46 / Yekop left 64...). 5. Free **Ybmug** (Good stasis **(10,3)**) and **Yekop** (Evil **(5,12)**) - each requires counterpart freed (`$75` bit flags). 6. Completion message -> Farview. |
+| **Where** | Isle of Ancients - **Castle of Evil** (loc **53**) and **Castle of Good** (loc **54**); walk-on-water or teleport to island |
+| **Prerequisites** | Sorcerer (+ robbers); **S3-4 Lightning Bolt** for 3x Iron Wizard (`6D`); FAQ door route **1-3-1-7-A-C-G-I** (Evil) / mirror (Good) |
+| **Steps** | 1. Enter both castles (order arbitrary). 2. Solve numbered/lettered door riddles (clues on plaques). 3. Optional: Iron Wizards at **(4,1)** Evil / **(11,14)** Good. 4. Enter access codes: **Evil** evt **04**=`**46**`, evt **05**=`**23**`; **Good** evt **04**=`**64**`, evt **05**=`**32**` (FAQ: Ybmug left 23 right 46 / Yekop left 64...). 5. Free **Ybmug** (Evil stasis **(10,3)**) and **Yekop** (Good **(5,12)**) - each requires counterpart freed (`$75` bit flags). 6. Completion message -> Farview. |
 | **Completion** | loc **53/54** evt **06**; `$75` OR masks `0x03` when both freed |
 | **Farview** | Ticket **`0xD4`** |
-| **Codes** | Good: **46**, **23**; Evil: **64**, **32** |
+| **Codes** | Evil: **46**, **23**; Good: **64**, **32** |
 
 ### Robber (FAQ 4-11 plaque)
 
@@ -418,19 +418,19 @@ Strings: [11] A plaque left by the Jurors of Mount / Farview reads: "For each ch
 
 Strings: [7] Only the barbaric may speak / to Brutal Bruno.; [8] Bruno, Chief of the Barbaric Hills, / challenges your Barbarian to a test of / brute force; [12] Victory! Now return to the Jurors.
 
-### Location 53 — Ancients (Good) (map **53**)
+### Location 53 — Ancients (Evil) (map **53**)
 
-**Event 04** — Sorcerer Good — access code (46)
+**Event 04** — Sorcerer Evil — access code (46)
 - Triggers: (10,2) `0xA2` DIR_S?
 - Hex: `01 28 2f 30 e6 e4 fa fa fa fa fa fa fa fa 10 02 01 29 29 18 00 75 fb 04 01 2a 07 14`
 - Key ops: cond = check_answer("46"); apply_party_masked(count=0x00, set=0x75, and=0xFB, or=0x04)
 
-**Event 05** — Sorcerer Good — access code (23)
+**Event 05** — Sorcerer Evil — access code (23)
 - Triggers: (10,4) `0xA4` DIR_S?
 - Hex: `01 28 2f 30 e8 e7 fa fa fa fa fa fa fa fa 10 02 01 29 29 18 00 75 f7 08 01 2a 07 14`
 - Key ops: cond = check_answer("23"); apply_party_masked(count=0x00, set=0x75, and=0xF7, or=0x08)
 
-**Event 06** — Sorcerer Good — free Ybmug / completion
+**Event 06** — Sorcerer Evil — free Ybmug / completion
 - Triggers: (10,3) `0xA3` DIR_S?
 - Hex: `2d 04 05 11 09 15 00 75 02 10 02 15 00 75 80 11 02 02 27 29 15 00 75 0c 1b 0c 10 02 02 04 29 01 2b 15 00 75 40 10 03 02 2c 18 00 75 73 80 29 02 2d 18 00 75 00 03 29`
 - Pseudo:
@@ -459,19 +459,19 @@ Strings: [7] Only the barbaric may speak / to Brutal Bruno.; [8] Bruno, Chief of
 
 Strings: [4] In the central chamber, locked / in a stasis field, lies the / evil wizard Ybmug.; [39] In the central chamber is an / empty stasis field.; [40] What is the access code?; [41] Incorrect!; [42] Correct!; [43] The field deactivates and Ybmug rises.; [44] "Equilibrium is essential. You must / free my counterpart, Yekop, and / return to the Juro; [45] Thank you for freeing Yekop and me. / Now you must return to the Jurors.
 
-### Location 54 — Ancients (Evil) (map **54**)
+### Location 54 — Ancients (Good) (map **54**)
 
-**Event 04** — Sorcerer Evil — access code (64)
+**Event 04** — Sorcerer Good — access code (64)
 - Triggers: (5,11) `0x5B` DIR_N?
 - Hex: `01 29 2f 30 e4 e6 fa fa fa fa fa fa fa fa 10 02 01 2a 29 18 00 75 ef 10 01 2b 07 14`
 - Key ops: cond = check_answer("64"); apply_party_masked(count=0x00, set=0x75, and=0xEF, or=0x10)
 
-**Event 05** — Sorcerer Evil — access code (32)
+**Event 05** — Sorcerer Good — access code (32)
 - Triggers: (5,13) `0x5D` DIR_N?
 - Hex: `01 29 2f 30 e7 e8 fa fa fa fa fa fa fa fa 10 02 01 2a 29 18 00 75 df 20 01 2b 07 14`
 - Key ops: cond = check_answer("32"); apply_party_masked(count=0x00, set=0x75, and=0xDF, or=0x20)
 
-**Event 06** — Sorcerer Evil — free Yekop / completion
+**Event 06** — Sorcerer Good — free Yekop / completion
 - Triggers: (5,12) `0x5C` DIR_N?
 - Hex: `2d 04 05 11 09 15 00 75 02 10 02 15 00 75 40 11 02 02 28 29 15 00 75 30 1b 30 10 02 02 03 29 01 2c 15 00 75 80 10 03 02 2d 18 00 75 8f 40 29 18 00 75 00 03 02 2e 29`
 - Pseudo:

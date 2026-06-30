@@ -78,7 +78,7 @@ struct View3DBlit {
     int y = 0;
     int latX = 0;    // lattice column -2..2
     int latRow = 0;  // lattice row -3..0
-    uint8_t code = 0;  // raw wall code (1=wall, 2=door, 3=torch)
+    uint8_t code = 0;  // map.dat page-0 nibble: 1 wall, 2 torch, 3 door
 };
 
 struct View3DScene {

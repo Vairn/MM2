@@ -1,7 +1,7 @@
-# Location 54 — Ancients (Evil)
+# Location 54 — Ancients (Good)
 
 - **event.dat** offset `0x010CA3`, length **1468** bytes
-- **Map:** map screen **54**; Ancients (Evil)
+- **Map:** map screen **54**; Ancients (Good)
 - **Record kind:** `standard`
 - **Triggers:** 80; **script segments:** 45; **strings:** 48
 

@@ -3,7 +3,7 @@
 // real map.dat (frustum @ 0x2900, paint order @ 0x2F7E):
 //   left  d=1 frame=5  @ (32,22)
 //   right d=1 frame=9  @ (160,22)
-//   front d=1 frame=17 @ (64,40)   (door -> +0x10 variant)
+//   front d=1 frame=17 @ (64,40)   (field-2 torch wall -> +0x10 variant)
 //   left  d=0 frame=12 @ (8,22)
 //   right d=0 frame=13 @ (192,22)
 //

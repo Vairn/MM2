@@ -111,8 +111,8 @@ Decoder: `tools/decode_event.py` · Editor: [`editor/README.md`](../../editor/RE
 
 | Loc | Map | Area | Doc |
 |-----|-----|------|-----|
-| 53 | 53 | Ancients (Good) | [loc_53_ancients_good.md](loc_53_ancients_good.md) |
-| 54 | 54 | Ancients (Evil) | [loc_54_ancients_evil.md](loc_54_ancients_evil.md) |
+| 53 | 53 | Ancients (Evil) | [loc_53_ancients_evil.md](loc_53_ancients_evil.md) |
+| 54 | 54 | Ancients (Good) | [loc_54_ancients_good.md](loc_54_ancients_good.md) |
 | 55 | 55 | Hillstone | [loc_55_hillstone.md](loc_55_hillstone.md) |
 | 56 | 56 | Woodhaven | [loc_56_woodhaven.md](loc_56_woodhaven.md) |
 | 57 | 57 | Pinehurst | [loc_57_pinehurst.md](loc_57_pinehurst.md) |

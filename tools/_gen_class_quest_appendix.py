@@ -17,8 +17,8 @@ QUEST: dict[int, dict] = {
     38: {"label": "38  C4 (Brutal Bruno / Barbarian quest)", "events": [12]},
     22: {"label": "22  Corak's Cave (Cleric quest)", "events": [4, 5]},
     30: {"label": "30  Dawn's Mist Bog (Ninja quest)", "events": [4]},
-    53: {"label": "53  Ancients (Good) — Ybmug / Sorcerer", "events": [4, 5, 6]},
-    54: {"label": "54  Ancients (Evil) — Yekop / Sorcerer", "events": [4, 5, 6]},
+    53: {"label": "53  Ancients (Evil) — Ybmug / Sorcerer", "events": [4, 5, 6]},
+    54: {"label": "54  Ancients (Good) — Yekop / Sorcerer", "events": [4, 5, 6]},
     61: {"label": "61  Spell/hireling index tables (HoS class-quest hints)", "events": "hints"},
 }
 

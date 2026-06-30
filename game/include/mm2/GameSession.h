@@ -97,6 +97,7 @@ private:
     bool overlayBlocksInput() const;
     void tickEventInput(const platform::KeyState &keys);
     void tickOverlayAnimations();
+    void tickTorchAnimation();
     bool eventBlocksInput() const;
     bool scriptedBlocksInput() const;
     void runPendingEvents();
@@ -157,6 +158,10 @@ private:
     /* Port-side one-shot for the Corak new-game prologue scene scheduling (the
      * classic intro is not a per-character quest bit). */
     bool corak_intro_seen_ = false;
+
+    /** Torch flicker phase (A4-$667A) — advanced each indoor viewport tick. */
+    int torch_phase_ = 0;
+    int torch_tick_ = 0;
 
 #if MM2_HOST_AMIGA
     bool view3d_dirty_ = false;

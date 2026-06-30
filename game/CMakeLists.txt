@@ -4,6 +4,7 @@ project(MM2 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -121,6 +122,14 @@ if(NOT AMIGA)
     src/runtime/PathScratch.cpp)
   target_include_directories(view3d_middlegate_check PRIVATE include)
   target_link_libraries(view3d_middlegate_check PRIVATE mm2_codecs)
+
+  add_executable(view3d_torch_door_test
+    tests/view3d_torch_door_test.cpp
+    src/gfx/View3D.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(view3d_torch_door_test PRIVATE include)
+  target_link_libraries(view3d_torch_door_test PRIVATE mm2_codecs)
 
   add_executable(view3d_outdoor_check
     tests/view3d_outdoor_check.cpp

@@ -20,6 +20,12 @@ constexpr int kView3DLatXMax = 2;
 constexpr int kView3DLatRowMin = -3;
 constexpr int kView3DLatRowMax = 0;
 
+/** map.dat page-0 visual field: 3 = wall+torch (doc 15 / hood @0x2900). */
+constexpr uint8_t kMapVisualWallTorch = 3;
+
+/** key_read_3d @0x1E9CE — A4-$667A torch flicker phase 0..2 (wraps at 3). */
+constexpr int kView3DTorchPhaseCount = 3;
+
 inline int view3dDepthFromRow(int latRow) { return -latRow; }
 inline int view3dRowFromDepth(int depth) { return -depth; }
 
@@ -52,12 +58,24 @@ struct View3DBlit {
     int y = 0;
     int latX = 0;
     int latRow = 0;
-    uint8_t code = 0;
+    uint8_t code = 0;  // map.dat page-0 nibble: 1 wall, 2 torch, 3 door
 };
+
+struct View3DTorchBlit {
+    int frame = 0;
+    int x = 0;
+    int y = 0;
+};
+
+/** Returns false when this wall slot has no torch overlay (townt/cavet/castlet.32). */
+bool view3dTorchBlitFor(const View3DBlit &wb, int phase, View3DTorchBlit *out);
 
 struct View3DScene {
     std::array<View3DBlit, 20> blits{};
     int num_blits = 0;
+    /** Field 2 only — populated at paint time (ASM -$4F62/-$4F76/-$4F8A). */
+    std::array<View3DBlit, 12> torch_blits{};
+    int num_torch_blits = 0;
     std::array<uint8_t, 13> hood{};
     std::array<uint8_t, 20> slots{};
 };

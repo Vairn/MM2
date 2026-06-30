@@ -204,16 +204,6 @@ void buildFrustum(const std::array<uint8_t, kHoodBytes>& hood, const FacingCtx& 
     norm(S_F1B, S_F0E);
 }
 
-int wallFrame(WallField field, int baseFrame) {
-    switch (field) {
-        case WallField::Open:  return -1;
-        case WallField::Wall:  return baseFrame;
-        case WallField::Torch: return baseFrame;
-        case WallField::Door:  return baseFrame;
-    }
-    return baseFrame;
-}
-
 void paintFrustumCell(std::vector<View3DBlit>& out, int latX, int paintDepth, uint8_t rawCode) {
     const int depth = (paintDepth & 0x7F) - 1;
     if (depth < 0 || depth >= kView3DDepthBands) return;
@@ -256,9 +246,9 @@ bool view3dPaintLatticeCell(std::vector<View3DBlit>& out, int latX, int latRow,
     const int depth = view3dDepthFromRow(latRow);
     if (depth < 0 || depth >= kView3DDepthBands) return false;
 
-    const auto field = static_cast<WallField>(rawCode & 3);
-    if (field == WallField::Open) return false;
-    const bool isDoor = (field == WallField::Door);
+    const uint8_t code = static_cast<uint8_t>(rawCode & 3);
+    if (code == 0) return false;
+    const bool isDoor = (code == static_cast<uint8_t>(WallField::Door));
 
     using T = View3DWallTables;
     int frame = 0;
@@ -268,34 +258,32 @@ bool view3dPaintLatticeCell(std::vector<View3DBlit>& out, int latX, int latRow,
     if (latX == 0) {
         x = T::kFrontX[depth];
         y = T::kFrontY[depth] + (depth == 0 ? 1 : 0);
-        frame = wallFrame(field, depth);
+        frame = depth;
         if (isDoor) frame += 0x10;
     } else if (latX == -2) {
         frame = T::kLeftFarFrame[depth];
         x = T::kLeftFarX[depth];
         y = T::kLeftFarY[depth];
-        frame = wallFrame(field, frame);
         if (isDoor) frame += 0x10;
     } else if (latX == -1) {
         x = T::kLeftNearX[depth];
         y = T::kLeftNearY[depth];
-        frame = wallFrame(field, depth + 4);
+        frame = depth + 4;
         if (isDoor) frame += 0x10;
     } else if (latX == 1) {
         x = T::kRightNearX[depth];
         y = T::kRightNearY[depth];
-        frame = wallFrame(field, depth + 8);
+        frame = depth + 8;
         if (isDoor) frame += 0x10;
     } else {
         frame = T::kRightFarFrame[depth];
         x = T::kRightFarX[depth];
         y = T::kRightFarY[depth];
-        frame = wallFrame(field, frame);
         if (isDoor) frame += 0x10;
     }
 
     if (frame < 0) return false;
-    out.push_back({frame, x, y, latX, latRow, static_cast<uint8_t>(field)});
+    out.push_back({frame, x, y, latX, latRow, code});
     return true;
 }
 

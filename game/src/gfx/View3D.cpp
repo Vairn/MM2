@@ -214,18 +214,6 @@ void buildFrustum(const std::array<uint8_t, kHoodBytes> &hood, const FacingCtx &
     norm(S_F1B, S_F0E);
 }
 
-int wallFrame(WallField field, int baseFrame) {
-    switch (field) {
-        case WallField::Open:
-            return -1;
-        case WallField::Wall:
-        case WallField::Torch:
-        case WallField::Door:
-            return baseFrame;
-    }
-    return baseFrame;
-}
-
 bool view3dPaintLatticeCell(View3DScene &scene, int latX, int latRow, uint8_t rawCode) {
     if (rawCode == 0) {
         return false;
@@ -242,11 +230,11 @@ bool view3dPaintLatticeCell(View3DScene &scene, int latX, int latRow, uint8_t ra
         return false;
     }
 
-    const auto field = static_cast<WallField>(rawCode & 3);
-    if (field == WallField::Open) {
+    const uint8_t code = static_cast<uint8_t>(rawCode & 3);
+    if (code == 0) {
         return false;
     }
-    const bool isDoor = (field == WallField::Door);
+    const bool isDoor = (code == static_cast<uint8_t>(WallField::Door));
 
     using T = View3DWallTables;
     int frame = 0;
@@ -256,7 +244,7 @@ bool view3dPaintLatticeCell(View3DScene &scene, int latX, int latRow, uint8_t ra
     if (latX == 0) {
         x = T::kFrontX[depth];
         y = T::kFrontY[depth] + (depth == 0 ? 1 : 0);
-        frame = wallFrame(field, depth);
+        frame = depth;
         if (isDoor) {
             frame += 0x10;
         }
@@ -264,21 +252,20 @@ bool view3dPaintLatticeCell(View3DScene &scene, int latX, int latRow, uint8_t ra
         frame = T::kLeftFarFrame[depth];
         x = T::kLeftFarX[depth];
         y = T::kLeftFarY[depth];
-        frame = wallFrame(field, frame);
         if (isDoor) {
             frame += 0x10;
         }
     } else if (latX == -1) {
         x = T::kLeftNearX[depth];
         y = T::kLeftNearY[depth];
-        frame = wallFrame(field, depth + 4);
+        frame = depth + 4;
         if (isDoor) {
             frame += 0x10;
         }
     } else if (latX == 1) {
         x = T::kRightNearX[depth];
         y = T::kRightNearY[depth];
-        frame = wallFrame(field, depth + 8);
+        frame = depth + 8;
         if (isDoor) {
             frame += 0x10;
         }
@@ -286,7 +273,6 @@ bool view3dPaintLatticeCell(View3DScene &scene, int latX, int latRow, uint8_t ra
         frame = T::kRightFarFrame[depth];
         x = T::kRightFarX[depth];
         y = T::kRightFarY[depth];
-        frame = wallFrame(field, frame);
         if (isDoor) {
             frame += 0x10;
         }
@@ -296,7 +282,12 @@ bool view3dPaintLatticeCell(View3DScene &scene, int latX, int latRow, uint8_t ra
         return false;
     }
     if (scene.num_blits < static_cast<int>(scene.blits.size())) {
-        scene.blits[scene.num_blits++] = {frame, x, y, latX, latRow, static_cast<uint8_t>(field)};
+        scene.blits[scene.num_blits++] = {frame, x, y, latX, latRow, code};
+        if (code == kMapVisualWallTorch && depth <= 2 &&
+            scene.num_torch_blits < static_cast<int>(scene.torch_blits.size())) {
+            scene.torch_blits[scene.num_torch_blits++] =
+                scene.blits[static_cast<size_t>(scene.num_blits - 1)];
+        }
     }
     return true;
 }
@@ -311,6 +302,7 @@ void paintFrustumCell(View3DScene &scene, int latX, int paintDepth, uint8_t rawC
 
 void collectBlits(const std::array<uint8_t, kFrustumSlots> &s, View3DScene &scene) {
     scene.num_blits = 0;
+    scene.num_torch_blits = 0;
     const auto sl = [&](int i) -> uint8_t { return s[static_cast<size_t>(i)]; };
 
     paintFrustumCell(scene, -1, 4, sl(S_F1D));
@@ -343,6 +335,78 @@ View3DMapBuffers buildView3DMapBuffers(const uint8_t center_page[kMapPageSize]) 
         ::memcpy(bufs.center.begin(), center_page, kMapPageSize);
     }
     return bufs;
+}
+
+bool view3dTorchBlitFor(const View3DBlit &wb, int phase, View3DTorchBlit *out) {
+    if (!out || wb.code != kMapVisualWallTorch) {
+        return false;
+    }
+    const int depth = view3dDepthFromRow(wb.latRow);
+    if (depth < 0 || depth > 2) {
+        return false;
+    }
+
+    const int flicker =
+        ((phase % kView3DTorchPhaseCount) + kView3DTorchPhaseCount) % kView3DTorchPhaseCount;
+    const int baseFrame = static_cast<int>(wb.frame);
+
+    if (wb.latX == 0) {
+        static constexpr int kX[3] = {105, 108, 107};
+        static constexpr int kY[3] = {44, 52, 60};
+        *out = {0x12 + depth * 3 + flicker, kX[depth], kY[depth]};
+        return true;
+    }
+    if (wb.latX == -1) {
+        if (wb.frame == 12 || wb.frame == 14 || wb.frame == 2 || wb.frame == 3 ||
+            baseFrame == 12 || baseFrame == 14 || baseFrame == 2 || baseFrame == 3) {
+            if (depth == 0) {
+                return false;
+            }
+            static constexpr int kX[3] = {8, 16, 64};
+            static constexpr int kY[3] = {44, 52, 60};
+            *out = {0x12 + depth * 3 + flicker, kX[depth], kY[depth]};
+            return true;
+        }
+        static constexpr int kX[3] = {8, 43, 73};
+        static constexpr int kY[3] = {49, 55, 59};
+        *out = {depth * 3 + flicker, kX[depth], kY[depth]};
+        return true;
+    }
+    if (wb.latX == -2) {
+        if (depth == 0) {
+            return false;
+        }
+        static constexpr int kX[3] = {8, 16, 64};
+        static constexpr int kY[3] = {44, 52, 60};
+        *out = {0x12 + depth * 3 + flicker, kX[depth], kY[depth]};
+        return true;
+    }
+    if (wb.latX == 1) {
+        if (wb.frame == 13 || wb.frame == 15 || wb.frame == 2 || wb.frame == 3 ||
+            baseFrame == 13 || baseFrame == 15 || baseFrame == 2 || baseFrame == 3) {
+            if (depth == 0) {
+                return false;
+            }
+            static constexpr int kX[3] = {202, 199, 152};
+            static constexpr int kY[3] = {44, 52, 60};
+            *out = {0x12 + depth * 3 + flicker, kX[depth], kY[depth]};
+            return true;
+        }
+        static constexpr int kX[3] = {196, 166, 142};
+        static constexpr int kY[3] = {49, 55, 59};
+        *out = {9 + depth * 3 + flicker, kX[depth], kY[depth]};
+        return true;
+    }
+    if (wb.latX == 2) {
+        if (depth == 0) {
+            return false;
+        }
+        static constexpr int kX[3] = {202, 199, 152};
+        static constexpr int kY[3] = {44, 52, 60};
+        *out = {0x12 + depth * 3 + flicker, kX[depth], kY[depth]};
+        return true;
+    }
+    return false;
 }
 
 View3DScene buildView3DScene(const View3DMapBuffers &bufs, const View3DCamera &cam) {

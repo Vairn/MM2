@@ -57,6 +57,8 @@ public:
 
     const mm2_image32_file &walls() const { return walls_; }
     const mm2_image32_file &floor() const { return floor_; }
+    /** Per-env torch sheet (townt/cavet/castlet.32) — blit source A4-$7A1E @ key_read_3d. */
+    const mm2_image32_file &torches() const { return torches_; }
     const mm2_image32_file &sky() const { return sky_; }
     const mm2_image32_file &automap() const { return automap_; }
 
@@ -78,6 +80,7 @@ private:
 
     mm2_image32_file walls_{};
     mm2_image32_file floor_{};
+    mm2_image32_file torches_{};
     mm2_image32_file automap_{};
     mm2_image32_file sky_{};
     bool automap_ok_ = false;

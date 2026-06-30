@@ -1,7 +1,7 @@
 /** Outdoor first-person scene — ports tools/view3d_outdoor.py. */
 "use strict";
 
-import { MAP_GRID, MAP_PAGE_SIZE, MAP_SCREENS, ORIGIN_X, STEP_DX, STEP_DY } from "./view3d.js";
+import { MAP_GRID, MAP_PAGE_SIZE, MAP_SCREENS, ORIGIN_X, STEP_DX, STEP_DY } from "./view3d.js?v=20260630-slower-anims-2";
 
 const BUNDLE_N = [0, 1, 255, 0, 1, 0];
 const BUNDLE_E = [1, 0, 0, 1, 0, 255];

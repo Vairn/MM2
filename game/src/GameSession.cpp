@@ -619,11 +619,9 @@ namespace {
 
 /* Wall field directly ahead, read from the centre cell of the active screen's
  * VISUAL page (the original's -$55BA source, MapWorld.h). 2-bit field per the
- * port codec: 0 open, 1 wall, 2 wall+torch, 3 door (MM2_MAP_WALL_*). This is
+ * port codec: 0 open, 1 wall, 2 door, 3 wall+torch (MM2_MAP_WALL_*). This is
  * the same extraction View3D uses for the forward wall slot (cell & mask, then
- * >> shift). NOTE: the original bash/unlock read a re-bundled table where the
- * door field is 2; the port's raw visual page uses 3 (the renderer's
- * convention). Door detection therefore follows the port convention. */
+ * >> shift). */
 int forwardWallField(const mm2::world::MapWorld &world, int x, int y, char facing)
 {
     const uint8_t cell = world.visualPage()[static_cast<size_t>((y << 4) | (x & 0x0F))];
@@ -647,7 +645,7 @@ void GameSession::handleBashDoor()
         return;
     }
 
-    /* 0x9BB4: a non-door wall (1 solid / 2 torch) -> "Solid!". */
+    /* 0x9BB4: a non-door wall (1 solid / 3 torch) -> "Solid!". */
     if (field != MM2_MAP_WALL_DOOR) {
         showStatusMessage(gameplay::obstructionMessage(gameplay::ObstructionMsg::Solid));
         return;
@@ -1120,6 +1118,30 @@ void GameSession::tickOverlayAnimations()
     }
 }
 
+void GameSession::tickTorchAnimation()
+{
+    if (!assets_ok_ || world_.isOutdoor() || viewportHiddenByOverlay()) {
+        return;
+    }
+    if (overlay_ == PlayOverlay::Automap) {
+        return;
+    }
+
+    /* key_read_3d @0x1E9CE advances -$667A once per indoor input poll (~vblank). */
+    constexpr int kTicksPerPhase = 2;
+    ++torch_tick_;
+    if (torch_tick_ < kTicksPerPhase) {
+        return;
+    }
+    torch_tick_ = 0;
+    torch_phase_ = (torch_phase_ + 1) % gfx::kView3DTorchPhaseCount;
+#if MM2_HOST_AMIGA
+    markView3DDirty();
+#else
+    markDirty();
+#endif
+}
+
 void GameSession::tick(const platform::KeyState &keys)
 {
     if (!gs_.valid()) {
@@ -1127,6 +1149,7 @@ void GameSession::tick(const platform::KeyState &keys)
     }
 
     tickOverlayAnimations();
+    tickTorchAnimation();
 
     if (scripted_loaded_ && scripted_scene_.active()) {
         const bool was_active = scripted_scene_.active();
@@ -1246,6 +1269,13 @@ void GameSession::renderIndoorView3D()
     for (int i = 0; i < scene.num_blits; ++i) {
         const View3DBlit &b = scene.blits[static_cast<size_t>(i)];
         blitImageFrame(compositor_, env_.walls(), b.frame, b.x, b.y, 0);
+    }
+    for (int i = 0; i < scene.num_torch_blits; ++i) {
+        const View3DBlit &b = scene.torch_blits[static_cast<size_t>(i)];
+        View3DTorchBlit tb{};
+        if (view3dTorchBlitFor(b, torch_phase_, &tb) && env_.torches().frame_count > 0) {
+            blitImageFrame(compositor_, env_.torches(), tb.frame, tb.x, tb.y, 0);
+        }
     }
 }
 

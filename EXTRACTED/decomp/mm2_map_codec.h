@@ -43,8 +43,8 @@ enum {
 enum {
     MM2_MAP_WALL_OPEN = 0,
     MM2_MAP_WALL_SOLID = 1,
-    MM2_MAP_WALL_TORCH = 2,
-    MM2_MAP_WALL_DOOR = 3
+    MM2_MAP_WALL_DOOR = 2,
+    MM2_MAP_WALL_TORCH = 3
 };
 
 /* Page-1 collision bit masks. */
