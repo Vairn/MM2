@@ -14,12 +14,18 @@ import {
   sessionApplyPartyEffect,
   sessionCheckCode16,
   sessionClearTileFlag,
-  healingCostPerChar,
-  trainingCostPerChar,
-  donationGold,
+  sessionAddGold,
+  syncSessionGoldFromParty,
   ITEM_GOLD_GOBLET,
   ITEM_FE_FARTHING,
-} from "./sessionState.js?v=20260630-slower-anims-2";
+} from "./sessionState.js";
+
+import {
+  runTempleService,
+  runTrainingService,
+  runSmithService,
+  runDeferredServiceMenu,
+} from "./townServices.js";
 
 /** Token byte lengths for opcodes 0x00..0x32 (A4-$6CC8). */
 export const OP_TOKEN_DELTA = [
@@ -40,7 +46,8 @@ export const OP_ARGC = {
 export const OPCODE_STATUS = {
   0x00: "real", 0x01: "real", 0x02: "real", 0x03: "real", 0x04: "real", 0x05: "real", 0x06: "real",
   0x07: "real", 0x08: "real", 0x09: "real", 0x0a: "real", 0x0b: "real", 0x0c: "real",
-  0x0d: "partial", 0x0e: "partial", 0x0f: "real", 0x10: "real", 0x11: "real",
+  0x0d: "partial", 0x0e: "partial", /* temple/train/smith interactive; tavern/guild/inn deferred */
+  0x0f: "real", 0x10: "real", 0x11: "real",
   0x12: "partial", 0x13: "partial", 0x14: "real", 0x15: "real", 0x16: "real", 0x17: "real",
   0x18: "real", 0x19: "real", 0x1a: "real", 0x1b: "real", 0x1c: "partial", 0x1d: "partial",
   0x1e: "partial", 0x1f: "partial", 0x20: "partial", 0x21: "real", 0x22: "real", 0x23: "real",
@@ -103,52 +110,16 @@ const OP0D_SEQUENCE_NAMES = [
   "pre-transition redraw (exit-flag bit0)",
 ];
 
-const SERVICE_MENUS = {
-  0x03: {
-    title: "Slaughtered Lamb — menu",
-    lines: [
-      "A) feeding frenzy  B) drink  C) specialties",
-      "D) tip the waitress  E) listen for rumors",
-      "(Food/drink costs RNG-gated in engine — not simulated)",
-    ],
-  },
-  0x04: {
-    title: "Gateway Temple — menu",
-    lines: [
-      "A) Restore Cond  B) Restore Algn  C) Donations",
-      "D) cleric spell  E) cleric spell  F) cleric spell",
-    ],
-    costs: (screenId, session) => {
-      const heal = healingCostPerChar(session.level, screenId);
-      const donate = donationGold(screenId);
-      return [`Heal (est.): ${heal} gp/char L${session.level}`, `Donate: ${donate} gp`];
-    },
-  },
-  0x05: {
-    title: "Mage guild — menu",
-    lines: ["A) spell  B) spell  C) spell  D) spell", "(Membership + spell stock per town — engine)"],
-  },
-  0x06: {
-    title: "Blacksmith — menu",
-    lines: [
-      "A) Weapons  B) Today's Specials  C) Armor",
-      "D) Misc  E) Sell  F) Identify",
-      "(Buy loop uses items.dat gold @ 0x1BF16 — not simulated)",
-    ],
-  },
-  0x01: {
-    title: "Inn — menu",
-    lines: ["Rest / dismiss roster members (engine @ -$7CD4)", "(Rest HP/SP + day advance — not simulated)"],
-  },
-  0x02: {
-    title: "Training hall — menu",
-    lines: ["Level-up from XP when threshold met (engine @ 0x1C898 path)"],
-    costs: (screenId, session) => [
-      `Training fee formula: level×town×50 = ${trainingCostPerChar(session.level, screenId)} gp`,
-    ],
-  },
-  0x07: { title: "General store", lines: ["Category shop engine @ 0x9D76 (deferred)"] },
-  0x08: { title: "Arena / special shop", lines: ["Category shop @ 0x9D76 (deferred)"] },
+const DEFERRED_SERVICE_LINES = {
+  0x01: ["Rest / dismiss roster (engine @ -$7CD4)", "Rest HP/SP + day advance — not simulated"],
+  0x03: [
+    "A) feeding frenzy  B) drink  C) specialties",
+    "D) tip the waitress  E) listen for rumors",
+    "Food/drink costs RNG-gated in engine",
+  ],
+  0x05: ["A–D sorcerer spells for sale", "Membership gate + spell stock per town — engine"],
+  0x07: ["General store category shop @ 0x9D76"],
+  0x08: ["Arena / special shop @ 0x9D76"],
 };
 
 const GOBLET_QUEST_NO_FARTHING = "Fool, you have no farthing to flick!";
@@ -342,18 +313,36 @@ function skipTokenNodes(nodes, fromIndex, count) {
   return fromIndex + count;
 }
 
-async function showServiceMenu(ctx, sel, title, sprite) {
-  const { screenId, session, waitForSpace } = ctx;
-  const menu = SERVICE_MENUS[sel];
-  const lines = [`${title}`, ""];
-  if (menu) {
-    lines.push(...menu.lines);
-    if (menu.costs) lines.push("", ...menu.costs(screenId, session));
-  } else {
-    lines.push(`Service selector 0x${sel.toString(16)}`, "(Shop engine @ -$7DFA / 0x9D76 — menu not decoded)");
+async function runTownService(ctx, sel, title, sprite) {
+  ctx.title = title;
+  ctx.sprite = sprite;
+  const { waitForSpace } = ctx;
+  if (sel === 0x02) {
+    await waitForSpace(title, sprite, 0x0e);
+    await runTrainingService(ctx);
+    return;
   }
-  lines.push("", "(Walker: menu display only — pick character / buy not ported)");
-  await waitForSpace(lines.join("\n"), sprite, 0x0e);
+  if (sel === 0x04) {
+    await runTempleService(ctx);
+    return;
+  }
+  if (sel === 0x06) {
+    await runSmithService(ctx);
+    return;
+  }
+  const lines = DEFERRED_SERVICE_LINES[sel];
+  if (lines) {
+    if (sel === 0x01) await waitForSpace(title, sprite, 0x0e);
+    await runDeferredServiceMenu(ctx, sel, title, sprite, lines);
+    return;
+  }
+  if (sel === 0x07 || sel === 0x08 || isTownServiceSelector(sel)) {
+    await waitForSpace(title, sprite, 0x0e);
+    await runDeferredServiceMenu(ctx, sel, title, sprite, [
+      `Service selector 0x${sel.toString(16)}`,
+      "Shop engine @ -$7DFA / 0x9D76",
+    ]);
+  }
 }
 
 async function runGobletQuest(ctx, title, sprite) {
@@ -384,7 +373,7 @@ async function runGobletQuest(ctx, title, sprite) {
 }
 
 function sessionAddRewardStub(session) {
-  session.gold += 1000;
+  sessionAddGold(session, 1000);
   session.flags[0x2b] = (session.flags[0x2b] ?? 0) | 1;
 }
 
@@ -405,6 +394,7 @@ export async function runEventScript(ctx) {
     resolveEventText,
     waitForSpace,
     promptYesNo,
+    promptMenuKey,
     promptCombatResult,
     onViewportOverlay,
     onTeleport,
@@ -444,6 +434,12 @@ export async function runEventScript(ctx) {
   };
 
   ctx.note = note;
+  ctx.waitForSpace = waitForSpace;
+  ctx.promptYesNo = promptYesNo;
+  ctx.promptMenuKey = promptMenuKey;
+  ctx.screenId = screenId;
+  ctx.manifest = manifest;
+  ctx.onSessionChange = onSessionChange;
 
   const strAt = (idx) => (idx < strings.length ? resolveEventText(strings[idx]) : "");
 
@@ -589,36 +585,34 @@ export async function runEventScript(ctx) {
 
         if (sel === 0x03) {
           const yes = await promptYesNo(TAVERN_INTRO[slot], sprite, op);
-          if (yes) await showServiceMenu(ctx, sel, title, sprite);
+          if (yes) await runTownService(ctx, sel, title, sprite);
           else note(`${title}: declined`);
           break;
         }
         if (sel === 0x04) {
           const yes = await promptYesNo(TEMPLE_INTRO[slot], sprite, op);
-          if (yes) await showServiceMenu(ctx, sel, title, sprite);
+          if (yes) await runTownService(ctx, sel, title, sprite);
           else note(`${title}: declined`);
           break;
         }
         if (sel === 0x05) {
           const yes = await promptYesNo(MAGE_GUILD_INTRO[slot], sprite, op);
-          if (yes) await showServiceMenu(ctx, sel, title, sprite);
+          if (yes) await runTownService(ctx, sel, title, sprite);
           else note(`${title}: declined`);
           break;
         }
         if (sel === 0x06) {
           const yes = await promptYesNo(BLACKSMITH_INTRO[slot], sprite, op);
-          if (yes) await showServiceMenu(ctx, sel, title, sprite);
+          if (yes) await runTownService(ctx, sel, title, sprite);
           else note(`${title}: declined`);
           break;
         }
         if (sel === 0x01 || sel === 0x02) {
-          await waitForSpace(title, sprite, op);
-          await showServiceMenu(ctx, sel, title, sprite);
+          await runTownService(ctx, sel, title, sprite);
           break;
         }
         if (sel === 0x07 || sel === 0x08 || isTownServiceSelector(sel)) {
-          await waitForSpace(`${title}`, sprite, op);
-          await showServiceMenu(ctx, sel, title, sprite);
+          await runTownService(ctx, sel, title, sprite);
           note(`${SELECTOR_LABEL[sel] || title} (0x${sel.toString(16)})`);
           break;
         }

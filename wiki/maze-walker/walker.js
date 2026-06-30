@@ -1,5 +1,5 @@
 /** MM2 first-person map walker — ports view3d_indoor.py / view3d_outdoor.py / MapSection. */
-import { BUILD_ID } from "./version.js?v=20260630-slower-anims-2";
+import { BUILD_ID } from "./version.js";
 
 import {
   MAP_GRID,
@@ -19,8 +19,8 @@ import {
   torchBlitFor,
   TORCH_PHASE_COUNT,
   K_CARTO_TILE_FALLBACK,
-} from "./view3d.js?v=20260630-slower-anims-2";
-import { StitchedOutdoor, buildOutdoorScene } from "./outdoor3d.js?v=20260630-slower-anims-2";
+} from "./view3d.js";
+import { StitchedOutdoor, buildOutdoorScene } from "./outdoor3d.js";
 import {
   initFont,
   resolveEventText,
@@ -37,13 +37,15 @@ import {
   formatAmbientStepMessage,
   drawMinimapAmbient,
   formatEventScriptFlow,
-} from "./ui.js?v=20260630-slower-anims-2";
-import { runEventScript } from "./eventVm.js?v=20260630-slower-anims-2";
+} from "./ui.js";
+import { runEventScript } from "./eventVm.js";
 import {
   createSessionState,
   formatSessionPartyPanel,
   isTileCleared as sessionTileCleared,
-} from "./sessionState.js?v=20260630-slower-anims-2";
+  syncSessionGoldFromParty,
+  sessionPartyGoldTotal,
+} from "./sessionState.js";
 import {
   SCREEN_W,
   SCREEN_H,
@@ -52,7 +54,9 @@ import {
   drawPlayStatusBar,
   drawPlayPartyPanel,
   drawPlayRightColumn,
-} from "./playScreen.js?v=20260630-slower-anims-2";
+  buildPlayPartySlots,
+} from "./playScreen.js";
+import { renderQuickRef, renderCharacterSheet } from "./inGameSheet.js";
 
 const SCALE = 3;
 const MINI_TW = 14;
@@ -104,6 +108,10 @@ const chkNoclip = document.getElementById("chkNoclip");
 
 /** @type {ReturnType<createSessionState>} */
 let session = createSessionState();
+/** @type {"none"|"quickRef"|"characterSheet"} */
+let playOverlay = "none";
+/** @type {number} */
+let sheetPartySlot = 0;
 /** @type {object[] | null} */
 let lastVmTrace = null;
 /** @type {number | null} */
@@ -355,7 +363,7 @@ function drawUI() {
   }
   uiCanvas.style.pointerEvents = "auto";
 
-  if (uiState.type === "text" || uiState.type === "prompt") {
+  if (uiState.type === "text" || uiState.type === "prompt" || uiState.type === "menu") {
     /* Narrative modal — lower console band rows 17..23 (EventTextView / doc 44),
      * NOT centered on the 208×120 viewport. */
     drawNarrativePanel(uiCtx, {
@@ -448,14 +456,22 @@ function promptCombatResult(enc) {
 }
 
 function syncPartyEditorsFromSession() {
-  if (editGoldEl) editGoldEl.value = String(session.gold);
+  syncSessionGoldFromParty(session);
+  if (editGoldEl) editGoldEl.value = String(sessionPartyGoldTotal(session));
   if (editDayEl) editDayEl.value = String(session.day);
   if (partyStateEl) partyStateEl.textContent = formatSessionPartyPanel(session, manifest);
 }
 
 function applyPartyEditorsToSession() {
-  if (editGoldEl) session.gold = Math.max(0, parseInt(editGoldEl.value, 10) || 0);
   if (editDayEl) session.day = Math.max(1, parseInt(editDayEl.value, 10) || 1);
+  if (editGoldEl) {
+    const want = Math.max(0, parseInt(editGoldEl.value, 10) || 0);
+    const cur = sessionPartyGoldTotal(session);
+    const delta = want - cur;
+    const m = session.party?.[0];
+    if (m) m.gold = Math.max(0, (m.gold | 0) + delta);
+    syncSessionGoldFromParty(session);
+  }
   syncPartyEditorsFromSession();
   draw();
 }
@@ -477,6 +493,74 @@ function promptYesNo(text, sprite = null, vmOp = null) {
   });
 }
 
+/** Letter/digit menu — validKeys e.g. "abc0" (0/Esc = exit, returns null). */
+function promptMenuKey(text, validKeys, sprite = null, vmOp = null) {
+  const resolved = resolveEventText(text);
+  return new Promise((resolve) => {
+    uiState = {
+      type: "menu",
+      layoutOp: resolveNarrativeLayoutOp(resolved, vmOp),
+      vmOp,
+      text: resolved,
+      showSpace: false,
+      validKeys: String(validKeys).toLowerCase(),
+      resolve: (k) => resolve(k),
+      sprite,
+    };
+    draw();
+    updateUI();
+  });
+}
+
+function viewportHiddenByOverlay() {
+  return playOverlay === "quickRef" || playOverlay === "characterSheet";
+}
+
+function handlePlayOverlayKey(ev) {
+  if (playOverlay === "none") return false;
+
+  if (ev.key === "Escape") {
+    playOverlay = "none";
+    uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+    draw();
+    return true;
+  }
+
+  if (playOverlay === "quickRef") {
+    const digit = ev.key.length === 1 ? ev.key : "";
+    if (digit >= "1" && digit <= "8") {
+      const slot = Number(digit) - 1;
+      if (slot < (session.party?.length ?? 0)) {
+        sheetPartySlot = slot;
+        playOverlay = "characterSheet";
+        draw();
+      }
+      return true;
+    }
+    return true;
+  }
+
+  if (playOverlay === "characterSheet") {
+    if (ev.key.toLowerCase() === "q") {
+      playOverlay = "quickRef";
+      draw();
+      return true;
+    }
+    const digit = ev.key.length === 1 ? ev.key : "";
+    if (digit >= "1" && digit <= "8") {
+      const slot = Number(digit) - 1;
+      if (slot < (session.party?.length ?? 0)) {
+        sheetPartySlot = slot;
+        draw();
+      }
+      return true;
+    }
+    return true;
+  }
+
+  return true;
+}
+
 function handleUIKey(ev) {
   if (!uiState) return false;
   if (uiState.type === "text" && (ev.code === "Space" || ev.key === "Enter")) {
@@ -485,6 +569,26 @@ function handleUIKey(ev) {
     uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
     resolve();
     draw();
+    return true;
+  }
+  if (uiState.type === "menu") {
+    const k = ev.key.length === 1 ? ev.key.toLowerCase() : "";
+    if (ev.key === "Escape") {
+      const resolve = uiState.resolve;
+      uiState = null;
+      uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      resolve(null);
+      draw();
+      return true;
+    }
+    if (k && uiState.validKeys.includes(k)) {
+      const resolve = uiState.resolve;
+      uiState = null;
+      uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      resolve(k === "0" ? null : k);
+      draw();
+      return true;
+    }
     return true;
   }
   if (uiState.type === "prompt") {
@@ -528,9 +632,18 @@ function handleUIKey(ev) {
 }
 function drawPlayHud(ctx) {
   drawPlayViewportDivider(ctx);
-  drawPlayStatusBar(ctx, 1, 1, FACE[state.facing], true);
-  drawPlayPartyPanel(ctx, []);
+  drawPlayStatusBar(ctx, session.day ?? 1, session.year ?? 1, FACE[state.facing], true);
+  drawPlayPartyPanel(ctx, buildPlayPartySlots(session));
   drawPlayRightColumn(ctx, "options");
+}
+
+function drawPlayOverlay() {
+  if (playOverlay === "none") return;
+  if (playOverlay === "quickRef") {
+    renderQuickRef(uiCtx, session, manifest);
+  } else if (playOverlay === "characterSheet") {
+    renderCharacterSheet(uiCtx, session, sheetPartySlot, manifest);
+  }
 }
 
 function draw() {
@@ -561,14 +674,16 @@ function draw() {
     locMode.textContent = `${sc.env} interior`;
   }
 
-  /* OP_04/05/06 persistent viewport text — on viewCtx so modal uiLayer clears do not erase it. */
-  drawViewportOverlay(
-    viewCtx,
-    viewportOverlay ?? eventOverlayPreviewAt(sc, state.x, state.y, state.facing)
-  );
+  /* OP_04/05/06 persistent viewport text — hidden when full-screen sheet overlays are up. */
+  if (!viewportHiddenByOverlay()) {
+    drawViewportOverlay(
+      viewCtx,
+      viewportOverlay ?? eventOverlayPreviewAt(sc, state.x, state.y, state.facing)
+    );
+  }
 
   /* OP_0B / encounter sprites over the 3D hood while narrative text sits in the lower band. */
-  if (uiState?.sprite) {
+  if (uiState?.sprite && !viewportHiddenByOverlay()) {
     const frame = resolveAnmFrame(uiState.sprite.sheet, Number(uiState.sprite.frame) || 0);
     const img = spriteImg(uiState.sprite.sheet, frame);
     if (img) {
@@ -579,6 +694,8 @@ function draw() {
   }
 
   drawPlayHud(viewCtx);
+
+  drawPlayOverlay();
 
   renderMinimap(sc);
   locName.textContent = sc.name;
@@ -722,6 +839,7 @@ async function runEvent(evtData, strings) {
       resolveEventText,
       waitForSpace,
       promptYesNo,
+      promptMenuKey,
       promptCombatResult,
       onDraw: () => draw(),
       onSessionChange: () => syncPartyEditorsFromSession(),
@@ -817,7 +935,7 @@ function bindControls() {
   if (editDayEl) editDayEl.addEventListener("change", applyPartyEditorsToSession);
 
   miniCanvas.addEventListener("click", (ev) => {
-    if (uiState) return;
+    if (uiState || playOverlay !== "none") return;
     const rect = miniCanvas.getBoundingClientRect();
     const scaleX = miniCanvas.width / rect.width;
     const scaleY = miniCanvas.height / rect.height;
@@ -840,7 +958,7 @@ function bindControls() {
   miniCanvas.style.cursor = "crosshair";
 
   screenSelect.addEventListener("change", () => {
-    if (uiState || isEventRunning) {
+    if (uiState || isEventRunning || playOverlay !== "none") {
       screenSelect.value = String(state.screen);
       return;
     }
@@ -851,7 +969,28 @@ function bindControls() {
   window.addEventListener("keydown", (ev) => {
     if (ev.target instanceof HTMLSelectElement) return;
     if (handleUIKey(ev)) return;
+    if (handlePlayOverlayKey(ev)) return;
     if (isEventRunning) return;
+
+    if (playOverlay === "none" && !uiState) {
+      if (ev.key.toLowerCase() === "q") {
+        ev.preventDefault();
+        playOverlay = "quickRef";
+        draw();
+        return;
+      }
+      const digit = ev.key.length === 1 ? ev.key : "";
+      if (digit >= "1" && digit <= "8") {
+        const slot = Number(digit) - 1;
+        if (slot < (session.party?.length ?? 0)) {
+          ev.preventDefault();
+          sheetPartySlot = slot;
+          playOverlay = "characterSheet";
+          draw();
+          return;
+        }
+      }
+    }
     
     switch (ev.key) {
       case "ArrowUp":
@@ -891,6 +1030,10 @@ async function init() {
     maps = data.maps;
     manifest = data.manifest;
     if (manifest.font) initFont(manifest.font);
+    session = createSessionState({ manifest });
+    if (manifest.defaultParty?.members?.length) {
+      statusEl.textContent = `Party loaded from roster (${manifest.defaultParty.partyCount} members)`;
+    }
     if (data.sprites) await loadSpriteTable(data.sprites);
     else await loadSpritesFromPaths();
   } catch (err) {
@@ -913,7 +1056,7 @@ async function init() {
   jumpEntry();
   syncAnimCache();
   startAnimLoop();
-  statusEl.textContent = `W/↑ forward · S/↓ back · A/D turn · build ${BUILD_ID}`;
+  statusEl.textContent = `W/↑ forward · Q quick ref · 1-6 view char · build ${BUILD_ID}`;
 }
 
 init();

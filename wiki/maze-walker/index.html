@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MM2 Map Walker</title>
-  <link rel="stylesheet" href="style.css?v=20260630-slower-anims-2">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="wrap">
@@ -59,12 +59,13 @@
         </section>
 
         <section class="panel partyPanel">
-          <h2>Party (walker stub)</h2>
+          <h2>Party (roster.dat slots 0–5)</h2>
+          <p class="hint">Town services: pick A/B/C then member 1–6. Gold is per-character (record+$66).</p>
           <div class="partyStateWrap">
             <pre id="partyState"></pre>
           </div>
           <div class="partyEdit">
-            <label title="Party gold for OP_24 checks">Gold <input type="number" id="editGold" min="0" step="100" value="5000"></label>
+            <label title="Sum of party member gold (OP_24); edits adjust Sir Felgar's purse">Gold <input type="number" id="editGold" min="0" step="100" value="200"></label>
             <label title="Game day for OP_23 gates">Day <input type="number" id="editDay" min="1" max="180" value="1"></label>
           </div>
         </section>
@@ -97,6 +98,9 @@
             <li><strong>S</strong> / <strong>↓</strong> — step backward</li>
             <li><strong>A</strong> / <strong>←</strong> — turn left</li>
             <li><strong>D</strong> / <strong>→</strong> — turn right</li>
+            <li><strong>Q</strong> — Quick Ref (party roster summary)</li>
+            <li><strong>1</strong>–<strong>6</strong> — view character sheet</li>
+            <li><strong>Esc</strong> — close Quick Ref / character sheet</li>
             <li>Walk off edge — change screen via <code>attrib.dat</code> neighbours</li>
           </ul>
           <p class="hint">Regenerate embedded data: <code>python tools/export_map_walker.py</code></p>
@@ -104,6 +108,6 @@
       </div>
     </main>
   </div>
-  <script type="module" src="walker.js?v=20260630-slower-anims-2"></script>
+  <script type="module" src="walker.js"></script>
 </body>
 </html>

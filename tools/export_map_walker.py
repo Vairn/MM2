@@ -76,6 +76,91 @@ def load_terrain_lookup() -> list[int]:
     return list(blob[off : off + 256])
 
 
+def load_item_gold(data_dir: Path) -> list[int]:
+    from decode_items import decode_record
+
+    for candidate in (data_dir / "items.dat", ROOT / "items.dat", ROOT / "EXTRACTED" / "items.dat"):
+        if candidate.is_file():
+            raw = candidate.read_bytes()
+            rec_size = 0x14
+            gold = []
+            for i in range(len(raw) // rec_size):
+                rec = raw[i * rec_size : (i + 1) * rec_size]
+                gold.append(decode_record(rec).gold)
+            return gold
+    return []
+
+
+def load_default_party(data_dir: Path) -> dict | None:
+    """First six roster slots (0..5) — default Goto-Town party in roster.dat."""
+    import struct
+
+    from decode_roster import RECORD_SIZE, decode_record
+
+    for candidate in (data_dir / "roster.dat", ROOT / "roster.dat", ROOT / "EXTRACTED" / "roster.dat"):
+        if not candidate.is_file():
+            continue
+        data = candidate.read_bytes()
+        members = []
+        roster_slots = []
+        for slot in range(6):
+            rec = decode_record(data, slot)
+            if rec is None:
+                break
+            off = slot * RECORD_SIZE
+            hp_aux = struct.unpack_from("<H", data, off + 0x60)[0]
+            sb = rec["stats_base"]
+            members.append(
+                {
+                    "rosterIndex": slot,
+                    "name": rec["name"],
+                    "sex": data[off + 0x0C],
+                    "alignmentBase": data[off + 0x6A],
+                    "race": data[off + 0x0E],
+                    "classId": data[off + 0x0F],
+                    "level": rec["level"],
+                    "spellLevel": rec["spell_lvl"],
+                    "gold": rec["gold"],
+                    "gems": rec["gems"],
+                    "experience": rec["xp"],
+                    "hpCurrent": rec["hp_cur"],
+                    "hpMax": rec["hp_max"],
+                    "hpAux": hp_aux,
+                    "spCurrent": rec["sp_cur"],
+                    "spMax": rec["sp_max"],
+                    "condition": rec["condition"],
+                    "armorClass": rec["ac"],
+                    "age": rec["age"],
+                    "food": rec["food"],
+                    "endurance": sb["End"],
+                    "intelligence": sb["Int"],
+                    "personality": sb["Per"],
+                    "might": sb["Might"],
+                    "speed": sb["Spd"],
+                    "accuracy": sb["Acc"],
+                    "luck": sb["Luck"],
+                    "backpack": [
+                        {"id": item_id, "charges": ch, "flags": fl}
+                        for item_id, ch, fl in rec["backpack"]
+                    ],
+                    "equipped": [
+                        {"id": item_id, "charges": ch, "flags": fl}
+                        for item_id, ch, fl in rec["equip"]
+                    ],
+                }
+            )
+            roster_slots.append(slot)
+        if not members:
+            return None
+        return {
+            "partyCount": len(members),
+            "rosterSlots": roster_slots,
+            "members": members,
+            "source": str(candidate.name),
+        }
+    return None
+
+
 def load_font() -> list[list[int]]:
     import re
     content = (ROOT / "game" / "src" / "gfx" / "Mm2Font8x8.inc").read_text()
@@ -102,6 +187,8 @@ def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
         "anm": {},
         "monsters": load_monster_records(data_dir),
         "items": try_load_default_items(),
+        "itemsGold": load_item_gold(data_dir),
+        "defaultParty": load_default_party(data_dir),
         "terrainLookup": load_terrain_lookup(),
         "cartoTile": list(K_CARTO_TILE),
         "font": load_font(),

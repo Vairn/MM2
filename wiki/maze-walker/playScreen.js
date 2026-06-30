@@ -1,7 +1,7 @@
 /** Play-screen chrome — ports game/src/gfx/PlayScreenChrome.cpp (ASM @ 0x60F4). */
 "use strict";
 
-import { drawGlyph, drawChar } from "./ui.js?v=20260630-slower-anims-2";
+import { drawGlyph, drawChar } from "./ui.js";
 
 export const SCREEN_W = 320;
 export const SCREEN_H = 200;
@@ -27,9 +27,74 @@ function glyphAt(ctx, col, row, glyph) {
   drawGlyph(ctx, col * 8, row * 8, glyph, BR, BG, BB);
 }
 
-function fillCellRect(ctx, col, row, w, h) {
+export function fillCellRect(ctx, col, row, w, h) {
   ctx.fillStyle = "#000";
   ctx.fillRect(col * 8, row * 8, w * 8, h * 8);
+}
+
+/** Modal overlay frame — drawPlayModalBackdrop @ PlayScreenChrome.cpp */
+export function drawPlayModalBackdrop(ctx) {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  consoleBox(ctx, 1, 1, 38, 23);
+  fillCellRect(ctx, 2, 2, 36, 21);
+}
+
+function consoleBox(ctx, col, row, w, h) {
+  const col1 = col + w - 1;
+  const row1 = row + h - 1;
+  glyphAt(ctx, col, row, GL.TL);
+  glyphAt(ctx, col1, row, GL.TR);
+  glyphAt(ctx, col, row1, GL.BL);
+  glyphAt(ctx, col1, row1, GL.BR);
+  for (let c = col + 1; c < col1; c++) {
+    glyphAt(ctx, c, row, GL.HSEG);
+    glyphAt(ctx, c, row1, GL.HSEG);
+  }
+  for (let r = row + 1; r < row1; r++) {
+    glyphAt(ctx, col, r, GL.VSEG);
+    glyphAt(ctx, col1, r, GL.VSEG);
+  }
+}
+
+export const PARTY_NAME_WIDTH = 11;
+const PARTY_PREFIX_LEN = 3;
+const PARTY_SLOT_ROW_BASE = 0x13;
+const PARTY_SLOT_COL_LEFT = 0x01;
+const PARTY_SLOT_COL_RIGHT = 0x14;
+const PARTY_SLOT_CLEAR_WIDTH = 0x13;
+
+/** @returns {string} format_party_status_line @ PartyStatusFormat.cpp */
+export function formatPartyStatusLine(slotIndex, name, hp) {
+  const slotDigit = slotIndex >= 0 && slotIndex < 8 ? slotIndex + 1 : 1;
+  const nameField = (name ?? "").slice(0, PARTY_NAME_WIDTH).padEnd(PARTY_NAME_WIDTH, " ");
+  const hpField = hp > 999 ? "+++" : String(hp).padStart(3, " ");
+  return ` ${slotDigit})${nameField} /${hpField}`;
+}
+
+/** @param {object} session */
+export function buildPlayPartySlots(session) {
+  const slots = Array.from({ length: 8 }, () => ({ present: false }));
+  const party = session?.party ?? [];
+  for (let i = 0; i < party.length && i < 8; i++) {
+    const m = party[i];
+    slots[i] = {
+      present: true,
+      name: m.name ?? "",
+      hp: m.hpCurrent ?? 0,
+      badCondition: (m.condition ?? 0) !== 0,
+    };
+  }
+  return slots;
+}
+
+function drawCellText(ctx, col, row, text, r = 255, g = 255, b = 255) {
+  let x = col * 8;
+  const y = row * 8;
+  for (let i = 0; i < text.length; i++) {
+    drawChar(ctx, x, y, text[i], r, g, b);
+    x += 8;
+  }
 }
 
 function hLine(ctx, col0, col1, row) {
@@ -100,12 +165,24 @@ function drawString(ctx, text, px, py) {
 
 export function drawPlayPartyPanel(ctx, slots) {
   for (let i = 0; i < 8; i++) {
-    const row = 0x13 + Math.floor(i / 2);
-    const col = i & 1 ? 0x14 : 0x01;
-    fillCellRect(ctx, col, row, 0x13, 1);
+    const row = PARTY_SLOT_ROW_BASE + Math.floor(i / 2);
+    const col = i & 1 ? PARTY_SLOT_COL_RIGHT : PARTY_SLOT_COL_LEFT;
+    fillCellRect(ctx, col, row, PARTY_SLOT_CLEAR_WIDTH, 1);
     const s = slots[i];
     if (!s?.present) continue;
-    drawString(ctx, s.line || s.name || "", col * 8, row * 8);
+
+    const line = formatPartyStatusLine(i, s.name, s.hp);
+    const prefix = line.slice(0, PARTY_PREFIX_LEN);
+    const nameField = line.slice(PARTY_PREFIX_LEN, PARTY_PREFIX_LEN + PARTY_NAME_WIDTH);
+    const tail = line.slice(PARTY_PREFIX_LEN + PARTY_NAME_WIDTH);
+
+    drawCellText(ctx, col, row, prefix);
+    if (s.badCondition) {
+      drawCellText(ctx, col + PARTY_PREFIX_LEN, row, nameField, 255, 80, 80);
+    } else {
+      drawCellText(ctx, col + PARTY_PREFIX_LEN, row, nameField);
+    }
+    drawCellText(ctx, col + PARTY_PREFIX_LEN + PARTY_NAME_WIDTH, row, tail);
   }
 }
 

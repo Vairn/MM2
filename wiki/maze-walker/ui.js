@@ -1,7 +1,7 @@
 /** MM2 8×8 font UI — ports game/src/gfx/ScreenCompositor.cpp + EventTextView.cpp. */
 "use strict";
 
-import { formatEncounterFlowLine } from "./eventVm.js?v=20260630-slower-anims-2";
+import { formatEncounterFlowLine } from "./eventVm.js";
 
 /** @type {number[][] | null} */
 let font = null;
