@@ -12,10 +12,8 @@ import {
   stepParty,
   selectIndoorSheets,
   skyFrameFor,
-  cartoFrame,
   tileLabel,
   torchBlitFor,
-  K_CARTO_TILE_FALLBACK,
 } from "./view3d.js";
 import { StitchedOutdoor, buildOutdoorScene } from "./outdoor3d.js";
 
@@ -47,10 +45,6 @@ const locScreen = document.getElementById("locScreen");
 const locFacing = document.getElementById("locFacing");
 const locMode = document.getElementById("locMode");
 const chkNoclip = document.getElementById("chkNoclip");
-
-function cartoTable() {
-  return manifest?.cartoTile || K_CARTO_TILE_FALLBACK;
-}
 
 function terrainLookup() {
   return manifest?.terrainLookup || new Array(256).fill(0);
@@ -219,49 +213,8 @@ function renderWallMinimap(sc) {
 }
 
 function renderMinimap(sc) {
-  if (sc.mapWalls) {
-    renderWallMinimap(sc);
-    return;
-  }
-  const w = MAP_GRID * MINI_TW;
-  const h = MAP_GRID * MINI_TH;
-  miniCanvas.width = w;
-  miniCanvas.height = h;
-  miniCtx.fillStyle = "#14141e";
-  miniCtx.fillRect(0, 0, w, h);
-  const sheetKey = sc.outdoor ? "outb_32" : "townb_32";
-  const table = cartoTable();
-
-  for (let sy = 0; sy < MAP_GRID; sy++) {
-    const diskY = MAP_GRID - 1 - sy;
-    for (let sx = 0; sx < MAP_GRID; sx++) {
-      const idx = (diskY << 4) | sx;
-      const px = sx * MINI_TW;
-      const py = sy * MINI_TH;
-      miniCtx.fillStyle = "#444450";
-      miniCtx.fillRect(px, py, MINI_TW, MINI_TH);
-      const frame = cartoFrame(state.screen, sc.visual[idx], sc.outdoor, table);
-      const img = spriteImg(sheetKey, String(frame));
-      if (img) miniCtx.drawImage(img, px, py, MINI_TW, MINI_TH);
-      if (sc.collision[idx] & 0x80) {
-        miniCtx.fillStyle = "rgba(255,65,65,0.85)";
-        miniCtx.beginPath();
-        miniCtx.arc(px + MINI_TW / 2, py + MINI_TH / 2, 2, 0, Math.PI * 2);
-        miniCtx.fill();
-      }
-    }
-  }
-
-  const px = state.x * MINI_TW;
-  const py = (MAP_GRID - 1 - state.y) * MINI_TH;
-  miniCtx.strokeStyle = "rgba(255,220,0,0.85)";
-  miniCtx.lineWidth = 1;
-  miniCtx.strokeRect(px + 0.5, py + 0.5, MINI_TW - 1, MINI_TH - 1);
-  const dirFrame = [0x20, 0x22, 0x21, 0x23][state.facing & 3];
-  const arr = spriteImg(sheetKey, String(dirFrame));
-  if (arr) miniCtx.drawImage(arr, px, py, MINI_TW, MINI_TH);
-  miniCtx.strokeStyle = "#787887";
-  miniCtx.strokeRect(0, 0, w, h);
+  // MM1 page 0 is MapWalls on every screen (dungeons and overland).
+  renderWallMinimap(sc);
 }
 
 function draw() {

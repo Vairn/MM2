@@ -130,6 +130,7 @@ def build_maps_payload(
             "slug": slug,
             "name": title,
             "outdoor": False,
+            "mapWalls": True,
             "env": env,
             "entry": [entry[0], entry[1]],
             "neighbors": [-1, -1, -1, -1],
