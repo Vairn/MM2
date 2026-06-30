@@ -63,3 +63,5 @@ imgui.ini
 EXTRACTED/docs/img/
 EXTRACTED/docs/img/**
 EXTRACTED/event_quiz_answers.json
+editor/build-imgui/
+

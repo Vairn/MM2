@@ -115,12 +115,12 @@ FAQ: section 4-11 (overview), 6-1..6-7 (per class), 9-1/9-2 (Sorcerer castles)
 
 | | |
 |--|--|
-| **Where** | Isle of Ancients - **Castle of Good** (loc **53**) and **Castle of Evil** (loc **54**); walk-on-water or teleport to island |
-| **Prerequisites** | Sorcerer (+ robbers); **S3-4 Lightning Bolt** for 3x Iron Wizard (`6D`); FAQ door route **1-3-1-7-A-C-G-I** (Good) / mirror (Evil) |
-| **Steps** | 1. Enter both castles (order arbitrary). 2. Solve numbered/lettered door riddles (clues on plaques). 3. Optional: Iron Wizards at **(4,1)** Good / **(11,14)** Evil. 4. Enter access codes: **Good** evt **04**=`**46**`, evt **05**=`**23**`; **Evil** evt **04**=`**64**`, evt **05**=`**32**` (FAQ: Ybmug left 23 right 46 / Yekop left 64...). 5. Free **Ybmug** (Good stasis **(10,3)**) and **Yekop** (Evil **(5,12)**) - each requires counterpart freed (`$75` bit flags). 6. Completion message -> Farview. |
+| **Where** | Isle of Ancients - **Castle of Evil** (loc **53**) and **Castle of Good** (loc **54**); walk-on-water or teleport to island |
+| **Prerequisites** | Sorcerer (+ robbers); **S3-4 Lightning Bolt** for 3x Iron Wizard (`6D`); FAQ door route **1-3-1-7-A-C-G-I** (Evil) / mirror (Good) |
+| **Steps** | 1. Enter both castles (order arbitrary). 2. Solve numbered/lettered door riddles (clues on plaques). 3. Optional: Iron Wizards at **(4,1)** Evil / **(11,14)** Good. 4. Enter access codes: **Evil** evt **04**=`**46**`, evt **05**=`**23**`; **Good** evt **04**=`**64**`, evt **05**=`**32**` (FAQ: Ybmug left 23 right 46 / Yekop left 64...). 5. Free **Ybmug** (Evil stasis **(10,3)**) and **Yekop** (Good **(5,12)**) - each requires counterpart freed (`$75` bit flags). 6. Completion message -> Farview. |
 | **Completion** | loc **53/54** evt **06**; `$75` OR masks `0x03` when both freed |
 | **Farview** | Ticket **`0xD4`** |
-| **Codes** | Good: **46**, **23**; Evil: **64**, **32** |
+| **Codes** | Evil: **46**, **23**; Good: **64**, **32** |
 
 ### Robber (FAQ 4-11 plaque)
 

@@ -13,32 +13,32 @@
 | (0,13) | `0x0D` | **5** | ANY_DIR |
 | (0,14) | `0x0E` | **5** | ANY_DIR |
 | (0,15) | `0x0F` | **5** | ANY_DIR |
-| (1,12) | `0x1C` | **13** | ENTER |
+| (1,12) | `0x1C` | **13** | DIR_N? |
 | (1,14) | `0x1E` | **1** | 0x90 |
 | (1,15) | `0x1F` | **5** | ANY_DIR |
 | (2,8) | `0x28` | **8** | 0x30 |
-| (2,10) | `0x2A` | **15** | ALWAYS |
+| (2,10) | `0x2A` | **15** | DIR_W? |
 | (2,15) | `0x2F` | **5** | ANY_DIR |
-| (3,11) | `0x3B` | **11** | DIR_N? |
-| (3,13) | `0x3D` | **7** | DIR_SPECIAL |
+| (3,11) | `0x3B` | **11** | DIR_S? |
+| (3,13) | `0x3D` | **7** | DIR_E? |
 | (3,15) | `0x3F` | **5** | ANY_DIR |
-| (4,5) | `0x45` | **16** | ENTER |
+| (4,5) | `0x45` | **16** | DIR_N? |
 | (4,10) | `0x4A` | **10** | 0x90 |
-| (5,2) | `0x52` | **20** | ENTER |
-| (6,12) | `0x6C` | **13** | DIR_SPECIAL |
-| (6,13) | `0x6D` | **6** | DIR_SPECIAL |
-| (8,7) | `0x87` | **19** | DIR_SPECIAL |
-| (8,11) | `0x8B` | **18** | DIR_N? |
-| (10,13) | `0xAD` | **17** | DIR_N? |
-| (11,3) | `0xB3` | **21** | DIR_N? |
-| (12,5) | `0xC5` | **13** | DIR_SPECIAL |
-| (12,6) | `0xC6` | **2** | DIR_SPECIAL |
+| (5,2) | `0x52` | **20** | DIR_N? |
+| (6,12) | `0x6C` | **13** | DIR_E? |
+| (6,13) | `0x6D` | **6** | DIR_E? |
+| (8,7) | `0x87` | **19** | DIR_E? |
+| (8,11) | `0x8B` | **18** | DIR_S? |
+| (10,13) | `0xAD` | **17** | DIR_S? |
+| (11,3) | `0xB3` | **21** | DIR_S? |
+| (12,5) | `0xC5` | **13** | DIR_E? |
+| (12,6) | `0xC6` | **2** | DIR_E? |
 | (12,7) | `0xC7` | **3** | ANY_DIR |
-| (12,13) | `0xCD` | **9** | ENTER |
+| (12,13) | `0xCD` | **9** | DIR_N? |
 | (13,3) | `0xD3` | **22** | 0x30 |
-| (13,10) | `0xDA` | **4** | DIR_N? |
+| (13,10) | `0xDA` | **4** | DIR_S? |
 | (14,1) | `0xE1` | **14** | ANY_DIR |
-| (14,10) | `0xEA` | **12** | DIR_N? |
+| (14,10) | `0xEA` | **12** | DIR_S? |
 
 ## Events
 
@@ -58,7 +58,7 @@
 05: end_script()
 ```
 
-**Event 02** — triggers: (12,6)/DIR_SPECIAL
+**Event 02** — triggers: (12,6)/DIR_E?
 
 ```hex
 02 02 29
@@ -86,7 +86,7 @@
 05: end_script()
 ```
 
-**Event 04** — triggers: (13,10)/DIR_N?
+**Event 04** — triggers: (13,10)/DIR_S?
 
 ```hex
 01 03 09 11 01 1a 33 01 0f
@@ -118,7 +118,7 @@
 05: clear_current_tile_event_flag()
 ```
 
-**Event 06** — triggers: (6,13)/DIR_SPECIAL
+**Event 06** — triggers: (6,13)/DIR_E?
 
 ```hex
 02 04 09 11 04 19 00 0e 00 00 10 02 01 0d 07 0f
@@ -137,7 +137,7 @@
 07: end_script()
 ```
 
-**Event 07** — triggers: (3,13)/DIR_SPECIAL
+**Event 07** — triggers: (3,13)/DIR_E?
 
 ```hex
 02 05 09 11 04 19 00 a1 05 00 10 02 01 0d 07 0f
@@ -175,7 +175,7 @@
 07: end_script()
 ```
 
-**Event 09** — triggers: (12,13)/ENTER
+**Event 09** — triggers: (12,13)/DIR_N?
 
 ```hex
 02 07 09 11 04 19 00 a0 0a 00 10 02 01 0d 07 0f
@@ -213,7 +213,7 @@
 07: end_script()
 ```
 
-**Event 11** — triggers: (3,11)/DIR_N?
+**Event 11** — triggers: (3,11)/DIR_S?
 
 ```hex
 04 09
@@ -223,7 +223,7 @@
 00: show_text_above_door(str[9] "Keep Out!")
 ```
 
-**Event 12** — triggers: (14,10)/DIR_N?
+**Event 12** — triggers: (14,10)/DIR_S?
 
 ```hex
 04 0a
@@ -233,7 +233,7 @@
 00: show_text_above_door(str[10] "Controls")
 ```
 
-**Event 13** — triggers: (1,12)/ENTER, (6,12)/DIR_SPECIAL, (12,5)/DIR_SPECIAL
+**Event 13** — triggers: (1,12)/DIR_N?, (6,12)/DIR_E?, (12,5)/DIR_E?
 
 ```hex
 04 0b
@@ -256,7 +256,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 15** — triggers: (2,10)/ALWAYS
+**Event 15** — triggers: (2,10)/DIR_W?
 
 ```hex
 02 0c 09 11 01 0e 7e 0f
@@ -271,7 +271,7 @@
 04: end_script()
 ```
 
-**Event 16** — triggers: (4,5)/ENTER
+**Event 16** — triggers: (4,5)/DIR_N?
 
 ```hex
 02 0e 29
@@ -282,7 +282,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 17** — triggers: (10,13)/DIR_N?
+**Event 17** — triggers: (10,13)/DIR_S?
 
 ```hex
 02 0f 29
@@ -293,7 +293,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 18** — triggers: (8,11)/DIR_N?
+**Event 18** — triggers: (8,11)/DIR_S?
 
 ```hex
 02 10 29
@@ -304,7 +304,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 19** — triggers: (8,7)/DIR_SPECIAL
+**Event 19** — triggers: (8,7)/DIR_E?
 
 ```hex
 02 11 29
@@ -315,7 +315,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 20** — triggers: (5,2)/ENTER
+**Event 20** — triggers: (5,2)/DIR_N?
 
 ```hex
 05 12
@@ -325,7 +325,7 @@
 00: show_text_popup_style_a(str[18] "The four discs are / needed to get the / corresponding talons")
 ```
 
-**Event 21** — triggers: (11,3)/DIR_N?
+**Event 21** — triggers: (11,3)/DIR_S?
 
 ```hex
 02 13 29

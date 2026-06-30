@@ -1,4 +1,6 @@
 /** MM2 first-person map walker — ports view3d_indoor.py / view3d_outdoor.py / MapSection. */
+import { BUILD_ID } from "./version.js?v=20260630-slower-anims-2";
+
 import {
   MAP_GRID,
   VIEW_W,
@@ -17,8 +19,8 @@ import {
   torchBlitFor,
   TORCH_PHASE_COUNT,
   K_CARTO_TILE_FALLBACK,
-} from "./view3d.js";
-import { StitchedOutdoor, buildOutdoorScene } from "./outdoor3d.js";
+} from "./view3d.js?v=20260630-slower-anims-2";
+import { StitchedOutdoor, buildOutdoorScene } from "./outdoor3d.js?v=20260630-slower-anims-2";
 import {
   initFont,
   resolveEventText,
@@ -35,13 +37,13 @@ import {
   formatAmbientStepMessage,
   drawMinimapAmbient,
   formatEventScriptFlow,
-} from "./ui.js";
-import { runEventScript } from "./eventVm.js";
+} from "./ui.js?v=20260630-slower-anims-2";
+import { runEventScript } from "./eventVm.js?v=20260630-slower-anims-2";
 import {
   createSessionState,
   formatSessionPartyPanel,
   isTileCleared as sessionTileCleared,
-} from "./sessionState.js";
+} from "./sessionState.js?v=20260630-slower-anims-2";
 import {
   SCREEN_W,
   SCREEN_H,
@@ -50,16 +52,16 @@ import {
   drawPlayStatusBar,
   drawPlayPartyPanel,
   drawPlayRightColumn,
-} from "./playScreen.js";
+} from "./playScreen.js?v=20260630-slower-anims-2";
 
 const SCALE = 3;
 const MINI_TW = 14;
-const MINI_TH = 11;
+const MINI_TH = 14;
 
 /** Indoor torch flicker: one phase step per poll of key_read_3d @0x1E9CE (~vblank). */
-const TORCH_TICKS_PER_PHASE = 2;
+const TORCH_TICKS_PER_PHASE = 20;
 /** ViewportAnmOverlay flipbook fallback when no sequence table (62.anm etc.). */
-const ANM_FLIPBOOK_DELAY = 5;
+const ANM_FLIPBOOK_DELAY = 30;
 
 let animTick = 0;
 let animRafId = 0;
@@ -168,7 +170,7 @@ async function loadSpritesFromPaths() {
 
 async function loadData() {
   try {
-    const bundle = await import("./walker-bundle.js");
+    const bundle = await import(`./walker-bundle.js?v=${BUILD_ID}`);
     if (bundle.WALKER_MAPS && bundle.WALKER_MANIFEST && bundle.WALKER_SPRITES) {
       return {
         maps: bundle.WALKER_MAPS,
@@ -220,6 +222,7 @@ function resolveAnmFrame(sheetKey, baseFrame = 0) {
   return String(step);
 }
 
+/** Indoor walls + animated townt.32 torch overlay on map field-2 (wall+torch) cells only. */
 function renderIndoorView(ctx, sc, scene, phase) {
   const sheets = selectIndoorSheets(sc.env);
   const skyFrame = skyFrameFor(sc, state.x, state.y);
@@ -229,7 +232,7 @@ function renderIndoorView(ctx, sc, scene, phase) {
     blitTransparent(ctx, sheets.walls, String(b.frame), b.x, b.y);
   }
   for (const b of scene.torchBlits ?? []) {
-    if (b.code !== 2) continue;
+    if (b.code !== 3) continue;
     const tb = torchBlitFor(b, phase);
     if (tb) blitTransparent(ctx, sheets.torch, String(tb.frame), tb.x, tb.y);
   }
@@ -910,7 +913,7 @@ async function init() {
   jumpEntry();
   syncAnimCache();
   startAnimLoop();
-  statusEl.textContent = "W/↑ forward · S/↓ back · A/D turn · like view3d_indoor.py";
+  statusEl.textContent = `W/↑ forward · S/↓ back · A/D turn · build ${BUILD_ID}`;
 }
 
 init();

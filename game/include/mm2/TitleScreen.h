@@ -72,10 +72,17 @@ public:
 
     bool controlsTick(const platform::KeyState &keys);
     void controlsDraw();
+    void controlsEnter();
     bool optionsTick(const platform::KeyState &keys);
     void optionsDraw();
+    void optionsEnter();
 
     void returnToMenu();
+
+#if MM2_HOST_AMIGA
+    /** Drop title/attract CHIP bitmaps before play-mode load (4K-stack / CHIP budget). */
+    void releaseChipForPlayMode();
+#endif
 
     bool shouldQuit() const { return quit_; }
     const gfx::ScreenCompositor &compositor() const { return compositor_; }
@@ -112,12 +119,17 @@ private:
     void pickRandomPeekerSlot();
     void releaseIntroClips();
     void releaseLogoAsset();
+    /** Drop intro.32 / introclips.32 / nwcp.32 once the interactive menu is shown. */
+    void releaseAttractAssets();
+    void ensureAttractAssetsLoaded();
     void drawTitleMenu();
     void buildTitleMenuCache();
     void presentTitleMenu();
     void blitTitleMenuBooks();
     void drawControls();
     void drawOptions();
+    void buildControlsCache();
+    void buildOptionsCache();
     void tickBookAnimation();
     void skipLogoToAttract();
     void skipLogoToMenu();
@@ -180,6 +192,8 @@ private:
     bool pegasus_painted_peeker_visible_ = false;
     bool title_menu_painted_ = false;
     int title_menu_painted_book_frame_ = -1;
+    bool controls_subscreen_painted_ = false;
+    bool options_subscreen_painted_ = false;
 #endif
 };
 

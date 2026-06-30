@@ -9,13 +9,13 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (0,10) | `0x0A` | **1** | DIR_SPECIAL |
+| (0,10) | `0x0A` | **1** | DIR_E? |
 | (0,13) | `0x0D` | **6** | ANY_DIR |
 | (1,1) | `0x11` | **10** | 0x90 |
 | (1,4) | `0x14` | **6** | ANY_DIR |
-| (1,9) | `0x19` | **9** | DIR_N? |
+| (1,9) | `0x19` | **9** | DIR_S? |
 | (1,11) | `0x1B` | **6** | ANY_DIR |
-| (1,15) | `0x1F` | **7** | DIR_SPECIAL |
+| (1,15) | `0x1F` | **7** | DIR_E? |
 | (2,4) | `0x24` | **6** | ANY_DIR |
 | (2,10) | `0x2A` | **6** | ANY_DIR |
 | (3,5) | `0x35` | **6** | ANY_DIR |
@@ -30,13 +30,13 @@
 | (5,3) | `0x53` | **6** | ANY_DIR |
 | (5,5) | `0x55` | **6** | ANY_DIR |
 | (6,1) | `0x61` | **6** | ANY_DIR |
-| (6,3) | `0x63` | **15** | DIR_SPECIAL |
+| (6,3) | `0x63` | **15** | DIR_E? |
 | (6,7) | `0x67` | **6** | ANY_DIR |
 | (6,9) | `0x69` | **6** | ANY_DIR |
-| (6,13) | `0x6D` | **12** | ALWAYS |
+| (6,13) | `0x6D` | **12** | DIR_W? |
 | (7,4) | `0x74` | **6** | ANY_DIR |
 | (8,1) | `0x81` | **6** | ANY_DIR |
-| (8,2) | `0x82` | **13** | ENTER |
+| (8,2) | `0x82` | **13** | DIR_N? |
 | (9,2) | `0x92` | **3** | ANY_DIR |
 | (9,4) | `0x94` | **6** | ANY_DIR |
 | (9,6) | `0x96` | **6** | ANY_DIR |
@@ -54,16 +54,16 @@
 | (13,6) | `0xD6` | **6** | ANY_DIR |
 | (14,1) | `0xE1` | **2** | 0xB0 |
 | (14,2) | `0xE2` | **8** | ANY_DIR |
-| (14,5) | `0xE5` | **11** | ENTER |
+| (14,5) | `0xE5` | **11** | DIR_N? |
 | (14,10) | `0xEA` | **6** | ANY_DIR |
 | (14,12) | `0xEC` | **6** | ANY_DIR |
 | (14,15) | `0xEF` | **5** | ANY_DIR |
 | (15,7) | `0xF7` | **6** | ANY_DIR |
-| (15,15) | `0xFF` | **14** | DIR_SPECIAL |
+| (15,15) | `0xFF` | **14** | DIR_E? |
 
 ## Events
 
-**Event 01** — triggers: (0,10)/DIR_SPECIAL
+**Event 01** — triggers: (0,10)/DIR_E?
 
 ```hex
 01 01 09 11 01 0c 03 0a 0f
@@ -125,7 +125,7 @@
 ```
 
 ```
-00: set_service_context(str[7] "<Endurance / Help[", mode=0x00)
+00: service_sign(idx=0x07 -> sign 69 [69.anm], pos=0x00)
 01: show_text_block(str[5] "You cringe as a lumbering giant sings / a popular ballad very badly. / S")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(33)
@@ -199,7 +199,7 @@
 12: set_abort_and_exit()
 ```
 
-**Event 07** — triggers: (1,15)/DIR_SPECIAL
+**Event 07** — triggers: (1,15)/DIR_E?
 
 ```hex
 06 07
@@ -222,7 +222,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 09** — triggers: (1,9)/DIR_N?
+**Event 09** — triggers: (1,9)/DIR_S?
 
 ```hex
 02 09 29
@@ -244,7 +244,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 11** — triggers: (14,5)/ENTER
+**Event 11** — triggers: (14,5)/DIR_N?
 
 ```hex
 02 0b 29
@@ -255,7 +255,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 12** — triggers: (6,13)/ALWAYS
+**Event 12** — triggers: (6,13)/DIR_W?
 
 ```hex
 02 0c 29
@@ -266,7 +266,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 13** — triggers: (8,2)/ENTER
+**Event 13** — triggers: (8,2)/DIR_N?
 
 ```hex
 02 0d 29
@@ -277,7 +277,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 14** — triggers: (15,15)/DIR_SPECIAL
+**Event 14** — triggers: (15,15)/DIR_E?
 
 ```hex
 02 0e 29
@@ -288,7 +288,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 15** — triggers: (6,3)/DIR_SPECIAL
+**Event 15** — triggers: (6,3)/DIR_E?
 
 ```hex
 02 0f 29

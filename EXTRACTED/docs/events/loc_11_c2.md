@@ -11,40 +11,40 @@
 |------------|-----|-------|-----------|
 | (1,2) | `0x12` | **12** | 0x30 |
 | (1,3) | `0x13` | **21** | ANY_DIR |
-| (1,11) | `0x1B` | **5** | ALWAYS |
+| (1,11) | `0x1B` | **5** | DIR_W? |
 | (3,2) | `0x32` | **20** | ANY_DIR |
-| (3,7) | `0x37` | **1** | DIR_N? |
+| (3,7) | `0x37` | **1** | DIR_S? |
 | (4,1) | `0x41` | **20** | ANY_DIR |
 | (4,2) | `0x42` | **20** | ANY_DIR |
 | (4,4) | `0x44` | **14** | 0x30 |
-| (4,7) | `0x47` | **4** | ENTER |
-| (4,10) | `0x4A` | **6** | DIR_SPECIAL |
-| (4,12) | `0x4C` | **8** | ALWAYS |
-| (4,14) | `0x4E` | **18** | DIR_SPECIAL |
-| (4,15) | `0x4F` | **19** | DIR_SPECIAL |
+| (4,7) | `0x47` | **4** | DIR_N? |
+| (4,10) | `0x4A` | **6** | DIR_E? |
+| (4,12) | `0x4C` | **8** | DIR_W? |
+| (4,14) | `0x4E` | **18** | DIR_E? |
+| (4,15) | `0x4F` | **19** | DIR_E? |
 | (5,2) | `0x52` | **20** | ANY_DIR |
-| (6,2) | `0x62` | **10** | DIR_N? |
-| (7,7) | `0x77` | **15** | ENTER |
-| (7,10) | `0x7A` | **2** | ENTER |
-| (8,14) | `0x8E` | **22** | ENTER+SPECIAL |
-| (10,14) | `0xAE` | **13** | DIR_SPECIAL |
-| (11,5) | `0xB5` | **3** | ENTER |
-| (12,7) | `0xC7` | **16** | ENTER |
-| (12,10) | `0xCA` | **7** | DIR_SPECIAL |
-| (12,12) | `0xCC` | **9** | ALWAYS |
-| (13,1) | `0xD1` | **11** | ENTER |
-| (13,3) | `0xD3` | **17** | ALWAYS |
+| (6,2) | `0x62` | **10** | DIR_S? |
+| (7,7) | `0x77` | **15** | DIR_N? |
+| (7,10) | `0x7A` | **2** | DIR_N? |
+| (8,14) | `0x8E` | **22** | DIR_N?+DIR_E? |
+| (10,14) | `0xAE` | **13** | DIR_E? |
+| (11,5) | `0xB5` | **3** | DIR_N? |
+| (12,7) | `0xC7` | **16** | DIR_N? |
+| (12,10) | `0xCA` | **7** | DIR_E? |
+| (12,12) | `0xCC` | **9** | DIR_W? |
+| (13,1) | `0xD1` | **11** | DIR_N? |
+| (13,3) | `0xD3` | **17** | DIR_W? |
 
 ## Events
 
-**Event 01** — triggers: (3,7)/DIR_N?
+**Event 01** — triggers: (3,7)/DIR_S?
 
 ```hex
 0b 18 00 02 01 0a 11 01 0c 00 f5 0f
 ```
 
 ```
-00: set_service_context(str[24], mode=0x00)
+00: service_sign(idx=0x18 -> sign 29 [29.anm], pos=0x00)
 01: show_text_block(str[1] "A giant portcullis slowly raises, / offering admittance to Middlegate. /")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)
@@ -53,7 +53,7 @@
 05: end_script()
 ```
 
-**Event 02** — triggers: (7,10)/ENTER
+**Event 02** — triggers: (7,10)/DIR_N?
 
 ```hex
 02 02 09 11 05 15 00 7f 01 10 02 01 03 29 0c 17 00 0f
@@ -73,7 +73,7 @@
 08: end_script()
 ```
 
-**Event 03** — triggers: (11,5)/ENTER
+**Event 03** — triggers: (11,5)/DIR_N?
 
 ```hex
 02 04 09 11 01 0c 16 d7 0f
@@ -88,7 +88,7 @@
 04: end_script()
 ```
 
-**Event 04** — triggers: (4,7)/ENTER
+**Event 04** — triggers: (4,7)/DIR_N?
 
 ```hex
 15 00 74 40 10 04 0b 0e 00 03 05 18 00 74 bf 40 08 14
@@ -98,14 +98,14 @@
 00: apply_party(count=0x00, op=0x74, val=0x40)
 01: if cond: skip_tokens(4)
     # skip -> clear_current_tile_event_flag()
-02: set_service_context(str[14] "<- Castle / Pinehurst", mode=0x00)
+02: service_sign(idx=0x0E -> sign 34 [34.anm], pos=0x00)
 03: show_text(str[5] ""Greetings! I'm your Guardian Pegasus. / Welcome to the outer world of C")
 04: apply_party_masked(count=0x00, set=0x74, and=0xBF, or=0x40)
 05: wait_key()
 06: clear_current_tile_event_flag()
 ```
 
-**Event 05** — triggers: (1,11)/ALWAYS
+**Event 05** — triggers: (1,11)/DIR_W?
 
 ```hex
 02 06 09 11 03 24 32 00 11 02 2e f0 08 14 01 07 29
@@ -125,7 +125,7 @@
 08: set_abort_and_exit()
 ```
 
-**Event 06** — triggers: (4,10)/DIR_SPECIAL
+**Event 06** — triggers: (4,10)/DIR_E?
 
 ```hex
 02 08 09 11 05 24 05 00 11 01 0c 0b 4c 01 07 29 0f
@@ -145,7 +145,7 @@
 08: end_script()
 ```
 
-**Event 07** — triggers: (12,10)/DIR_SPECIAL
+**Event 07** — triggers: (12,10)/DIR_E?
 
 ```hex
 02 08 09 11 05 24 05 00 11 01 0c 0b cc 01 07 29 0f
@@ -165,7 +165,7 @@
 08: end_script()
 ```
 
-**Event 08** — triggers: (4,12)/ALWAYS
+**Event 08** — triggers: (4,12)/DIR_W?
 
 ```hex
 02 08 09 11 05 24 05 00 11 01 0c 0b 4a 01 07 29 0f
@@ -185,7 +185,7 @@
 08: end_script()
 ```
 
-**Event 09** — triggers: (12,12)/ALWAYS
+**Event 09** — triggers: (12,12)/DIR_W?
 
 ```hex
 02 08 09 11 05 24 05 00 11 01 0c 0b ca 01 07 29 0f
@@ -205,7 +205,7 @@
 08: end_script()
 ```
 
-**Event 10** — triggers: (6,2)/DIR_N?
+**Event 10** — triggers: (6,2)/DIR_S?
 
 ```hex
 01 09 29
@@ -216,7 +216,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 11** — triggers: (13,1)/ENTER
+**Event 11** — triggers: (13,1)/DIR_N?
 
 ```hex
 02 0a 09 11 01 18 00 24 00 28 0f
@@ -247,7 +247,7 @@
 05: end_script()
 ```
 
-**Event 13** — triggers: (10,14)/DIR_SPECIAL
+**Event 13** — triggers: (10,14)/DIR_E?
 
 ```hex
 02 0c 09 11 01 18 00 28 00 14 0f
@@ -277,7 +277,7 @@
 04: end_script()
 ```
 
-**Event 15** — triggers: (7,7)/ENTER
+**Event 15** — triggers: (7,7)/DIR_N?
 
 ```hex
 06 0e
@@ -287,7 +287,7 @@
 00: show_text_popup_style_b(str[14] "<- Castle / Pinehurst")
 ```
 
-**Event 16** — triggers: (12,7)/ENTER
+**Event 16** — triggers: (12,7)/DIR_N?
 
 ```hex
 06 0f
@@ -297,7 +297,7 @@
 00: show_text_popup_style_b(str[15] "Vulcania / -[")
 ```
 
-**Event 17** — triggers: (13,3)/ALWAYS
+**Event 17** — triggers: (13,3)/DIR_W?
 
 ```hex
 06 10
@@ -307,7 +307,7 @@
 00: show_text_popup_style_b(str[16] "Tundara  [ / Woodhaven[")
 ```
 
-**Event 18** — triggers: (4,14)/DIR_SPECIAL
+**Event 18** — triggers: (4,14)/DIR_E?
 
 ```hex
 06 11
@@ -317,7 +317,7 @@
 00: show_text_popup_style_b(str[17] "Sandsobar[ / Hillstone[")
 ```
 
-**Event 19** — triggers: (4,15)/DIR_SPECIAL
+**Event 19** — triggers: (4,15)/DIR_E?
 
 ```hex
 06 12
@@ -353,7 +353,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 22** — triggers: (8,14)/ENTER+SPECIAL
+**Event 22** — triggers: (8,14)/DIR_N?+DIR_E?
 
 ```hex
 22 08 08 11 03 2b 07 0b 07 00 0e 5a 22 09 09 10 01 14 02 13 29 0c 3b 80
@@ -365,7 +365,7 @@
     # skip -> cond = (era in [9..9])
 02: skip_tokens(7)
     # skip -> map_transition(0x3B, 0x80)
-03: set_service_context(str[7] "Not enough gold!", mode=0x00)
+03: service_sign(idx=0x07 -> sign 74 [74.anm], pos=0x00)
 04: exec_selector(0x5A)
 05: cond = (era in [9..9])
 06: if cond: skip_tokens(1)

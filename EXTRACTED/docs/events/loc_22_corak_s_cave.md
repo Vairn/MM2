@@ -12,37 +12,37 @@
 | (0,4) | `0x04` | **27** | ANY_DIR |
 | (0,8) | `0x08` | **5** | 0x60 |
 | (0,11) | `0x0B` | **27** | ANY_DIR |
-| (0,13) | `0x0D` | **6** | ALWAYS |
+| (0,13) | `0x0D` | **6** | DIR_W? |
 | (2,3) | `0x23` | **27** | ANY_DIR |
-| (2,7) | `0x27` | **8** | DIR_N? |
-| (2,8) | `0x28` | **8** | DIR_N? |
+| (2,7) | `0x27` | **8** | DIR_S? |
+| (2,8) | `0x28` | **8** | DIR_S? |
 | (2,12) | `0x2C` | **27** | ANY_DIR |
 | (3,4) | `0x34` | **26** | ANY_DIR |
 | (3,8) | `0x38` | **27** | ANY_DIR |
 | (3,11) | `0x3B` | **26** | ANY_DIR |
-| (3,13) | `0x3D` | **4** | ENTER+SPECIAL |
+| (3,13) | `0x3D` | **4** | DIR_N?+DIR_E? |
 | (5,2) | `0x52` | **21** | ANY_DIR |
 | (5,7) | `0x57` | **26** | ANY_DIR |
 | (5,8) | `0x58` | **26** | ANY_DIR |
 | (5,13) | `0x5D` | **22** | ANY_DIR |
-| (6,7) | `0x67` | **3** | DIR_N? |
-| (6,8) | `0x68` | **3** | DIR_N? |
+| (6,7) | `0x67` | **3** | DIR_S? |
+| (6,8) | `0x68` | **3** | DIR_S? |
 | (7,3) | `0x73` | **20** | ANY_DIR |
-| (7,7) | `0x77` | **7** | DIR_N? |
-| (7,8) | `0x78` | **7** | DIR_N? |
+| (7,7) | `0x77` | **7** | DIR_S? |
+| (7,8) | `0x78` | **7** | DIR_S? |
 | (7,13) | `0x7D` | **19** | ANY_DIR |
 | (8,0) | `0x80` | **25** | ANY_DIR |
-| (8,2) | `0x82` | **10** | DIR_N? |
-| (8,3) | `0x83` | **10** | DIR_N? |
+| (8,2) | `0x82` | **10** | DIR_S? |
+| (8,3) | `0x83` | **10** | DIR_S? |
 | (8,6) | `0x86` | **24** | ANY_DIR |
 | (8,9) | `0x89` | **25** | ANY_DIR |
-| (8,12) | `0x8C` | **10** | DIR_N? |
-| (8,13) | `0x8D` | **10** | DIR_N? |
+| (8,12) | `0x8C` | **10** | DIR_S? |
+| (8,13) | `0x8D` | **10** | DIR_S? |
 | (8,15) | `0x8F` | **25** | ANY_DIR |
 | (9,0) | `0x90` | **24** | ANY_DIR |
 | (9,4) | `0x94` | **24** | ANY_DIR |
-| (9,7) | `0x97` | **9** | ENTER |
-| (9,8) | `0x98` | **9** | ENTER |
+| (9,7) | `0x97` | **9** | DIR_N? |
+| (9,8) | `0x98` | **9** | DIR_N? |
 | (9,11) | `0x9B` | **25** | ANY_DIR |
 | (9,15) | `0x9F` | **24** | ANY_DIR |
 | (10,1) | `0xA1` | **14** | ANY_DIR |
@@ -51,17 +51,17 @@
 | (10,14) | `0xAE` | **11** | ANY_DIR |
 | (11,5) | `0xB5` | **23** | ANY_DIR |
 | (11,7) | `0xB7` | **1** | 0x30 |
-| (11,8) | `0xB8` | **28** | DIR_SPECIAL |
+| (11,8) | `0xB8` | **28** | DIR_E? |
 | (11,10) | `0xBA` | **23** | ANY_DIR |
 | (12,1) | `0xC1` | **15** | ANY_DIR |
 | (12,14) | `0xCE` | **12** | ANY_DIR |
 | (13,5) | `0xD5` | **17** | ANY_DIR |
-| (13,7) | `0xD7` | **2** | DIR_N? |
-| (13,8) | `0xD8` | **2** | DIR_N? |
+| (13,7) | `0xD7` | **2** | DIR_S? |
+| (13,8) | `0xD8` | **2** | DIR_S? |
 | (13,10) | `0xDA` | **17** | ANY_DIR |
 | (14,1) | `0xE1` | **16** | ANY_DIR |
-| (14,5) | `0xE5` | **9** | DIR_N? |
-| (14,10) | `0xEA` | **9** | DIR_N? |
+| (14,5) | `0xE5` | **9** | DIR_S? |
+| (14,10) | `0xEA` | **9** | DIR_S? |
 | (14,14) | `0xEE` | **13** | ANY_DIR |
 
 ## Events
@@ -79,7 +79,7 @@
 03: clear_current_tile_event_flag()
 ```
 
-**Event 02** — triggers: (13,7)/DIR_N?, (13,8)/DIR_N?
+**Event 02** — triggers: (13,7)/DIR_S?, (13,8)/DIR_S?
 
 ```hex
 02 02 04 03 09 10 01 0f 0c 0b b5
@@ -95,7 +95,7 @@
 05: map_transition(0x0B, 0xB5)
 ```
 
-**Event 03** — triggers: (6,7)/DIR_N?, (6,8)/DIR_N?
+**Event 03** — triggers: (6,7)/DIR_S?, (6,8)/DIR_S?
 
 ```hex
 28 01 c1 11 02 01 04 29 02 05 07 0d 09 0c 16 77
@@ -113,7 +113,7 @@
 07: map_transition(0x16, 0x77)
 ```
 
-**Event 04** — triggers: (3,13)/ENTER+SPECIAL
+**Event 04** — triggers: (3,13)/DIR_N?+DIR_E?
 
 ```hex
 2d 03 05 10 02 02 06 29 16 01 e5 10 02 02 07 29 02 08 21 37 00 02 21 38 00 02 21 27 08 22 21 28 08 22 07 14
@@ -163,7 +163,7 @@
 12: exec_selector(0x65)
 ```
 
-**Event 06** — triggers: (0,13)/ALWAYS
+**Event 06** — triggers: (0,13)/DIR_W?
 
 ```hex
 05 0d
@@ -173,7 +173,7 @@
 00: show_text_popup_style_a(str[13] "Holy Word -H. Gibson / Look south on a tree / in Lost Soul's Woods / it ")
 ```
 
-**Event 07** — triggers: (7,7)/DIR_N?, (7,8)/DIR_N?
+**Event 07** — triggers: (7,7)/DIR_S?, (7,8)/DIR_S?
 
 ```hex
 04 0e
@@ -183,7 +183,7 @@
 00: show_text_above_door(str[14] "Corak's Crypt")
 ```
 
-**Event 08** — triggers: (2,7)/DIR_N?, (2,8)/DIR_N?
+**Event 08** — triggers: (2,7)/DIR_S?, (2,8)/DIR_S?
 
 ```hex
 04 0f
@@ -193,7 +193,7 @@
 00: show_text_above_door(str[15] "Hero's Tomb")
 ```
 
-**Event 09** — triggers: (9,7)/ENTER, (9,8)/ENTER, (14,5)/DIR_N?, (14,10)/DIR_N?
+**Event 09** — triggers: (9,7)/DIR_N?, (9,8)/DIR_N?, (14,5)/DIR_S?, (14,10)/DIR_S?
 
 ```hex
 04 10
@@ -203,7 +203,7 @@
 00: show_text_above_door(str[16] "Zombie Sanctuary")
 ```
 
-**Event 10** — triggers: (8,2)/DIR_N?, (8,3)/DIR_N?, (8,12)/DIR_N?, (8,13)/DIR_N?
+**Event 10** — triggers: (8,2)/DIR_S?, (8,3)/DIR_S?, (8,12)/DIR_S?, (8,13)/DIR_S?
 
 ```hex
 04 11
@@ -434,7 +434,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 28** — triggers: (11,8)/DIR_SPECIAL
+**Event 28** — triggers: (11,8)/DIR_E?
 
 ```hex
 0e 7a

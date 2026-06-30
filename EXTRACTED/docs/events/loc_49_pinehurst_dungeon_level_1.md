@@ -9,28 +9,28 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (0,15) | `0x0F` | **9** | DIR_N? |
-| (1,5) | `0x15` | **9** | ENTER |
-| (2,1) | `0x21` | **2** | ALWAYS |
+| (0,15) | `0x0F` | **9** | DIR_S? |
+| (1,5) | `0x15` | **9** | DIR_N? |
+| (2,1) | `0x21` | **2** | DIR_W? |
 | (2,14) | `0x2E` | **9** | 0x60 |
-| (4,14) | `0x4E` | **12** | ENTER |
+| (4,14) | `0x4E` | **12** | DIR_N? |
 | (5,6) | `0x56` | **11** | 0x90 |
-| (5,14) | `0x5E` | **7** | ENTER |
-| (6,4) | `0x64` | **9** | ALWAYS |
-| (6,6) | `0x66` | **5** | ENTER |
-| (7,2) | `0x72` | **6** | DIR_N? |
-| (8,12) | `0x8C` | **3** | DIR_N? |
-| (11,8) | `0xB8` | **9** | DIR_SPECIAL |
-| (13,11) | `0xDB` | **4** | DIR_N? |
-| (13,14) | `0xDE` | **8** | ALWAYS |
-| (14,0) | `0xE0` | **12** | DIR_N? |
-| (14,11) | `0xEB` | **10** | DIR_N? |
-| (14,15) | `0xEF` | **9** | DIR_N? |
-| (15,0) | `0xF0` | **1** | ENTER |
+| (5,14) | `0x5E` | **7** | DIR_N? |
+| (6,4) | `0x64` | **9** | DIR_W? |
+| (6,6) | `0x66` | **5** | DIR_N? |
+| (7,2) | `0x72` | **6** | DIR_S? |
+| (8,12) | `0x8C` | **3** | DIR_S? |
+| (11,8) | `0xB8` | **9** | DIR_E? |
+| (13,11) | `0xDB` | **4** | DIR_S? |
+| (13,14) | `0xDE` | **8** | DIR_W? |
+| (14,0) | `0xE0` | **12** | DIR_S? |
+| (14,11) | `0xEB` | **10** | DIR_S? |
+| (14,15) | `0xEF` | **9** | DIR_S? |
+| (15,0) | `0xF0` | **1** | DIR_N? |
 
 ## Events
 
-**Event 01** — triggers: (15,0)/ENTER
+**Event 01** — triggers: (15,0)/DIR_N?
 
 ```hex
 01 01 09 11 01 0c 39 2b 0f
@@ -45,7 +45,7 @@
 04: end_script()
 ```
 
-**Event 02** — triggers: (2,1)/ALWAYS
+**Event 02** — triggers: (2,1)/DIR_W?
 
 ```hex
 01 02 09 11 01 0c 32 77 0f
@@ -60,14 +60,14 @@
 04: end_script()
 ```
 
-**Event 03** — triggers: (8,12)/DIR_N?
+**Event 03** — triggers: (8,12)/DIR_S?
 
 ```hex
 0b 0f 00 02 03 0a 11 01 0c 33 9b 0f
 ```
 
 ```
-00: set_service_context(str[15] "No / Knights!", mode=0x00)
+00: service_sign(idx=0x0F -> sign 24 [24.anm], pos=0x00)
 01: show_text_block(str[3] ""If you like fighting bad guys as much / as I do, then take this portal ")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)
@@ -76,7 +76,7 @@
 05: end_script()
 ```
 
-**Event 04** — triggers: (13,11)/DIR_N?
+**Event 04** — triggers: (13,11)/DIR_S?
 
 ```hex
 2d 20 00 11 04 01 04 07 0d 09 0c 31 21 02 05 19 01 f5 00 00 10 01 01 12 07 14
@@ -99,7 +99,7 @@
 11: clear_current_tile_event_flag()
 ```
 
-**Event 05** — triggers: (6,6)/ENTER
+**Event 05** — triggers: (6,6)/DIR_N?
 
 ```hex
 2d 21 00 11 04 01 06 07 0d 09 0c 31 21 02 07 19 01 f1 00 00 10 01 01 12 07 14
@@ -122,7 +122,7 @@
 11: clear_current_tile_event_flag()
 ```
 
-**Event 06** — triggers: (7,2)/DIR_N?
+**Event 06** — triggers: (7,2)/DIR_S?
 
 ```hex
 02 08 09 11 05 01 09 26 20 09 13 01 05 00 00 11 01 1f 09 14 01 03 00 00 0f
@@ -142,7 +142,7 @@
 08: end_script()
 ```
 
-**Event 07** — triggers: (5,14)/ENTER
+**Event 07** — triggers: (5,14)/DIR_N?
 
 ```hex
 2d a0 00 11 04 01 0a 07 0d 09 0c 31 21 17 3d 00 10 06 02 0b 07 1c 05 1f 80 3c 02 00 00 00 1a 3d 01 14 02 13 29
@@ -169,7 +169,7 @@
 15: set_abort_and_exit()
 ```
 
-**Event 08** — triggers: (13,14)/ALWAYS
+**Event 08** — triggers: (13,14)/DIR_W?
 
 ```hex
 02 0c 09 11 23 15 01 14 00 1b 32 10 01 1f 01 14 01 0a 00 00 15 02 14 00 1b 32 10 01 1f 02 14 01 0a 00 00 15 03 14 00 1b 32 10 01 1f 03 14 01 0a 00 00 15 04 14 00 1b 32 10 01 1f 04 14 01 0a 00 00 15 05 14 00 1b 32 10 01 1f 05 14 01 0a 00 00 15 06 14 00 1b 32 10 01 1f 06 14 01 0a 00 00 15 07 14 00 1b 32 10 01 1f 07 14 01 0a 00 00 15 08 14 00 1b 32 10 01 1f 08 14 01 0a 00 00 02 0d 07 14 0f
@@ -226,7 +226,7 @@
 38: end_script()
 ```
 
-**Event 09** — triggers: (0,15)/DIR_N?, (1,5)/ENTER, (2,14)/0x60, (6,4)/ALWAYS, (11,8)/DIR_SPECIAL, (14,15)/DIR_N?
+**Event 09** — triggers: (0,15)/DIR_S?, (1,5)/DIR_N?, (2,14)/0x60, (6,4)/DIR_W?, (11,8)/DIR_E?, (14,15)/DIR_S?
 
 ```hex
 2b 1b 02 0e 07 20 01 28 02 14 00 00 10 01 18 01 28 00 00 20 02 28 02 14 00 00 10 01 18 02 28 00 00 20 03 28 02 14 00 00 10 01 18 03 28 00 00 20 04 28 02 14 00 00 10 01 18 04 28 00 00 20 05 28 02 14 00 00 10 01 18 05 28 00 00 20 06 28 02 14 00 00 10 01 18 06 28 00 00 20 07 28 02 14 00 00 10 01 18 07 28 00 00 20 08 28 02 14 00 00 10 01 18 08 28 00 00 13 00 00 00 00 00 00 00 00 00 00 14
@@ -273,7 +273,7 @@
 28: clear_current_tile_event_flag()
 ```
 
-**Event 10** — triggers: (14,11)/DIR_N?
+**Event 10** — triggers: (14,11)/DIR_S?
 
 ```hex
 06 0f
@@ -293,7 +293,7 @@
 00: show_text_popup_style_b(str[16] "No / Paladins!")
 ```
 
-**Event 12** — triggers: (4,14)/ENTER, (14,0)/DIR_N?
+**Event 12** — triggers: (4,14)/DIR_N?, (14,0)/DIR_S?
 
 ```hex
 06 11

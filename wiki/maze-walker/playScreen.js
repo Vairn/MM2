@@ -1,7 +1,7 @@
 /** Play-screen chrome — ports game/src/gfx/PlayScreenChrome.cpp (ASM @ 0x60F4). */
 "use strict";
 
-import { drawGlyph, drawChar } from "./ui.js";
+import { drawGlyph, drawChar } from "./ui.js?v=20260630-slower-anims-2";
 
 export const SCREEN_W = 320;
 export const SCREEN_H = 200;

@@ -343,10 +343,68 @@ The full play screen is assembled by the **session refresh** family:
   `-$7438` paging counter); draws the play frame and calls the viewport refresh.
 - `0x5382` — viewport area refresh (the `-$79E2` switch above); also handles the
   darkness/"can't see" overlay when `-$79E1` is set.
-- The persistent UI chrome (viewport border, party portraits/stats panel,
-  compass, command buttons) is the `nwcp.32` panel sheet ("new-game control
-  panel"); the character/party stats text is drawn by the formatter family
-  around `0x42DC`/`0x5312`.
+
+### 4.1 Play-screen chrome is a font-glyph lattice (NOT `nwcp.32`)
+
+**Corrected trace (2026-06).** The earlier note that the persistent in-game
+chrome is the `nwcp.32` panel sheet is **wrong** — `nwcp.32` is only used on
+the title/menu screens. The in-game chrome is drawn entirely with text-engine
+primitives on the 40×24 grid of 8×8 font cells (`x = col*8`, `y = row*8`;
+cursor thunk `-$7BFC → 0x22108`, glyph put `-$7C62 → 0x218EA`, string put
+`-$7BE4 → 0x22376`):
+
+- `-$7F86 → 0x4032` `h_line(col0,col1,row)` — glyph `6`, `5`…, `7`.
+- `-$7F80 → 0x4088` `v_line(row0,row1,col)` — glyph `9`, `0x0B`…, `8`.
+- `-$7F7A → 0x422A` outer frame — corner glyphs `1/2/3/4` via `0x410A`.
+- `-$7F62 → 0x42DC` — **cell-rect clear** (the old `draw_party_status_panel`
+  annotation was a mislabel; `0x42DC` clears `(col*8,row*8)` rectangles).
+- Line glyphs `1..9,0x0B` are the red box-drawing set in the game font;
+  `0x18..0x1B` are the arrow glyphs used by the command reference list.
+
+Chrome assembly per refresh (`0x52A2` body):
+
+- `0x60F4` chrome init: outer frame; h-lines rows `0x10`/`0x12` cols `0..0x27`;
+  v-line col `0x1B` rows `0..0x10` (viewport / right-column divider).
+- `0x60B6` status dividers: v-lines rows `0x10..0x12` at cols `0xC/0x15/0x1F`.
+- `0x62C8` status row `0x11`: col 1 `'O' Options` (new-game flag `=1`) else
+  `'P' Protect`; col `0xD` `Day=` + `-$79DE[era]` (3 cells); col `0x16`
+  `Year=` + `-$79CA[era]` (4 cells); col `0x20` `Face=` + key char `-$79B1`.
+- `0x6150` party panel rows `0x13..0x16`, slots two-per-row at cols `1`/`0x14`:
+  `" n) "` + name (text attribute 1 via `-$7C08` when roster condition byte
+  `+$26 != 0`) + `" /"` + HP word `+$5E` (roster **HP max** field; values
+  `1..999` print via `-$7BDE` with trailing-space pad to 3 cells @
+  `0x6266..0x629A`; `>999` prints literal `"+++"` @ `0x62C4` via `pea` @
+  `0x625A`). Combat reuses the same rule on the bottom party strip @
+  `0x12910` (`cmpi #$3E8` / `bcc` → `"+++"` @ `0x129C8`). **Quick Ref**
+  (`0x595C`) and the character sheet (`0x39B4`) print full numeric HP/SP with
+  no `+++` cap. SP has no `+++` rule anywhere traced. Empty slots are
+  cell-cleared via `-$7F62`.
+- Right column cols `0x1C..0x26` rows `1..15`: new game → `0x5E28`
+  protection/spell-status panel (h-line row 9, labels `Light`/`Magic`/`Forces`
+  rows `0xA..0xC`); otherwise `0x5D54` command reference (string table
+  `A4-$741A`).
+
+**Adjudication note on `0x42DC` / `A4-$85C2`:** a parallel trace read `0x42DC`
+as an nwcp.32 portrait blit because it retargets `-$619C` to `A4-$85C2`
+(allocated @ `0x25F7E`). The alloc dims are `$BF/$13F` = **191/319**, i.e. the
+**320×192 play-area back buffer**, not the 300×90 `nwcp.32` sheet; `-$619C` is
+the text engine's *current render-target bitmap*. `0x42DC` therefore reads:
+save target + its attribute byte `$12`, retarget to the play buffer, set
+mode-2 attribute (`-$7BAE`), **clear the cell rect** (`-$7C68` takes only a
+pixel rect `((base+arg)<<3, +7)` — no source frame), restore. The runtime
+publish `0xCBF6/0xCBFE` (`-$7ED8` frame 0) belongs to the title/menu panel
+path (callers `0x6EAC/0xA820/0xA906/0xB572`), not the exploration refresh
+chain `0x545E/0x5436/0x52A2`.
+
+**Remaining gaps:** `0x410A` frame-corner internals; exact palette effect of
+text attribute 1 (`0x220BE`); `0x5EB8..` value printout after the
+Light/Magic/Forces labels (strings `0x6068/0x6074/0x6080`); copy-protection
+challenge content rows 1..8 of the new-game right column (out of scope);
+`-$7BAE` mode-2 attribute semantics (`0x22C24` dispatcher) and the per-slot
+byte tables `A4-$8BBF/-$8BB6/-$8BAD/-$8BA4` used by
+`format_party_status_line @ 0x531A` (need a data-hunk dump).
+The character/party stats *text formatting* is the `0x5312`/`0x62C8`/`0x6150`
+family described above.
 
 `0x316E` builds the on-screen **monster/encounter sprites** layered over the
 viewport (24-entry placement table `-$7538`).

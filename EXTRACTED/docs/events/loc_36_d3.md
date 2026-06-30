@@ -14,7 +14,7 @@
 | (3,3) | `0x33` | **8** | ANY_DIR |
 | (3,4) | `0x34` | **10** | ANY_DIR |
 | (3,5) | `0x35` | **9** | ANY_DIR |
-| (3,13) | `0x3D` | **4** | DIR_SPECIAL |
+| (3,13) | `0x3D` | **4** | DIR_E? |
 | (4,10) | `0x4A` | **9** | ANY_DIR |
 | (4,12) | `0x4C` | **10** | ANY_DIR |
 | (4,13) | `0x4D` | **13** | ANY_DIR |
@@ -48,7 +48,7 @@
 ```
 
 ```
-00: set_service_context(str[8] "Yellow / Message 9", mode=0x00)
+00: service_sign(idx=0x08 -> sign 42 [42.anm], pos=0x00)
 01: cond = consume_item(item_id=218, name="Cupie Doll", probe=0)
 02: if not cond: skip_tokens(4)
     # skip -> show_text_block(str[1] "A mad old man ignores you while / ranting about a Cupie Doll.")
@@ -103,7 +103,7 @@
 12: end_script()
 ```
 
-**Event 04** — triggers: (3,13)/DIR_SPECIAL
+**Event 04** — triggers: (3,13)/DIR_E?
 
 ```hex
 06 06

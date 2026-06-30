@@ -19,7 +19,7 @@ import {
   donationGold,
   ITEM_GOLD_GOBLET,
   ITEM_FE_FARTHING,
-} from "./sessionState.js";
+} from "./sessionState.js?v=20260630-slower-anims-2";
 
 /** Token byte lengths for opcodes 0x00..0x32 (A4-$6CC8). */
 export const OP_TOKEN_DELTA = [

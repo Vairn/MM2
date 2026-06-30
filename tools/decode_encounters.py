@@ -33,6 +33,51 @@ A4_ENCOUNTER_AREA_INDEX = 0x718A  # lea @ 0x9E96 (arena/ticket path)
 A4_DISPOSITION_MOD = 0x6FC0  # lea @ 0x11F14
 A4_PARTY_XP_BUDGET = 0x6FCA  # cmp.l @ 0x12110
 
+MM2_ENCOUNTER_SLOT_COUNT = 10
+MM2_ENCOUNTER_MODE_FIXED = 0x80
+MM2_ENCOUNTER_MODE_RANDOM = 0x00
+
+
+def decode_op12_setup(script: bytes, is_op12: bool) -> dict:
+    """Decode the inline OP_12 (12-byte) / OP_13 (10-byte) encounter block.
+
+    Mirrors the event-VM handler @ 0x16300. See docs/07 §"OP_12/OP_13".
+    """
+    slots = list(script[:MM2_ENCOUNTER_SLOT_COUNT])
+    if is_op12:
+        return {
+            "monster_slot": slots,
+            "overflow_type": script[10],
+            "mode": MM2_ENCOUNTER_MODE_FIXED,
+            "live_count": script[11],
+            "bytes_consumed": 12,
+        }
+    return {
+        "monster_slot": slots,
+        "overflow_type": 0,
+        "mode": MM2_ENCOUNTER_MODE_RANDOM,
+        "live_count": 0,
+        "bytes_consumed": 10,
+    }
+
+
+def encode_op12_setup(setup: dict) -> bytes:
+    """Encode an encounter setup dict back to inline script bytes."""
+    out = bytes(setup["monster_slot"][:MM2_ENCOUNTER_SLOT_COUNT])
+    if setup.get("mode", MM2_ENCOUNTER_MODE_RANDOM) == MM2_ENCOUNTER_MODE_FIXED:
+        out += bytes([setup["overflow_type"] & 0xFF, setup["live_count"] & 0xFF])
+    return out
+
+
+def op12_live_count(setup: dict) -> int:
+    """Combat-setup recompute @ 0x12CE0: #non-zero slots (+ live_count if
+    overflow_type != 0)."""
+    j = sum(1 for s in setup["monster_slot"] if s != 0)
+    if setup.get("overflow_type", 0) != 0:
+        j += setup.get("live_count", 0)
+    return min(j, 255)
+
+
 def _area_name(area_id: int) -> str:
     return f"Area {area_id}"
 

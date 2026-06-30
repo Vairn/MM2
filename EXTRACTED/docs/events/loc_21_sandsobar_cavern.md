@@ -12,42 +12,42 @@
 | (0,0) | `0x00` | **4** | ANY_DIR |
 | (0,5) | `0x05` | **13** | ANY_DIR |
 | (0,14) | `0x0E` | **16** | ANY_DIR |
-| (0,15) | `0x0F` | **10** | ALWAYS |
+| (0,15) | `0x0F` | **10** | DIR_W? |
 | (1,6) | `0x16` | **6** | ANY_DIR |
 | (1,15) | `0x1F` | **6** | ANY_DIR |
-| (2,4) | `0x24` | **22** | DIR_SPECIAL |
+| (2,4) | `0x24` | **22** | DIR_E? |
 | (2,6) | `0x26` | **14** | ANY_DIR |
 | (3,3) | `0x33` | **15** | ANY_DIR |
 | (3,12) | `0x3C` | **5** | 0x90 |
 | (4,6) | `0x46` | **6** | ANY_DIR |
-| (4,15) | `0x4F` | **8** | DIR_SPECIAL |
+| (4,15) | `0x4F` | **8** | DIR_E? |
 | (5,2) | `0x52` | **6** | ANY_DIR |
 | (5,4) | `0x54` | **6** | ANY_DIR |
 | (5,9) | `0x59` | **6** | ANY_DIR |
-| (5,11) | `0x5B` | **7** | DIR_N? |
+| (5,11) | `0x5B` | **7** | DIR_S? |
 | (6,4) | `0x64` | **12** | ANY_DIR |
 | (6,9) | `0x69` | **12** | ANY_DIR |
 | (6,12) | `0x6C` | **6** | ANY_DIR |
-| (7,12) | `0x7C` | **1** | DIR_SPECIAL |
+| (7,12) | `0x7C` | **1** | DIR_E? |
 | (8,5) | `0x85` | **23** | 0x90 |
 | (8,10) | `0x8A` | **12** | ANY_DIR |
 | (9,3) | `0x93` | **19** | ANY_DIR |
 | (9,7) | `0x97` | **11** | ANY_DIR |
-| (9,13) | `0x9D` | **3** | DIR_SPECIAL |
+| (9,13) | `0x9D` | **3** | DIR_E? |
 | (10,0) | `0xA0` | **6** | ANY_DIR |
-| (11,0) | `0xB0` | **24** | ALWAYS |
+| (11,0) | `0xB0` | **24** | DIR_W? |
 | (11,2) | `0xB2` | **6** | ANY_DIR |
-| (12,0) | `0xC0` | **2** | DIR_N? |
+| (12,0) | `0xC0` | **2** | DIR_S? |
 | (12,9) | `0xC9` | **18** | ANY_DIR |
 | (12,12) | `0xCC` | **6** | ANY_DIR |
 | (13,12) | `0xDC` | **17** | ANY_DIR |
-| (14,2) | `0xE2` | **9** | ENTER |
-| (14,14) | `0xEE` | **21** | DIR_SPECIAL |
+| (14,2) | `0xE2` | **9** | DIR_N? |
+| (14,14) | `0xEE` | **21** | DIR_E? |
 | (15,2) | `0xF2` | **20** | ANY_DIR |
 
 ## Events
 
-**Event 01** — triggers: (7,12)/DIR_SPECIAL
+**Event 01** — triggers: (7,12)/DIR_E?
 
 ```hex
 01 01 09 11 01 0c 04 0a 0f
@@ -62,14 +62,14 @@
 04: end_script()
 ```
 
-**Event 02** — triggers: (12,0)/DIR_N?
+**Event 02** — triggers: (12,0)/DIR_S?
 
 ```hex
 0b 0e 00 02 02 0a 11 2f 24 bc 02 11 2b 15 01 1e 00 11 03 1b 3d 10 01 1f 01 1e 01 0a 00 00 15 02 1e 00 11 03 1b 3d 10 01 1f 02 1e 01 0a 00 00 15 03 1e 00 11 03 1b 3d 10 01 1f 03 1e 01 0a 00 00 15 04 1e 00 11 03 1b 3d 10 01 1f 04 1e 01 0a 00 00 15 05 1e 00 11 03 1b 3d 10 01 1f 05 1e 01 0a 00 00 15 06 1e 00 11 03 1b 3d 10 01 1f 06 1e 01 0a 00 00 15 07 1e 00 11 03 1b 3d 10 01 1f 07 1e 01 0a 00 00 15 08 1e 00 11 03 1b 3d 10 01 1f 08 1e 01 0a 00 00 01 03 08 14 01 04 29 0f
 ```
 
 ```
-00: set_service_context(str[14] "Sharp Tooth Den", mode=0x00)
+00: service_sign(idx=0x0E -> sign 21 [21.anm], pos=0x00)
 01: show_text_block(str[2] "The infamous master thief Rinaldo Jr. / will train your thieves in the /")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(47)
@@ -141,14 +141,14 @@
 51: end_script()
 ```
 
-**Event 03** — triggers: (9,13)/DIR_SPECIAL
+**Event 03** — triggers: (9,13)/DIR_E?
 
 ```hex
 0b 0e 00 02 05 0a 11 27 24 fa 00 11 23 15 01 1e 00 1b 06 11 01 20 01 1e 01 05 00 00 15 02 1e 00 1b 06 11 01 20 02 1e 01 05 00 00 15 03 1e 00 1b 06 11 01 20 03 1e 01 05 00 00 15 04 1e 00 1b 06 11 01 20 04 1e 01 05 00 00 15 05 1e 00 1b 06 11 01 20 05 1e 01 05 00 00 15 06 1e 00 1b 06 11 01 20 06 1e 01 05 00 00 15 07 1e 00 1b 06 11 01 20 07 1e 01 05 00 00 15 08 1e 00 1b 06 11 01 20 08 1e 01 05 00 00 02 06 08 0f 01 04 08 0f
 ```
 
 ```
-00: set_service_context(str[14] "Sharp Tooth Den", mode=0x00)
+00: service_sign(idx=0x0E -> sign 21 [21.anm], pos=0x00)
 01: show_text_block(str[5] "The Thieving Fiend Maxwell will teach / all your thieves the intricacies")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(39)
@@ -211,7 +211,7 @@
 ```
 
 ```
-00: set_service_context(str[24], mode=0x00)
+00: service_sign(idx=0x18 -> sign 61 [61.anm], pos=0x00)
 01: show_text_block(str[8] "A foul-smelling zombie hands you an / Admit 8 Pass and says, "This will ")
 02: wait_key()
 03: add_party_entity(0x01, f3a=0xC1, f40=0x00, f46=0x00)
@@ -253,7 +253,7 @@
 04: clear_current_tile_event_flag()
 ```
 
-**Event 07** — triggers: (5,11)/DIR_N?
+**Event 07** — triggers: (5,11)/DIR_S?
 
 ```hex
 06 0b
@@ -263,7 +263,7 @@
 00: show_text_popup_style_b(str[11] "Beware of / Vermin!")
 ```
 
-**Event 08** — triggers: (4,15)/DIR_SPECIAL
+**Event 08** — triggers: (4,15)/DIR_E?
 
 ```hex
 06 0c
@@ -273,7 +273,7 @@
 00: show_text_popup_style_b(str[12] "<Master / Thief")
 ```
 
-**Event 09** — triggers: (14,2)/ENTER
+**Event 09** — triggers: (14,2)/DIR_N?
 
 ```hex
 04 0d
@@ -283,7 +283,7 @@
 00: show_text_above_door(str[13] "Thieves' Guild")
 ```
 
-**Event 10** — triggers: (0,15)/ALWAYS
+**Event 10** — triggers: (0,15)/DIR_W?
 
 ```hex
 04 0e
@@ -423,7 +423,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 21** — triggers: (14,14)/DIR_SPECIAL
+**Event 21** — triggers: (14,14)/DIR_E?
 
 ```hex
 02 0f 29
@@ -434,7 +434,7 @@
 01: set_abort_and_exit()
 ```
 
-**Event 22** — triggers: (2,4)/DIR_SPECIAL
+**Event 22** — triggers: (2,4)/DIR_E?
 
 ```hex
 02 10 29
@@ -455,7 +455,7 @@
 00: exec_selector(0x74)
 ```
 
-**Event 24** — triggers: (11,0)/ALWAYS
+**Event 24** — triggers: (11,0)/DIR_W?
 
 ```hex
 0e 79

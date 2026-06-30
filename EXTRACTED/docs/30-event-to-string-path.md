@@ -13,9 +13,14 @@ pull text from **`str.dat`** or the **executable** instead. ASM references:
 (string index, `OP_0E` selector byte, gold amount, etc.). They **do not** open
 `str.dat` directly.
 
-- **`OP_01`–`OP_06`** and **`OP_0B`** resolve text from the **current location’s
-  `event.dat` string bank** (copied into workspace `A4-$47C8`, indexed via
-  `A4-$86AC` / `A4-$5D3C`).
+- **`OP_01`–`OP_06`** resolve text from the **current location’s `event.dat`
+  string bank** (copied into workspace `A4-$47C8`, indexed via `A4-$86AC` /
+  `A4-$5D3C`).
+- **`OP_0B`** does **not** display text at all (neither `event.dat` nor
+  `str.dat`). It loads a **signboard `.anm` sprite**: `0x15756` maps the opcode's
+  first byte through a per-environment sign table to a sign id (`NN.anm`). The
+  decoders treat its arg0 as a **sign index**, not a string index — see §2.2 and
+  [`45-event-graphics-opcodes.md`](45-event-graphics-opcodes.md).
 - **`OP_0E`** passes one **selector byte** into a **C-like service handler**
   (pub, inn, temple, training, guild, smith, …). That handler loads UI strings
   from **`str.dat`** (`A4-$703e` base, drawn with `-$7BE4`) and/or **embedded
@@ -42,7 +47,7 @@ mostly **exe-embedded** prompts (`0x19D00`…, doc 29).
 
 ---
 
-## 2. Event-local text (`OP_01`–`OP_06`, `OP_0B`)
+## 2. Event-local text (`OP_01`–`OP_06`) + the `OP_0B` sign sprite
 
 ### 2.1 Index → string bytes
 
@@ -57,18 +62,24 @@ string base inside the decoded event work buffer. **No `str.dat` read** on this 
 
 ### 2.2 Per-opcode display
 
-| Op | Handler | Text source | Draw path |
-|----|---------|-------------|-----------|
-| `01` | `0x15924` | event.dat | `-$7EC0` |
-| `02` | `0x15942` | event.dat | `-$7F62` / `-$7BFC` / `-$7C62` (multiline) |
-| `03` | `0x159CE` | event.dat (via `02`) | prep + `02` |
-| `04` | `0x159F4` | event.dat | door label `-$7BE4` |
-| `05` | `0x15A46` | event.dat | large popup `-$7C74` / `-$7BE4` |
-| `06` | `0x15AEE` | event.dat | framed sign + border glyphs |
-| `0B` | `0x15DB0` | event.dat (`0x15756` resolves index) | service title window |
+Full pixel-exact draw paths (thunk targets, dest rects, line metrics, prompt
+loops, restore behavior) are traced in
+[`44-event-text-rendering.md`](44-event-text-rendering.md).
 
-**`OP_09` / `OP_0A`:** y/n prompts; question text still comes from prior
-**event** opcodes, not `str.dat`.
+| Op | Handler | Text source | Draw path (thunk → routine) | Dest |
+|----|---------|-------------|------------------------------|------|
+| `01` | `0x15924` | event.dat | `-$7EC0` → `0x54F2` | centered, **row 17** (cols 1..38 cleared) + row-18 divider |
+| `02` | `0x15942` | event.dat | `-$7F62`→`0x42DC` clear, `-$7BFC`→`0x22108` cursor, `-$7C62`→`0x218EA` putchar | block **rows 19..22**, col 1 |
+| `03` | `0x159CE` | event.dat (via `02`) | `-$7F5C`→`0x43A8` + `-$7ED8(2)`→`0x5312` prep, then `02` base 17 | block **rows 17..22**, col 1 |
+| `04` | `0x159F4` | event.dat | `-$7BE4` → `0x22376` (JAM1) | door label, **row 3**, centered on col 14, over 3D view |
+| `05` | `0x15A46` | event.dat | `-$7C74`→`0x21624` window + `-$7BE4` | popup cells **(4,3)-(24,13)**, centered, transparent |
+| `06` | `0x15AEE` | event.dat | glyph signpost + post, pen `$7A50` | outdoor sign **(7,7)-(19,14)** |
+| `0B` | `0x15DB0` | **sign `.anm`** (no text; `0x15756` maps arg0→sign id) | `-$7FC2`→`0x316E` sprite + `-$7FBC`→`0x3266` place | **service** signboard sprite over viewport |
+
+**`OP_09` / `OP_0A`:** y/n prompts (`0x15D3C`, Y → cond `A4-$7951`); question
+text still comes from prior **event** opcodes, not `str.dat`. **`OP_07`/`08`**
+SPACE-wait (`0x15CE6`) prints `"('Space' to continue)"` at (9,23) then redraws
+the row-23 rule (`-$7F4A` → `0x44E0`). See doc 44 §3.7.
 
 ---
 

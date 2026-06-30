@@ -4,6 +4,7 @@ project(MM2 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -25,12 +26,17 @@ if(AMIGA)
   set(MM2_PLATFORM_SOURCES src/platform/amiga/PlatformAmiga.cpp)
   set(MM2_MAIN_SOURCE src/main_amiga.cpp)
 
-  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(ACE_DEBUG ON CACHE BOOL "ACE debug logging" FORCE)
-    set(ACE_DEBUG_UAE ON CACHE BOOL "ACE logWrite -> WinUAE/Bartman console" FORCE)
-  else()
-    set(ACE_DEBUG OFF CACHE BOOL "ACE debug logging" FORCE)
-    set(ACE_DEBUG_UAE OFF CACHE BOOL "ACE logWrite -> WinUAE/Bartman console" FORCE)
+  # Presets may set ACE_DEBUG=ON for RelWithDebInfo (optimized + symbols + MM2_DBG spam).
+  # Default ON for Debug, OFF otherwise; never FORCE — cacheVariables from presets win.
+  if(NOT DEFINED ACE_DEBUG)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+      set(ACE_DEBUG ON CACHE BOOL "ACE debug logging (MM2_DBG / logWrite)")
+    else()
+      set(ACE_DEBUG OFF CACHE BOOL "ACE debug logging (MM2_DBG / logWrite)")
+    endif()
+  endif()
+  if(NOT DEFINED ACE_DEBUG_UAE)
+    set(ACE_DEBUG_UAE ${ACE_DEBUG} CACHE BOOL "ACE logWrite -> WinUAE/Bartman console")
   endif()
 
   # Stale CPM_DIRECTORY from a prior ACE fork breaks AmigaPorts/ACE's include(cmake/CPM.cmake).
@@ -77,18 +83,29 @@ endif()
 set(MM2_CODEC_SOURCES
   ${MM2_DECOMP}/mm2_image32_codec.c
   ${MM2_DECOMP}/mm2_anm_codec.c
+  ${MM2_DECOMP}/mm2_anm_preview.c
   ${MM2_DECOMP}/mm2_roster_codec.c
   ${MM2_DECOMP}/mm2_create_character.c
   ${MM2_DECOMP}/mm2_monsters_codec.c
   ${MM2_DECOMP}/mm2_event_codec.c
   ${MM2_DECOMP}/mm2_attrib_codec.c
+  ${MM2_DECOMP}/mm2_map_codec.c
   ${MM2_DECOMP}/mm2_party_launch.c
+  ${MM2_DECOMP}/mm2_items_codec.c
+  ${MM2_DECOMP}/mm2_found_items.c
+  ${MM2_DECOMP}/mm2_town_tables.c
 )
 
 if(NOT AMIGA)
   add_library(mm2_codecs STATIC ${MM2_CODEC_SOURCES})
   target_include_directories(mm2_codecs PUBLIC ${MM2_DECOMP})
 endif()
+
+# GameSession + automap_golden share automap implementation (Cartography.h is header-only).
+set(MM2_AUTOMAP_SOURCES
+  src/gfx/AutomapView.cpp
+  src/world/AutomapState.cpp
+)
 
 if(NOT AMIGA)
   add_executable(image32_golden tests/image32_golden.c)
@@ -97,6 +114,166 @@ if(NOT AMIGA)
   add_executable(font_golden tests/font_golden.cpp src/gfx/ScreenCompositor.cpp src/gfx/mm2_font8x8.c)
   target_include_directories(font_golden PRIVATE include)
   target_link_libraries(font_golden PRIVATE mm2_codecs)
+
+  add_executable(view3d_middlegate_check
+    tests/view3d_middlegate_check.cpp
+    src/gfx/View3D.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(view3d_middlegate_check PRIVATE include)
+  target_link_libraries(view3d_middlegate_check PRIVATE mm2_codecs)
+
+  add_executable(view3d_torch_door_test
+    tests/view3d_torch_door_test.cpp
+    src/gfx/View3D.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(view3d_torch_door_test PRIVATE include)
+  target_link_libraries(view3d_torch_door_test PRIVATE mm2_codecs)
+
+  add_executable(view3d_outdoor_check
+    tests/view3d_outdoor_check.cpp
+    src/gfx/OutdoorView3D.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(view3d_outdoor_check PRIVATE include)
+  target_link_libraries(view3d_outdoor_check PRIVATE mm2_codecs)
+
+  add_executable(movement_middlegate_test
+    tests/movement_middlegate_test.cpp
+    src/gameplay/Movement.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(movement_middlegate_test PRIVATE include)
+  target_link_libraries(movement_middlegate_test PRIVATE mm2_codecs)
+
+  add_executable(calendar_rollover_test
+    tests/calendar_rollover_test.cpp
+    src/gameplay/Movement.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(calendar_rollover_test PRIVATE include)
+  target_link_libraries(calendar_rollover_test PRIVATE mm2_codecs)
+
+  add_executable(playsession_input_test
+    tests/playsession_input_test.cpp
+    src/gameplay/PlaySessionInput.cpp)
+  target_include_directories(playsession_input_test PRIVATE include)
+  target_link_libraries(playsession_input_test PRIVATE mm2_codecs)
+
+  add_executable(explore_commands_test
+    tests/explore_commands_test.cpp
+    src/gameplay/ExploreActions.cpp
+    src/gameplay/Movement.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(explore_commands_test PRIVATE include)
+  target_link_libraries(explore_commands_test PRIVATE mm2_codecs)
+
+  add_executable(automap_golden
+    tests/automap_golden.cpp
+    ${MM2_AUTOMAP_SOURCES}
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/mm2_font8x8.c
+    src/gfx/EnvAssets.cpp
+    src/gfx/OutdoorView3D.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(automap_golden PRIVATE include)
+  target_link_libraries(automap_golden PRIVATE mm2_codecs)
+
+  add_executable(character_sheet_input_test
+    tests/character_sheet_input_test.cpp
+    src/gameplay/InGameCharacterSheet.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/PlayScreenChrome.cpp
+    src/gfx/PartyStatusFormat.cpp
+    src/gfx/mm2_font8x8.c
+    src/runtime/PathScratch.cpp)
+  target_include_directories(character_sheet_input_test PRIVATE include)
+  target_link_libraries(character_sheet_input_test PRIVATE mm2_codecs)
+
+  add_executable(party_hp_format_test
+    tests/party_hp_format_test.cpp
+    src/gfx/PartyStatusFormat.cpp)
+  target_include_directories(party_hp_format_test PRIVATE include)
+  target_link_libraries(party_hp_format_test PRIVATE mm2_codecs)
+
+  add_executable(event_middlegate_test
+    tests/event_middlegate_test.cpp
+    src/events/EventRuntime.cpp
+    src/events/EventVmHelpers.cpp
+    src/events/EventPartyEffects.cpp
+    src/events/EventTownServices.cpp
+    src/events/TownServiceTransactions.cpp
+    src/events/TownServiceMenu.cpp
+    src/events/EventCombatEncounter.cpp
+    src/events/EventTextView.cpp
+    src/events/ServiceSignResolver.cpp
+    src/events/ScriptedSceneEngine.cpp
+    src/ui/PlayTownServiceUi.cpp
+    src/gfx/ViewportAnmOverlay.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/PlayScreenChrome.cpp
+    src/gfx/PartyStatusFormat.cpp
+    src/gfx/mm2_font8x8.c
+    src/world/MapWorld.cpp
+    src/runtime/Mm2Alloc.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(event_middlegate_test PRIVATE include)
+  target_link_libraries(event_middlegate_test PRIVATE mm2_codecs)
+
+  add_executable(event_op_demo
+    tests/event_op_demo.cpp
+    src/events/EventTextView.cpp
+    src/events/ServiceSignResolver.cpp
+    src/events/ScriptedSceneEngine.cpp
+    src/gfx/ViewportAnmOverlay.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/mm2_font8x8.c
+    src/gfx/View3D.cpp
+    src/gfx/OutdoorView3D.cpp
+    src/gfx/PlayScreenChrome.cpp
+    src/gfx/PartyStatusFormat.cpp
+    src/gfx/EnvAssets.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(event_op_demo PRIVATE include)
+  target_link_libraries(event_op_demo PRIVATE mm2_codecs)
+
+  add_executable(playscreen_golden
+    tests/playscreen_golden.cpp
+    src/GameSession.cpp
+    ${MM2_AUTOMAP_SOURCES}
+    src/events/ScriptedSceneEngine.cpp
+    src/gameplay/Movement.cpp
+    src/gameplay/PlaySessionInput.cpp
+    src/gameplay/ExploreActions.cpp
+    src/gameplay/InGameCharacterSheet.cpp
+    src/gameplay/InGameControlsScreen.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/mm2_font8x8.c
+    src/gfx/View3D.cpp
+    src/gfx/OutdoorView3D.cpp
+    src/gfx/PlayScreenChrome.cpp
+    src/gfx/PartyStatusFormat.cpp
+    src/gfx/EnvAssets.cpp
+    src/world/MapWorld.cpp
+    src/events/EventRuntime.cpp
+    src/events/EventVmHelpers.cpp
+    src/events/EventPartyEffects.cpp
+    src/events/EventTownServices.cpp
+    src/events/TownServiceTransactions.cpp
+    src/events/TownServiceMenu.cpp
+    src/events/EventCombatEncounter.cpp
+    src/events/EventTextView.cpp
+    src/events/ServiceSignResolver.cpp
+    src/ui/PlayTownServiceUi.cpp
+    src/gfx/ViewportAnmOverlay.cpp
+    src/runtime/Mm2Alloc.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(playscreen_golden PRIVATE include)
+  target_link_libraries(playscreen_golden PRIVATE mm2_codecs)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -118,16 +295,38 @@ endif()
 set(MM2_GAME_SOURCES
   ${MM2_MAIN_SOURCE}
   src/GameSession.cpp
+  src/gameplay/Movement.cpp
+  src/gameplay/PlaySessionInput.cpp
+  src/gameplay/ExploreActions.cpp
+  src/gameplay/InGameCharacterSheet.cpp
+  src/gameplay/InGameControlsScreen.cpp
   src/TitleScreen.cpp
   src/states/mm2_state.c
   src/states/mm2_app_context.c
+  src/states/mm2_goto_trace.c
   src/states/mm2_states.cpp
   src/states/AppHost.cpp
   src/states/mm2_app_run.cpp
   src/gfx/ScreenCompositor.cpp
   src/gfx/mm2_font8x8.c
   src/gfx/View3D.cpp
+  src/gfx/OutdoorView3D.cpp
   src/gfx/PlayScreenChrome.cpp
+  src/gfx/PartyStatusFormat.cpp
+  src/gfx/EnvAssets.cpp
+  ${MM2_AUTOMAP_SOURCES}
+  src/world/MapWorld.cpp
+  src/events/EventRuntime.cpp
+  src/events/EventVmHelpers.cpp
+  src/events/EventPartyEffects.cpp
+  src/events/EventTownServices.cpp
+  src/events/TownServiceTransactions.cpp
+  src/events/TownServiceMenu.cpp
+  src/events/EventCombatEncounter.cpp
+  src/events/EventTextView.cpp
+  src/events/ServiceSignResolver.cpp
+  src/events/ScriptedSceneEngine.cpp
+  src/gfx/ViewportAnmOverlay.cpp
   src/runtime/Mm2Alloc.cpp
   src/runtime/PathScratch.cpp
   src/ui/CharacterUiKind.cpp
@@ -135,6 +334,7 @@ set(MM2_GAME_SOURCES
   src/ui/CharacterUiController.cpp
   src/ui/StubCharacterUi.cpp
   src/ui/AmigaCharacterUi.cpp
+  src/ui/PlayTownServiceUi.cpp
   ${MM2_PLATFORM_SOURCES}
 )
 
@@ -153,7 +353,7 @@ if(AMIGA AND ELF2HUNK)
   set(MM2_LINKED mm2.elf)
   set(MM2_OUTPUT mm2.exe)
   set(ELF2HUNK_EXTRA_OPTS "")
-  if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+  if(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(ELF2HUNK_EXTRA_OPTS "-s")
   endif()
   add_executable(${MM2_LINKED} ${MM2_GAME_SOURCES})
@@ -206,8 +406,11 @@ else()
   target_link_libraries(${_mm2_target} PRIVATE mm2_codecs SDL2::SDL2main SDL2::SDL2)
 endif()
 
+if(AMIGA AND ACE_DEBUG)
+  target_compile_definitions(${_mm2_target} PRIVATE ACE_DEBUG MM2_DEBUG)
+endif()
 target_compile_definitions(${_mm2_target} PRIVATE
-  $<$<CONFIG:Debug>:MM2_DEBUG ACE_DEBUG GAME_DEBUG>
+  $<$<CONFIG:Debug>:GAME_DEBUG>
 )
 
 if(AMIGA)

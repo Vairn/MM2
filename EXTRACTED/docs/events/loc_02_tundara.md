@@ -9,13 +9,13 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (0,5) | `0x05` | **33** | DIR_SPECIAL |
-| (1,3) | `0x13` | **31** | ENTER |
-| (1,5) | `0x15` | **31** | ENTER |
-| (1,7) | `0x17` | **31** | ENTER |
-| (1,9) | `0x19` | **31** | ENTER |
-| (1,11) | `0x1B` | **31** | ENTER |
-| (1,13) | `0x1D` | **31** | ENTER |
+| (0,5) | `0x05` | **33** | DIR_E? |
+| (1,3) | `0x13` | **31** | DIR_N? |
+| (1,5) | `0x15` | **31** | DIR_N? |
+| (1,7) | `0x17` | **31** | DIR_N? |
+| (1,9) | `0x19` | **31** | DIR_N? |
+| (1,11) | `0x1B` | **31** | DIR_N? |
+| (1,13) | `0x1D` | **31** | DIR_N? |
 | (2,2) | `0x22` | **34** | ANY_DIR |
 | (2,3) | `0x23` | **35** | ANY_DIR |
 | (2,4) | `0x24` | **36** | ANY_DIR |
@@ -28,60 +28,60 @@
 | (2,11) | `0x2B` | **43** | ANY_DIR |
 | (2,12) | `0x2C` | **44** | ANY_DIR |
 | (2,13) | `0x2D` | **45** | ANY_DIR |
-| (3,0) | `0x30` | **33** | DIR_N? |
-| (3,2) | `0x32` | **31** | DIR_N? |
-| (3,4) | `0x34` | **31** | DIR_N? |
-| (3,6) | `0x36` | **31** | DIR_N? |
-| (3,8) | `0x38` | **31** | DIR_N? |
-| (3,10) | `0x3A` | **31** | DIR_N? |
-| (3,12) | `0x3C` | **31** | DIR_N? |
-| (3,15) | `0x3F` | **33** | ENTER |
-| (4,13) | `0x4D` | **51** | DIR_N? |
+| (3,0) | `0x30` | **33** | DIR_S? |
+| (3,2) | `0x32` | **31** | DIR_S? |
+| (3,4) | `0x34` | **31** | DIR_S? |
+| (3,6) | `0x36` | **31** | DIR_S? |
+| (3,8) | `0x38` | **31** | DIR_S? |
+| (3,10) | `0x3A` | **31** | DIR_S? |
+| (3,12) | `0x3C` | **31** | DIR_S? |
+| (3,15) | `0x3F` | **33** | DIR_N? |
+| (4,13) | `0x4D` | **51** | DIR_S? |
 | (5,3) | `0x53` | **29** | ANY_DIR |
 | (6,7) | `0x67` | **21** | 0x60 |
-| (6,11) | `0x6B` | **16** | DIR_N? |
-| (7,2) | `0x72` | **32** | ALWAYS |
-| (7,9) | `0x79` | **50** | DIR_N? |
-| (7,11) | `0x7B` | **5** | DIR_N? |
+| (6,11) | `0x6B` | **16** | DIR_S? |
+| (7,2) | `0x72` | **32** | DIR_W? |
+| (7,9) | `0x79` | **50** | DIR_S? |
+| (7,11) | `0x7B` | **5** | DIR_S? |
 | (7,14) | `0x7E` | **27** | ANY_DIR |
-| (8,6) | `0x86` | **6** | ENTER |
+| (8,6) | `0x86` | **6** | DIR_N? |
 | (8,8) | `0x88` | **52** | 0x30 |
 | (8,15) | `0x8F` | **28** | ANY_DIR |
 | (9,3) | `0x93` | **47** | ANY_DIR |
 | (9,4) | `0x94` | **48** | ANY_DIR |
-| (9,6) | `0x96` | **18** | ENTER |
-| (9,7) | `0x97` | **14** | ALWAYS |
-| (9,8) | `0x98` | **2** | ALWAYS |
+| (9,6) | `0x96` | **18** | DIR_N? |
+| (9,7) | `0x97` | **14** | DIR_W? |
+| (9,8) | `0x98` | **2** | DIR_W? |
 | (9,13) | `0x9D` | **53** | 0xA0 |
 | (9,15) | `0x9F` | **26** | 0xA0 |
-| (10,0) | `0xA0` | **33** | DIR_N? |
+| (10,0) | `0xA0` | **33** | DIR_S? |
 | (10,3) | `0xA3` | **46** | ANY_DIR |
 | (10,4) | `0xA4` | **49** | ANY_DIR |
-| (10,6) | `0xA6` | **7** | ENTER |
-| (10,10) | `0xAA` | **3** | DIR_SPECIAL |
-| (10,11) | `0xAB` | **12** | DIR_SPECIAL |
-| (10,15) | `0xAF` | **25** | ENTER |
-| (11,6) | `0xB6` | **19** | ENTER |
-| (11,7) | `0xB7` | **15** | ALWAYS |
-| (11,8) | `0xB8` | **1** | ALWAYS |
-| (11,15) | `0xBF` | **20** | DIR_SPECIAL |
-| (12,5) | `0xC5` | **10** | ENTER |
-| (12,11) | `0xCB` | **4** | ENTER |
-| (12,15) | `0xCF` | **30** | DIR_N? |
-| (13,5) | `0xD5` | **23** | ENTER |
-| (13,8) | `0xD8` | **24** | DIR_N? |
-| (13,11) | `0xDB` | **13** | ENTER |
-| (13,14) | `0xDE` | **17** | DIR_N? |
-| (14,2) | `0xE2` | **22** | ALWAYS |
-| (14,3) | `0xE3` | **9** | ALWAYS |
-| (14,8) | `0xE8` | **11** | DIR_N? |
-| (14,14) | `0xEE` | **8** | DIR_N? |
-| (15,4) | `0xF4` | **33** | ALWAYS |
-| (15,12) | `0xFC` | **33** | ALWAYS |
+| (10,6) | `0xA6` | **7** | DIR_N? |
+| (10,10) | `0xAA` | **3** | DIR_E? |
+| (10,11) | `0xAB` | **12** | DIR_E? |
+| (10,15) | `0xAF` | **25** | DIR_N? |
+| (11,6) | `0xB6` | **19** | DIR_N? |
+| (11,7) | `0xB7` | **15** | DIR_W? |
+| (11,8) | `0xB8` | **1** | DIR_W? |
+| (11,15) | `0xBF` | **20** | DIR_E? |
+| (12,5) | `0xC5` | **10** | DIR_N? |
+| (12,11) | `0xCB` | **4** | DIR_N? |
+| (12,15) | `0xCF` | **30** | DIR_S? |
+| (13,5) | `0xD5` | **23** | DIR_N? |
+| (13,8) | `0xD8` | **24** | DIR_S? |
+| (13,11) | `0xDB` | **13** | DIR_N? |
+| (13,14) | `0xDE` | **17** | DIR_S? |
+| (14,2) | `0xE2` | **22** | DIR_W? |
+| (14,3) | `0xE3` | **9** | DIR_W? |
+| (14,8) | `0xE8` | **11** | DIR_S? |
+| (14,14) | `0xEE` | **8** | DIR_S? |
+| (15,4) | `0xF4` | **33** | DIR_W? |
+| (15,12) | `0xFC` | **33** | DIR_W? |
 
 ## Events
 
-**Event 01** — triggers: (11,8)/ALWAYS
+**Event 01** — triggers: (11,8)/DIR_W?
 
 ```hex
 04 01
@@ -91,7 +91,7 @@
 00: show_text_above_door(str[1] "Tundaran Arms Inn")
 ```
 
-**Event 02** — triggers: (9,8)/ALWAYS
+**Event 02** — triggers: (9,8)/DIR_W?
 
 ```hex
 04 02
@@ -101,7 +101,7 @@
 00: show_text_above_door(str[2] "Lucky Dog Saloon")
 ```
 
-**Event 03** — triggers: (10,10)/DIR_SPECIAL
+**Event 03** — triggers: (10,10)/DIR_E?
 
 ```hex
 04 03
@@ -111,7 +111,7 @@
 00: show_text_above_door(str[3] "Thundrax Weaponry")
 ```
 
-**Event 04** — triggers: (12,11)/ENTER
+**Event 04** — triggers: (12,11)/DIR_N?
 
 ```hex
 04 04
@@ -121,7 +121,7 @@
 00: show_text_above_door(str[4] "White Dove Temple")
 ```
 
-**Event 05** — triggers: (7,11)/DIR_N?
+**Event 05** — triggers: (7,11)/DIR_S?
 
 ```hex
 04 05
@@ -131,7 +131,7 @@
 00: show_text_above_door(str[5] "Enhancement Center")
 ```
 
-**Event 06** — triggers: (8,6)/ENTER
+**Event 06** — triggers: (8,6)/DIR_N?
 
 ```hex
 04 06
@@ -141,7 +141,7 @@
 00: show_text_above_door(str[6] "Polar Passage Portal")
 ```
 
-**Event 07** — triggers: (10,6)/ENTER
+**Event 07** — triggers: (10,6)/DIR_N?
 
 ```hex
 04 07
@@ -151,7 +151,7 @@
 00: show_text_above_door(str[7] "La Porte")
 ```
 
-**Event 08** — triggers: (14,14)/DIR_N?
+**Event 08** — triggers: (14,14)/DIR_S?
 
 ```hex
 04 08
@@ -161,7 +161,7 @@
 00: show_text_above_door(str[8] "Mystical Mage Guild")
 ```
 
-**Event 09** — triggers: (14,3)/ALWAYS
+**Event 09** — triggers: (14,3)/DIR_W?
 
 ```hex
 04 09
@@ -171,7 +171,7 @@
 00: show_text_above_door(str[9] "Saracen's Denial")
 ```
 
-**Event 10** — triggers: (12,5)/ENTER
+**Event 10** — triggers: (12,5)/DIR_N?
 
 ```hex
 04 0a
@@ -181,7 +181,7 @@
 00: show_text_above_door(str[10] "International Market")
 ```
 
-**Event 11** — triggers: (14,8)/DIR_N?
+**Event 11** — triggers: (14,8)/DIR_S?
 
 ```hex
 04 0b
@@ -191,73 +191,73 @@
 00: show_text_above_door(str[11] "Columbus's Sextant")
 ```
 
-**Event 12** — triggers: (10,11)/DIR_SPECIAL
+**Event 12** — triggers: (10,11)/DIR_E?
 
 ```hex
 0b 02 00 0e 06
 ```
 
 ```
-00: set_service_context(str[2] "Lucky Dog Saloon", mode=0x00)
+00: service_sign(idx=0x02 -> sign 62 [62.anm], pos=0x00)
 01: exec_selector(0x06)  # open_blacksmith_shop
 ```
 
-**Event 13** — triggers: (13,11)/ENTER
+**Event 13** — triggers: (13,11)/DIR_N?
 
 ```hex
 0b 05 00 0e 04
 ```
 
 ```
-00: set_service_context(str[5] "Enhancement Center", mode=0x00)
-01: exec_selector(0x04)  # open_training
+00: service_sign(idx=0x05 -> sign 67 [67.anm], pos=0x00)
+01: exec_selector(0x04)  # open_temple
 ```
 
-**Event 14** — triggers: (9,7)/ALWAYS
+**Event 14** — triggers: (9,7)/DIR_W?
 
 ```hex
 0b 04 00 0e 03
 ```
 
 ```
-00: set_service_context(str[4] "White Dove Temple", mode=0x00)
-01: exec_selector(0x03)  # open_temple
+00: service_sign(idx=0x04 -> sign 66 [66.anm], pos=0x00)
+01: exec_selector(0x03)  # open_tavern_food
 ```
 
-**Event 15** — triggers: (11,7)/ALWAYS
+**Event 15** — triggers: (11,7)/DIR_W?
 
 ```hex
 0b 03 00 0e 01
 ```
 
 ```
-00: set_service_context(str[3] "Thundrax Weaponry", mode=0x00)
-01: exec_selector(0x01)  # open_tavern_food
+00: service_sign(idx=0x03 -> sign 63 [63.anm], pos=0x00)
+01: exec_selector(0x01)  # open_inn_lodging
 ```
 
-**Event 16** — triggers: (6,11)/DIR_N?
+**Event 16** — triggers: (6,11)/DIR_S?
 
 ```hex
 0b 06 00 0e 02
 ```
 
 ```
-00: set_service_context(str[6] "Polar Passage Portal", mode=0x00)
-01: exec_selector(0x02)  # open_inn_lodging
+00: service_sign(idx=0x06 -> sign 68 [68.anm], pos=0x00)
+01: exec_selector(0x02)  # open_training
 ```
 
-**Event 17** — triggers: (13,14)/DIR_N?
+**Event 17** — triggers: (13,14)/DIR_S?
 
 ```hex
 0b 14 00 0e 05
 ```
 
 ```
-00: set_service_context(str[20] "Don't ya want to haggle? Pay 1000 gold / to become a merchant (y/n)?", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: exec_selector(0x05)  # open_mages_guild
 ```
 
-**Event 18** — triggers: (9,6)/ENTER
+**Event 18** — triggers: (9,6)/DIR_N?
 
 ```hex
 02 0c 09 10 01 0f 24 32 00 11 01 0c 03 36 01 12 29
@@ -277,7 +277,7 @@
 08: set_abort_and_exit()
 ```
 
-**Event 19** — triggers: (11,6)/ENTER
+**Event 19** — triggers: (11,6)/DIR_N?
 
 ```hex
 02 0d 09 10 01 0f 24 0a 00 11 01 0c 04 f4 01 12 29
@@ -297,7 +297,7 @@
 08: set_abort_and_exit()
 ```
 
-**Event 20** — triggers: (11,15)/DIR_SPECIAL
+**Event 20** — triggers: (11,15)/DIR_E?
 
 ```hex
 02 0e 09 10 01 0f 0c 05 3c
@@ -327,7 +327,7 @@
 04: map_transition(0x13, 0x1E)
 ```
 
-**Event 22** — triggers: (14,2)/ALWAYS
+**Event 22** — triggers: (14,2)/DIR_W?
 
 ```hex
 02 10 09 10 01 0f 02 11 26 15 09 6d 0f 10 04 24 fa 00 11 0a 18 09 6d f0 04 0f 15 09 6d f0 10 04 24 fa 00 11 04 18 09 6d 0f 40 0f 01 13 29 01 12 29
@@ -363,7 +363,7 @@
 21: set_abort_and_exit()
 ```
 
-**Event 23** — triggers: (13,5)/ENTER
+**Event 23** — triggers: (13,5)/DIR_N?
 
 ```hex
 02 14 09 10 01 0f 02 11 26 15 09 6d 0f 10 04 24 e8 03 11 0a 18 09 6d f0 0a 0f 15 09 6d f0 10 04 24 e8 03 11 04 18 09 6d 0f a0 0f 01 13 29 01 12 29
@@ -399,7 +399,7 @@
 21: set_abort_and_exit()
 ```
 
-**Event 24** — triggers: (13,8)/DIR_N?
+**Event 24** — triggers: (13,8)/DIR_S?
 
 ```hex
 0e 38
@@ -409,7 +409,7 @@
 00: exec_selector(0x38)
 ```
 
-**Event 25** — triggers: (10,15)/ENTER
+**Event 25** — triggers: (10,15)/DIR_N?
 
 ```hex
 17 09 00 11 01 14 0e 39
@@ -479,7 +479,7 @@
 03: exec_selector(0x37)
 ```
 
-**Event 30** — triggers: (12,15)/DIR_N?
+**Event 30** — triggers: (12,15)/DIR_S?
 
 ```hex
 02 16 09 10 01 0f 01 18 0d 00 21 7f 11 32 29
@@ -497,7 +497,7 @@
 07: set_abort_and_exit()
 ```
 
-**Event 31** — triggers: (1,3)/ENTER, (1,5)/ENTER, (1,7)/ENTER, (1,9)/ENTER, (1,11)/ENTER, (1,13)/ENTER, (3,2)/DIR_N?, (3,4)/DIR_N?, (3,6)/DIR_N?, (3,8)/DIR_N?, (3,10)/DIR_N?, (3,12)/DIR_N?
+**Event 31** — triggers: (1,3)/DIR_N?, (1,5)/DIR_N?, (1,7)/DIR_N?, (1,9)/DIR_N?, (1,11)/DIR_N?, (1,13)/DIR_N?, (3,2)/DIR_S?, (3,4)/DIR_S?, (3,6)/DIR_S?, (3,8)/DIR_S?, (3,10)/DIR_S?, (3,12)/DIR_S?
 
 ```hex
 04 15
@@ -507,7 +507,7 @@
 00: show_text_above_door(str[21] "Frozen Monster")
 ```
 
-**Event 32** — triggers: (7,2)/ALWAYS
+**Event 32** — triggers: (7,2)/DIR_W?
 
 ```hex
 05 17
@@ -517,7 +517,7 @@
 00: show_text_popup_style_a(str[23] "Monster Freezing / Authorized Personnel / Only!")
 ```
 
-**Event 33** — triggers: (0,5)/DIR_SPECIAL, (3,0)/DIR_N?, (3,15)/ENTER, (10,0)/DIR_N?, (15,4)/ALWAYS, (15,12)/ALWAYS
+**Event 33** — triggers: (0,5)/DIR_E?, (3,0)/DIR_S?, (3,15)/DIR_N?, (10,0)/DIR_S?, (15,4)/DIR_W?, (15,12)/DIR_W?
 
 ```hex
 2b 01 0e 0c 14
@@ -738,18 +738,18 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 50** — triggers: (7,9)/DIR_N?
+**Event 50** — triggers: (7,9)/DIR_S?
 
 ```hex
 0b 14 00 0e 50
 ```
 
 ```
-00: set_service_context(str[20] "Don't ya want to haggle? Pay 1000 gold / to become a merchant (y/n)?", mode=0x00)
+00: service_sign(idx=0x14 -> sign 37 [37.anm], pos=0x00)
 01: exec_selector(0x50)
 ```
 
-**Event 51** — triggers: (4,13)/DIR_N?
+**Event 51** — triggers: (4,13)/DIR_S?
 
 ```hex
 05 19
@@ -776,7 +776,7 @@
 ```
 
 ```
-00: set_service_context(str[14] "A pathway leads to the snowdrift. / Exit (y/n)?", mode=0x00)
+00: service_sign(idx=0x0E -> sign 12 [12.anm], pos=0x00)
 01: exec_selector(0x3D)
 ```
 

@@ -11,8 +11,8 @@
 |------------|-----|-------|-----------|
 | (0,7) | `0x07` | **12** | 0xA0 |
 | (4,1) | `0x41` | **13** | ANY_DIR |
-| (4,5) | `0x45` | **3** | DIR_SPECIAL |
-| (4,8) | `0x48` | **4** | DIR_SPECIAL |
+| (4,5) | `0x45` | **3** | DIR_E? |
+| (4,8) | `0x48` | **4** | DIR_E? |
 | (5,5) | `0x55` | **1** | ANY_DIR |
 | (6,2) | `0x62` | **5** | ANY_DIR |
 | (7,1) | `0x71` | **10** | ANY_DIR |
@@ -23,14 +23,14 @@
 | (9,3) | `0x93` | **9** | ANY_DIR |
 | (10,2) | `0xA2` | **5** | ANY_DIR |
 | (10,10) | `0xAA` | **14** | ANY_DIR |
-| (11,7) | `0xB7` | **2** | ENTER |
+| (11,7) | `0xB7` | **2** | DIR_N? |
 | (12,1) | `0xC1` | **8** | ANY_DIR |
 | (12,7) | `0xC7` | **5** | ANY_DIR |
 | (13,14) | `0xDE` | **14** | ANY_DIR |
 | (14,2) | `0xE2` | **5** | ANY_DIR |
 | (14,4) | `0xE4` | **5** | ANY_DIR |
 | (14,7) | `0xE7` | **5** | ANY_DIR |
-| (14,14) | `0xEE` | **6** | ENTER |
+| (14,14) | `0xEE` | **6** | DIR_N? |
 
 ## Events
 
@@ -44,7 +44,7 @@
 00: show_text_popup_style_b(str[1] "Royal / Territory")
 ```
 
-**Event 02** — triggers: (11,7)/ENTER
+**Event 02** — triggers: (11,7)/DIR_N?
 
 ```hex
 06 02
@@ -54,7 +54,7 @@
 00: show_text_popup_style_b(str[2] "Queen's / Orchard")
 ```
 
-**Event 03** — triggers: (4,5)/DIR_SPECIAL
+**Event 03** — triggers: (4,5)/DIR_E?
 
 ```hex
 06 03
@@ -64,7 +64,7 @@
 00: show_text_popup_style_b(str[3] "<- Luxus / Palace")
 ```
 
-**Event 04** — triggers: (4,8)/DIR_SPECIAL
+**Event 04** — triggers: (4,8)/DIR_E?
 
 ```hex
 06 04
@@ -87,7 +87,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 06** — triggers: (14,14)/ENTER
+**Event 06** — triggers: (14,14)/DIR_N?
 
 ```hex
 2b 0e 0b 06 00 02 05 08 02 0d 0a 10 01 0f 16 00 d5 10 05 02 06 0a 10 01 0f 12 69 69 69 69 69 69 00 00 00 00 00 00 0c 3a 07
@@ -96,7 +96,7 @@
 ```
 00: skip_tokens(14)
     # skip -> map_transition(0x3A, 0x07)
-01: set_service_context(str[6] "Guards rudely deny access, exclaiming, / "No key, no admittance!" Attack", mode=0x00)
+01: service_sign(idx=0x06 -> sign 47 [47.anm], pos=0x00)
 02: show_text_block(str[5] "The Great Luxus Palace Royale stands / before you majestically. Banners ")
 03: wait_key()
 04: show_text_block(str[13] "flutter from every turret while / colorfully clad guardsman pace / the b")
@@ -125,7 +125,7 @@
 ```
 00: skip_tokens(6)
     # skip -> clear_current_tile_event_flag()
-01: set_service_context(str[6] "Guards rudely deny access, exclaiming, / "No key, no admittance!" Attack", mode=0x00)
+01: service_sign(idx=0x06 -> sign 47 [47.anm], pos=0x00)
 02: show_text_block(str[7] "Dreary Mandagual's Keep casts a dark / shadow. A chill crawls up your sp")
 03: cond = prompt_yes_no(mode=1)
 04: if cond: skip_tokens(1)

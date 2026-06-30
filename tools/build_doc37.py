@@ -34,12 +34,12 @@ CLASS_QUEST_EVENTS: list[tuple[int, int, str]] = [
     (22, 5, "Cleric — crypt reunion OP_0E 0x65"),
     (22, 6, "Cleric prep — Holy Word popup"),
     (30, 4, "Ninja — Dawn's throne"),
-    (53, 4, "Sorcerer Good — access code (46)"),
-    (53, 5, "Sorcerer Good — access code (23)"),
-    (53, 6, "Sorcerer Good — free Ybmug / completion"),
-    (54, 4, "Sorcerer Evil — access code (64)"),
-    (54, 5, "Sorcerer Evil — access code (32)"),
-    (54, 6, "Sorcerer Evil — free Yekop / completion"),
+    (53, 4, "Sorcerer Evil — access code (46)"),
+    (53, 5, "Sorcerer Evil — access code (23)"),
+    (53, 6, "Sorcerer Evil — free Ybmug / completion"),
+    (54, 4, "Sorcerer Good — access code (64)"),
+    (54, 5, "Sorcerer Good — access code (32)"),
+    (54, 6, "Sorcerer Good — free Yekop / completion"),
 ]
 
 

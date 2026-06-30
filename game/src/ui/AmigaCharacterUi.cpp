@@ -340,7 +340,7 @@ void drawCellHorizRule(gfx::ScreenCompositor &c, int row, int col, int len, uint
                        uint8_t b = 255)
 {
     for (int i = 0; i < len; ++i) {
-        drawCellGlyph(c, row, col + i, gfx::font_glyphs::kHorizRule, r, g, b);
+        drawCellGlyph(c, row, col + i, '-', r, g, b);
     }
 }
 
@@ -363,7 +363,7 @@ void drawCenteredHorizRule(gfx::ScreenCompositor &c, int row, int total_cols, in
     drawCellHorizRule(c, row, col, len, r, g, b);
 }
 
-// Section label flanked by font-8 horizontal rules (0x7B), matching OP_06 sign styling.
+// Section label flanked by font-8 horizontal rules (0x7B), matching character UI red frame (-$809E).
 void drawSectionHeader(gfx::ScreenCompositor &c, int row, int col, int width_cells, const char *label,
                        uint8_t r = 200, uint8_t g = 200, uint8_t b = 200)
 {
@@ -623,6 +623,7 @@ public:
 
     void beginChooseParty(Mm2RosterFile &roster) override
     {
+        MM2_DBG("MM2 GOTO: AmigaCharacterUi::beginChooseParty\n");
         roster_ = &roster;
         party_town_ = 1;
         party_page_ = PartyPage::Characters;
@@ -645,12 +646,15 @@ public:
         const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
         if (ch == 'Z') {
             // ASM @ 0x0E06: Z with party → spawn at town inn (requires members).
+            MM2_DBG("MM2 GOTO: ChooseParty Z party_count=%d town=%d\n", party_count_, party_town_);
             if (party_count_ <= 0) {
+                MM2_DBG("MM2 GOTO: ChooseParty Z ignored (empty party)\n");
                 return UiResult::Continue;
             }
             mm2_party_launch_build(&party_launch_, static_cast<uint8_t>(party_town_), party_members_,
                                    party_count_);
             has_party_launch_ = true;
+            MM2_DBG("MM2 GOTO: ChooseParty Z -> Done (launch built)\n");
             return UiResult::Done;
         }
         if (keys.space) {
@@ -687,6 +691,8 @@ public:
 
     void renderChooseParty(gfx::ScreenCompositor &compositor) override
     {
+        MM2_DBG("MM2 GOTO: renderChooseParty sub=%d page=%d count=%d\n", static_cast<int>(party_sub_),
+                static_cast<int>(party_page_), party_count_);
         compositor.clear(0, 0, 0, 255);
         if (party_sub_ == PartySub::Sheet) {
             renderCharacterSheet(compositor);
@@ -952,6 +958,7 @@ private:
         } else {
             view_mode_ = ViewMode::RosterList;
         }
+        markDirty();
     }
 
     UiResult tickCharacterSheet(const platform::KeyState &keys, bool from_party)
@@ -1612,7 +1619,7 @@ private:
         drawCellText(c, r0 + 1, kSheetStatColRight, buf);
         if (hireling) {
             const uint32_t cost = hirelingDailyCost(hireling_index, rec.level);
-            std::snprintf(buf, sizeof(buf), "Cost=%u /Day", cost);
+            std::snprintf(buf, sizeof(buf), "Cost=%lu /Day", static_cast<unsigned long>(cost));
         } else {
             std::snprintf(buf, sizeof(buf), "Gold=%lu", static_cast<unsigned long>(rec.gold));
         }
@@ -1628,14 +1635,14 @@ private:
             const int row = kSheetEquipRowBase + i;
             char iname[20];
             char eline[24];
-            itemName(rec.equipped[i].item_id, iname, sizeof(iname));
+            itemName(rec.equipped_id[i], iname, sizeof(iname));
             if (iname[0]) {
                 std::snprintf(eline, sizeof(eline), "%d) %s", i + 1, iname);
             } else {
                 std::snprintf(eline, sizeof(eline), "%d)", i + 1);
             }
             drawCellText(c, row, kSheetEquipCol, eline, 220, 220, 220);
-            itemName(rec.backpack[i].item_id, iname, sizeof(iname));
+            itemName(rec.backpack_id[i], iname, sizeof(iname));
             if (iname[0]) {
                 std::snprintf(eline, sizeof(eline), "%c) %s", kPackLetters[i], iname);
             } else {
@@ -1850,7 +1857,7 @@ private:
     int party_count_ = 0;
     Mm2PartyLaunch party_launch_{};
     bool has_party_launch_ = false;
-    bool frame_dirty_ = true;
+    bool frame_dirty_ = false;
 };
 
 }  // namespace

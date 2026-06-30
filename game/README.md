@@ -73,20 +73,69 @@ flowchart TB
 
 ## Implementation phases
 
-1. **Bootstrap** (current) — **320×200** compositor (`ScreenCompositor`), title screen
+1. **Bootstrap** (done) — **320×200** compositor (`ScreenCompositor`), title screen
    (`intro.32` @ (3,0) + `introclips.32` pegasus/peekers + `nwcp.32` logo + `book.32`
    menu on black), roster viewer (`roster.dat`), 2× SDL present. Menu text uses
    **`Mm2Font8x8.inc`** (plain ASCII). Title animation spec:
    [`EXTRACTED/docs/39-title-screen-animation.md`](../EXTRACTED/docs/39-title-screen-animation.md).
    Character UI is pluggable — see
    [`39-character-ui-view-create.md`](../EXTRACTED/docs/39-character-ui-view-create.md).
-2. **Data + state** — wire all `.dat` codecs; materialize `A4` workspace (`mm2_gamestate.h`).
-3. **3D view** — port `0x2900` hood renderer (208×120 viewport, wall fields from map page 0).
-4. **Main loop** — `0x1280` mode dispatch (overland, town, combat, menus).
-5. **Events** — triplet scanner `0x175E2`, script VM, `OP_0E` town-service dispatch.
-6. **Combat** — round loop, player bar, monster AI, rewards.
-7. **Audio** — Paula tone path from `master.32` or MOD export fallback on desktop.
-8. **Copy protection** — externalize globe/disk strings (already extracted to `EXTRACTED/embedded_strings.json`).
+2. **Data + state** (in progress) — wire all `.dat` codecs; materialize `A4` workspace
+   (`mm2_gamestate.h`). Done: `map.dat` codec (`mm2_map_codec.{h,c}` +
+   `tools/mm2_map_codec.py`), `world/MapWorld` (map+attrib, neighbor pages, screen-enter
+   per `0x256E`/`0x923E`), `GameStateView` (`include/mm2/GameState.h`: screen/x/y/facing
+   + per-era calendar `-$79DE/-$79CA`), party launch → A4 apply.
+3. **3D view + movement** (Milestone 2 done) — `0x2900` hood renderer plus
+   `gameplay/Movement` (turn @ `0x5838`, step @ `0x5816`, passability first gate @
+   `0x9424`, screen edge @ `0x1D0A`, time tick/light drain @ `0x69DC`). Arrow/keypad
+   → `$F0..$F3` via `PlaySessionInput` (**no WASD** — doc 43 §1 rawkey table).
+   Offline checks: `view3d_middlegate_check`, `playscreen_golden`,
+   `movement_middlegate_test`, `playsession_input_test`, `event_middlegate_test`.
+4. **Exploration commands** (Phase 2) — in-town input from doc 43:
+   **Ctrl-Q** quit prompt (`$12F4`), **Q** Quick Ref party table (`$595C` via
+   `0x907A`), digits **1–8** in-game character sheet (`$8C8A` / `$39B4`) with
+   digit-chain character switch, **O**/**P** right-column OPTIONS/Protect toggle
+   (`-$79B2`), Protect panel Light/Magic/Forces from `-$79AB..-$79A6` (`0x5E28`),
+   **C** Controls modal (`0x13CCE`), sheet sub-keys **E/R/D** equip/remove/drop
+   (class mask from `items.dat`), **C/U/G/S/T** stubbed toward ASM handlers.
+   Play HUD chrome (`PlayScreenChrome`): black viewport/status/party fills,
+   red `-809E` console box around the bottom party band (`0x5600`), and full-screen
+   black + red border for **Q** Quick Ref / digit character sheet overlays.
+   **B/D/E/M/S/U** exploration keys wired with status stubs; **R** Rest restores
+   HP/SP (minimal stub toward `0x19E20`). Codecs: `mm2_items_codec.{h,c}` +
+   `tools/mm2_items_codec.py`.
+4. **Scripted scene graphics (Phase 4+)** — `events/ScriptedSceneEngine` drives
+   castle/scene illustration beats separate from the event VM (doc
+   [`46-scripted-scene-graphics.md`](../EXTRACTED/docs/46-scripted-scene-graphics.md)):
+   **Corak intro** (viewport ghost overlay + loc 60 `str[8]` + OPTIONS panel) and
+   **Guardian Pegasus C2** (`intro.32` full-sheet blit — not `introclips` title cels —
+   + loc 11 `str[5]` + Protect panel). Wired into `GameSession` (auto-queue on new-game
+   Middlegate / first enter map 11; debug **Ctrl+G** / **Ctrl+P**). Offline demos:
+   `scripted_corak.png`, `scripted_pegasus.png` via `event_op_demo`. **OP_0B** wired:
+   `ServiceSignResolver` + `ViewportAnmOverlay` (`62.anm` blacksmith demo). **GAP:**
+   Corak ghost castle-bytecode confirm (remake uses **51.anm** candidate), mode `$17`
+   placement table **A4-$56E**, party byte **`0x74` bit `0x40`** pegasus gate, castle tile hook **`0x78A8`**.
+5. **Event processing (Phase 4 — text ops)** — `events/EventRuntime` loads
+   `event.dat` per screen (`0x92F2`), tile scanner @ `0x175E2`, script VM @
+   `0x172CA` for **OP_01..OP_07**, **OP_09**, **OP_0F**, and **OP_10/OP_11**
+   token skip. Text draw via `events/EventTextView` + `PlayScreenChrome` cell
+   grid (doc [`44-event-text-rendering.md`](../EXTRACTED/docs/44-event-text-rendering.md)).
+   Wired into `GameSession::tick()` after movement (`-$7952` latch); movement
+   blocked while SPACE/Y/N wait active. **Middlegate acceptance:** door labels
+   (event 01 `OP_04` "Middlegate Inn" @ (7,5)/DIR_N?), city gates Y/N (event 20
+   `OP_01`+`OP_09`).    Offline: `event_middlegate_test`. **GAP:** OP_0E town services,
+   OP_0E town services, OP_0C map transition, OP_12 combat, str.dat cross-refs,
+   outdoor/overland events.
+   **Visual opcode demos:** `event_op_demo` renders OP_01..OP_07, OP_09, and OP_0B
+   (stub) on the Middlegate play-screen base frame → `build/event_demos/*.ppm`
+   (PNG if Pillow installed). OP_06 demo = B2 **Archers Only** outdoor signpost
+   (not the red character-UI frame). See `build/event_demos/README.md`:
+   `./build/event_op_demo.exe ..`
+6. **Main loop** — `0x1280` mode dispatch (overland, town, combat, menus).
+7. **Events (services + combat ops)** — `OP_0E` town-service dispatch, full VM.
+8. **Combat** — round loop, player bar, monster AI, rewards.
+9. **Audio** — Paula tone path from `master.32` or MOD export fallback on desktop.
+10. **Copy protection** — externalize globe/disk strings (already extracted to `EXTRACTED/embedded_strings.json`).
 
 RE references: [`EXTRACTED/docs/README.md`](../EXTRACTED/docs/README.md),
 `EXTRACTED/mm2.capstone.annotated.asm`, per-location events in `EXTRACTED/docs/events/`.

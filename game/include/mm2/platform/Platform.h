@@ -39,6 +39,8 @@ void freeFileBuffer(uint8_t *data);
 
 KeyState pollInput();
 void presentFrame(const uint8_t *rgba, int width, int height);
+/** Amiga: pace to display refresh without swapping DB buffers. SDL: no-op. */
+void waitVblank();
 void setPresentScale(int scale);
 void setWindowTitle(const char *title);
 void setWindowSize(int width, int height);
@@ -63,10 +65,13 @@ bool resolveDataDir(const char *hint, char *out, size_t out_cap);
 
 #if MM2_HOST_AMIGA
 #include "mm2_image32_codec.h"
+#include "mm2_anm_preview.h"
 namespace mm2::platform {
 void clearScreen();
 /** @param opaque Non-zero for solid layers (intro.32); zero for pen-0 masked cels. */
 void blitImage32(const ::mm2_image32_file *img, int frame_index, int x, int y, int opaque = 0);
+/** Masked blit of composed .anm overlay (pen 0 transparent, .anm palette). */
+void blitAnmComposed(const ::mm2_anm_composite_planar *img, int x, int y);
 void applyUiPalette(void);
 void logoFadeCapturePalette(void);
 void logoFadeBeginIn(int frames);

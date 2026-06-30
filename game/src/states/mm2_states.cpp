@@ -1,9 +1,14 @@
 #include "mm2/states/mm2_states.h"
 
+#include "mm2/Mm2Dbg.h"
 #include "mm2/states/AppHost.h"
 #include "mm2/states/mm2_app_context.h"
 #include "mm2/TitleScreen.h"
 #include "mm2/platform/Platform.h"
+
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+#include <ace/managers/memory.h>
+#endif
 
 namespace {
 
@@ -11,6 +16,17 @@ using mm2::AppHost;
 using mm2::TitleScreen;
 
 AppHost &host() { return AppHost::get(); }
+
+#if MM2_HOST_AMIGA && defined(ACE_DEBUG)
+static unsigned long goto_chip_free()
+{
+    return (unsigned long)memGetFreeChipSize();
+}
+#else
+static unsigned long goto_chip_free() { return 0; }
+#endif
+
+static int g_char_choose_frame = 0;
 
 /* ---- Boot ---- */
 static void boot_create(void) {}
@@ -111,9 +127,6 @@ static void menu_loop(void)
         return;
     }
     switch (adv) {
-    case TitleScreen::MenuAdvance::Attract:
-        mm2_pending_change(&g_mm2_state_attract);
-        break;
     case TitleScreen::MenuAdvance::Controls:
         mm2_pending_push(&g_mm2_state_controls);
         break;
@@ -127,6 +140,7 @@ static void menu_loop(void)
         mm2_pending_push(&g_mm2_state_char_create);
         break;
     case TitleScreen::MenuAdvance::ChooseParty:
+        MM2_DBG("MM2 GOTO: menu_loop pushing char_choose chip=%lu\n", goto_chip_free());
         mm2_pending_push(&g_mm2_state_char_choose);
         break;
     default:
@@ -212,7 +226,7 @@ static void char_create_loop(void)
         mm2_pending_change(&g_mm2_state_in_town);
         return;
     }
-    if (!h.characterUi().active()) {
+    if (!h.characterUi().active() && !h.charCreatePendingStart()) {
         h.charPopCleanup();
         mm2_pending_pop();
         return;
@@ -223,26 +237,49 @@ static void char_create_loop(void)
 
 static void char_create_destroy(void) { host().charDestroy(); }
 
-static void char_choose_create(void) { host().charChooseEnter(); }
+static void char_choose_create(void)
+{
+    MM2_DBG("MM2 GOTO: char_choose_create() chip=%lu\n", goto_chip_free());
+    g_char_choose_frame = 0;
+    host().charChooseEnter();
+    MM2_DBG("MM2 GOTO: char_choose_create done chip=%lu\n", goto_chip_free());
+}
 
 static void char_choose_loop(void)
 {
     AppHost &h = host();
+    const bool ui_active = h.characterUi().active();
+    MM2_DBG(
+        "MM2 GOTO: char_choose loop #%d active=%d mode=%d redraw=%d chip=%lu\n",
+        g_char_choose_frame,
+        ui_active ? 1 : 0,
+        static_cast<int>(h.characterUi().mode()),
+        h.characterUi().needsRedraw() ? 1 : 0,
+        goto_chip_free()
+    );
+    ++g_char_choose_frame;
+
     h.charStep();
     if (h.shouldQuit()) {
+        MM2_DBG("MM2 GOTO: char_choose quit requested\n");
         return;
     }
     if (h.takePendingInTown()) {
+        MM2_DBG("MM2 GOTO: char_choose -> pending in_town, change state\n");
         mm2_pending_change(&g_mm2_state_in_town);
         return;
     }
     if (!h.characterUi().active()) {
+        MM2_DBG("MM2 GOTO: char_choose UI inactive -> pop menu\n");
         h.charPopCleanup();
         mm2_pending_pop();
         return;
     }
+    MM2_DBG("MM2 GOTO: char_choose charDraw...\n");
     h.charDraw();
+    MM2_DBG("MM2 GOTO: char_choose framePresent...\n");
     h.framePresent();
+    MM2_DBG("MM2 GOTO: char_choose frame done chip=%lu\n", goto_chip_free());
 }
 
 static void char_choose_destroy(void) { host().charDestroy(); }
@@ -251,8 +288,12 @@ static void char_choose_destroy(void) { host().charDestroy(); }
 static void in_town_create(void)
 {
     AppHost &h = host();
+    MM2_DBG("MM2 GOTO: in_town_create() chip=%lu\n", goto_chip_free());
     if (!h.startInTownFromPending()) {
+        MM2_DBG("MM2 GOTO: in_town_create FAILED -> menu\n");
         mm2_pending_change(&g_mm2_state_menu);
+    } else {
+        MM2_DBG("MM2 GOTO: in_town_create ok chip=%lu\n", goto_chip_free());
     }
 }
 

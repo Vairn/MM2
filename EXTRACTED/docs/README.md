@@ -33,11 +33,13 @@ Source of truth: `EXTRACTED/docs/`, `EXTRACTED/mm2-ANALYSIS.md`, `tools/`, `edit
 | [`01-startup-init.md`](01-startup-init.md) | Boot path, hunk entry, DOS/Exec, MANX heap |
 | [`02-runtime-memory-map.md`](02-runtime-memory-map.md) | `A4` workspace, thunk tables, wrappers |
 | [`03-main-loop-and-map.md`](03-main-loop-and-map.md) | Main scheduler `LAB_1280`, overland map |
+| [`43-exploration-input-and-ingame-options.md`](43-exploration-input-and-ingame-options.md) | **Exploration key dispatch `$1482`** — full key table, Options/Protect panels, Controls screen, char-sheet/cast entry |
 | [`04-party-and-session.md`](04-party-and-session.md) | New game, party copy, session restart |
 | [`05-open-questions.md`](05-open-questions.md) | Unknowns and next trace targets |
 | [`08-event-runtime.md`](08-event-runtime.md) | Event VM dispatch and collision triggers |
 | [`13-time-era-calendar.md`](13-time-era-calendar.md) | In-game calendar, day/night, era |
 | [`14-game-state-struct.md`](14-game-state-struct.md) | `A4` field layout and party state |
+| [`49-data-hunk-mm2_data_00.md`](49-data-hunk-mm2_data_00.md) | **`mm2_data_00.bin` reference** — initialized `A4` data hunk + jump table, `file_offset==EA`, decoded static tables |
 | [`29-embedded-exe-strings.md`](29-embedded-exe-strings.md) | Code-hunk ASCII tables and UI text |
 
 ---
@@ -56,6 +58,8 @@ Source of truth: `EXTRACTED/docs/`, `EXTRACTED/mm2-ANALYSIS.md`, `tools/`, `edit
 | [`21-map-dat-format.md`](21-map-dat-format.md) | `map.dat` — 60 screens, visual + collision pages |
 | [`06-event-dat-format.md`](06-event-dat-format.md) | `event.dat` — 71-location container format |
 | [`07-event-script-opcodes.md`](07-event-script-opcodes.md) | Script VM opcodes `0x00..0x32` |
+| [`45-event-graphics-opcodes.md`](45-event-graphics-opcodes.md) | **Event VM sprite/sign ops** — `OP_0B`, Corak/Pegasus paths |
+| [`42-event-dsl-format.md`](42-event-dsl-format.md) | **`.mm2evt` script DSL** — `tools/mm2_event_lang/` decompile/patch/roundtrip |
 | [`16-monster-ability-format.md`](16-monster-ability-format.md) | `monsters.dat` — 256 × 26-byte records |
 | [`20-copy-protection-table.md`](20-copy-protection-table.md) | `globe.32` / `disk.32` XOR string tables |
 
@@ -67,6 +71,10 @@ python tools\build_event_location_docs.py             # events/loc_*.md (71 file
 python tools\build_doc37.py                           # 37-mount-farview-class-quest-event.md
 python tools\decode_spells.py spells.dat              # spells round-trip check
 python tools\mm2_codec.py items-decode items.dat …    # items / str codecs
+python -m mm2_event_lang decompile -o events event.dat  # .mm2evt DSL (see doc 42)
+python tools\dump_shop_tables.py                      # blacksmith tables → doc 28 §4.1
+python tools\mm2_town_tables.py                       # town commerce + smith inventories
+python tools\mm2_found_items.py                       # OP_2A / OP_19 found-item buffer codec
 ```
 
 **Events per map (71 locations):** [`events/README.md`](events/README.md) · [`40-events-by-location.md`](40-events-by-location.md)
@@ -80,6 +88,10 @@ python tools\mm2_codec.py items-decode items.dat …    # items / str codecs
 | [`15-3d-view-and-game-screen.md`](15-3d-view-and-game-screen.md) | First-person hood, wall bits, auto-map |
 | [`38-title-screen-and-intro-assets.md`](38-title-screen-and-intro-assets.md) | Title boot, `intro.32` / `introclips.32` / `nwcp.32` |
 | [`39-title-screen-animation.md`](39-title-screen-animation.md) | Pegasus overlays, peekers, menu — **authoritative coords** |
+| [`45-event-graphics-opcodes.md`](45-event-graphics-opcodes.md) | In-game `OP_0B` signboards vs title-screen pegasus |
+| [`46-scripted-scene-graphics.md`](46-scripted-scene-graphics.md) | **Corak ghost + Pegasus illustration** — castle engine (`0x6FB8`/`0x64F8`/`0x316E`); **§10 full scene catalog** (loc 60–70, blobs 63/65/68, `play_song_scripted` ids 2–6) |
+| [`47-amiga-3d-render-process.md`](47-amiga-3d-render-process.md) | **3D blit pipeline** — environment dispatch, frustum builder, painter's algorithm |
+| [`48-amiga-cpp-play-screen-draw-walkthrough.md`](48-amiga-cpp-play-screen-draw-walkthrough.md) | **Remake play screen** — per-frame vs per-move draw path in `game/` (Amiga ACE) |
 
 ---
 
@@ -114,9 +126,11 @@ Remake: `game/src/TitleScreen.cpp` — **320×200**, `Mm2Font8x8.inc`, menu on *
 | **[`events/README.md`](events/README.md)** | **Index of all 71 locations** — triggers, scripts, strings per map |
 | [`40-events-by-location.md`](40-events-by-location.md) | Hub link into `events/` + format cross-refs |
 | [`06-event-dat-format.md`](06-event-dat-format.md) | Location header, triplets, string banks |
-| [`07-event-script-opcodes.md`](07-event-script-opcodes.md) | Opcode argc, names, pseudo-code |
+| [`07-event-script-opcodes.md`](07-event-script-opcodes.md) | Opcode argc, names, pseudo-code — **OP_2A/OP_19 found-item buffer** |
+| [`42-event-dsl-format.md`](42-event-dsl-format.md) | `.mm2evt` readable script format + patch CLI |
 | [`08-event-runtime.md`](08-event-runtime.md) | Collision `0x80` → interpreter @ `0x172CA` |
 | [`30-event-to-string-path.md`](30-event-to-string-path.md) | When scripts use `str.dat` vs exe text |
+| [`44-event-text-rendering.md`](44-event-text-rendering.md) | **Pixel-exact event text** — draw thunks, window kernel, per-op dest rects, prompt loops |
 | [`37-mount-farview-class-quest-event.md`](37-mount-farview-class-quest-event.md) | Class quests + Juror turn-in (loc 34) |
 | [`36-class-quest-hp-bug.md`](36-class-quest-hp-bug.md) | Class-quest reward HP bug @ `0x9D76` |
 
@@ -130,8 +144,15 @@ Remake: `game/src/TitleScreen.cpp` — **320×200**, `Mm2Font8x8.inc`, menu on *
 | [`33-skills-and-hirelings.md`](33-skills-and-hirelings.md) | 15 skill sellers, 24 hirelings A–X |
 | [`34-commerce-formulas.md`](34-commerce-formulas.md) | Training, healing, portals, bar, shop cycle |
 | [`34-commerce-and-world-services.md`](34-commerce-and-world-services.md) | Extended commerce / world services notes |
-| [`28-town-services.md`](28-town-services.md) | Inn, temple, guild, training ASM handlers |
+| [`28-town-services.md`](28-town-services.md) | Inn, temple, guild, training, **blacksmith inventories** (data hunk) |
 | [`31-spell-sources.md`](31-spell-sources.md) | Where each spell is obtained in-game |
+
+**Runtime codecs (C + Python, not `.dat` files)**
+
+| Module | Description |
+|--------|-------------|
+| `EXTRACTED/decomp/mm2_found_items.{h,c}` · `tools/mm2_found_items.py` | Pending loot buffer — OP_2A treasure fill, OP_19 backpack overflow, Search predicate |
+| `EXTRACTED/decomp/mm2_town_tables.{h,c}` · `tools/mm2_town_tables.py` | Per-town training/donation constants + blacksmith shop tables from data hunk |
 
 ---
 

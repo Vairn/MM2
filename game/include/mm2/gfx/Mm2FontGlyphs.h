@@ -6,7 +6,8 @@
 // See EXTRACTED/docs/07-event-script-opcodes.md § "MM2 8×8 Text Format Characters".
 namespace mm2::gfx::font_glyphs {
 
-// Box outline @ JSR -$809E / event OP_06 popup B @ 0x15AEE.
+// Box outline glyphs for event OP_06 outdoor signpost @ 0x15AEE (pen A4-$7A50).
+// Character UI red frame uses the same glyph codes via JSR -$809E (pen $17) — not OP_06.
 constexpr uint8_t kTopBar = 0x0E;
 constexpr uint8_t kBottomBar = 0x0F;
 constexpr uint8_t kTopLeft = 0x10;

@@ -11,6 +11,11 @@
 #include <mini_std/stdlib.h>
 #include <string.h>
 
+/* ACE 1.8.x bitmap.h lacks BMF_EXTERNAL (master: plane mem owned externally). */
+#ifndef BMF_EXTERNAL
+#define BMF_EXTERNAL (1 << 7)
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -21,14 +21,14 @@ CLASS_FIELD_BY_NAME = {v.lower(): k for k, v in CLASS_BY_FIELD.items()}
 # Explicit OP_0E dispatch cases @ asm 0x160C2 (not default -$7DFA range bins).
 # Decompile appends `# label` comments; compile path ignores them.
 SELECTOR_HANDLER_LABELS: dict[int, str] = {
-    0x01: "open_tavern_food",
-    0x02: "open_inn_lodging",
-    0x03: "open_temple",
-    0x04: "open_training",
+    0x01: "open_inn_lodging",
+    0x02: "open_training",
+    0x03: "open_tavern_food",
+    0x04: "open_temple",
     0x05: "open_mages_guild",
     0x06: "open_blacksmith_shop",
     0x07: "open_general_store",
-    0x08: "open_special_shop",
+    0x08: "open_arena_shop",
     0x0A: "goblet_quest",
     0x0D: "enroll_mages_guild",
     0x64: "portal_travel_100",
@@ -50,14 +50,14 @@ SELECTOR_HANDLER_LABELS: dict[int, str] = {
 }
 
 SELECTOR_NAMES = {
-    0x01: ("shop", "tavern"),
-    0x02: ("shop", "inn"),
-    0x03: ("shop", "temple"),
-    0x04: ("shop", "training"),
+    0x01: ("shop", "inn"),
+    0x02: ("shop", "training"),
+    0x03: ("shop", "tavern"),
+    0x04: ("shop", "temple"),
     0x05: ("shop", "mages_guild"),
     0x06: ("shop", "blacksmith"),
     0x07: ("shop", "general_store"),
-    0x08: ("shop", "special_shop"),
+    0x08: ("shop", "arena_shop"),
     0x0A: ("quest", "goblet"),
     0x0D: ("shop", "enroll_mages"),
     0x64: ("quest", "portal_travel"),

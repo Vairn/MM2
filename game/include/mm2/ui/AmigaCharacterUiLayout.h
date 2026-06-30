@@ -65,8 +65,9 @@ constexpr int kSheetEquipCol = 0x02;
 constexpr int kSheetBackpackCol = 0x14;    // 20
 constexpr int kSheetBackpackHeaderCol = kSheetBackpackCol;
 
-constexpr int kSheetFooterRow1 = 0x14;     // 20
-constexpr int kSheetFooterRow2 = 0x15;     // 21
+constexpr int kSheetFooterRow1 = 0x14;     // 20 — command row 1 ($8FF0)
+constexpr int kSheetFooterRow2 = 0x15;     // 21 — command row 2 ($9017)
+constexpr int kSheetFooterCmdRow3 = 0x16;  // 22 — command row 3 ($903E)
 constexpr int kSheetFooterRow3 = 0x18;     // 24 — bottom border row for ESC prompt
 constexpr int kSheetFooterCol = 0x02;
 

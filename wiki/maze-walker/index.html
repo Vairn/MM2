@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MM2 Map Walker</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20260630-slower-anims-2">
 </head>
 <body>
   <div class="wrap">
@@ -54,7 +54,7 @@
         <section id="miniWrap" class="panel miniPanel">
           <h2>Minimap</h2>
           <div class="miniPanelCanvasWrap">
-            <canvas id="minimap" width="224" height="176" aria-label="Minimap"></canvas>
+            <canvas id="minimap" width="224" height="224" aria-label="Minimap"></canvas>
           </div>
         </section>
 
@@ -68,7 +68,9 @@
             <label title="Game day for OP_23 gates">Day <input type="number" id="editDay" min="1" max="180" value="1"></label>
           </div>
         </section>
+      </aside>
 
+      <div class="bottomPanel">
         <section id="eventWrap" class="panel eventPanel">
           <h2>Events on Tile</h2>
           <pre id="eventScript">No events.</pre>
@@ -99,9 +101,9 @@
           </ul>
           <p class="hint">Regenerate embedded data: <code>python tools/export_map_walker.py</code></p>
         </section>
-      </aside>
+      </div>
     </main>
   </div>
-  <script type="module" src="walker.js"></script>
+  <script type="module" src="walker.js?v=20260630-slower-anims-2"></script>
 </body>
 </html>

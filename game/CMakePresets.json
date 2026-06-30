@@ -28,6 +28,17 @@
       }
     },
     {
+      "name": "m68k-bartman-1.8.2-reldeb",
+      "displayName": "Amiga (Bartman) RelWithDebInfo + DBG",
+      "inherits": "m68k-bartman-1.8.2",
+      "binaryDir": "${sourceDir}/build/m68k-bartman-1.8.2-reldeb",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "ACE_DEBUG": "ON",
+        "ACE_DEBUG_UAE": "ON"
+      }
+    },
+    {
       "name": "sdl-release",
       "displayName": "Desktop SDL Release",
       "generator": "Ninja",
@@ -51,6 +62,7 @@
   "buildPresets": [
     { "name": "m68k-bartman-1.8.2", "configurePreset": "m68k-bartman-1.8.2" },
     { "name": "m68k-bartman-1.8.2-debug", "configurePreset": "m68k-bartman-1.8.2-debug" },
+    { "name": "m68k-bartman-1.8.2-reldeb", "configurePreset": "m68k-bartman-1.8.2-reldeb" },
     { "name": "sdl-release", "configurePreset": "sdl-release" },
     { "name": "sdl-debug", "configurePreset": "sdl-debug" }
   ]

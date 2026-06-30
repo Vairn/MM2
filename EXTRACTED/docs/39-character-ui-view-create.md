@@ -157,6 +157,13 @@ Field index → row/col tables: **`A4-$8AF8` / `A4-$8AE0`** (`$38EA`).
 
 **Gap:** title **C** thunk in older notes (`JSR -$82A2` @ `$13C4`) does **not** match the current annotated dispatch (`$13C4` → `$14F2`). Treat **`$01C684`** as the verified stat-create session entry.
 
+> **Update (doc 43):** the `-$82A2` thunk (signed `-$7D5E`, data file offset `0x2A0`) is
+> confirmed to jump to **`0x13CCE` = the Controls screen** (Sounds/Walk Beep/Disposition/
+> Delay), not character creation. The `$1482` dispatcher's `C` handler (`$139C`) therefore
+> opens **Controls** both in-game and from the title/continue menu. How the title menu
+> reaches the create session (`$01C684`) remains the open gap above. See
+> `43-exploration-input-and-ingame-options.md` §5.
+
 ### Stat roll — **`$01C00E`**
 
 | Item | ASM | Notes |

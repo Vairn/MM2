@@ -42,7 +42,7 @@ inline const OpcodeInfo& opcodeInfo(uint8_t op) {
         {"OP_0A_PROMPT_YN_B", 0},             // 0A
         {"OP_0B_SHOW_SERVICE_WINDOW", 2},     // 0B
         {"OP_0C_MAP_TRANSITION", 2},          // 0C
-        {"OP_0D_ENGINE_CALL", 1},             // 0D
+        {"OP_0D_PLAY_SEQUENCE", 1},           // 0D
         {"OP_0E_EXEC_SELECTOR", 1},           // 0E
         {"OP_0F_END_SCRIPT", 0},              // 0F
         {"OP_10_IF_TRUE_SKIPTOK", -1},        // 10
@@ -52,7 +52,7 @@ inline const OpcodeInfo& opcodeInfo(uint8_t op) {
         {"OP_14_CLEAR_TILE_EVENT", 0},        // 14
         {"OP_15_APPLY_PARTY", 3},             // 15
         {"OP_16_CHECK_MONSTER_PRESENT", 2},   // 16
-        {"OP_17_LOAD_VAR_TO_COND", 2},        // 17
+        {"OP_17_LOAD_VAR_RAW_TO_COND", 2},    // 17
         {"OP_18_APPLY_PARTY_MASKED", 4},      // 18
         {"OP_19_ADD_PARTY_ENTITY", 4},        // 19
         {"OP_1A_STORE_VAR8", 2},              // 1A
@@ -66,20 +66,20 @@ inline const OpcodeInfo& opcodeInfo(uint8_t op) {
         {"OP_22_CHECK_ERA_RANGE", 2},         // 22
         {"OP_23_CHECK_DAY_RANGE", 2},         // 23
         {"OP_24_CHECK_GOLD_TO_COND", 2},      // 24
-        {"OP_25_CHECK_CODE16_TO_COND", 2},    // 25
+        {"OP_25_CHECK_CODE16_TO_COND", 2},    // 25 (linear argc=2; OP_10/11/2B token-skip table length is opcode+1)
         {"OP_26_SELECT_MEMBER", 0},           // 26
         {"OP_27_SELECT_MEMBER_B", 0},         // 27
         {"OP_28_CONSUME_ITEM_TO_COND", 2},    // 28
         {"OP_29_SET_ABORT", 0},               // 29
         {"OP_2A_SET_TREASURE", 14},           // 2A
         {"OP_2B_SKIPTOK", -1},                // 2B
-        {"OP_2C_ADJUST_STATE", 1},            // 2C
+        {"OP_2C_ADD_WORD_COUNTER", 1},        // 2C
         {"OP_2D_CHECK_MEMBER_ATTR", 2},       // 2D
-        {"OP_2E_SET_PARTY_ATTR", 2},          // 2E
+        {"OP_2E_OR_MEMBER_FIELD", 2},         // 2E
         {"OP_2F_CLEAR_INPUT_BUF", 0},         // 2F
         {"OP_30_CHECK_ANSWER", 10},           // 30
         {"OP_31_PARTY_ITERATE_CALL", 3},      // 31
-        {"OP_32_LOAD_COND_FROM_VAR", 1},      // 32
+        {"OP_32_COUNT_TITLE_NIBBLE", 1},      // 32
     };
     static const OpcodeInfo kUnknown = {"OP_??", 0};
     if (op <= 0x32) return kTable[op];
@@ -91,15 +91,61 @@ inline const char* opcodeName(uint8_t op) { return opcodeInfo(op).name; }
 inline int opcodeArgc(uint8_t op) { return opcodeInfo(op).argc; }
 
 // String index referenced by a text-display opcode, or -1 if this op does not
-// index the string table. (01..06 take a u8 string index; 0B takes one too.)
+// index the event-local string table. Only 01..06 take a u8 string index.
+//
+// OP_0B is intentionally excluded: ASM (handler 0x15DB0 -> 0x15756) shows it
+// loads a signboard `.anm` sprite, not event-local / str.dat text. Its arg0 is
+// a per-environment sign-table index (see serviceSignId() below), so it must
+// not be wired to a string node.
 inline int opcodeStringArg(uint8_t op, const std::vector<uint8_t>& args) {
     switch (op) {
         case 0x01: case 0x02: case 0x03: case 0x04:
-        case 0x05: case 0x06: case 0x0B:
+        case 0x05: case 0x06:
             return args.empty() ? -1 : args[0];
         default:
             return -1;
     }
+}
+
+// ---- OP_0B service-signboard resolver (handler 0x15DB0 -> 0x15756) ---------
+//
+// OP_0B arg0 is a sign index mapped to a signboard `.anm` id, NOT a string:
+//   * arg0 >= 0x80 -> sign id 0x4B                          (0x15760/0x15766)
+//   * else sign id = TABLE[env][arg0 - 1]                   (0x1576C subq #1)
+//   * env id = area_env_lookup(screen) (0x18AE); env -> one of five 24-byte
+//     tables (A4-$6C62..-$6C02). The env->table mapping and the table bytes
+//     mirror game/src/events/ServiceSignResolver.cpp (test-validated against the
+//     real `.anm` assets), so the editor view matches the game port:
+//       env 0 Middlegate(0), 1 Atlantium(22), 2 Tundara(44), 3 Vulcania(66),
+//       4/5 Sandsobar(88), 6 Vulcania(66)  [offsets into the 112-byte block].
+//     The tables overlap by 2 bytes (bases 0x16 apart) -> one shared block.
+inline int signEnvForScreen(int screen) {
+    static const uint8_t lo[] = {0, 5, 17, 33, 41, 45, 55};
+    static const uint8_t hi[] = {4, 16, 32, 40, 44, 54, 59};
+    static const uint8_t id[] = {0, 3, 1, 6, 4, 5, 2};
+    for (int i = 0; i < 7; ++i)
+        if (screen >= lo[i] && screen <= hi[i]) return id[i];
+    return 7;
+}
+
+// Resolve OP_0B arg0 to a signboard `.anm` id for location `loc` (== map screen
+// for loc 0..59). Returns -1 when unresolved (overlay banks / out of range).
+inline int serviceSignId(int loc, uint8_t strIdx) {
+    if (strIdx >= 0x80) return 0x4B;
+    if (loc < 0) return -1;
+    static const uint8_t kBlock[112] = {
+        70, 62, 63, 66, 67, 68, 65,  2, 19, 26, 51, 54, 53, 12, 60, 27, 39,  4, 45, 37, 57, 47, 73, 33,
+        42, 43, 17, 14, 69, 34,  9, 26, 24, 52, 53, 21, 25, 28, 44, 49, 11, 31, 55, 36,  1, 61,
+        18, 47, 72, 16, 10, 23,  6, 51, 15,  8,  5, 49, 40, 11, 30, 39,  4, 46, 20, 36,  1, 57,
+        13, 58, 18, 47, 74, 42,  2, 17, 14, 69, 19, 34,  9, 26, 24, 52, 54,  8, 21, 25,  3, 29,
+        44, 50, 27, 39, 61, 48, 71, 59, 33, 19, 35, 10, 24,  6, 75, 51, 15,  7, 60, 56, 29,  5,
+    };
+    static const int envOffset[7] = {0, 22, 44, 66, 88, 88, 66};
+    const int env = signEnvForScreen(loc);
+    if (env < 0 || env > 6) return -1;
+    const int i = envOffset[env] + (static_cast<int>(strIdx) - 1);  // 0x1576C subq #1
+    if (i < 0 || i >= 112) return -1;
+    return kBlock[i];
 }
 
 // OP_24 reads a little-endian u16; OP_25 reads explicit hi/lo bytes.
@@ -111,10 +157,13 @@ inline int decodeU16Arg(uint8_t op, const std::vector<uint8_t>& args) {
 
 // Human-readable pseudo-code for one opcode, ported from decompile_op().
 // `strAt` returns the string-table entry for an index (for inline previews),
-// `itemAt` resolves an items.dat id to a name. Either may be null.
+// `itemAt` resolves an items.dat id to a name. Either may be null. `loc` is the
+// event.dat location id (== map screen for 0..59), used to resolve OP_0B sign
+// ids; pass -1 when unknown.
 inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
                               const std::function<std::string(int)>& strAt,
-                              const std::function<std::string(int)>& itemAt) {
+                              const std::function<std::string(int)>& itemAt,
+                              int loc = -1) {
     char buf[256];
     auto strHint = [&](int idx) -> std::string {
         if (strAt) {
@@ -139,9 +188,17 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
         case 0x09: return "cond = prompt_yes_no()";
         case 0x0A: return "cond = prompt_yes_no(mode=1)";
         case 0x0B:
+            // Signboard `.anm` sprite (NOT event-local / str.dat text). arg0 ->
+            // sign id via per-env sign table (0x15756); arg1 = placement slot.
             if (args.size() >= 2) {
-                snprintf(buf, sizeof(buf), "open_service_window(%s, mode=0x%02X)",
-                         strHint(args[0]).c_str(), args[1]);
+                int sign = serviceSignId(loc, args[0]);
+                if (sign >= 0)
+                    snprintf(buf, sizeof(buf),
+                             "service_sign(idx=0x%02X -> sign %d [%d.anm], pos=0x%02X)",
+                             args[0], sign, sign, args[1]);
+                else
+                    snprintf(buf, sizeof(buf), "service_sign(idx=0x%02X, pos=0x%02X)",
+                             args[0], args[1]);
                 return buf;
             }
             break;
@@ -151,11 +208,12 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
                 return buf;
             }
             break;
-        case 0x0D: if (!args.empty()) { snprintf(buf, sizeof(buf), "engine_call(0x%02X)", args[0]); return buf; } break;
+        case 0x0D: if (!args.empty()) { snprintf(buf, sizeof(buf), "play_sequence(#%d)  # canned on-screen sequence @0x06FB8; presentation-only, no game-state writes", args[0]); return buf; } break;
         case 0x0E: if (!args.empty()) {
             static const struct { uint8_t id; const char* name; } kSel[] = {
-                {0x01, "tavern"}, {0x03, "temple"}, {0x04, "training"},
-                {0x05, "mages_guild"}, {0x06, "blacksmith"}, {0x64, "portal"},
+                {0x01, "inn"}, {0x02, "training"}, {0x03, "tavern"}, {0x04, "temple"},
+                {0x05, "mages_guild"}, {0x06, "blacksmith"}, {0x07, "general_store"},
+                {0x08, "arena_shop"}, {0x64, "portal"},
             };
             for (const auto& s : kSel) if (s.id == args[0]) {
                 snprintf(buf, sizeof(buf), "exec_selector(0x%02X)  # %s", args[0], s.name);
@@ -171,7 +229,7 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
         case 0x14: return "clear_current_tile_event_flag()";
         case 0x15: if (args.size() >= 3) { snprintf(buf, sizeof(buf), "apply_party(count=0x%02X, 0x%02X, 0x%02X)", args[0], args[1], args[2]); return buf; } break;
         case 0x16: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "cond = check_monster_present(0x%02X, 0x%02X)", args[0], args[1]); return buf; } break;
-        case 0x17: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "cond = load_var8(group=0x%02X, index=0x%02X)", args[0], args[1]); return buf; } break;
+        case 0x17: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "cond = var8_raw(id=0x%02X)  # raw variable byte, not a bool (2nd byte 0x%02X discarded)", args[0], args[1]); return buf; } break;
         case 0x18: if (args.size() >= 4) { snprintf(buf, sizeof(buf), "apply_party_masked(count=0x%02X, set=0x%02X, and=0x%02X, or=0x%02X)", args[0], args[1], args[2], args[3]); return buf; } break;
         case 0x19: if (args.size() >= 4) { snprintf(buf, sizeof(buf), "add_party_entity(0x%02X, f3a=0x%02X, f40=0x%02X, f46=0x%02X)", args[0], args[1], args[2], args[3]); return buf; } break;
         case 0x1A: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "store_var8(group=0x%02X, value=0x%02X)", args[0], args[1]); return buf; } break;
@@ -205,9 +263,24 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
         case 0x29: return "set_abort_and_exit()";
         case 0x2A: return "load_special_block(...)";
         case 0x2B: { int n = args.empty() ? 0 : args[0]; snprintf(buf, sizeof(buf), "skip_tokens(%d)", n); return buf; }
-        case 0x2C: if (!args.empty()) { snprintf(buf, sizeof(buf), "adjust_state(+0x%02X)", args[0]); return buf; } break;
-        case 0x2D: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "cond = check_member_attr(fields=0x%02X, value=0x%02X)", args[0], args[1]); return buf; } break;
-        case 0x2E: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "set_party_attr(class=0x%02X, bits=0x%02X)", args[0], args[1]); return buf; } break;
+        case 0x2C: if (!args.empty()) { snprintf(buf, sizeof(buf), "word_counter[-$79B8] += %d  # u16 counter, flag redraw", args[0]); return buf; } break;
+        case 0x2D: if (args.size() >= 2) {
+            // arg1 bit7=race(+0xE)/bit6=sex(+0xC)/else class(+0xF); bit5=any-mode(else all);
+            // low nibble=val1; if arg1&0xE0==0 then arg2&0xF=val2.
+            const char* field = (args[0] & 0x80) ? "race(+0xE)" : (args[0] & 0x40) ? "sex(+0xC)" : "class(+0xF)";
+            const char* mode = (args[0] & 0x20) ? "any" : "all";
+            snprintf(buf, sizeof(buf), "cond = match_member_attr(%s %s == 0x%X, arg2=0x%02X)", mode, field, args[0] & 0xF, args[1]);
+            return buf;
+        } break;
+        case 0x2E: if (args.size() >= 2) {
+            // OR arg2 into member +(uint8)(arg1-0x6E)+0x51 for classes {4,2} (or {3,1}
+            // if arg1>=0x80, with arg1 &= 0x7F).
+            const bool hi = (args[0] & 0x80) != 0;
+            const int a1 = hi ? (args[0] & 0x7F) : args[0];
+            const int fieldOff = (static_cast<uint8_t>(a1 - 0x6E) + 0x51) & 0xFF;
+            snprintf(buf, sizeof(buf), "member[+0x%02X] |= 0x%02X  # classes %s", fieldOff, args[1], hi ? "{3,1}" : "{4,2}");
+            return buf;
+        } break;
         case 0x2F: return "clear_input_buffer()";
         case 0x30: {
             // Stored answer: byte = 0x11A - ascii (0xFA == trailing space).
@@ -220,7 +293,7 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
             return "cond = check_answer(\"" + decoded + "\")";
         }
         case 0x31: if (args.size() >= 3) { snprintf(buf, sizeof(buf), "for_party(mask=0x%02X): call(0x%02X, 0x%02X)", args[0], args[1], args[2]); return buf; } break;
-        case 0x32: if (!args.empty()) { snprintf(buf, sizeof(buf), "cond = load_cond_from_var(0x%02X)", args[0]); return buf; } break;
+        case 0x32: if (!args.empty()) { snprintf(buf, sizeof(buf), "cond = count_title_nibble(id=0x%02X)  # living members whose record+0x50 nibble == id (0x04 Crusader, 0x08 Heroic, 0x09 druid)", args[0]); return buf; } break;
         default: break;
     }
 

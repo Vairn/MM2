@@ -40,8 +40,26 @@
 #define MM2_AGA_PALETTE_PENS (1u << MM2_AGA_SCREEN_BPP)
 
 /*
+ * Palette banks on 6bpp AGA (ACE viewUpdateGlobalPalette):
+ *   bank 0 → pens 0-31  (.32 / .anm world art — 5 planes on disk)
+ *   bank 1 → pens 32-63 (CPU-drawn UI text and chrome)
+ * mm2_amiga_push_palette() updates only the dirty bank(s), not all 64 pens.
+ */
+#define MM2_WORLD_PALETTE_FIRST 0u
+#define MM2_WORLD_PALETTE_COUNT MM2_IMAGE32_PALETTE_COLORS
+#define MM2_UI_PALETTE_BANK 1u
+
+/*
+ * Viewport .anm overlays (OP_0B / mode $17 @ 0x23C8C): retail loads only palette
+ * entries 3-17 into hardware pens 3-17 (1-based colours 4-18). Env .32 art keeps
+ * pens 0-2 and 18-31; overlay sprites use 3-17 without host pen remapping.
+ */
+#define MM2_ANM_OVERLAY_PALETTE_FIRST 3u
+#define MM2_ANM_OVERLAY_PALETTE_LAST 17u
+
+/*
  * Title / menu UI pens — indices 32+ so CPU-drawn text survives .32 blits
- * (mm2_amiga_apply_palette only loads art pens 0-31).
+ * mm2_amiga_apply_play_world_palette() loads art pens 0-31 once per env load.
  */
 #define MM2_UI_PEN_WHITE 32
 #define MM2_UI_PEN_RED 33
@@ -52,6 +70,7 @@
 #define MM2_UI_PEN_GREY_FOOTER 38
 #define MM2_UI_PEN_GREY_DIM 39
 #define MM2_UI_PEN_WARN 40
+#define MM2_UI_PEN_BLACK 41
 
 /* ACE view/vport tags used in mm2_amiga_display.c (see LoL src/misc/screen.c) */
 #define MM2_AGA_VIEW_TAG_GLOBAL_PALETTE TAG_VIEW_GLOBAL_PALETTE

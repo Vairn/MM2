@@ -22,8 +22,8 @@ constexpr int kA4EndgameScoreB = -0x79A9;
 constexpr int kA4AchievementA = -0x79A7;
 constexpr int kA4AchievementB = -0x79A6;
 constexpr int kA4EncounterMod = -0x79A5;
-constexpr int kA4ClassQuestCounter = -0x79A0;  // g=0x2B
-constexpr int kA4SecondaryQuestCounter = -0x799F;  // g=0x2C
+constexpr int kA4EagleEyeStepTimer = -0x79A0;  // g=0x2B (Eagle Eye spell step countdown)
+constexpr int kA4WizardEyeStepTimer = -0x799F;  // g=0x2C (Wizard Eye spell step countdown)
 constexpr int kA4TempleDonation = -0x799E;  // g=0x13
 constexpr int kA4GuardianGate = -0x7996;  // g=0x32
 constexpr int kA4TundaraLever = -0x7990;  // g=0x33
@@ -75,8 +75,8 @@ constexpr int kSpecialQuest = 0x7F3;   // g=0x23 @ A4-$79A8
 constexpr int kAchievementA = 0x7F4;
 constexpr int kAchievementB = 0x7F5;
 constexpr int kEncounterMod = 0x7F6;
-constexpr int kClassQuestCounter = 0x7F7;   // g=0x2B
-constexpr int kSecondaryQuestCounter = 0x7F8;  // g=0x2C
+constexpr int kEagleEyeStepTimer = 0x7F7;   // g=0x2B (Eagle Eye spell step countdown)
+constexpr int kWizardEyeStepTimer = 0x7F8;  // g=0x2C (Wizard Eye spell step countdown)
 constexpr int kTempleDonation = 0x7F9;    // g=0x13
 constexpr int kInputState0 = 0x7FA;
 constexpr int kInputState4 = 0x7FE;

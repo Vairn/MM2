@@ -10,11 +10,11 @@
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
 | (0,2) | `0x02` | **12** | ANY_DIR |
-| (0,3) | `0x03` | **11** | ALWAYS |
+| (0,3) | `0x03` | **11** | DIR_W? |
 | (0,4) | `0x04` | **16** | ANY_DIR |
-| (0,7) | `0x07` | **7** | DIR_N? |
-| (0,8) | `0x08` | **7** | DIR_N? |
-| (0,12) | `0x0C` | **11** | DIR_SPECIAL |
+| (0,7) | `0x07` | **7** | DIR_S? |
+| (0,8) | `0x08` | **7** | DIR_S? |
+| (0,12) | `0x0C` | **11** | DIR_E? |
 | (0,13) | `0x0D` | **12** | ANY_DIR |
 | (1,1) | `0x11` | **13** | ANY_DIR |
 | (1,3) | `0x13` | **14** | ANY_DIR |
@@ -30,14 +30,14 @@
 | (2,3) | `0x23` | **14** | ANY_DIR |
 | (2,4) | `0x24` | **14** | ANY_DIR |
 | (2,5) | `0x25` | **14** | ANY_DIR |
-| (2,7) | `0x27` | **1** | ENTER |
-| (2,8) | `0x28` | **2** | ENTER |
+| (2,7) | `0x27` | **1** | DIR_N? |
+| (2,8) | `0x28` | **2** | DIR_N? |
 | (2,10) | `0x2A` | **18** | ANY_DIR |
 | (2,11) | `0x2B` | **18** | ANY_DIR |
 | (2,12) | `0x2C` | **18** | ANY_DIR |
 | (2,13) | `0x2D` | **24** | 0x90 |
 | (2,15) | `0x2F` | **12** | ANY_DIR |
-| (3,0) | `0x30` | **11** | DIR_N? |
+| (3,0) | `0x30` | **11** | DIR_S? |
 | (3,1) | `0x31` | **14** | ANY_DIR |
 | (3,3) | `0x33` | **14** | ANY_DIR |
 | (3,4) | `0x34` | **14** | ANY_DIR |
@@ -47,12 +47,12 @@
 | (3,12) | `0x3C` | **18** | ANY_DIR |
 | (3,13) | `0x3D` | **18** | ANY_DIR |
 | (3,14) | `0x3E` | **19** | ANY_DIR |
-| (3,15) | `0x3F` | **11** | DIR_N? |
+| (3,15) | `0x3F` | **11** | DIR_S? |
 | (4,1) | `0x41` | **14** | ANY_DIR |
 | (4,6) | `0x46` | **14** | ANY_DIR |
 | (4,7) | `0x47` | **16** | ANY_DIR |
 | (4,9) | `0x49` | **14** | ANY_DIR |
-| (4,10) | `0x4A` | **5** | DIR_SPECIAL |
+| (4,10) | `0x4A` | **5** | DIR_E? |
 | (4,14) | `0x4E` | **19** | ANY_DIR |
 | (5,1) | `0x51` | **14** | ANY_DIR |
 | (5,3) | `0x53` | **14** | ANY_DIR |
@@ -68,9 +68,9 @@
 | (6,4) | `0x64` | **12** | ANY_DIR |
 | (6,5) | `0x65` | **14** | ANY_DIR |
 | (6,7) | `0x67` | **14** | ANY_DIR |
-| (6,8) | `0x68` | **9** | DIR_N? |
-| (6,9) | `0x69` | **23** | ENTER |
-| (6,10) | `0x6A` | **17** | DIR_N? |
+| (6,8) | `0x68` | **9** | DIR_S? |
+| (6,9) | `0x69` | **23** | DIR_N? |
+| (6,10) | `0x6A` | **17** | DIR_S? |
 | (6,11) | `0x6B` | **18** | ANY_DIR |
 | (6,12) | `0x6C` | **19** | ANY_DIR |
 | (6,14) | `0x6E` | **20** | ANY_DIR |
@@ -86,30 +86,30 @@
 | (8,6) | `0x86` | **14** | ANY_DIR |
 | (8,7) | `0x87` | **14** | ANY_DIR |
 | (8,8) | `0x88` | **12** | ANY_DIR |
-| (8,10) | `0x8A` | **4** | DIR_N? |
+| (8,10) | `0x8A` | **4** | DIR_S? |
 | (8,12) | `0x8C` | **18** | ANY_DIR |
-| (9,3) | `0x93` | **19** | DIR_N? |
-| (9,5) | `0x95` | **18** | DIR_N? |
+| (9,3) | `0x93` | **19** | DIR_S? |
+| (9,5) | `0x95` | **18** | DIR_S? |
 | (9,9) | `0x99` | **16** | ANY_DIR |
-| (9,11) | `0x9B` | **6** | DIR_SPECIAL |
+| (9,11) | `0x9B` | **6** | DIR_E? |
 | (9,12) | `0x9C` | **19** | ANY_DIR |
-| (9,13) | `0x9D` | **21** | ALWAYS |
-| (10,7) | `0xA7` | **19** | DIR_SPECIAL |
-| (10,9) | `0xA9` | **3** | ENTER |
+| (9,13) | `0x9D` | **21** | DIR_W? |
+| (10,7) | `0xA7` | **19** | DIR_E? |
+| (10,9) | `0xA9` | **3** | DIR_N? |
 | (10,12) | `0xAC` | **20** | ANY_DIR |
 | (10,13) | `0xAD` | **19** | ANY_DIR |
-| (11,2) | `0xB2` | **10** | ALWAYS |
-| (11,4) | `0xB4` | **21** | ALWAYS |
-| (11,9) | `0xB9` | **8** | ENTER |
+| (11,2) | `0xB2` | **10** | DIR_W? |
+| (11,4) | `0xB4` | **21** | DIR_W? |
+| (11,9) | `0xB9` | **8** | DIR_N? |
 | (11,12) | `0xBC` | **18** | ANY_DIR |
 | (11,13) | `0xBD` | **18** | ANY_DIR |
-| (12,0) | `0xC0` | **11** | ENTER |
-| (12,6) | `0xC6` | **20** | ENTER |
+| (12,0) | `0xC0` | **11** | DIR_N? |
+| (12,6) | `0xC6` | **20** | DIR_N? |
 | (12,7) | `0xC7` | **16** | ANY_DIR |
 | (12,11) | `0xCB` | **16** | ANY_DIR |
 | (12,12) | `0xCC` | **22** | ANY_DIR |
 | (12,13) | `0xCD` | **18** | ANY_DIR |
-| (12,15) | `0xCF` | **11** | ENTER |
+| (12,15) | `0xCF` | **11** | DIR_N? |
 | (13,0) | `0xD0` | **12** | ANY_DIR |
 | (13,3) | `0xD3` | **15** | ANY_DIR |
 | (13,4) | `0xD4` | **15** | ANY_DIR |
@@ -135,13 +135,13 @@
 | (14,12) | `0xEC` | **15** | ANY_DIR |
 | (14,14) | `0xEE` | **13** | ANY_DIR |
 | (15,2) | `0xF2` | **12** | ANY_DIR |
-| (15,3) | `0xF3` | **11** | ALWAYS |
-| (15,12) | `0xFC` | **11** | DIR_SPECIAL |
+| (15,3) | `0xF3` | **11** | DIR_W? |
+| (15,12) | `0xFC` | **11** | DIR_E? |
 | (15,13) | `0xFD` | **12** | ANY_DIR |
 
 ## Events
 
-**Event 01** — triggers: (2,7)/ENTER
+**Event 01** — triggers: (2,7)/DIR_N?
 
 ```hex
 04 01
@@ -151,7 +151,7 @@
 00: show_text_above_door(str[1] "No Entry")
 ```
 
-**Event 02** — triggers: (2,8)/ENTER
+**Event 02** — triggers: (2,8)/DIR_N?
 
 ```hex
 04 02
@@ -161,7 +161,7 @@
 00: show_text_above_door(str[2] "Hoardall's Palace")
 ```
 
-**Event 03** — triggers: (10,9)/ENTER
+**Event 03** — triggers: (10,9)/DIR_N?
 
 ```hex
 04 03
@@ -171,7 +171,7 @@
 00: show_text_above_door(str[3] "Throne Room")
 ```
 
-**Event 04** — triggers: (8,10)/DIR_N?
+**Event 04** — triggers: (8,10)/DIR_S?
 
 ```hex
 04 04
@@ -181,7 +181,7 @@
 00: show_text_above_door(str[4] "Green Room")
 ```
 
-**Event 05** — triggers: (4,10)/DIR_SPECIAL
+**Event 05** — triggers: (4,10)/DIR_E?
 
 ```hex
 04 05
@@ -191,7 +191,7 @@
 00: show_text_above_door(str[5] "Grand Hall")
 ```
 
-**Event 06** — triggers: (9,11)/DIR_SPECIAL
+**Event 06** — triggers: (9,11)/DIR_E?
 
 ```hex
 01 07 09 11 01 0c 2f f0 0f
@@ -206,7 +206,7 @@
 04: end_script()
 ```
 
-**Event 07** — triggers: (0,7)/DIR_N?, (0,8)/DIR_N?
+**Event 07** — triggers: (0,7)/DIR_S?, (0,8)/DIR_S?
 
 ```hex
 01 08 09 11 02 18 00 7d ef 00 0c 07 e3 0f
@@ -222,14 +222,14 @@
 05: end_script()
 ```
 
-**Event 08** — triggers: (11,9)/ENTER
+**Event 08** — triggers: (11,9)/DIR_N?
 
 ```hex
 0b 0e 00 32 04 11 01 0e c9 02 14 08 0f
 ```
 
 ```
-00: set_service_context(str[14] "Guard Tower", mode=0x00)
+00: service_sign(idx=0x0E -> sign 49 [49.anm], pos=0x00)
 01: cond = load_cond_from_var(0x04)
 02: if not cond: skip_tokens(1)
     # skip -> show_text_block(str[20] "Lord Hoardall proclaims, "Only a / Crusader can help me with my never / ")
@@ -239,7 +239,7 @@
 06: end_script()
 ```
 
-**Event 09** — triggers: (6,8)/DIR_N?
+**Event 09** — triggers: (6,8)/DIR_S?
 
 ```hex
 02 0b 09 11 01 18 00 42 00 28 0f
@@ -254,7 +254,7 @@
 04: end_script()
 ```
 
-**Event 10** — triggers: (11,2)/ALWAYS
+**Event 10** — triggers: (11,2)/DIR_W?
 
 ```hex
 02 0c 09 10 01 0f 02 0d 19 01 fc 00 00 10 01 01 06 07 14
@@ -275,7 +275,7 @@
 09: clear_current_tile_event_flag()
 ```
 
-**Event 11** — triggers: (0,3)/ALWAYS, (0,12)/DIR_SPECIAL, (3,0)/DIR_N?, (3,15)/DIR_N?, (12,0)/ENTER, (12,15)/ENTER, (15,3)/ALWAYS, (15,12)/DIR_SPECIAL
+**Event 11** — triggers: (0,3)/DIR_W?, (0,12)/DIR_E?, (3,0)/DIR_S?, (3,15)/DIR_S?, (12,0)/DIR_N?, (12,15)/DIR_N?, (15,3)/DIR_W?, (15,12)/DIR_E?
 
 ```hex
 04 0e
@@ -318,7 +318,7 @@
 ```
 
 ```
-00: set_service_context(str[1] "No Entry", mode=0x00)
+00: service_sign(idx=0x01 -> sign 1 [1.anm], pos=0x00)
 01: show_text_basic(str[15] "Take castle treasure (y/n)?")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(5)
@@ -338,7 +338,7 @@
 ```
 
 ```
-00: set_service_context(str[1] "No Entry", mode=0x00)
+00: service_sign(idx=0x01 -> sign 1 [1.anm], pos=0x00)
 01: show_text_basic(str[15] "Take castle treasure (y/n)?")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(5)
@@ -368,18 +368,18 @@
 05: clear_current_tile_event_flag()
 ```
 
-**Event 17** — triggers: (6,10)/DIR_N?
+**Event 17** — triggers: (6,10)/DIR_S?
 
 ```hex
 0b 05 00 0e f7
 ```
 
 ```
-00: set_service_context(str[5] "Grand Hall", mode=0x00)
+00: service_sign(idx=0x05 -> sign 72 [72.anm], pos=0x00)
 01: exec_selector(0xF7)
 ```
 
-**Event 18** — triggers: (2,10)/ANY_DIR, (2,11)/ANY_DIR, (2,12)/ANY_DIR, (3,12)/ANY_DIR, (3,13)/ANY_DIR, (5,11)/ANY_DIR, (5,12)/ANY_DIR, (6,11)/ANY_DIR, (8,12)/ANY_DIR, (9,5)/DIR_N?, (11,12)/ANY_DIR, (11,13)/ANY_DIR, (12,13)/ANY_DIR
+**Event 18** — triggers: (2,10)/ANY_DIR, (2,11)/ANY_DIR, (2,12)/ANY_DIR, (3,12)/ANY_DIR, (3,13)/ANY_DIR, (5,11)/ANY_DIR, (5,12)/ANY_DIR, (6,11)/ANY_DIR, (8,12)/ANY_DIR, (9,5)/DIR_S?, (11,12)/ANY_DIR, (11,13)/ANY_DIR, (12,13)/ANY_DIR
 
 ```hex
 02 13 09 11 04 19 01 03 00 00 10 02 01 06 07 0f
@@ -398,7 +398,7 @@
 07: end_script()
 ```
 
-**Event 19** — triggers: (1,10)/ANY_DIR, (3,14)/ANY_DIR, (4,14)/ANY_DIR, (5,14)/ANY_DIR, (6,12)/ANY_DIR, (7,11)/ANY_DIR, (7,12)/ANY_DIR, (9,3)/DIR_N?, (9,12)/ANY_DIR, (10,7)/DIR_SPECIAL, (10,13)/ANY_DIR
+**Event 19** — triggers: (1,10)/ANY_DIR, (3,14)/ANY_DIR, (4,14)/ANY_DIR, (5,14)/ANY_DIR, (6,12)/ANY_DIR, (7,11)/ANY_DIR, (7,12)/ANY_DIR, (9,3)/DIR_S?, (9,12)/ANY_DIR, (10,7)/DIR_E?, (10,13)/ANY_DIR
 
 ```hex
 02 13 09 11 04 19 00 da 00 00 10 02 01 06 07 0f
@@ -417,7 +417,7 @@
 07: end_script()
 ```
 
-**Event 20** — triggers: (1,11)/ANY_DIR, (6,14)/ANY_DIR, (7,14)/ANY_DIR, (10,12)/ANY_DIR, (12,6)/ENTER
+**Event 20** — triggers: (1,11)/ANY_DIR, (6,14)/ANY_DIR, (7,14)/ANY_DIR, (10,12)/ANY_DIR, (12,6)/DIR_N?
 
 ```hex
 02 13 09 11 04 19 00 a4 00 00 10 02 01 06 07 0f
@@ -436,7 +436,7 @@
 07: end_script()
 ```
 
-**Event 21** — triggers: (1,12)/ANY_DIR, (9,13)/ALWAYS, (11,4)/ALWAYS
+**Event 21** — triggers: (1,12)/ANY_DIR, (9,13)/DIR_W?, (11,4)/DIR_W?
 
 ```hex
 02 13 09 11 04 19 00 a1 00 00 10 02 01 06 07 0f
@@ -474,14 +474,14 @@
 07: end_script()
 ```
 
-**Event 23** — triggers: (6,9)/ENTER
+**Event 23** — triggers: (6,9)/DIR_N?
 
 ```hex
 0b 0d 00 01 0a 0e e2
 ```
 
 ```
-00: set_service_context(str[13] "After removing the object and cleaning / it off, you notice the inscript", mode=0x00)
+00: service_sign(idx=0x0D -> sign 5 [5.anm], pos=0x00)
 01: show_text_basic(str[10] "Here's the joke of the day:")
 02: exec_selector(0xE2)  # special_226
 ```

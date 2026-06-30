@@ -43,8 +43,12 @@ runtime — it is a packed quest/calendar/combat-state blob. The editor keeps sl
 | `$25` | 1 | **Food** | Ration count |
 | `$26` | 1 | **Condition** | 0=Good, 1=Cursed, 2-3=Silenced, 4+=Poisoned, $80+=Dead/Stone/Eradicated |
 | `$27` | 1 | **Endurance** (current) | Copied to `$73` on party load |
-| `$28`–`$39` | 18 | **Equipped items** | 6 slots × 3 bytes: (item_id, bonus, flags) |
-| `$3A`–`$4B` | 18 | **Backpack items** | 6 slots × 3 bytes: (item_id, bonus, flags) |
+| `$28`–`$2D` | 6 | **Equipped item ids** | 6 contiguous item ids (0 = empty). **Structure-of-Arrays** — see below |
+| `$2E`–`$33` | 6 | **Equipped charges** | per-item charge counter (Blitz3D "plus"); decremented on use @ `$138A6` |
+| `$34`–`$39` | 6 | **Equipped flags** | per-item flags (Blitz3D "efft"); cleared on depletion @ `$138EE` |
+| `$3A`–`$3F` | 6 | **Backpack item ids** | 6 contiguous item ids (0 = empty) |
+| `$40`–`$45` | 6 | **Backpack charges** | per-item charge counter; decremented on use @ `$137F0` |
+| `$46`–`$4B` | 6 | **Backpack flags** | per-item flags; cleared on depletion @ `$13838` |
 | `$4C`–`$57` | 12 | **Spell book** | Bitmask of known spells (Sorc + Cleric levels) |
 | `$58`–`$59` | 2 | **SP max** | Word (LE) |
 | `$5A`–`$5B` | 2 | **SP current** | Word (LE) |
@@ -68,6 +72,42 @@ runtime — it is a packed quest/calendar/combat-state blob. The editor keeps sl
 | `$78` | 1 | **Script/work flag** | Transient script/work flag |
 | `$79` | 1 | **Class-quest / guild mask** | Bit 7: in-game class **'+'** display; low bits AND `A4-$66A9[town]` for mage-guild purchase gate @ `0x1E41A`; OR'd on quest completion @ `0x9FE0`. **Bug:** @ `0x9FBE` the reward handler uses table **`A4-$7154`** as a roster **offset** before `$79`, so the OR often hits **`$7E`** (padding) or the next record — see [`36-class-quest-hp-bug.md`](36-class-quest-hp-bug.md). |
 | `$7A`–`$81` | 10 | *Padding / unknown* | Mostly zero |
+
+## Equipped / backpack items — Structure-of-Arrays (`$28`–`$4B`)
+
+The 36 bytes `$28`–`$4B` are **NOT** six interleaved `(id, charges, flags)`
+triplets. They are stored as **three parallel 6-byte runs** per group: six item
+ids, then six charges, then six flags — for equipped (`$28`/`$2E`/`$34`) then
+backpack (`$3A`/`$40`/`$46`). An earlier audit flagged the array-of-structs
+model as suspect; the 68k ASM (and the Blitz3D editor) confirm SoA.
+
+### 68k ASM evidence (`EXTRACTED/mm2.capstone.annotated.asm`)
+
+- **OP_16 item scan** `event_op16` @ `0x16520`: inner loop index `i` 0..5 reads
+  `move.b $3a(a0),d0` and `move.b $28(a0),d0` with `a0 = base + i` (`adda.l`),
+  i.e. **stride 1** over six contiguous ids at `+$3A+i` / `+$28+i`
+  (`0x16572`, `0x1655C`).
+- **OP_19 add-item** `event_op19` @ `0x165D8`: for the chosen empty slot `i` it
+  writes the three correlated bytes to `+$3A+i`, `+$40+i`, `+$46+i`
+  (`0x16648`, `0x1665A`, `0x1666C`) — spaced **6 apart** (id / charges / flags).
+- **Equip** (backpack→equipped not shown) and **unequip** move all three runs
+  together: `$28→$3A`, `$2E→$40`, `$34→$46` @ `0x0EB9A`/`0x0EBB8`/`0x0EBD6`;
+  the reverse `$3A→$28`, `$40→$2E`, `$46→$34` @ `0x0EF8A`/`0x0EFA8`/`0x0EFC6`.
+- **Whole-character copy** copies each run independently:
+  equipped `$28→$28`, `$2E→$2E`, `$34→$34` @ `0x0E09A`/`0x0E0BA`/`0x0E0DA`;
+  backpack `$3A`/`$40`/`$46` @ `0x04716`/`0x04736`/`0x04756`.
+- **Item-use charge decrement** (`combat_use_item_handler` @ `0x133EC` region):
+  backpack `tst/subq $40(a0)`; on depletion `move.b #$ff,$3a(a0)` + `clr.b
+  $46(a0)` @ `0x137F0`–`0x13838`; equipped `tst/subq $2e(a0)`; `move.b
+  #$ff,$28(a0)` + `clr.b $34(a0)` @ `0x138A6`–`0x138EE`. This identifies the
+  `$2E`/`$40` run as **charges** and the `$34`/`$46` run as **flags**.
+
+### Blitz3D editor cross-check (`b3dmm2/Character.bb`)
+
+The reference editor reads the record sequentially into six `equiped[6]`, six
+`equiplus[6]`, six `equiefft[6]`, then six `backpack[6]`, `backplus[6]`,
+`backefft[6]` — exactly the SoA order above. (`equiplus`/`backplus` = charges;
+`equiefft`/`backefft` = flags.)
 
 ## Global save stream (file `$1860`, runtime via `0x823C`)
 
@@ -93,8 +133,8 @@ Tail byte indices used by the editor mirror the memcpy order in that routine; se
 | `-$79A7` / `-$79A6` | achievement flags | Endgame screen counters |
 | `-$79A5` | `encounter_mod` | Encounter difficulty modifier |
 | `-$79A4`–`-$79A1` | elemental talismans | **g=0x27..0x2A** (Acwalandar / Shalwend / Pyrannaste / Gralkor) |
-| `-$79A0` | class-quest counter | **g=0x2B** |
-| `-$799F` | secondary quest counter | **g=0x2C** |
+| `-$79A0` | **Eagle Eye** step timer (was mislabeled "class-quest counter") | **g=0x2B** |
+| `-$799F` | **Wizard Eye** step timer (was mislabeled "secondary quest counter") | **g=0x2C** |
 | `-$799E` | temple donation bits | **g=0x13** (OR town bits 1/2/4/8/16) |
 | `-$799D`–`-$7999` | `input_state` | Input-state bytes |
 | `-$7996` | guardian cave gate | **g=0x32** |
@@ -122,8 +162,8 @@ Tail byte indices used by the editor mirror the memcpy order in that routine; se
 | `0x13` | `-$799E` | Temple donation quest bitfield |
 | `0x23` | `-$79A8` | Special quest byte |
 | `0x27`..`0x2A` | `-$79A4` + (id−`0x27`) | Elemental talisman flags |
-| `0x2B` | `-$79A0` | Class-quest progress counter |
-| `0x2C` | `-$799F` | Secondary quest counter |
+| `0x2B` | `-$79A0` | **Eagle Eye** vision step timer (outdoor 5×5 overhead) |
+| `0x2C` | `-$799F` | **Wizard Eye** vision step timer (indoor/maze 5×5 overhead) |
 | `0x32` | `-$7996` | Guardian cave gate |
 | `0x33` | `-$7990` | Tundara cavern lever |
 | `0x3B` | `-$798F` | Castle Xabran gate |
@@ -132,6 +172,26 @@ Tail byte indices used by the editor mirror the memcpy order in that routine; se
 | `0x3E` | `-$798C` | Calendar period flag A |
 | `0x80`..`0x83` | `-$7995` + (id−`0x80`) | Second 4-byte gate bank |
 | `0x84` | `-$79B5` (era low) | Era index for event gating |
+
+### Eagle Eye / Wizard Eye vision timers (`-$79A0` / `-$799F`)
+
+Groups `0x2B`/`0x2C` are **not** quest counters — they are the two overhead-vision
+spell-effect step timers (decrement one-per-step; a quest counter would not).
+
+- **Cast handlers:** Eagle Eye sets `-$79A0` @ `0xA91C`; Wizard Eye sets `-$799F`
+  @ `0xAD20`. Both add `5` per caster level (manual "5 steps/L") and clamp at
+  `0xFA`/`0xFF`.
+- **Per-step ticker @ `0x4672`:** selects the timer for the current view mode
+  (`-$79E2`: outdoor → `-$79A0` Eagle Eye, dungeon → `-$799F` Wizard Eye), does
+  `subq #1` while nonzero, and while active calls the overhead-render path
+  (`-$7C3E`/`-$7EAE`).
+- **Fountain of Clairvoyance** (Middlegate loc 00, event 42) shortcuts the cast:
+  it writes both timers to `0x32` (50 steps) directly via `store_var8` (OP_1A),
+  granting 50 steps of each.
+- **Port note:** `mm2_gamestate.h` still names these `MM2_GS_CLASS_QUEST_CNT`
+  (`-0x79A0`) and `MM2_GS_QUEST_COUNTER_B` (`-0x799F`); the *offsets are correct*
+  but the names are stale. Rename to Eagle/Wizard Eye timers when the spell-effect
+  system is implemented (see `19-spells-and-item-use.md`).
 
 ## Enumerations
 

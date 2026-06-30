@@ -14,29 +14,29 @@
 | (1,4) | `0x14` | **10** | ANY_DIR |
 | (1,6) | `0x16` | **12** | ANY_DIR |
 | (1,8) | `0x18` | **3** | ANY_DIR |
-| (1,11) | `0x1B` | **2** | ENTER |
+| (1,11) | `0x1B` | **2** | DIR_N? |
 | (1,13) | `0x1D` | **3** | ANY_DIR |
 | (2,5) | `0x25` | **8** | ANY_DIR |
 | (2,9) | `0x29` | **3** | ANY_DIR |
-| (2,10) | `0x2A` | **2** | DIR_SPECIAL |
+| (2,10) | `0x2A` | **2** | DIR_E? |
 | (2,11) | `0x2B` | **17** | 0xA0 |
-| (2,12) | `0x2C` | **2** | ALWAYS |
+| (2,12) | `0x2C` | **2** | DIR_W? |
 | (2,14) | `0x2E` | **3** | ANY_DIR |
 | (3,4) | `0x34` | **9** | ANY_DIR |
 | (3,5) | `0x35` | **21** | ANY_DIR |
 | (3,6) | `0x36` | **11** | ANY_DIR |
-| (3,11) | `0x3B` | **2** | DIR_N? |
+| (3,11) | `0x3B` | **2** | DIR_S? |
 | (4,2) | `0x42` | **3** | ANY_DIR |
 | (4,10) | `0x4A` | **4** | ANY_DIR |
 | (4,12) | `0x4C` | **3** | ANY_DIR |
-| (4,14) | `0x4E` | **18** | DIR_N? |
+| (4,14) | `0x4E` | **18** | DIR_S? |
 | (5,6) | `0x56` | **3** | ANY_DIR |
 | (5,9) | `0x59` | **13** | ANY_DIR |
-| (5,14) | `0x5E` | **23** | ENTER+SPECIAL |
+| (5,14) | `0x5E` | **23** | DIR_N?+DIR_E? |
 | (6,3) | `0x63` | **15** | ANY_DIR |
 | (7,2) | `0x72` | **19** | ANY_DIR |
 | (7,7) | `0x77` | **20** | ANY_DIR |
-| (7,13) | `0x7D` | **4** | ALWAYS |
+| (7,13) | `0x7D` | **4** | DIR_W? |
 | (7,14) | `0x7E` | **21** | ANY_DIR |
 | (8,8) | `0x88` | **5** | ANY_DIR |
 | (9,1) | `0x91` | **1** | ANY_DIR |
@@ -68,7 +68,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 02** — triggers: (1,11)/ENTER, (2,10)/DIR_SPECIAL, (2,12)/ALWAYS, (3,11)/DIR_N?
+**Event 02** — triggers: (1,11)/DIR_N?, (2,10)/DIR_E?, (2,12)/DIR_W?, (3,11)/DIR_S?
 
 ```hex
 06 01
@@ -91,7 +91,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 04** — triggers: (4,10)/ANY_DIR, (7,13)/ALWAYS
+**Event 04** — triggers: (4,10)/ANY_DIR, (7,13)/DIR_W?
 
 ```hex
 06 02
@@ -308,7 +308,7 @@
 11: clear_current_tile_event_flag()
 ```
 
-**Event 18** — triggers: (4,14)/DIR_N?
+**Event 18** — triggers: (4,14)/DIR_S?
 
 ```hex
 23 8c aa 11 01 0e 64 01 10 29
@@ -383,7 +383,7 @@
 02: set_abort_and_exit()
 ```
 
-**Event 23** — triggers: (5,14)/ENTER+SPECIAL
+**Event 23** — triggers: (5,14)/DIR_N?+DIR_E?
 
 ```hex
 06 13 02 14 29

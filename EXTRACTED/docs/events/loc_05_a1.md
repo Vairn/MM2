@@ -17,7 +17,7 @@
 | (3,2) | `0x32` | **8** | ANY_DIR |
 | (3,8) | `0x38` | **6** | ANY_DIR |
 | (3,11) | `0x3B` | **13** | 0xA0 |
-| (3,12) | `0x3C` | **1** | ALWAYS |
+| (3,12) | `0x3C` | **1** | DIR_W? |
 | (3,14) | `0x3E` | **10** | ANY_DIR |
 | (4,6) | `0x46` | **7** | ANY_DIR |
 | (5,9) | `0x59` | **11** | ANY_DIR |
@@ -39,14 +39,14 @@
 
 ## Events
 
-**Event 01** — triggers: (3,12)/ALWAYS
+**Event 01** — triggers: (3,12)/DIR_W?
 
 ```hex
 0b 18 00 02 01 0a 11 01 0c 02 bf 0f
 ```
 
 ```
-00: set_service_context(str[24], mode=0x00)
+00: service_sign(idx=0x18 -> sign 29 [29.anm], pos=0x00)
 01: show_text_block(str[1] "As snow swirls about your party, you / catch a glimpse of the Tundaran t")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)

@@ -1,0 +1,49 @@
+#pragma once
+// Auto-map tile mapping (@0x2182, called by overland_map_view @0x223A).
+// See editor/src/core/Cartography.h and EXTRACTED/docs/15-3d-view-and-game-screen.md §3.
+
+#include "mm2/CppStdCompat.h"
+
+namespace mm2::world {
+
+inline constexpr uint8_t kCartoTile[64] = {
+    0x00, 0x05, 0x06, 0x05, 0x03, 0x0B, 0x0D, 0x0B,
+    0x04, 0x0C, 0x0E, 0x0C, 0x03, 0x0B, 0x0D, 0x0B,
+    0x01, 0x0F, 0x11, 0x0F, 0x07, 0x13, 0x16, 0x13,
+    0x09, 0x15, 0x19, 0x15, 0x07, 0x13, 0x16, 0x13,
+    0x02, 0x10, 0x12, 0x10, 0x08, 0x14, 0x18, 0x14,
+    0x0A, 0x17, 0x1A, 0x17, 0x08, 0x14, 0x18, 0x14,
+    0x01, 0x0F, 0x11, 0x0F, 0x07, 0x13, 0x16, 0x13,
+    0x09, 0x15, 0x19, 0x15, 0x07, 0x13, 0x16, 0x13,
+};
+
+inline constexpr uint8_t kCartoEdge[3] = {0x1B, 0x1C, 0x1B};
+
+constexpr int kElementalPlaneFirst = 41;
+constexpr int kElementalPlaneLast = 44;
+
+inline bool isElementalPlane(int screen)
+{
+    return screen >= kElementalPlaneFirst && screen <= kElementalPlaneLast;
+}
+
+inline bool cartoUsesOutb(int screen, bool outdoor_surface)
+{
+    if (isElementalPlane(screen)) {
+        return true;
+    }
+    return outdoor_surface;
+}
+
+inline int cartoFrame(int screen, uint8_t visual, bool outdoor_surface)
+{
+    if (screen >= 41 && screen <= 44) {
+        return visual & 0x1F;
+    }
+    if (outdoor_surface) {
+        return visual & 0x1F;
+    }
+    return kCartoTile[(visual >> 2) & 0x3F];
+}
+
+}  // namespace mm2::world

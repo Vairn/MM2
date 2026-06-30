@@ -9,13 +9,13 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (0,8) | `0x08` | **4** | DIR_N? |
-| (1,8) | `0x18` | **3** | ENTER |
+| (0,8) | `0x08` | **4** | DIR_S? |
+| (1,8) | `0x18` | **3** | DIR_N? |
 | (2,7) | `0x27` | **6** | ANY_DIR |
 | (2,9) | `0x29` | **8** | ANY_DIR |
 | (3,2) | `0x32` | **2** | ANY_DIR |
-| (3,7) | `0x37` | **10** | DIR_SPECIAL |
-| (4,2) | `0x42` | **1** | DIR_N? |
+| (3,7) | `0x37` | **10** | DIR_E? |
+| (4,2) | `0x42` | **1** | DIR_S? |
 | (4,7) | `0x47` | **9** | ANY_DIR |
 | (4,9) | `0x49` | **9** | ANY_DIR |
 | (4,13) | `0x4D` | **9** | ANY_DIR |
@@ -28,7 +28,7 @@
 | (6,1) | `0x61` | **8** | ANY_DIR |
 | (6,2) | `0x62` | **9** | ANY_DIR |
 | (6,3) | `0x63` | **8** | ANY_DIR |
-| (6,8) | `0x68` | **7** | ENTER |
+| (6,8) | `0x68` | **7** | DIR_N? |
 | (6,11) | `0x6B` | **9** | ANY_DIR |
 | (6,13) | `0x6D` | **8** | ANY_DIR |
 | (7,0) | `0x70` | **8** | ANY_DIR |
@@ -56,11 +56,11 @@
 | (14,13) | `0xED` | **8** | ANY_DIR |
 | (14,15) | `0xEF` | **8** | ANY_DIR |
 | (15,0) | `0xF0` | **8** | ANY_DIR |
-| (15,1) | `0xF1` | **5** | ENTER |
+| (15,1) | `0xF1` | **5** | DIR_N? |
 
 ## Events
 
-**Event 01** — triggers: (4,2)/DIR_N?
+**Event 01** — triggers: (4,2)/DIR_S?
 
 ```hex
 04 01
@@ -83,7 +83,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 03** — triggers: (1,8)/ENTER
+**Event 03** — triggers: (1,8)/DIR_N?
 
 ```hex
 06 02
@@ -93,7 +93,7 @@
 00: show_text_popup_style_b(str[2] "Beware / Cave-ins!")
 ```
 
-**Event 04** — triggers: (0,8)/DIR_N?
+**Event 04** — triggers: (0,8)/DIR_S?
 
 ```hex
 02 03 09 11 01 0c 09 3c 0f
@@ -108,7 +108,7 @@
 04: end_script()
 ```
 
-**Event 05** — triggers: (15,1)/ENTER
+**Event 05** — triggers: (15,1)/DIR_N?
 
 ```hex
 2b 01 12 e8 92 92 aa aa aa 93 93 93 00 00 00 02 04 09 11 22 15 01 2f 00 1b 18 11 01 18 01 2f 00 17 15 02 2f 00 1b 18 11 01 18 02 2f 00 17 15 03 2f 00 1b 18 11 01 18 03 2f 00 17 15 04 2f 00 1b 18 11 01 18 04 2f 00 17 15 05 2f 00 1b 18 11 01 18 05 2f 00 17 15 06 2f 00 1b 18 11 01 18 06 2f 00 17 15 07 2f 00 1b 18 11 01 18 07 2f 00 17 15 08 2f 00 1b 18 11 01 18 08 2f 00 17 02 05 07 14
@@ -184,14 +184,14 @@
 06: clear_current_tile_event_flag()
 ```
 
-**Event 07** — triggers: (6,8)/ENTER
+**Event 07** — triggers: (6,8)/DIR_N?
 
 ```hex
 0b 06 00 01 07 08 0f
 ```
 
 ```
-00: set_service_context(str[6] "Sir Kill and Jed I jump at the sight / of your party. Trapped by the cav", mode=0x00)
+00: service_sign(idx=0x06 -> sign 14 [14.anm], pos=0x00)
 01: show_text_basic(str[7] ""I am Sarakin. Leave my home ore die!"")
 02: wait_key()
 03: end_script()
@@ -226,7 +226,7 @@
 05: clear_current_tile_event_flag()
 ```
 
-**Event 10** — triggers: (3,7)/DIR_SPECIAL
+**Event 10** — triggers: (3,7)/DIR_E?
 
 ```hex
 15 00 77 20 10 03 02 0a 07 0c 19 36 0f

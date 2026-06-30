@@ -29,4 +29,34 @@ void mm2_encounter_tuning_from_attrib(const uint8_t rec[64], Mm2EncounterTuning 
 /* Load embedded globals from the data hunk blob (8604 bytes). */
 int mm2_encounter_globals_load(const uint8_t *data, size_t len, Mm2EncounterGlobals *out);
 
+/* ---- OP_12 / OP_13 fixed-encounter setup (event-VM handler @ 0x16300) ----
+ *
+ * Inline script-byte layout following the opcode:
+ *   OP_12 (fixed):         10 monster ids, then overflow_type, then live_count  (12 bytes)
+ *   OP_13 (seeded-random): 10 monster ids only                                  (10 bytes)
+ *
+ * The handler seeds A4-$11DE[0..9] (slots), A4-$11D4 (overflow_type), A4-$796B
+ * (mode), A4-$77BE (live_count). See docs/07 §"OP_12/OP_13 encounter setup".
+ */
+enum { MM2_ENCOUNTER_SLOT_COUNT = 10 };
+enum { MM2_ENCOUNTER_MODE_FIXED = 0x80, MM2_ENCOUNTER_MODE_RANDOM = 0x00 };
+
+typedef struct Mm2EncounterSetup {
+    uint8_t monster_slot[MM2_ENCOUNTER_SLOT_COUNT]; /* A4-$11DE visible monster types */
+    uint8_t overflow_type;  /* A4-$11D4 type for monsters beyond 10 slots / breed seed; flag */
+    uint8_t mode;           /* A4-$796B 0x80=fixed, 0x00=seeded-random */
+    uint8_t live_count;     /* A4-$77BE live monster count (seed; recomputed @ 0x12CE0) */
+} Mm2EncounterSetup;
+
+/* Decode the inline OP_12/OP_13 byte block (is_op12 selects 12- vs 10-byte form).
+ * Returns the number of script bytes consumed (12 for OP_12, 10 for OP_13). */
+int mm2_encounter_setup_decode(const uint8_t *script, int is_op12, Mm2EncounterSetup *out);
+
+/* Encode an Mm2EncounterSetup back to inline script bytes. `out` must hold >=12.
+ * Returns the number of bytes written (12 for fixed mode, 10 otherwise). */
+int mm2_encounter_setup_encode(const Mm2EncounterSetup *in, uint8_t *out);
+
+/* Final on-screen monster count per the combat-setup recompute @ 0x12CE0. */
+uint8_t mm2_encounter_live_count(const Mm2EncounterSetup *in);
+
 #endif

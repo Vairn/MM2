@@ -5,7 +5,7 @@
   --text: #e8e8f0;
   --dim: #888898;
   --accent: #c04040;
-  --sidebar-width: 300px;
+  --sidebar-width: 340px;
   --game-width: 960px;
   --game-height: 600px;
   --panel-pad: 10px;
@@ -17,16 +17,10 @@
   --toolbar-h: 44px;
   --status-width: 22rem;
   --meta-panel-h: 6.25rem;
-  --mini-panel-h: 9.5rem;
+  --mini-panel-h: 22rem;
   --mini-canvas-w: 224px;
   --mini-canvas-h: 176px;
   --party-panel-h: 6.875rem;
-  --legend-panel-h: 3.5rem;
-  --controls-panel-h: 3.75rem;
-  --event-panel-h: calc(
-    var(--sidebar-inner-h) - var(--meta-panel-h) - var(--mini-panel-h) -
-      var(--party-panel-h) - var(--legend-panel-h) - var(--controls-panel-h)
-  );
 }
 
 * {
@@ -138,7 +132,9 @@ select:hover {
 main {
   display: grid;
   grid-template-columns: var(--game-panel-outer-w) var(--sidebar-width);
-  grid-template-rows: var(--game-panel-outer-h);
+  grid-template-areas:
+    "game side"
+    "bottom side";
   gap: var(--gap);
   width: var(--main-width);
   min-width: var(--main-width);
@@ -147,6 +143,7 @@ main {
 }
 
 .gamePanel {
+  grid-area: game;
   position: relative;
   width: var(--game-panel-outer-w);
   min-width: var(--game-panel-outer-w);
@@ -157,6 +154,27 @@ main {
   margin: 0;
   padding: var(--panel-pad);
   overflow: hidden;
+}
+
+.sidePanel {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  max-width: var(--sidebar-width);
+  height: auto;
+  min-height: var(--game-panel-outer-h);
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.bottomPanel {
+  grid-area: bottom;
+  display: flex;
+  gap: var(--gap);
+  width: var(--game-panel-outer-w);
 }
 
 #view,
@@ -176,20 +194,6 @@ main {
 canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-}
-
-.sidePanel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap);
-  width: var(--sidebar-width);
-  min-width: var(--sidebar-width);
-  max-width: var(--sidebar-width);
-  height: var(--game-panel-outer-h);
-  min-height: var(--game-panel-outer-h);
-  max-height: var(--game-panel-outer-h);
-  overflow: hidden;
-  flex-shrink: 0;
 }
 
 .metaPanel {
@@ -248,10 +252,13 @@ canvas {
 
 .miniPanel canvas {
   display: block;
-  width: min(var(--mini-canvas-w), 100%);
+  /* Size by sidebar width; height follows the 224:176 aspect so the minimap is
+   * as large as the panel allows and never squashed. */
+  width: 100%;
   height: auto;
-  max-height: calc(var(--mini-panel-h) - 2rem);
-  aspect-ratio: 224 / 176;
+  max-height: 100%;
+  aspect-ratio: 1 / 1;
+  image-rendering: pixelated;
   margin: 0;
 }
 
@@ -309,13 +316,11 @@ canvas {
 }
 
 .eventPanel {
-  flex: 0 0 var(--event-panel-h);
-  height: var(--event-panel-h);
-  min-height: var(--event-panel-h);
-  max-height: var(--event-panel-h);
+  flex: 2;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 12rem;
 }
 
 .eventPanel pre {
@@ -331,23 +336,19 @@ canvas {
 }
 
 .legendPanel {
-  flex: 0 0 var(--legend-panel-h);
-  height: var(--legend-panel-h);
-  min-height: var(--legend-panel-h);
-  max-height: var(--legend-panel-h);
+  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 12rem;
 }
 
 .controlsPanel {
-  flex: 0 0 var(--controls-panel-h);
-  height: var(--controls-panel-h);
-  min-height: var(--controls-panel-h);
-  max-height: var(--controls-panel-h);
+  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 12rem;
 }
 
 .legendList,

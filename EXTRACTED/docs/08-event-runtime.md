@@ -66,16 +66,20 @@ if left trigger tile → clear visited bit7 + tile_rt bit7
 else → pending_event_latch = 1
 ```
 
-**Condition flags** (triplet byte 2):
+**Condition flags** (triplet byte 2, AND-masked with `context_mask_tbl[facing_index]`):
 
 | Value | Meaning |
 |-------|---------|
-| `0x10` | ALWAYS |
-| `0x20` | DIR_N? |
-| `0x40` | DIR_SPECIAL |
-| `0x80` | ENTER |
-| `0xC0` | ENTER+SPECIAL |
-| `0xF0` | ANY_DIR |
+| `0x10` | DIR_W? (west-facing context) |
+| `0x20` | DIR_S? (south-facing context) |
+| `0x40` | DIR_E? (east-facing context) |
+| `0x80` | DIR_N? (north-facing context; also used for ENTER tiles) |
+| `0xC0` | DIR_N? + DIR_E? |
+| `0xF0` | ANY_DIR (all four facing bits set) |
+
+`context_mask_tbl` @ `A4-$6BE6` (ghidra `mm2_data_00.bin` off `0x1418`):
+`[0x10, 0, 0x20, 0, 0x40, 0, 0x80, 0]` indexed by facing index `0/2/4/6` (W/S/E/N).
+There is no “match all facings” cond byte — `0x10` door labels require west-facing only.
 
 ## Interpreter loop
 

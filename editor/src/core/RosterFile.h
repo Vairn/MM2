@@ -22,9 +22,14 @@ constexpr int kRosterNameSize = 11;
 constexpr int kRosterFileSize = kRosterCount * kRosterRecordSize;
 constexpr int kRosterItemSlots = 6;
 
+// One logical equipped/backpack item. NOTE: on disk these are stored as
+// Structure-of-Arrays (6 ids, 6 charges, 6 flags per group), not interleaved
+// triplets -- see roster_off::kEquipped/kBackpack and RosterRecord::slot().
+//   charges: usable charges, decremented on item-use (68k ASM 0x137F0/0x138A6;
+//            Blitz3D editor "plus"). flags: per-instance flags ("efft").
 struct RosterItemSlot {
     uint8_t itemId = 0;
-    uint8_t bonus = 0;
+    uint8_t charges = 0;
     uint8_t flags = 0;
 };
 
@@ -48,9 +53,19 @@ constexpr int kArmorClass = 0x24;
 constexpr int kFood = 0x25;
 constexpr int kCondition = 0x26;
 constexpr int kEnduranceCur = 0x27;
-constexpr int kEquipped = 0x28;      // 6 slots * 3 bytes
-constexpr int kBackpack = 0x3A;      // 6 slots * 3 bytes
-constexpr int kSpells = 0x4C;        // 12 bytes bitmask
+constexpr int kEquipped = 0x28;      // Structure-of-Arrays: id[6]@0x28, charges[6]@0x2E, flags[6]@0x34
+constexpr int kBackpack = 0x3A;      // Structure-of-Arrays: id[6]@0x3A, charges[6]@0x40, flags[6]@0x46
+constexpr int kItemChargesRun = 6;   // id run -> +6 charges run -> +12 flags run
+constexpr int kSpells = 0x4C;        // 0x4C..0x57: tentatively "spells" -- UNVERIFIED
+                                     // (MM2 gates spells by spell-level, not per-spell
+                                     // flags, so this label is suspect). Byte +0x50 is
+                                     // NOT a spell field: the event VM (OP_32 @0x17190 ->
+                                     // 0x04614/0x45C4) reads +0x50 as a packed pair of
+                                     // alignment/profession-title nibbles and counts party
+                                     // members whose nibble == a title id (0x04 Crusader,
+                                     // 0x08 Heroic, 0x09 druid/pagan). ASM annotates
+                                     // +0x50 "class nibble".
+constexpr int kAlignTitleNibbles = 0x50;  // packed alignment/profession-title nibble pair
 constexpr int kSpMax = 0x58;         // u16 LE
 constexpr int kSpCur = 0x5A;
 constexpr int kGems = 0x5C;
@@ -71,7 +86,9 @@ constexpr int kEnduranceBase = 0x73;
 constexpr int kHpCur = 0x74;         // u16 LE
 constexpr int kTempScoreWord = 0x76; // u16 LE
 constexpr int kScriptWorkFlag = 0x78;
-constexpr int kClassQuestGuildMask = 0x79;  // bit7 = class '+'; low bits AND A4-$66A9[town]
+constexpr int kClassQuestGuildMask = 0x79;  // per-character class-quest/guild bits;
+                                            // bit 0x40 = "seen Pegasus" (written by event
+                                            // OP_18 selector 0x74). bit7 = class '+'.
 constexpr int kTailPadding7A = 0x7A;        // 10 bytes, mostly padding
 }  // namespace roster_off
 

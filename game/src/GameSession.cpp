@@ -1,13 +1,20 @@
 #include "mm2/GameSession.h"
-#include "mm2/runtime/PathScratch.h"
+
+#include "mm2/Mm2Dbg.h"
 #include "mm2/CppStdCompat.h"
+
 #include "mm2/DataPath.h"
+#include "mm2/gameplay/Movement.h"
+#include "mm2/gameplay/PlaySessionInput.h"
 #include "mm2/runtime/Alloc.h"
+#include "mm2/runtime/PathScratch.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
+#include "mm2/gfx/AutomapView.h"
 #include "mm2/gfx/PlayScreenChrome.h"
-#include "mm2/gfx/View3D.h"
+
 #if MM2_HOST_AMIGA
 #include "mm2/platform/Platform.h"
+#include "mm2/platform/amiga/Mm2AmigaPlanar.h"
 #endif
 
 namespace mm2 {
@@ -16,7 +23,8 @@ namespace {
 
 const char *kTownNames[] = {"?", "Middlegate", "Atlantium", "Tundara", "Vulcania", "Sandsobar"};
 
-void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int frame, int dst_x, int dst_y)
+void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int frame, int dst_x, int dst_y,
+                    int opaque = 0)
 {
     if (frame < 0 || frame >= img.frame_count) {
         return;
@@ -24,10 +32,11 @@ void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int f
 
     const mm2_image32_frame &f = img.frames[frame];
 #if MM2_HOST_AMIGA
+    (void)c;
     if (!f.bitmap) {
         return;
     }
-    platform::blitImage32(&img, frame, dst_x, dst_y, 1);
+    platform::blitImage32(&img, frame, dst_x, dst_y, opaque);
 #else
     if (!f.rgba) {
         return;
@@ -38,14 +47,169 @@ void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int f
 
 }  // namespace
 
+bool GameSession::needsRedraw() const
+{
+#if MM2_HOST_AMIGA
+    return view3d_dirty_ || chrome_dirty_ || text_dirty_ || overlay_anim_dirty_;
+#else
+    return frame_dirty_;
+#endif
+}
+
+void GameSession::ackRedraw()
+{
+#if MM2_HOST_AMIGA
+    view3d_dirty_ = false;
+    chrome_dirty_ = false;
+    text_dirty_ = false;
+    overlay_anim_dirty_ = false;
+#else
+    frame_dirty_ = false;
+#endif
+}
+
+void GameSession::markDirty()
+{
+#if MM2_HOST_AMIGA
+    view3d_dirty_ = true;
+    chrome_dirty_ = true;
+    text_dirty_ = true;
+    overlay_anim_dirty_ = false;
+    play_buffer_valid_ = false;
+    mm2_amiga_viewport_cache_invalidate();
+#else
+    frame_dirty_ = true;
+#endif
+}
+
+#if MM2_HOST_AMIGA
+void GameSession::markView3DDirty()
+{
+    view3d_dirty_ = true;
+    mm2_amiga_viewport_cache_invalidate();
+}
+
+void GameSession::markTextDirty()
+{
+    text_dirty_ = true;
+}
+
+void GameSession::markOverlayAnimDirty()
+{
+    overlay_anim_dirty_ = true;
+}
+#endif
+
 const char *GameSession::areaName(uint8_t area_id)
 {
     static const char *kAreas[] = {"Middlegate", "Atlantium", "Tundara", "Vulcania", "Sandsobar"};
     if (area_id < 5) {
         return kAreas[area_id];
     }
-
     return "?";
+}
+
+namespace {
+
+const char *areaNameRaw(int area)
+{
+    switch (area) {
+        case 0:
+            return "Middlegate";
+        case 1:
+            return "Atlantium";
+        case 2:
+            return "Tundara";
+        case 3:
+            return "Vulcania";
+        case 4:
+            return "Sandsobar";
+        case 5:
+            return "A1";
+        case 6:
+            return "B1";
+        case 7:
+            return "C1";
+        case 8:
+            return "D1";
+        case 9:
+            return "A2";
+        case 10:
+            return "B2";
+        case 11:
+            return "C2";
+        case 12:
+            return "A3";
+        case 13:
+            return "B3";
+        case 14:
+            return "C3";
+        case 15:
+            return "A4";
+        case 16:
+            return "B4";
+        case 17:
+            return "Middlegate Cavern";
+        case 18:
+            return "Atlantium Cavern";
+        case 19:
+            return "Tundara Cavern";
+        case 20:
+            return "Vulcania Cavern";
+        case 21:
+            return "Sandsobar Cavern";
+        case 33:
+            return "E1";
+        case 34:
+            return "D2";
+        case 35:
+            return "E2";
+        case 36:
+            return "D3";
+        case 37:
+            return "E3";
+        case 38:
+            return "C4";
+        case 39:
+            return "D4";
+        case 40:
+            return "E4";
+        case 55:
+            return "Hillstone";
+        case 56:
+            return "Woodhaven";
+        case 57:
+            return "Pinehurst";
+        case 58:
+            return "Luxus Palace";
+        case 59:
+            return "Castle Xabran";
+        default:
+            return nullptr;
+    }
+}
+
+}  // namespace
+
+const char *GameSession::currentScreenLabel() const
+{
+    static char kFallback[24];
+    if (!world_.loaded()) {
+        return "?";
+    }
+    const int screen = world_.currentScreen();
+    const Mm2AttribRecord &rec = world_.attrib();
+    const int area = static_cast<int>(mm2_attrib_area_id(&rec));
+    const char *name = areaNameRaw(area);
+    if (name != nullptr) {
+        return name;
+    }
+    if (mm2_attrib_is_outdoor(&rec)) {
+        std::snprintf(kFallback, sizeof(kFallback), "Screen %d", screen);
+        return kFallback;
+    }
+    std::snprintf(kFallback, sizeof(kFallback), "Area %d", area);
+    return kFallback;
 }
 
 const char *GameSession::townName(uint8_t town_filter)
@@ -53,72 +217,33 @@ const char *GameSession::townName(uint8_t town_filter)
     return (town_filter >= 1 && town_filter <= 5) ? kTownNames[town_filter] : "?";
 }
 
-int GameSession::facingFromKey(char key)
+bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
+                        uint32_t start_flags)
 {
-    switch (key) {
-        case 'N':
-            return 0;
-        case 'E':
-            return 1;
-        case 'S':
-            return 2;
-        case 'W':
-            return 3;
-        default:
-            return 0;
-    }
-
-}
-
-bool GameSession::loadImage(const char *name, mm2_image32_file *out)
-{
-    char *const path = mm2_path_scratch_a();
-    if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, name)) {
-        return false;
-    }
-
-    ::memset(out, 0, sizeof(*out));
-    if (mm2_image32_load_file(path, out) != MM2_IMAGE32_OK || out->frame_count == 0) {
-        return false;
-    }
-#if MM2_HOST_AMIGA
-    return out->frames[0].bitmap != nullptr;
-#else
-    return out->frames[0].rgba != nullptr;
-#endif
-}
-
-bool GameSession::loadMapVisualPage(int screen_idx, uint8_t *out_page)
-{
-    char *const path = mm2_path_scratch_a();
-    if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "map.dat")) {
-        return false;
-    }
-
-    FILE *f = std::fopen(path, "rb");
-    if (!f) {
-        return false;
-    }
-
-    const long offset = static_cast<long>(screen_idx) * 512L;
-    if (std::fseek(f, offset, SEEK_SET) != 0) {
-        std::fclose(f);
-        return false;
-    }
-
-    const std::size_t n = std::fread(out_page, 1, gfx::kMapPageSize, f);
-    std::fclose(f);
-    return n == gfx::kMapPageSize;
-}
-
-bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch)
-{
+    MM2_DBG(
+        "MM2 GOTO: GameSession::start town=%u area=%u members=%u flags=%u\n",
+        (unsigned)launch.town_filter,
+        (unsigned)launch.area_id,
+        (unsigned)launch.party_count,
+        (unsigned)start_flags
+    );
     data_dir_ = data_dir;
+    start_flags_ = start_flags;
     roster_ = roster;
     launch_ = launch;
     quit_ = false;
     back_to_title_ = false;
     assets_ok_ = false;
+    overlay_ = PlayOverlay::None;
+    town_service_ui_.close();
+    automap_.clearAll();
+    sheet_session_ = {};
+    sheet_session_.party_slot = 0;
+    status_message_[0] = '\0';
+    has_items_ = false;
+
+    right_panel_ = gfx::PlayRightPanel::Protect;
+
     if (!gs_image_) {
         gs_image_ = static_cast<uint8_t *>(mm2::runtime::allocate(kGsImageBytes));
         if (!gs_image_) {
@@ -126,115 +251,1322 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
         }
     }
     ::memset(gs_image_, 0, kGsImageBytes);
-    mm2_party_launch_apply(mm2_gs_base_from_image(gs_image_), &launch_);
+    gs_ = GameStateView(mm2_gs_base_from_image(gs_image_));
 
-    camera_.x = launch_.coord_x;
-    camera_.y = launch_.coord_y;
-    camera_.facing = facingFromKey(launch_.facing_key);
+    gs_.initCalendarDefaults();
+    gs_.initControlsDefaults();
+    gs_.initProtectDefaults();
+    mm2_party_launch_apply(gs_.a4(), &launch_);
 
     mm2_image32_set_preview_opaque(0);
-    const bool has_walls = loadImage("town.32", &walls_);
-    const bool has_floor = loadImage("townf.32", &floor_);
-    const bool has_sky = loadImage("sky.32", &sky_);
-    const bool has_map = loadMapVisualPage(launch_.area_id, map_visual_);
-    assets_ok_ = has_walls && has_floor && has_sky && has_map;
+
+#if MM2_HOST_AMIGA
+    mm2_amiga_viewport_cache_create();
+    mm2_amiga_play_chrome_cache_create();
+    bootstrapping_ = true;
+    bootstrap_step_ = 0;
+    markDirty();
+    MM2_DBG("MM2 GOTO: GameSession::start -> bootstrapping step 0\n");
+    return true;
+#else
+    ingame_sheet_.loadAssets(data_dir_);
+
+    char *path = mm2_path_scratch_a();
+    if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "items.dat")) {
+        has_items_ = mm2_items_load_file(path, &items_) == MM2_ITEMS_OK;
+    }
+
+    const bool has_world = world_.load(data_dir_) && world_.enterScreen(gs_.screenId());
+    bool has_env = false;
+    bool has_sky = false;
+    if (has_world) {
+        has_sky = env_.loadGlobal(data_dir_);
+        has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
+    }
+    assets_ok_ = has_world && has_env && has_sky;
+    events_loaded_ = events_.load(data_dir_);
+    if (events_loaded_) {
+        events_.bindParty(&roster_, &launch_);
+        events_.bindItems(has_items_ ? &items_ : nullptr);
+        events_.bindTownServiceUi(&town_service_ui_);
+        refreshEventsForScreen();
+    }
+
+    scripted_loaded_ = scripted_scene_.load(data_dir_);
+    if (scripted_loaded_) {
+        maybeQueueScriptedScenes(true);
+    }
+
+    automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_, launch_);
+
+    markDirty();
 
 #if !MM2_NO_STL
     if (!assets_ok_) {
-        std::fprintf(stderr,
-                     "mm2: play view missing assets in %s (town.32=%d townf.32=%d sky.32=%d map.dat=%d)\n",
-                     data_dir_, has_walls, has_floor, has_sky, has_map);
+        std::fprintf(stderr, "mm2: play view missing assets in %s (world=%d env=%d sky=%d)\n", data_dir_,
+                     has_world, has_env, has_sky);
     }
 #endif
 
     return true;
+#endif
 }
+
+#if MM2_HOST_AMIGA
+void GameSession::tickBootstrap()
+{
+    if (!bootstrapping_) {
+        return;
+    }
+
+    MM2_DBG("MM2 GOTO: tickBootstrap step=%u\n", (unsigned)bootstrap_step_);
+
+    switch (bootstrap_step_) {
+    case 0:
+        MM2_DBG("MM2 GOTO: bootstrap load ingame_sheet + items\n");
+        ingame_sheet_.loadAssets(data_dir_);
+        {
+            char *path = mm2_path_scratch_a();
+            if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "items.dat")) {
+                has_items_ = mm2_items_load_file(path, &items_) == MM2_ITEMS_OK;
+            }
+        }
+        bootstrap_step_ = 1;
+        markDirty();
+        return;
+    case 1: {
+        MM2_DBG("MM2 GOTO: bootstrap world load screen=%d\n", gs_.screenId());
+        const bool has_world = world_.load(data_dir_) && world_.enterScreen(gs_.screenId());
+        assets_ok_ = has_world;
+        bootstrap_step_ = 2;
+        markDirty();
+        return;
+    }
+    case 2: {
+        MM2_DBG("MM2 GOTO: bootstrap env load\n");
+        bool has_env = false;
+        bool has_sky = false;
+        if (world_.loaded()) {
+            has_sky = env_.loadGlobal(data_dir_);
+            has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
+        }
+        assets_ok_ = world_.loaded() && has_env && has_sky;
+        bootstrap_step_ = 3;
+        markDirty();
+        return;
+    }
+    case 3:
+        MM2_DBG("MM2 GOTO: bootstrap events load\n");
+        events_loaded_ = events_.load(data_dir_);
+        if (events_loaded_) {
+            events_.bindParty(&roster_, &launch_);
+            events_.bindItems(has_items_ ? &items_ : nullptr);
+            events_.bindTownServiceUi(&town_service_ui_);
+            refreshEventsForScreen();
+        }
+        bootstrap_step_ = 4;
+        markDirty();
+        return;
+    default:
+        MM2_DBG("MM2 GOTO: bootstrap scripted + finish\n");
+        scripted_loaded_ = scripted_scene_.load(data_dir_);
+        if (scripted_loaded_) {
+            maybeQueueScriptedScenes(true);
+        }
+        automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_,
+                                               launch_);
+        bootstrapping_ = false;
+        MM2_DBG("MM2 GOTO: bootstrap DONE assets_ok=%d\n", assets_ok_ ? 1 : 0);
+        markDirty();
+        return;
+    }
+}
+#endif
 
 void GameSession::shutdown()
 {
-    mm2_image32_free(&walls_);
-    mm2_image32_free(&floor_);
-    mm2_image32_free(&sky_);
+    env_.unloadAll();
+    events_.unload();
+    events_loaded_ = false;
+    scripted_scene_.unload();
+    scripted_loaded_ = false;
     if (gs_image_) {
         mm2::runtime::deallocate(gs_image_, kGsImageBytes);
         gs_image_ = nullptr;
     }
+    gs_ = GameStateView();
 
     data_dir_ = nullptr;
     assets_ok_ = false;
+    overlay_ = PlayOverlay::None;
+    has_items_ = false;
+#if MM2_HOST_AMIGA
+    view3d_dirty_ = false;
+    chrome_dirty_ = false;
+    text_dirty_ = false;
+    overlay_anim_dirty_ = false;
+    play_buffer_valid_ = false;
+    mm2_amiga_viewport_cache_invalidate();
+    mm2_amiga_play_chrome_cache_destroy();
+    bootstrapping_ = false;
+    bootstrap_step_ = 0;
+#else
+    frame_dirty_ = false;
+#endif
+}
+
+void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
+{
+    if (!move.acted) {
+        return;
+    }
+
+#if MM2_HOST_AMIGA
+    markView3DDirty();
+    if (move.turned) {
+        markTextDirty();
+    }
+#else
+    markDirty();
+#endif
+
+    if (move.acted && data_dir_) {
+        if (move.screen_changed) {
+            world_.enterScreen(gs_.screenId());
+            const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
+            assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
+            if (events_loaded_) {
+                refreshEventsForScreen();
+            }
+        }
+        if (scripted_loaded_) {
+            maybeQueueScriptedScenes(false);
+        }
+        automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_,
+                                               launch_);
+    }
+}
+
+void GameSession::maybeQueueScriptedScenes(bool on_start)
+{
+    if ((start_flags_ & kStartSkipScriptedIntros) != 0) {
+        return;
+    }
+    if (!scripted_loaded_ || !gs_.valid() || scripted_scene_.active()) {
+        return;
+    }
+
+    /* Area enter @ 0x6E84: first_time_flag until Corak prologue at (7,4) (FAQ x,y).
+     * corak_intro_seen_ is a port-side one-shot (the prologue is scene scheduling,
+     * not a per-character quest bit). */
+    if (on_start && gs_.screenId() == 0 && !corak_intro_seen_) {
+        gs_.setFirstTimeFlag(true);
+        return;
+    }
+
+    if (!on_start && gs_.screenId() == 0 && gs_.coordX() == 7 && gs_.coordY() == 4 &&
+        gs_.firstTimeFlag() && !corak_intro_seen_) {
+        scripted_scene_.queueScene(events::ScriptedSceneId::CorakIntro);
+        corak_intro_seen_ = true;
+        gs_.setFirstTimeFlag(false);
+        markDirty();
+    }
+}
+
+void GameSession::refreshEventsForScreen()
+{
+    if (!events_loaded_ || !gs_.valid()) {
+        return;
+    }
+    events_.enterLocation(static_cast<int>(gs_.screenId()), gs_, world_);
+}
+
+void GameSession::refreshWorldAfterEventTransition()
+{
+    if (!events_loaded_ || !events_.screenChanged() || !data_dir_) {
+        return;
+    }
+    events_.clearScreenChanged();
+
+    world_.enterScreen(gs_.screenId());
+    const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
+    assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
+    if (events_loaded_) {
+        /* OP_0C map_transition: drop OP_0B portraits / popups from the prior screen
+         * (enterLocation → text_.reset). Without this, Middlegate shop .anm overlays
+         * the overland viewport after exiting town. */
+        refreshEventsForScreen();
+    }
+    markDirty();
+}
+
+void GameSession::runPendingEvents()
+{
+    if (!events_loaded_ || !gs_.valid()) {
+        return;
+    }
+    if (mm2_gs_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH)) {
+        const bool blocking_before = events_.blocksMovement();
+        events_.scanAndRun(gs_, world_);
+        if (events_.blocksMovement() != blocking_before || events_.blocksMovement()) {
+            markDirty();
+        }
+    }
+}
+
+bool GameSession::eventBlocksInput() const
+{
+    return events_loaded_ && events_.blocksMovement();
+}
+
+bool GameSession::scriptedBlocksInput() const
+{
+    return scripted_loaded_ && scripted_scene_.blocksInput();
+}
+
+bool GameSession::overlayBlocksInput() const
+{
+    return overlay_ != PlayOverlay::None || eventBlocksInput();
+}
+
+void GameSession::tickEventInput(const platform::KeyState &keys)
+{
+    if (!events_loaded_ || !events_.blocksMovement()) {
+        return;
+    }
+    const bool blocking_before = events_.blocksMovement();
+    const int layers_before = events_.textView().layerCount();
+    events_.continueInput(gs_, world_, keys);
+    refreshWorldAfterEventTransition();
+    if (events_.blocksMovement() != blocking_before || events_.textView().layerCount() != layers_before) {
+        markDirty();
+    }
+}
+
+void GameSession::showStatusMessage(const char *msg)
+{
+    if (!msg) {
+        status_message_[0] = '\0';
+        overlay_ = PlayOverlay::None;
+        markDirty();
+        return;
+    }
+    std::snprintf(status_message_, sizeof(status_message_), "%s", msg);
+    overlay_ = PlayOverlay::StatusMessage;
+    markDirty();
+}
+
+gfx::PlayProtectValues GameSession::protectValues() const
+{
+    gfx::PlayProtectValues v{};
+    if (gs_.valid()) {
+        v.light = gs_.lightFactor();
+        v.magic = gs_.magicProtect();
+        v.forces = gs_.forcesProtect();
+        v.levitate = gs_.levitateFlag();
+        v.walk_water = gs_.walkWaterFlag();
+        v.guard_dog = gs_.guardDogFlag();
+    }
+    return v;
+}
+
+void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
+{
+    switch (action) {
+    case gameplay::PlaySessionAction::BashDoor:
+        handleBashDoor();
+        break;
+    case gameplay::PlaySessionAction::Controls:
+        overlay_ = PlayOverlay::Controls;
+        markDirty();
+        break;
+    case gameplay::PlaySessionAction::DismissHireling:
+        showStatusMessage("Dismiss hireling (GAP 0x141F4).");
+        break;
+    case gameplay::PlaySessionAction::ExchangeOrder:
+        showStatusMessage("Exchange order (GAP 0x20F58).");
+        break;
+    case gameplay::PlaySessionAction::Automap:
+        if (!assets_ok_ || !env_.automapReady()) {
+            showStatusMessage("Automap tiles missing.");
+        } else {
+            overlay_ = PlayOverlay::Automap;
+        }
+        markDirty();
+        break;
+    case gameplay::PlaySessionAction::Search:
+        showStatusMessage("Search (GAP $4800 / 0x1B19C).");
+        break;
+    case gameplay::PlaySessionAction::Unlock:
+        handleUnlockDoor();
+        break;
+    case gameplay::PlaySessionAction::Rest:
+        /* Rest @ 0x19E20: set the modal flag, then put up the Y/N confirm overlay.
+         * Execution (pay / encounter / heal / day-advance) runs on confirm in
+         * executeRest(). The original's "Too dangerous!" pre-check (0x19E32
+         * btst #3,-$55D6) reads the re-bundled per-tile flag table that the port
+         * does not maintain yet, so it is DEFERRED (no false blocking). */
+        mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 1); /* 0x19E24: -$7950 := 1 */
+        overlay_ = PlayOverlay::RestConfirm;
+        markDirty();
+        break;
+    default:
+        break;
+    }
+}
+
+namespace {
+
+/* Wall field directly ahead, read from the centre cell of the active screen's
+ * VISUAL page (the original's -$55BA source, MapWorld.h). 2-bit field per the
+ * port codec: 0 open, 1 wall, 2 door, 3 wall+torch (MM2_MAP_WALL_*). This is
+ * the same extraction View3D uses for the forward wall slot (cell & mask, then
+ * >> shift). */
+int forwardWallField(const mm2::world::MapWorld &world, int x, int y, char facing)
+{
+    const uint8_t cell = world.visualPage()[static_cast<size_t>((y << 4) | (x & 0x0F))];
+    return (cell >> mm2_map_facing_shift(facing)) & 3;
+}
+
+}  // namespace
+
+void GameSession::handleBashDoor()
+{
+    /* Bash door @ 0x9B48. */
+    const int x = gs_.coordX();
+    const int y = gs_.coordY();
+    const char facing = gs_.facingKey();
+    const int field = forwardWallField(world_, x, y, facing);
+
+    /* 0x9B7A/0x9B82: outdoor, or no wall ahead -> a plain forward step + tick. */
+    if (world_.isOutdoor() || field == MM2_MAP_WALL_OPEN) {
+        gameplay::MoveResult move = gameplay::step(world_, gs_, true);
+        refreshWorldAfterMove(move);
+        return;
+    }
+
+    /* 0x9BB4: a non-door wall (1 solid / 3 torch) -> "Solid!". */
+    if (field != MM2_MAP_WALL_DOOR) {
+        showStatusMessage(gameplay::obstructionMessage(gameplay::ObstructionMsg::Solid));
+        return;
+    }
+
+    /* 0x9BCA door: bash strength = char0 +$6B (might base) [+ char1 if party>1]. */
+    int might_sum = 0;
+    for (int i = 0; i < launch_.party_count && i < 2; ++i) {
+        const int idx = launch_.roster_slots[i];
+        if (idx >= 0 && idx < MM2_ROSTER_RECORD_COUNT) {
+            might_sum += roster_.records[idx].might_base; /* roster +$6B */
+        }
+    }
+
+    /* GAP: the door-strength byte -$5608 (compared at 0x9C2A) and the bash trap
+     * springs path (-$7D22/-$7D28 victim+damage @ 0x9C88) are part of the door /
+     * combat runtime state the port does not model yet (door tables are built by
+     * map_row_sampler 0x190C; -$5608 is never written in traced code). Without a
+     * door-strength source the success/fail comparison cannot be resolved
+     * faithfully, so the in-game bash on a real door is reported as deferred. The
+     * full strength + trap-roll decision IS implemented and unit-tested in
+     * gameplay::bashDoorRoll (explore_commands_test). */
+    (void)might_sum;
+    showStatusMessage("Bash: door strength (-$5608) not modeled (0x9BCA).");
+}
+
+void GameSession::handleUnlockDoor()
+{
+    /* Unlock door @ 0x20CA2. */
+    if (world_.isOutdoor()) {
+        return; /* 0x20CAE: outdoor -> silent exit. */
+    }
+
+    const int x = gs_.coordX();
+    const int y = gs_.coordY();
+    const char facing = gs_.facingKey();
+    const int field = forwardWallField(world_, x, y, facing);
+
+    /* 0x20CE4: must be a door ahead, else exit silently. */
+    if (field != MM2_MAP_WALL_DOOR) {
+        return;
+    }
+
+    /* GAP: the locked-bit test (0x20CF0 vs -$55D6) reads the re-bundled tile
+     * flag table that the port does not maintain; we treat a door as lockable
+     * and attempt the pick. The "Not Locked!" early-out is therefore deferred. */
+
+    /* GAP: the "who tries to unlock" character picker (0x1AE2E) is its own modal
+     * UI (not yet ported); use party slot 0 as the picker. */
+    int picker = -1;
+    for (int i = 0; i < launch_.party_count; ++i) {
+        const int idx = launch_.roster_slots[i];
+        if (idx >= 0 && idx < MM2_ROSTER_RECORD_COUNT) {
+            picker = idx;
+            break;
+        }
+    }
+    if (picker < 0) {
+        return;
+    }
+
+    /* Picker thievery = roster +$1E (read at 0x20D44). doc 06 labels +$16 the
+     * "Thievery %" creation stat; the unlock handler AND the party-thievery sum
+     * (0x4B7C) both read +$1E, so we follow the ASM (record byte 0x1E ==
+     * unknown_1a_20[4], contiguous run with no struct padding before age@0x21). */
+    const int thievery = roster_.records[picker].unknown_1a_20[4];
+
+    const int lock_d100 = rng_.range(1, 100);  /* 0x20D2E */
+    const int trap_d100 = rng_.range(1, 100);  /* 0x20D64 (only used on a failed pick) */
+
+    /* GAP: the trap byte -$5607 (0x20D6E) is unported door/combat state; on a
+     * failed pick the port reports the faithfully-known "Locked!" outcome and
+     * the trap-springs branch (-$7D22/-$7D28 @ 0x20D8A) is deferred. Passing a
+     * trap_byte >= roll keeps unlockDoorRoll on that branch. */
+    const gameplay::UnlockDecision d =
+        gameplay::unlockDoorRoll(thievery, lock_d100, /*trap_byte*/ 0xFF, trap_d100);
+
+    /* GAP: clearing the lock on success (-$7F02 @ 0x4B06) mutates the re-bundled
+     * -$54BA/-$55D6 tables the port does not maintain, so the unlocked state is
+     * not persisted here yet. */
+    showStatusMessage(gameplay::obstructionMessage(
+        d.outcome == gameplay::UnlockOutcome::Success ? gameplay::ObstructionMsg::Success
+                                                      : gameplay::ObstructionMsg::Locked));
+}
+
+void GameSession::executeRest()
+{
+    uint8_t *a4 = gs_.a4();
+
+    /* --- 0x19AD6 hireling daily-pay check --------------------------------- */
+    uint32_t hireling_pay = 0;
+    for (int i = 0; i < launch_.party_count; ++i) {
+        const int idx = launch_.roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        if (idx >= 0x18) { /* roster index >= 24 -> hireling (doc 33 / 0x19AE4) */
+            hireling_pay += roster_.records[idx].gold; /* +$66 daily fee */
+        }
+    }
+    if (hireling_pay > 0) {
+        /* The pooled-gold spend routine -$7E6C (0x19B1E) is not traced; pool the
+         * party's gold to decide affordability. DEFER the exact distribution. */
+        uint32_t pool = 0;
+        for (int i = 0; i < launch_.party_count; ++i) {
+            const int idx = launch_.roster_slots[i];
+            if (idx >= 0 && idx < MM2_ROSTER_RECORD_COUNT) {
+                pool += roster_.records[idx].gold;
+            }
+        }
+        if (pool < hireling_pay) {
+            /* 0x19EA0 inline string. */
+            mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
+            showStatusMessage("Not enough gold - Dismiss hirelings");
+            return;
+        }
+        uint32_t remaining = hireling_pay;
+        for (int i = 0; i < launch_.party_count && remaining > 0; ++i) {
+            const int idx = launch_.roster_slots[i];
+            if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+                continue;
+            }
+            const uint32_t take = roster_.records[idx].gold < remaining ? roster_.records[idx].gold
+                                                                        : remaining;
+            roster_.records[idx].gold -= take;
+            remaining -= take;
+        }
+    }
+
+    /* --- 0x19D64 rest-interruption (encounter) check ---------------------- */
+    /* Conditions that suppress the encounter (all -> no roll): event tile, an
+     * active guard dog, or a non-zero move counter -$796C. */
+    const uint8_t move_counter = mm2_gs_u8(a4, -0x796C);
+    mm2_gs_set_u8(a4, -0x796C, 0); /* 0x19D76: clr -$796C */
+    const bool on_event_tile = (world_.collisionAt(gs_.coordX(), gs_.coordY()) & MM2_MAP_COLL_EVENT) != 0;
+    const bool guard_dog = mm2_gs_u8(a4, MM2_GS_GUARD_DOG_FLAG) != 0;
+
+    bool encounter = false;
+    if (!on_event_tile && !guard_dog && move_counter == 0) {
+        encounter = (rng_.range(1, 50) == 2); /* 0x19D98: rng(1,50)==2 */
+    }
+    if (encounter) {
+        /* 0x19DAC: wakes the party (sets condition bit 4) and starts a fixed
+         * fight (-$796B := 3, -$7EDE combat setup @ 0x051C2). DEFER the combat
+         * engine; faithfully skip the heal + day advance (rest interrupted). */
+        mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
+        showStatusMessage("Rest interrupted by monsters (combat 0x051C2 deferred).");
+        return;
+    }
+
+    /* --- 0x19B28 rest execution: clear buffs, heal, advance the clock ------ */
+    /* 0x19B2C..0x19B5C: clear the 13 contiguous temporary-buff bytes
+     * (-$79AB light .. -$799F wizard-eye), exactly the set the ASM zeroes. */
+    for (int32_t off = -0x79AB; off <= -0x799F; ++off) {
+        mm2_gs_set_u8(a4, off, 0);
+    }
+
+    for (int i = 0; i < launch_.party_count; ++i) {
+        const int idx = launch_.roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        Mm2RosterRecord &rec = roster_.records[idx];
+
+        if (rec.condition >= 0x80) {
+            continue; /* 0x19B80: dead/stone/eradicated -> not healed. */
+        }
+
+        rec.condition &= 0x0D; /* 0x19B8C: keep bits 0,2,3; clear the rest. */
+
+        /* 0x19B96: age >= 0x50 -> 50%-ish chance to fall ill (condition = 0x81). */
+        if (rec.age >= 0x50 && rng_.range(1, 100) < 0x32) {
+            rec.condition = 0x81;
+        }
+
+        if (rec.hp_max == 0) {
+            rec.hp_max = 1; /* 0x19BC4 */
+        }
+
+        /* 0x19BD0: poisoned (condition bit 3) heals HP_current to half; otherwise
+         * restore HP_current to the permanent max in +$60 (hp_aux). */
+        if (rec.condition & 0x08) {
+            rec.hp_current = static_cast<uint16_t>(rec.hp_current / 2);
+        } else {
+            rec.hp_current = rec.hp_aux;
+        }
+
+        /* 0x19C06: with no food, HP_current is restored but the rest of the
+         * refresh (HP_max sync, food spend, SP) is skipped for this member. */
+        if (rec.food == 0) {
+            continue;
+        }
+        rec.food = static_cast<uint8_t>(rec.food - 1); /* 0x19C12 */
+
+        if (!(rec.condition & 0x04)) {
+            rec.hp_max = rec.hp_current; /* 0x19C2A */
+        }
+
+        /* 0x19C30 SP recompute: sp_current = (stat_bonus+3) * spell_level for
+         * casters (+$23), then sp_max = sp_current. The bonus lookup -$7F56 and
+         * the exact field semantics are not ported; restore SP to the stored max
+         * (the rested end state for an undrained caster). DEFER exact recompute. */
+        rec.sp_current = rec.sp_max;
+    }
+
+    /* 0x19CEC: advance the clock by 0x55 sub-day units (one rest = ~85 ticks),
+     * rolling the calendar over so the day/night cycle progresses. */
+    gameplay::advanceTimeTick(gs_, 0x55);
+
+    /* DEFER 0x19CF6: era==9 endgame timeline-shuffle (rng(1,60) -> map reload). */
+
+    mm2_gs_set_u8(a4, MM2_GS_PENDING_EVENT_LATCH, 1); /* dispatcher epilogue $1420 */
+    mm2_gs_set_u8(a4, MM2_GS_BUSY_STATUS, 1);
+    mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
+
+    showStatusMessage("Rest complete, no encounters."); /* 0x19D46 inline string */
+}
+
+void GameSession::tickOverlayInput(const platform::KeyState &keys)
+{
+    if (overlay_ == PlayOverlay::TownService) {
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        town_service_ui_.handleKey(ch, keys.escape);
+        if (!town_service_ui_.active()) {
+            overlay_ = PlayOverlay::None;
+        }
+        markDirty();
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::StatusMessage) {
+        if (keys.escape || keys.any_key) {
+            overlay_ = PlayOverlay::None;
+            status_message_[0] = '\0';
+            markDirty();
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::Automap) {
+        if (keys.escape) {
+            overlay_ = PlayOverlay::None;
+            markDirty();
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::Controls) {
+        if (keys.escape) {
+            overlay_ = PlayOverlay::None;
+            markDirty();
+            return;
+        }
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (ch >= '1' && ch <= '4') {
+            controls_screen_.handleKey(ch, gs_);
+            markDirty();
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::RestConfirm) {
+        /* 0x19E50 prompt loop: read a key, toupper, accept only Y / N (the ASM
+         * loops on anything else). ESC is treated as N here for parity with the
+         * other confirm overlays. */
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (ch == 'Y') {
+            overlay_ = PlayOverlay::None;
+            executeRest();
+            markDirty();
+            return;
+        }
+        if (keys.escape || ch == 'N') {
+            /* 0x19E8E: repaint chrome, clear -$7950, abort. */
+            mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+            overlay_ = PlayOverlay::None;
+            markDirty();
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::QuitConfirm) {
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (ch == 'Y') {
+            quit_ = true;
+            overlay_ = PlayOverlay::None;
+            return;
+        }
+        if (keys.escape || ch == 'N') {
+            overlay_ = PlayOverlay::None;
+            markDirty();
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::QuickRef) {
+        if (keys.escape) {
+            overlay_ = PlayOverlay::None;
+            markDirty();
+            return;
+        }
+        if (keys.key_q && !keys.ctrl) {
+            return;
+        }
+
+        int party_slot = -1;
+        gameplay::PlaySessionAction action = gameplay::PlaySessionAction::None;
+        if (gameplay::pollPlaySessionAction(keys, launch_.party_count, &action, &party_slot)) {
+            if (action == gameplay::PlaySessionAction::ViewCharacter) {
+                sheet_session_.party_slot = party_slot;
+                sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+                sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+                sheet_session_.status_line[0] = '\0';
+                overlay_ = PlayOverlay::CharacterSheet;
+                markDirty();
+            }
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::CharacterSheet) {
+        if (keys.escape) {
+            if (gameplay::sheetSubModeBlocksCharacterSwitch(sheet_session_.sub_mode)) {
+                sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+                sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+                sheet_session_.status_line[0] = '\0';
+                markDirty();
+                return;
+            }
+            overlay_ = PlayOverlay::None;
+            sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+            sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+            sheet_session_.status_line[0] = '\0';
+            markDirty();
+            return;
+        }
+        if (keys.key_q && !keys.ctrl) {
+            overlay_ = PlayOverlay::QuickRef;
+            markDirty();
+            return;
+        }
+
+        const bool pending = gameplay::sheetSubModeBlocksCharacterSwitch(sheet_session_.sub_mode);
+        if (!pending) {
+            int party_slot = -1;
+            gameplay::PlaySessionAction action = gameplay::PlaySessionAction::None;
+            if (gameplay::pollPlaySessionAction(keys, launch_.party_count, &action, &party_slot)) {
+                if (action == gameplay::PlaySessionAction::ViewCharacter) {
+                    /* 0x907A digit chain: switch character without closing sheet. */
+                    sheet_session_.party_slot = party_slot;
+                    sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+                    sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+                    sheet_session_.status_line[0] = '\0';
+                    markDirty();
+                    return;
+                }
+            }
+        }
+
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (ch == 0) {
+            return;
+        }
+
+        const Mm2ItemsFile *items_ptr = has_items_ ? &items_ : nullptr;
+        const gameplay::SheetKeyOutcome outcome =
+            ingame_sheet_.handleKey(ch, sheet_session_, roster_, launch_, items_ptr);
+        if (outcome == gameplay::SheetKeyOutcome::Close) {
+            overlay_ = PlayOverlay::None;
+        }
+        markDirty();
+        return;
+    }
+}
+
+void GameSession::tickPlayInput(const platform::KeyState &keys)
+{
+    if (keys.ctrl && keys.key_q) {
+        overlay_ = PlayOverlay::QuitConfirm;
+        markDirty();
+        return;
+    }
+
+    int party_slot = -1;
+    gameplay::PlaySessionAction action = gameplay::PlaySessionAction::None;
+    if (!gameplay::pollPlaySessionAction(keys, launch_.party_count, &action, &party_slot)) {
+        return;
+    }
+
+    switch (action) {
+    case gameplay::PlaySessionAction::CtrlQuit:
+        overlay_ = PlayOverlay::QuitConfirm;
+        markDirty();
+        break;
+    case gameplay::PlaySessionAction::QuickRef:
+        overlay_ = PlayOverlay::QuickRef;
+        markDirty();
+        break;
+    case gameplay::PlaySessionAction::ViewCharacter:
+        sheet_session_.party_slot = party_slot;
+        sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+        sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+        sheet_session_.status_line[0] = '\0';
+        overlay_ = PlayOverlay::CharacterSheet;
+        markDirty();
+        break;
+    case gameplay::PlaySessionAction::PanelOptions:
+        if (right_panel_ == gfx::PlayRightPanel::Protect) {
+            right_panel_ = gfx::PlayRightPanel::Options;
+            gs_.setRightPanelMode(0);
+            markDirty();
+        }
+        break;
+    case gameplay::PlaySessionAction::PanelProtect:
+        if (right_panel_ == gfx::PlayRightPanel::Options) {
+            right_panel_ = gfx::PlayRightPanel::Protect;
+            gs_.setRightPanelMode(1);
+            markDirty();
+        }
+        break;
+    case gameplay::PlaySessionAction::BashDoor:
+    case gameplay::PlaySessionAction::Controls:
+    case gameplay::PlaySessionAction::DismissHireling:
+    case gameplay::PlaySessionAction::ExchangeOrder:
+    case gameplay::PlaySessionAction::Automap:
+    case gameplay::PlaySessionAction::Rest:
+    case gameplay::PlaySessionAction::Search:
+    case gameplay::PlaySessionAction::Unlock:
+        handleExploreCommand(action);
+        break;
+    default:
+        break;
+    }
+}
+
+bool GameSession::awaitingContinuePrompt() const
+{
+    if (scripted_loaded_ && scripted_scene_.active()) {
+        return true;
+    }
+    if (events_loaded_ && events_.blocksMovement()) {
+        return true;
+    }
+    return false;
+}
+
+void GameSession::tickOverlayAnimations()
+{
+    if (viewportHiddenByOverlay()) {
+#if MM2_HOST_AMIGA
+        overlay_anim_dirty_ = false;
+#endif
+        return;
+    }
+
+    bool changed = false;
+    if (scripted_loaded_ && scripted_scene_.active()) {
+        changed |= scripted_scene_.tickAnimation();
+    }
+    if (events_loaded_ &&
+        (events_.textView().hasServicePortrait() || events_.textView().hasPegasusIllustration())) {
+        changed |= events_.textView().tickAnimation();
+    }
+    if (changed) {
+#if MM2_HOST_AMIGA
+        markOverlayAnimDirty();
+#else
+        markDirty();
+#endif
+    }
+}
+
+void GameSession::tickTorchAnimation()
+{
+    if (!assets_ok_ || world_.isOutdoor() || viewportHiddenByOverlay()) {
+        return;
+    }
+    if (overlay_ == PlayOverlay::Automap) {
+        return;
+    }
+
+    /* key_read_3d @0x1E9CE advances -$667A once per indoor input poll (~vblank). */
+    constexpr int kTicksPerPhase = 2;
+    ++torch_tick_;
+    if (torch_tick_ < kTicksPerPhase) {
+        return;
+    }
+    torch_tick_ = 0;
+    torch_phase_ = (torch_phase_ + 1) % gfx::kView3DTorchPhaseCount;
+#if MM2_HOST_AMIGA
+    markView3DDirty();
+#else
+    markDirty();
+#endif
 }
 
 void GameSession::tick(const platform::KeyState &keys)
 {
-    if (keys.quit || keys.escape) {
-        back_to_title_ = true;
+    if (!gs_.valid()) {
         return;
     }
 
-    if (keys.key_q) {
-        quit_ = true;
+    tickOverlayAnimations();
+    tickTorchAnimation();
+
+    if (scripted_loaded_ && scripted_scene_.active()) {
+        const bool was_active = scripted_scene_.active();
+        scripted_scene_.tick(keys);
+        if (was_active && !scripted_scene_.active()) {
+            markDirty();
+        }
+        if (scripted_scene_.needsViewportRestore()) {
+            scripted_scene_.clearViewportRestore();
+#if MM2_HOST_AMIGA
+            markView3DDirty();
+#else
+            markDirty();
+#endif
+        }
+        return;
     }
 
-    if (keys.left) {
-        camera_.facing = (camera_.facing + 3) & 3;
-        launch_.facing_key = "NWSE"[camera_.facing];
-    } else if (keys.right) {
-        camera_.facing = (camera_.facing + 1) & 3;
-        launch_.facing_key = "NWSE"[camera_.facing];
+    if (events_loaded_ && events_.blocksMovement()) {
+        tickEventInput(keys);
+        return;
     }
 
+    if (overlay_ != PlayOverlay::None) {
+        tickOverlayInput(keys);
+    } else {
+        tickPlayInput(keys);
+        if (overlay_ == PlayOverlay::None) {
+            gameplay::ExploreCode code{};
+            if (gameplay::pollExploreCode(keys, &code)) {
+                gameplay::MoveResult move{};
+                switch (code) {
+                case gameplay::ExploreCode::TurnLeft:
+                    move = gameplay::turn(world_, gs_, false);
+                    break;
+                case gameplay::ExploreCode::TurnRight:
+                    move = gameplay::turn(world_, gs_, true);
+                    break;
+                case gameplay::ExploreCode::Forward:
+                    move = gameplay::step(world_, gs_, true);
+                    break;
+                case gameplay::ExploreCode::Back:
+                    move = gameplay::step(world_, gs_, false);
+                    break;
+                default:
+                    break;
+                }
+                refreshWorldAfterMove(move);
+            }
+        }
+    }
+
+    /* Debug triggers: Ctrl+G = Corak scene, Ctrl+P = Pegasus scene (doc 46 demos). */
+    if (overlay_ == PlayOverlay::None && scripted_loaded_ &&
+        keys.ctrl && (keys.last_ascii == 'G' || keys.last_ascii == 'g')) {
+        scripted_scene_.queueScene(events::ScriptedSceneId::CorakIntro);
+        markDirty();
+        return;
+    }
+    if (overlay_ == PlayOverlay::None && scripted_loaded_ &&
+        keys.ctrl && (keys.last_ascii == 'P' || keys.last_ascii == 'p')) {
+        scripted_scene_.queueScene(events::ScriptedSceneId::PegasusC2);
+        markDirty();
+        return;
+    }
+
+    runPendingEvents();
+    refreshWorldAfterEventTransition();
+    maybeOpenTownServiceMenu();
+}
+
+void GameSession::maybeOpenTownServiceMenu()
+{
+    /* An OP_0E temple/training/smith selector fired during scanAndRun and the bound
+     * PlayTownServiceUi recorded the request (presentation deferred to here so input
+     * runs per-frame, not blocking inside the event VM). Open the modal overlay. */
+    if (!town_service_ui_.pending() || overlay_ != PlayOverlay::None) {
+        return;
+    }
+    town_service_ui_.begin();
+    overlay_ = PlayOverlay::TownService;
+    markDirty();
 }
 
 void GameSession::renderView3D()
 {
-    using namespace gfx;
-    using namespace gfx::play_layout;
-
     if (!assets_ok_) {
-        compositor_.drawTextShadow(kViewOriginX, kViewOriginY, "(missing town.32 / map.dat)", 200, 120, 120);
+        compositor_.drawTextShadow(gfx::play_layout::kViewOriginX, gfx::play_layout::kViewOriginY,
+                                   "(missing gfx / map.dat)", 200, 120, 120);
         return;
     }
 
-    const View3DMapBuffers bufs = buildView3DMapBuffers(map_visual_);
-    const View3DScene scene = buildView3DScene(bufs, camera_);
-
-    blitImageFrame(compositor_, floor_, 0, kView3DOriginX, kView3DFloorY);
-    blitImageFrame(compositor_, sky_, 0, kView3DOriginX, kView3DSkyY);
-
-    for (const View3DBlit &b : scene.blits) {
-        blitImageFrame(compositor_, walls_, b.frame, b.x, b.y);
+    if (world_.isOutdoor()) {
+        renderOutdoorView();
+    } else {
+        renderIndoorView3D();
     }
-
 }
 
-void GameSession::render()
+void GameSession::renderIndoorView3D()
 {
-    compositor_.clear(0, 0, 0, 255);
+    using namespace gfx;
+    using namespace gfx::play_layout;
 
-    gfx::drawPlayScreenChrome(compositor_);
-    renderView3D();
+    View3DCamera camera{};
+    camera.x = gs_.coordX();
+    camera.y = gs_.coordY();
+    camera.facing = gs_.facing03();
 
-    gfx::drawPlayStatusBar(compositor_, game_day_, game_year_, launch_.facing_key);
+    const View3DMapBuffers bufs = world_.buildView3DMapBuffers();
+    const View3DScene scene = buildView3DScene(bufs, camera);
 
-    char names[8][16];
-    int hp_cur[8]{};
-    int hp_max[8]{};
+    const int sky_frame = world_.roofBitAt(camera.x, camera.y) ? 1 : 0;
+    blitImageFrame(compositor_, env_.floor(), 0, kView3DOriginX, kView3DFloorY, 1);
+    blitImageFrame(compositor_, env_.sky(), sky_frame, kView3DOriginX, kView3DSkyY, 1);
+
+    for (int i = 0; i < scene.num_blits; ++i) {
+        const View3DBlit &b = scene.blits[static_cast<size_t>(i)];
+        blitImageFrame(compositor_, env_.walls(), b.frame, b.x, b.y, 0);
+    }
+    for (int i = 0; i < scene.num_torch_blits; ++i) {
+        const View3DBlit &b = scene.torch_blits[static_cast<size_t>(i)];
+        View3DTorchBlit tb{};
+        if (view3dTorchBlitFor(b, torch_phase_, &tb) && env_.torches().frame_count > 0) {
+            blitImageFrame(compositor_, env_.torches(), tb.frame, tb.x, tb.y, 0);
+        }
+    }
+}
+
+void GameSession::renderOutdoorView()
+{
+    using namespace gfx;
+    using namespace gfx::play_layout;
+
+    View3DCamera camera{};
+    camera.x = gs_.coordX();
+    camera.y = gs_.coordY();
+    camera.facing = gs_.facing03();
+
+    /* Paint order @ outdoor_3d_master 0x18870: floor, sky, decor, horizon layers. */
+    blitImageFrame(compositor_, env_.floor(), 0, kView3DOriginX, kView3DFloorY, 1);
+
+    /* Day vs night sky @0x18898: cmpi.w #$80,-$79b4 — subday < 0x80 draws the
+     * sky.32 backdrop; >= 0x80 (night) fills the band black + plots stars
+     * (night routine @0x0687C). */
+    const uint16_t subday = mm2_gs_u16(gs_.a4(), MM2_GS_TIME_SUBDAY);
+    if (subday < static_cast<uint16_t>(kOutdoorNightSubdayThreshold)) {
+        blitImageFrame(compositor_, env_.sky(), 0, kView3DOriginX, kView3DSkyY, 1);
+    } else {
+        const mm2_image32_file &sky = env_.sky();
+        auto penRgb = [&sky](uint8_t pen, uint8_t &r, uint8_t &g, uint8_t &b) {
+            const uint8_t *c = sky.palette_rgba[pen & (MM2_IMAGE32_PALETTE_COLORS - 1)];
+            r = c[0];
+            g = c[1];
+            b = c[2];
+        };
+        uint8_t fr = 0, fg = 0, fb = 0;
+        penRgb(kOutdoorSkyFillPen, fr, fg, fb);
+        compositor_.fillRect(kOutdoorSkyFillX, kOutdoorSkyFillY, kOutdoorSkyFillW, kOutdoorSkyFillH,
+                             fr, fg, fb);
+
+        std::array<OutdoorStarBlit, kOutdoorStarCount> stars{};
+        const int nstars = buildOutdoorStars(camera.facing, stars);
+        for (int i = 0; i < nstars; ++i) {
+            uint8_t r = 0, g = 0, b = 0;
+            penRgb(stars[static_cast<size_t>(i)].pen, r, g, b);
+            compositor_.fillRect(stars[static_cast<size_t>(i)].x, stars[static_cast<size_t>(i)].y, 1, 1,
+                                 r, g, b);
+        }
+    }
+
+    const OutdoorScene scene = buildOutdoorScene(world_, camera);
+
+    for (int i = 0; i < scene.num_decor; ++i) {
+        const OutdoorSpriteBlit &b = scene.decor[static_cast<size_t>(i)];
+        blitImageFrame(compositor_, env_.biomeSheet(b.biome), b.frame, b.x, b.y, 0);
+    }
+    for (int i = 0; i < scene.num_horizon; ++i) {
+        const OutdoorSpriteBlit &b = scene.horizon[static_cast<size_t>(i)];
+        blitImageFrame(compositor_, env_.horizonSheet(b.horizon), b.frame, b.x, b.y, 0);
+    }
+}
+
+void GameSession::renderPartyPanel()
+{
+    gfx::PlayPartySlot slots[8]{};
     for (int i = 0; i < launch_.party_count && i < 8; ++i) {
         const int slot = launch_.roster_slots[i];
         if (slot < 0 || slot >= MM2_ROSTER_RECORD_COUNT) {
-            names[i][0] = '\0';
             continue;
         }
 
         const Mm2RosterRecord &rec = roster_.records[slot];
-        mm2_roster_name_to_cstr(&rec, names[i], sizeof(names[i]));
-        hp_cur[i] = rec.hp_current;
-        hp_max[i] = rec.hp_max;
+        slots[i].present = true;
+        mm2_roster_name_to_cstr(&rec, slots[i].name, sizeof(slots[i].name));
+        slots[i].hp = rec.hp_current;
+        slots[i].bad_condition = rec.condition != 0;
     }
 
-    gfx::drawPlayPartyList(compositor_, launch_.party_count, names, hp_cur, hp_max);
+    gfx::drawPlayPartyPanel(compositor_, slots);
+}
 
-    compositor_.drawTextShadow(8, 192, "ESC title  Q quit  Left/Right turn", 140, 140, 160);
+void GameSession::renderOverlays()
+{
+    switch (overlay_) {
+    case PlayOverlay::QuickRef:
+        ingame_sheet_.renderQuickRef(compositor_, roster_, launch_);
+        break;
+    case PlayOverlay::CharacterSheet:
+        ingame_sheet_.renderSheet(compositor_, roster_, launch_, sheet_session_.party_slot,
+                                  has_items_ ? &items_ : nullptr, &sheet_session_);
+        break;
+    case PlayOverlay::Controls:
+        controls_screen_.render(compositor_, gs_);
+        break;
+    case PlayOverlay::StatusMessage:
+        /* Status row 0x11 — same clear as EventTextView Op01 / y/n bar (doc 44). */
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
+        compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 128, 255);
+        compositor_.drawText(8, 18 * 8, "(ESC to dismiss)", 180, 180, 180, 255);
+        break;
+    case PlayOverlay::Automap:
+        gfx::renderAutomap(compositor_, env_, world_, automap_, gs_);
+        break;
+    case PlayOverlay::QuitConfirm:
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
+        compositor_.drawText(8, 17 * 8, "Quit without game save (y/n)?", 255, 80, 80, 255);
+        break;
+    case PlayOverlay::RestConfirm:
+        /* 0x19ECB inline string, drawn on the status row like the other prompts. */
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
+        compositor_.drawText(8, 17 * 8, "Rest here? (Y/N)", 255, 255, 128, 255);
+        break;
+    case PlayOverlay::TownService:
+        town_service_ui_.render(compositor_);
+        break;
+    default:
+        break;
+    }
+}
+
+void GameSession::renderFrame(bool overlay_anim_only)
+{
+    const bool scripted_active = scripted_loaded_ && scripted_scene_.active();
+
+    /* Chrome (red border + black fills) is cached in chip RAM and blitted each
+     * frame so double-buffer swaps do not drop HUD glyphs outside the 3D cache. */
+#if MM2_HOST_AMIGA
+    if (!overlay_anim_only) {
+        if (chrome_dirty_ || !mm2_amiga_play_chrome_cache_ready()) {
+            if (!mm2_amiga_play_chrome_cache_ready()) {
+                mm2_amiga_play_chrome_cache_create();
+            }
+            mm2_amiga_play_chrome_cache_begin();
+            gfx::drawPlayScreenChromeStatic(compositor_);
+            mm2_amiga_play_chrome_cache_end();
+        }
+        mm2_amiga_play_chrome_cache_present();
+    }
+#else
+    (void)overlay_anim_only;
+    compositor_.clear(0, 0, 0, 255);
+    gfx::drawPlayScreenChrome(compositor_);
+#endif
+
+    if (!scripted_active || !scripted_scene_.hidesView3D()) {
+        if (overlay_ != PlayOverlay::Automap && !viewportHiddenByOverlay()) {
+#if MM2_HOST_AMIGA
+            if (overlay_anim_only) {
+                /* Retail buf_copy_rect @ 0x171AC: restore the saved 3D viewport
+                 * instead of rebuilding floor+sky+wall slices every ghost cel. */
+                mm2_amiga_viewport_cache_restore();
+            } else {
+                renderView3D();
+                mm2_amiga_viewport_cache_save();
+            }
+#else
+            renderView3D();
+#endif
+            /* Walls blit past x=216 and erase the viewport/right-column divider. */
+            gfx::drawPlayViewportDivider(compositor_);
+        }
+    }
+
+    gfx::PlayRightPanel panel = right_panel_;
+    if (scripted_active) {
+        panel = scripted_scene_.panelMode() == 0 ? gfx::PlayRightPanel::Options : gfx::PlayRightPanel::Protect;
+    }
+
+    const bool protect_panel = panel == gfx::PlayRightPanel::Protect;
+    gfx::drawPlayStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
+                           gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
+    renderPartyPanel();
+
+    if (overlay_ == PlayOverlay::None || overlay_ == PlayOverlay::StatusMessage ||
+        overlay_ == PlayOverlay::TownService) {
+        /* Town services render in the lower console band only (faithful, not a
+         * fullscreen modal) — keep the 3D view + right column on screen. */
+        const gfx::PlayProtectValues prot = protectValues();
+        gfx::drawPlayRightColumn(compositor_, panel, protect_panel ? &prot : nullptr);
+    }
+
+    if (scripted_active) {
+        scripted_scene_.draw(compositor_);
+    }
+
+    renderOverlays();
+
+    /* OP_04 door labels / OP_05/06/0B viewport overlays must not paint over modal
+     * sheets (character sheet, quick ref, etc.) — retail hides the 3D hood entirely. */
+    if (events_loaded_ && !scripted_active && !viewportHiddenByOverlay()) {
+        events_.textView().draw(compositor_);
+    }
+}
+
+bool GameSession::viewportHiddenByOverlay() const
+{
+    switch (overlay_) {
+    case PlayOverlay::QuickRef:
+    case PlayOverlay::CharacterSheet:
+    case PlayOverlay::Controls:
+    case PlayOverlay::QuitConfirm:
+    case PlayOverlay::Automap:
+        return true;
+    /* TownService is NOT here: its menu draws only in the lower console band, so
+     * the 3D viewport stays visible (faithful non-fullscreen presentation). */
+    default:
+        return false;
+    }
+}
+
+#if MM2_HOST_AMIGA
+bool GameSession::canUsePartialView3DRefresh() const
+{
+    if (!play_buffer_valid_ || !view3d_dirty_ || chrome_dirty_) {
+        return false;
+    }
+    if (!assets_ok_ || overlay_ != PlayOverlay::None) {
+        return false;
+    }
+    if (scripted_loaded_ && scripted_scene_.active()) {
+        return false;
+    }
+    return true;
+}
+
+void GameSession::renderFrameOverlayAnimOnly()
+{
+    if (!mm2_amiga_copy_front_to_back()) {
+        renderFrame(false);
+        play_buffer_valid_ = true;
+        return;
+    }
+
+    if (overlay_ != PlayOverlay::Automap) {
+        mm2_amiga_viewport_cache_restore();
+        gfx::drawPlayViewportDivider(compositor_);
+    }
+
+    if (scripted_loaded_ && scripted_scene_.active()) {
+        scripted_scene_.drawViewportSpriteOverlays(compositor_);
+    } else if (events_loaded_) {
+        events_.textView().drawPersistentViewportOverlays(compositor_);
+        events_.textView().drawServiceSignOverlay(compositor_);
+        events_.textView().drawPegasusIllustration(compositor_);
+    }
+}
+
+void GameSession::renderFrameView3DOnly()
+{
+    if (!mm2_amiga_copy_front_to_back()) {
+        renderFrame(false);
+        play_buffer_valid_ = true;
+        return;
+    }
+
+    if (overlay_ != PlayOverlay::Automap) {
+        renderView3D();
+        mm2_amiga_viewport_cache_save();
+        gfx::drawPlayViewportDivider(compositor_);
+    }
+
+    if (text_dirty_) {
+        const bool protect_panel = right_panel_ == gfx::PlayRightPanel::Protect;
+        gfx::drawPlayStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
+                               gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
+    }
+
+    if (events_loaded_) {
+        events_.textView().drawPersistentViewportOverlays(compositor_);
+        events_.textView().drawServiceSignOverlay(compositor_);
+        events_.textView().drawPegasusIllustration(compositor_);
+    }
+}
+#endif
+
+void GameSession::render()
+{
+#if MM2_HOST_AMIGA
+    /* Sign / portrait cel tick: copy HUD from front, restore cached 3D hood, repaint overlays. */
+    if (overlay_anim_dirty_ && !view3d_dirty_ && !chrome_dirty_ && !text_dirty_ &&
+        mm2_amiga_viewport_cache_valid() && !viewportHiddenByOverlay()) {
+        renderFrameOverlayAnimOnly();
+        play_buffer_valid_ = true;
+        return;
+    }
+
+    if (canUsePartialView3DRefresh()) {
+        renderFrameView3DOnly();
+        play_buffer_valid_ = true;
+        return;
+    }
+#endif
+    renderFrame(false);
+#if MM2_HOST_AMIGA
+    play_buffer_valid_ = true;
+#endif
 }
 
 }  // namespace mm2

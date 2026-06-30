@@ -14,6 +14,18 @@ Flow shape:
 
 Hotkeys include at least `C/M/O/P/Q` branches into command handlers.
 
+### Exploration key dispatch (NEW — full trace in doc 43)
+
+The dispatcher at `$1482` is now fully decoded — see
+`43-exploration-input-and-ingame-options.md` for the complete table. Summary:
+Ctrl-Q quit-confirm `$12F4`; `B` Bash `0x9B48`; `C` Controls `0x13CCE`;
+`D` Dismiss `0x141F4`; `E` Exchange `0x20F58`; `M` auto-map `0x223A`;
+`O`/`P` toggle the right-hand Options/Protect panels (`$5D54` / `0x5E28`,
+state byte `A4-$79B2`); `Q` Quick Ref + digits `1-8` View Character (both via
+thunk `-$7E00` → `0x907A`); `R` Rest `0x19E20`; `S` Search `$4800`;
+`U` Unlock `0x20CA2`; `$F0/$F1` turn (`$5838`), `$F2/$F3` step (`$5816`).
+Arrow/keypad keys map to `$F0..$F3` in the raw key reader at `$2264E`.
+
 ## Screen Loader (`LAB_256E`)
 
 Triggered when mode/screen id changes:

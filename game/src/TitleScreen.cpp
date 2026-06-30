@@ -286,7 +286,7 @@ void TitleScreen::bootBeginLogoFade()
 #if MM2_HOST_AMIGA
     logo_fade_armed_ = true;
     if (has_nwcp_) {
-        mm2_amiga_stage_asset_palette(&nwcp_);
+        mm2_amiga_apply_palette(&nwcp_);
         platform::logoFadeCapturePalette();
     }
 #endif
@@ -411,9 +411,7 @@ void TitleScreen::releaseItemsDat()
 
 void TitleScreen::shutdown()
 {
-    mm2_image32_free(&intro_);
-    releaseIntroClips();
-    releaseLogoAsset();
+    releaseAttractAssets();
     mm2_image32_free(&book_);
 #if MM2_HOST_AMIGA
     releaseItemsDat();
@@ -435,6 +433,41 @@ void TitleScreen::releaseLogoAsset()
     mm2_image32_free(&nwcp_);
     has_nwcp_ = false;
 }
+
+void TitleScreen::releaseAttractAssets()
+{
+    if (has_intro_) {
+        mm2_image32_free(&intro_);
+        has_intro_ = false;
+    }
+    releaseIntroClips();
+    releaseLogoAsset();
+#if MM2_HOST_AMIGA
+    invalidatePegasusPaint();
+#endif
+}
+
+void TitleScreen::ensureAttractAssetsLoaded()
+{
+    if (!data_dir_) {
+        return;
+    }
+    if (!has_intro_) {
+        has_intro_ = loadImage("intro.32", &intro_);
+    }
+    if (!has_introclips_) {
+        has_introclips_ = loadImage("introclips.32", &introclips_);
+    }
+}
+
+#if MM2_HOST_AMIGA
+void TitleScreen::releaseChipForPlayMode()
+{
+    mm2_amiga_ui_cache_end();
+    mm2_amiga_ui_cache_destroy();
+    releaseAttractAssets();
+}
+#endif
 
 #if MM2_HOST_AMIGA
 void TitleScreen::invalidatePegasusPaint()
@@ -613,6 +646,7 @@ void TitleScreen::attractDraw() { drawAttract(); }
 
 void TitleScreen::menuEnter()
 {
+    releaseAttractAssets();
 #if MM2_HOST_AMIGA
     invalidateTitleMenuPaint();
 #endif
@@ -623,6 +657,8 @@ void TitleScreen::menuResume() {}
 void TitleScreen::menuSuspend()
 {
 #if MM2_HOST_AMIGA
+    MM2_DBG("MM2 GOTO: menuSuspend (blit_sync+clear)\n");
+    mm2_amiga_blit_sync();
     platform::clearScreen();
     platform::applyUiPalette();
     title_menu_painted_ = false;
@@ -637,21 +673,21 @@ TitleScreen::MenuAdvance TitleScreen::menuTick(const platform::KeyState &keys)
         return MenuAdvance::None;
     }
     tickBookAnimation();
-    if (keys.escape) {
-        return MenuAdvance::Attract;
-    }
     if (keys.key_q) {
         quit_ = true;
         return MenuAdvance::Quit;
     }
     const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
     if (ch == 'V' && has_roster_) {
+        MM2_DBG("MM2 GOTO: menu key V -> ViewParty\n");
         return MenuAdvance::ViewParty;
     }
     if ((keys.key_c || ch == 'C') && has_roster_) {
+        MM2_DBG("MM2 GOTO: menu key C -> CreateCharacter (key_c=%d ch=%c)\n", keys.key_c ? 1 : 0, ch);
         return MenuAdvance::CreateCharacter;
     }
     if (ch == 'G' && has_roster_) {
+        MM2_DBG("MM2 GOTO: menu key G -> ChooseParty (Goto Town)\n");
         return MenuAdvance::ChooseParty;
     }
     if (keys.key_m) {
@@ -674,7 +710,67 @@ bool TitleScreen::controlsTick(const platform::KeyState &keys)
     return keys.escape;
 }
 
-void TitleScreen::controlsDraw() { drawControls(); }
+void TitleScreen::controlsEnter()
+{
+#if MM2_HOST_AMIGA
+    controls_subscreen_painted_ = false;
+#endif
+}
+
+void TitleScreen::optionsEnter()
+{
+#if MM2_HOST_AMIGA
+    options_subscreen_painted_ = false;
+#endif
+}
+
+void TitleScreen::controlsDraw()
+{
+#if MM2_HOST_AMIGA
+    if (!controls_subscreen_painted_) {
+        buildControlsCache();
+    }
+    platform::applyUiPalette();
+    mm2_amiga_ui_cache_present();
+#else
+    drawControls();
+#endif
+}
+
+void TitleScreen::optionsDraw()
+{
+#if MM2_HOST_AMIGA
+    if (!options_subscreen_painted_) {
+        buildOptionsCache();
+    }
+    platform::applyUiPalette();
+    mm2_amiga_ui_cache_present();
+#else
+    drawOptions();
+#endif
+}
+
+void TitleScreen::buildControlsCache()
+{
+#if MM2_HOST_AMIGA
+    platform::applyUiPalette();
+    mm2_amiga_ui_cache_begin();
+    drawControls();
+    mm2_amiga_ui_cache_end();
+    controls_subscreen_painted_ = true;
+#endif
+}
+
+void TitleScreen::buildOptionsCache()
+{
+#if MM2_HOST_AMIGA
+    platform::applyUiPalette();
+    mm2_amiga_ui_cache_begin();
+    drawOptions();
+    mm2_amiga_ui_cache_end();
+    options_subscreen_painted_ = true;
+#endif
+}
 
 bool TitleScreen::optionsTick(const platform::KeyState &keys)
 {
@@ -685,11 +781,12 @@ bool TitleScreen::optionsTick(const platform::KeyState &keys)
     return keys.escape;
 }
 
-void TitleScreen::optionsDraw() { drawOptions(); }
-
 void TitleScreen::returnToMenu()
 {
 #if MM2_HOST_AMIGA
+    if (!mm2_amiga_ui_cache_ready()) {
+        mm2_amiga_ui_cache_create();
+    }
     invalidateTitleMenuPaint();
     if (mm2_amiga_ui_cache_ready()) {
         buildTitleMenuCache();
@@ -716,6 +813,9 @@ void TitleScreen::blitIntroClipFrame(int frame_index, int x, int y)
 void TitleScreen::drawIntroPegasus(bool animate_overlays)
 {
 #if MM2_HOST_AMIGA
+    ensureAttractAssetsLoaded();
+#endif
+#if MM2_HOST_AMIGA
     pegasus_painted_overlay_phase_ = overlay_phase_;
 #if MM2_HOST_AMIGA && defined(ACE_DEBUG)
     MM2_DBG("MM2 DBG: Draw TitleAttract intro=%d overlay_phase=%d peeker=%d\n", has_intro_ ? 1 : 0,
@@ -727,6 +827,9 @@ void TitleScreen::drawIntroPegasus(bool animate_overlays)
      * stale (e.g. nwcp logo) and causes a flash when ACE swaps front/back. */
     platform::clearScreen();
     if (has_intro_) {
+#if MM2_HOST_AMIGA
+        mm2_amiga_apply_palette(&intro_);
+#endif
         platform::blitImage32(&intro_, 0, kIntroBgX, kIntroBgY, 1);
     }
 #else
@@ -757,6 +860,9 @@ void TitleScreen::drawIntroPegasus(bool animate_overlays)
         const IntroClipSlot &slot = kPeekerSlots[peeker_slot_];
         blitIntroClipFrame(slot.frame, slot.x, slot.y);
     }
+#if MM2_HOST_AMIGA
+    mm2_amiga_blit_sync();
+#endif
 }
 
 void TitleScreen::tickPegasusAnimation()
@@ -794,16 +900,14 @@ void TitleScreen::drawLogoSplash()
 {
 #if MM2_HOST_AMIGA
     if (has_nwcp_ && nwcp_.frames[0].bitmap) {
+        mm2_amiga_apply_palette(&nwcp_);
         if (logo_phase_ == LogoPhase::Static) {
-            mm2_amiga_stage_asset_palette(&nwcp_);
-            platform::applyUiPalette();
             platform::clearScreen();
             const int logo_y = (gfx::ScreenCompositor::kHeight - static_cast<int>(nwcp_.frames[0].height)) / 2;
             platform::blitImage32(&nwcp_, 0, logo_splash_x_, logo_y, 0);
             return;
         }
         if (logo_phase_ == LogoPhase::FadeIn && !logo_fade_armed_) {
-            mm2_amiga_stage_asset_palette(&nwcp_);
             platform::logoFadeCapturePalette();
             platform::logoFadeBeginIn(kFadeTicks);
             logo_fade_armed_ = true;
@@ -830,11 +934,9 @@ void TitleScreen::drawLogoSplash()
 
 void TitleScreen::drawControls()
 {
-#if MM2_HOST_AMIGA
-    platform::clearScreen();
-    platform::applyUiPalette();
-#else
     compositor_.clear(0, 0, 0, 255);
+#if MM2_HOST_AMIGA
+    platform::applyUiPalette();
 #endif
     drawRedFrame(compositor_, 8, 8, 304, 184);
     int y = 20;
@@ -871,11 +973,9 @@ void TitleScreen::drawControls()
 
 void TitleScreen::drawOptions()
 {
-#if MM2_HOST_AMIGA
-    platform::clearScreen();
-    platform::applyUiPalette();
-#else
     compositor_.clear(0, 0, 0, 255);
+#if MM2_HOST_AMIGA
+    platform::applyUiPalette();
 #endif
     drawRedFrame(compositor_, 40, 40, 240, 120);
     int y = 56;
@@ -919,8 +1019,11 @@ void TitleScreen::blitTitleMenuBooks()
 void TitleScreen::presentTitleMenu()
 {
 #if MM2_HOST_AMIGA
-    mm2_amiga_blit_sync();
+    if (has_book_ && book_.frame_count > 0) {
+        mm2_amiga_apply_palette(&book_);
+    }
     platform::applyUiPalette();
+    mm2_amiga_blit_sync();
     mm2_amiga_ui_cache_present();
     blitTitleMenuBooks();
 #else
@@ -931,6 +1034,9 @@ void TitleScreen::presentTitleMenu()
 void TitleScreen::buildTitleMenuCache()
 {
 #if MM2_HOST_AMIGA
+    if (has_book_ && book_.frame_count > 0) {
+        mm2_amiga_apply_palette(&book_);
+    }
     platform::applyUiPalette();
     mm2_amiga_ui_cache_begin();
 #endif

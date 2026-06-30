@@ -9,57 +9,57 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (0,7) | `0x07` | **28** | ALWAYS |
-| (1,7) | `0x17` | **27** | ALWAYS |
+| (0,7) | `0x07` | **28** | DIR_W? |
+| (1,7) | `0x17` | **27** | DIR_W? |
 | (1,13) | `0x1D` | **29** | ANY_DIR |
 | (1,15) | `0x1F` | **31** | ANY_DIR |
-| (2,4) | `0x24` | **6** | ENTER |
-| (2,7) | `0x27` | **26** | ALWAYS |
+| (2,4) | `0x24` | **6** | DIR_N? |
+| (2,7) | `0x27` | **26** | DIR_W? |
 | (2,12) | `0x2C` | **32** | 0x30 |
-| (3,7) | `0x37` | **25** | ALWAYS |
+| (3,7) | `0x37` | **25** | DIR_W? |
 | (3,13) | `0x3D` | **5** | ANY_DIR |
-| (4,4) | `0x44` | **1** | ENTER |
-| (4,7) | `0x47` | **24** | ALWAYS |
+| (4,4) | `0x44` | **1** | DIR_N? |
+| (4,7) | `0x47` | **24** | DIR_W? |
 | (4,15) | `0x4F` | **4** | ANY_DIR |
-| (5,7) | `0x57` | **23** | ALWAYS |
-| (5,8) | `0x58` | **22** | ALWAYS |
-| (5,9) | `0x59` | **21** | ALWAYS |
-| (5,10) | `0x5A` | **20** | ALWAYS |
+| (5,7) | `0x57` | **23** | DIR_W? |
+| (5,8) | `0x58` | **22** | DIR_W? |
+| (5,9) | `0x59` | **21** | DIR_W? |
+| (5,10) | `0x5A` | **20** | DIR_W? |
 | (5,12) | `0x5C` | **5** | ANY_DIR |
-| (6,10) | `0x6A` | **19** | ALWAYS |
+| (6,10) | `0x6A` | **19** | DIR_W? |
 | (6,14) | `0x6E` | **3** | ANY_DIR |
-| (7,10) | `0x7A` | **18** | ALWAYS |
+| (7,10) | `0x7A` | **18** | DIR_W? |
 | (7,12) | `0x7C` | **5** | ANY_DIR |
-| (8,10) | `0x8A` | **17** | ALWAYS |
+| (8,10) | `0x8A` | **17** | DIR_W? |
 | (8,14) | `0x8E` | **5** | ANY_DIR |
 | (8,15) | `0x8F` | **2** | ANY_DIR |
-| (9,10) | `0x9A` | **16** | ALWAYS |
+| (9,10) | `0x9A` | **16** | DIR_W? |
 | (9,12) | `0x9C` | **33** | 0x90 |
 | (10,2) | `0xA2` | **30** | ANY_DIR |
-| (10,10) | `0xAA` | **15** | ALWAYS |
+| (10,10) | `0xAA` | **15** | DIR_W? |
 | (10,13) | `0xAD` | **5** | ANY_DIR |
 | (10,15) | `0xAF` | **30** | ANY_DIR |
 | (11,5) | `0xB5` | **7** | ANY_DIR |
-| (11,10) | `0xBA` | **14** | ALWAYS |
-| (11,11) | `0xBB` | **13** | ALWAYS |
-| (11,12) | `0xBC` | **12** | ALWAYS |
-| (11,13) | `0xBD` | **11** | ALWAYS |
-| (11,14) | `0xBE` | **10** | ALWAYS |
-| (11,15) | `0xBF` | **9** | ALWAYS |
+| (11,10) | `0xBA` | **14** | DIR_W? |
+| (11,11) | `0xBB` | **13** | DIR_W? |
+| (11,12) | `0xBC` | **12** | DIR_W? |
+| (11,13) | `0xBD` | **11** | DIR_W? |
+| (11,14) | `0xBE` | **10** | DIR_W? |
+| (11,15) | `0xBF` | **9** | DIR_W? |
 | (13,10) | `0xDA` | **29** | ANY_DIR |
 | (14,5) | `0xE5` | **8** | 0x50 |
 | (14,7) | `0xE7` | **31** | ANY_DIR |
 
 ## Events
 
-**Event 01** — triggers: (4,4)/ENTER
+**Event 01** — triggers: (4,4)/DIR_N?
 
 ```hex
 0b 07 00 02 01 0a 10 01 0f 2d 04 05 11 01 0c 35 00 02 02 08 14
 ```
 
 ```
-00: set_service_context(str[7] "A knight proclaims, / "None shall pass!" Attack (y/n)?", mode=0x00)
+00: service_sign(idx=0x07 -> sign 74 [74.anm], pos=0x00)
 01: show_text_block(str[1] "Upon heavy wooden doors of an ancient / fortress is scrawled: Sorcerers ")
 02: cond = prompt_yes_no(mode=1)
 03: if cond: skip_tokens(1)
@@ -120,7 +120,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 06** — triggers: (2,4)/ENTER
+**Event 06** — triggers: (2,4)/DIR_N?
 
 ```hex
 06 06
@@ -173,7 +173,7 @@
 13: clear_current_tile_event_flag()
 ```
 
-**Event 09** — triggers: (11,15)/ALWAYS
+**Event 09** — triggers: (11,15)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d be
@@ -188,7 +188,7 @@
 04: map_transition(0x0D, 0xBE)
 ```
 
-**Event 10** — triggers: (11,14)/ALWAYS
+**Event 10** — triggers: (11,14)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d bd
@@ -203,7 +203,7 @@
 04: map_transition(0x0D, 0xBD)
 ```
 
-**Event 11** — triggers: (11,13)/ALWAYS
+**Event 11** — triggers: (11,13)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d bc
@@ -218,7 +218,7 @@
 04: map_transition(0x0D, 0xBC)
 ```
 
-**Event 12** — triggers: (11,12)/ALWAYS
+**Event 12** — triggers: (11,12)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 01 0b 1e c8 0d 09 0c 0d bb
@@ -235,7 +235,7 @@
 06: map_transition(0x0D, 0xBB)
 ```
 
-**Event 13** — triggers: (11,11)/ALWAYS
+**Event 13** — triggers: (11,11)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d ba
@@ -250,7 +250,7 @@
 04: map_transition(0x0D, 0xBA)
 ```
 
-**Event 14** — triggers: (11,10)/ALWAYS
+**Event 14** — triggers: (11,10)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d aa
@@ -265,7 +265,7 @@
 04: map_transition(0x0D, 0xAA)
 ```
 
-**Event 15** — triggers: (10,10)/ALWAYS
+**Event 15** — triggers: (10,10)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 9a
@@ -280,7 +280,7 @@
 04: map_transition(0x0D, 0x9A)
 ```
 
-**Event 16** — triggers: (9,10)/ALWAYS
+**Event 16** — triggers: (9,10)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 8a
@@ -295,7 +295,7 @@
 04: map_transition(0x0D, 0x8A)
 ```
 
-**Event 17** — triggers: (8,10)/ALWAYS
+**Event 17** — triggers: (8,10)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 7a
@@ -310,7 +310,7 @@
 04: map_transition(0x0D, 0x7A)
 ```
 
-**Event 18** — triggers: (7,10)/ALWAYS
+**Event 18** — triggers: (7,10)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 6a
@@ -325,7 +325,7 @@
 04: map_transition(0x0D, 0x6A)
 ```
 
-**Event 19** — triggers: (6,10)/ALWAYS
+**Event 19** — triggers: (6,10)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 5a
@@ -340,7 +340,7 @@
 04: map_transition(0x0D, 0x5A)
 ```
 
-**Event 20** — triggers: (5,10)/ALWAYS
+**Event 20** — triggers: (5,10)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 59
@@ -355,7 +355,7 @@
 04: map_transition(0x0D, 0x59)
 ```
 
-**Event 21** — triggers: (5,9)/ALWAYS
+**Event 21** — triggers: (5,9)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 58
@@ -370,7 +370,7 @@
 04: map_transition(0x0D, 0x58)
 ```
 
-**Event 22** — triggers: (5,8)/ALWAYS
+**Event 22** — triggers: (5,8)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 57
@@ -385,7 +385,7 @@
 04: map_transition(0x0D, 0x57)
 ```
 
-**Event 23** — triggers: (5,7)/ALWAYS
+**Event 23** — triggers: (5,7)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 47
@@ -400,7 +400,7 @@
 04: map_transition(0x0D, 0x47)
 ```
 
-**Event 24** — triggers: (4,7)/ALWAYS
+**Event 24** — triggers: (4,7)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 01 0c 1e c8 0d 09 0c 0d 37
@@ -417,7 +417,7 @@
 06: map_transition(0x0D, 0x37)
 ```
 
-**Event 25** — triggers: (3,7)/ALWAYS
+**Event 25** — triggers: (3,7)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 27
@@ -432,7 +432,7 @@
 04: map_transition(0x0D, 0x27)
 ```
 
-**Event 26** — triggers: (2,7)/ALWAYS
+**Event 26** — triggers: (2,7)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 17
@@ -447,7 +447,7 @@
 04: map_transition(0x0D, 0x17)
 ```
 
-**Event 27** — triggers: (1,7)/ALWAYS
+**Event 27** — triggers: (1,7)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 0d 07
@@ -462,7 +462,7 @@
 04: map_transition(0x0D, 0x07)
 ```
 
-**Event 28** — triggers: (0,7)/ALWAYS
+**Event 28** — triggers: (0,7)/DIR_W?
 
 ```hex
 15 00 7b 08 10 01 14 0d 09 0c 10 f7

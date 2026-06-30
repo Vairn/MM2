@@ -148,11 +148,22 @@ void mm2AmigaDisplayFrameEnd(void)
     if (s_display.pFade) {
         mm2_fade_process(s_display.pFade);
     }
+    /* Title attract / menu blit several cels per frame without an explicit sync;
+     * swapping DB buffers while the blitter is still touching pBack → bus fault. */
+    mm2_amiga_blit_sync();
     /* ACE simpleBuffer: updates copper to pBack, then swaps pBack/pFront. */
     viewProcessManagers(s_display.pView);
     copProcessBlocks();
     vPortWaitForEnd(s_display.pVp);
     mm2_amiga_push_palette();
+}
+
+void mm2AmigaDisplayWaitVblank(void)
+{
+    if (!s_display.pVp) {
+        return;
+    }
+    vPortWaitForEnd(s_display.pVp);
 }
 
 void mm2AmigaDisplayDispose(void)

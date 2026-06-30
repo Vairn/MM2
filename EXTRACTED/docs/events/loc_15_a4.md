@@ -24,16 +24,16 @@
 | (5,14) | `0x5E` | **10** | ANY_DIR |
 | (6,4) | `0x64` | **14** | ANY_DIR |
 | (6,6) | `0x66` | **12** | ANY_DIR |
-| (7,12) | `0x7C` | **7** | DIR_N? |
+| (7,12) | `0x7C` | **7** | DIR_S? |
 | (8,1) | `0x81` | **6** | ANY_DIR |
 | (8,8) | `0x88` | **5** | ANY_DIR |
 | (10,0) | `0xA0` | **14** | ANY_DIR |
 | (10,8) | `0xA8` | **10** | ANY_DIR |
-| (10,10) | `0xAA` | **8** | ALWAYS |
-| (10,13) | `0xAD` | **1** | ALWAYS |
+| (10,10) | `0xAA` | **8** | DIR_W? |
+| (10,13) | `0xAD` | **1** | DIR_W? |
 | (12,7) | `0xC7` | **11** | ANY_DIR |
 | (12,9) | `0xC9` | **10** | ANY_DIR |
-| (13,13) | `0xDD` | **9** | ENTER |
+| (13,13) | `0xDD` | **9** | DIR_N? |
 | (14,5) | `0xE5` | **10** | ANY_DIR |
 | (14,10) | `0xEA` | **3** | ANY_DIR |
 | (14,15) | `0xEF` | **10** | ANY_DIR |
@@ -42,14 +42,14 @@
 
 ## Events
 
-**Event 01** — triggers: (10,13)/ALWAYS
+**Event 01** — triggers: (10,13)/DIR_W?
 
 ```hex
 0b 18 00 02 01 0a 11 01 0c 01 fe 0f
 ```
 
 ```
-00: set_service_context(str[24], mode=0x00)
+00: service_sign(idx=0x18 -> sign 29 [29.anm], pos=0x00)
 01: show_text_block(str[1] "You spy upon a lone seagull drifting / down to Atlantium. Enter (y/n)?")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)
@@ -131,7 +131,7 @@
 02: clear_current_tile_event_flag()
 ```
 
-**Event 07** — triggers: (7,12)/DIR_N?
+**Event 07** — triggers: (7,12)/DIR_S?
 
 ```hex
 02 06 09 11 01 18 00 43 fe 01 0f
@@ -146,7 +146,7 @@
 04: end_script()
 ```
 
-**Event 08** — triggers: (10,10)/ALWAYS
+**Event 08** — triggers: (10,10)/DIR_W?
 
 ```hex
 02 07 09 11 07 18 00 22 00 64 18 00 23 00 64 18 00 24 00 64 18 00 2a 00 64 18 00 2b 00 64 18 00 2c 00 64 18 00 2d 00 64 0f
@@ -167,7 +167,7 @@
 10: end_script()
 ```
 
-**Event 09** — triggers: (13,13)/ENTER
+**Event 09** — triggers: (13,13)/DIR_N?
 
 ```hex
 02 08 09 11 04 01 09 26 18 09 43 00 fe 1f 09 43 01 01 00 00 0f

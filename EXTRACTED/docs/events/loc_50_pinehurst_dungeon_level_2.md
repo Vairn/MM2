@@ -9,14 +9,14 @@
 
 | Tile (y,x) | pos | Event | Condition |
 |------------|-----|-------|-----------|
-| (0,13) | `0x0D` | **12** | ENTER |
+| (0,13) | `0x0D` | **12** | DIR_N? |
 | (1,2) | `0x12` | **5** | ANY_DIR |
 | (1,5) | `0x15` | **8** | 0x90 |
-| (1,12) | `0x1C` | **12** | DIR_SPECIAL |
+| (1,12) | `0x1C` | **12** | DIR_E? |
 | (1,13) | `0x1D` | **6** | ANY_DIR |
-| (1,14) | `0x1E` | **12** | ALWAYS |
+| (1,14) | `0x1E` | **12** | DIR_W? |
 | (2,11) | `0x2B` | **9** | ANY_DIR |
-| (2,13) | `0x2D` | **12** | DIR_N? |
+| (2,13) | `0x2D` | **12** | DIR_S? |
 | (3,0) | `0x30` | **9** | ANY_DIR |
 | (3,12) | `0x3C` | **9** | ANY_DIR |
 | (3,13) | `0x3D` | **9** | ANY_DIR |
@@ -27,29 +27,29 @@
 | (6,4) | `0x64` | **9** | ANY_DIR |
 | (6,8) | `0x68` | **2** | 0x60 |
 | (7,1) | `0x71` | **9** | ANY_DIR |
-| (7,6) | `0x76` | **12** | ALWAYS |
-| (7,7) | `0x77` | **1** | DIR_SPECIAL |
+| (7,6) | `0x76` | **12** | DIR_W? |
+| (7,7) | `0x77` | **1** | DIR_E? |
 | (8,15) | `0x8F` | **9** | ANY_DIR |
 | (9,7) | `0x97` | **9** | ANY_DIR |
 | (10,2) | `0xA2` | **9** | ANY_DIR |
 | (10,6) | `0xA6` | **9** | ANY_DIR |
-| (12,2) | `0xC2` | **10** | ENTER |
+| (12,2) | `0xC2` | **10** | DIR_N? |
 | (12,4) | `0xC4` | **9** | ANY_DIR |
 | (12,10) | `0xCA` | **9** | ANY_DIR |
-| (12,14) | `0xCE` | **11** | ENTER |
-| (13,1) | `0xD1` | **10** | DIR_SPECIAL |
+| (12,14) | `0xCE` | **11** | DIR_N? |
+| (13,1) | `0xD1` | **10** | DIR_E? |
 | (13,2) | `0xD2` | **3** | ANY_DIR |
-| (13,3) | `0xD3` | **10** | ALWAYS |
-| (13,13) | `0xDD` | **11** | DIR_SPECIAL |
+| (13,3) | `0xD3` | **10** | DIR_W? |
+| (13,13) | `0xDD` | **11** | DIR_E? |
 | (13,14) | `0xDE` | **4** | ANY_DIR |
-| (13,15) | `0xDF` | **11** | ALWAYS |
-| (14,2) | `0xE2` | **10** | DIR_N? |
-| (14,14) | `0xEE` | **11** | DIR_N? |
+| (13,15) | `0xDF` | **11** | DIR_W? |
+| (14,2) | `0xE2` | **10** | DIR_S? |
+| (14,14) | `0xEE` | **11** | DIR_S? |
 | (15,4) | `0xF4` | **7** | 0x90 |
 
 ## Events
 
-**Event 01** — triggers: (7,7)/DIR_SPECIAL
+**Event 01** — triggers: (7,7)/DIR_E?
 
 ```hex
 01 01 09 11 01 0c 31 21 0f
@@ -71,7 +71,7 @@
 ```
 
 ```
-00: set_service_context(str[17] "All are content.", mode=0x00)
+00: service_sign(idx=0x11 -> sign 75 [75.anm], pos=0x00)
 01: show_text_block(str[2] ""There's no dungeon that I enjoy / killing in more than level two of / L")
 02: cond = prompt_yes_no(mode=1)
 03: if not cond: skip_tokens(1)
@@ -133,7 +133,7 @@
 ```
 
 ```
-00: set_service_context(str[22] "*** Backpacks Full ***", mode=0x00)
+00: service_sign(idx=0x16 -> sign 56 [56.anm], pos=0x00)
 01: exec_selector(0xF9)
 ```
 
@@ -248,7 +248,7 @@
 28: clear_current_tile_event_flag()
 ```
 
-**Event 10** — triggers: (12,2)/ENTER, (13,1)/DIR_SPECIAL, (13,3)/ALWAYS, (14,2)/DIR_N?
+**Event 10** — triggers: (12,2)/DIR_N?, (13,1)/DIR_E?, (13,3)/DIR_W?, (14,2)/DIR_S?
 
 ```hex
 06 13
@@ -258,7 +258,7 @@
 00: show_text_popup_style_b(str[19] "No / Knights!")
 ```
 
-**Event 11** — triggers: (12,14)/ENTER, (13,13)/DIR_SPECIAL, (13,15)/ALWAYS, (14,14)/DIR_N?
+**Event 11** — triggers: (12,14)/DIR_N?, (13,13)/DIR_E?, (13,15)/DIR_W?, (14,14)/DIR_S?
 
 ```hex
 06 14
@@ -268,7 +268,7 @@
 00: show_text_popup_style_b(str[20] "No / Paladins!")
 ```
 
-**Event 12** — triggers: (0,13)/ENTER, (1,12)/DIR_SPECIAL, (1,14)/ALWAYS, (2,13)/DIR_N?, (7,6)/ALWAYS
+**Event 12** — triggers: (0,13)/DIR_N?, (1,12)/DIR_E?, (1,14)/DIR_W?, (2,13)/DIR_S?, (7,6)/DIR_W?
 
 ```hex
 06 15

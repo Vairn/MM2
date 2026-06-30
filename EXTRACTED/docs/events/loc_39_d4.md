@@ -29,7 +29,7 @@
 | (5,11) | `0x5B` | **4** | ANY_DIR |
 | (6,0) | `0x60` | **9** | ANY_DIR |
 | (7,2) | `0x72` | **8** | ANY_DIR |
-| (7,3) | `0x73` | **1** | ENTER |
+| (7,3) | `0x73` | **1** | DIR_N? |
 | (7,4) | `0x74` | **8** | ANY_DIR |
 | (8,1) | `0x81` | **7** | ANY_DIR |
 | (8,3) | `0x83` | **8** | ANY_DIR |
@@ -40,7 +40,7 @@
 | (9,8) | `0x98` | **13** | ANY_DIR |
 | (10,2) | `0xA2` | **6** | ANY_DIR |
 | (10,12) | `0xAC` | **16** | ANY_DIR |
-| (10,13) | `0xAD` | **3** | DIR_N? |
+| (10,13) | `0xAD` | **3** | DIR_S? |
 | (11,0) | `0xB0` | **5** | ANY_DIR |
 | (11,5) | `0xB5` | **4** | ANY_DIR |
 | (11,9) | `0xB9` | **11** | ANY_DIR |
@@ -57,7 +57,7 @@
 
 ## Events
 
-**Event 01** — triggers: (7,3)/ENTER
+**Event 01** — triggers: (7,3)/DIR_N?
 
 ```hex
 06 02 02 01 09 10 01 0f 0c 1e 08
@@ -82,7 +82,7 @@
 ```
 00: skip_tokens(12)
     # skip -> map_transition(0x37, 0xF7)
-01: set_service_context(str[6] "Farm of Fear. Enter (y/n)?", mode=0x00)
+01: service_sign(idx=0x06 -> sign 47 [47.anm], pos=0x00)
 02: show_text_block(str[3] "The marble walls of Castle Hillstone / gleam before you. Enter (y/n)?")
 03: cond = prompt_yes_no(mode=1)
 04: if cond: skip_tokens(1)
@@ -100,7 +100,7 @@
 13: map_transition(0x37, 0xF7)
 ```
 
-**Event 03** — triggers: (10,13)/DIR_N?
+**Event 03** — triggers: (10,13)/DIR_S?
 
 ```hex
 06 04

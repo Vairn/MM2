@@ -105,17 +105,20 @@ def decode_record(data, slot):
     condition = u8(data, off + 0x26)
     end_c     = u8(data, off + 0x27)  # current Endurance
 
-    # Equipment: 6 slots × 3 bytes (id, bonus, flags?)
-    equip = []
-    for i in range(6):
-        base = off + 0x28 + i * 3
-        equip.append((u8(data, base), u8(data, base+1), u8(data, base+2)))
+    # Equipment / Backpack: Structure-of-Arrays, NOT interleaved triplets.
+    # 6 contiguous item ids, then 6 charges, then 6 flags per group.
+    # ASM-confirmed: OP_16 @0x16520 scans ids at +0x28+i / +0x3A+i (stride 1);
+    # OP_19 @0x165D8 writes id/charges/flags at +0x3A+i, +0x40+i, +0x46+i.
+    def read_item_group(group_off):
+        return [
+            (u8(data, group_off + i),
+             u8(data, group_off + 6 + i),
+             u8(data, group_off + 12 + i))
+            for i in range(6)
+        ]
 
-    # Backpack: 6 slots × 3 bytes
-    backpack = []
-    for i in range(6):
-        base = off + 0x3A + i * 3
-        backpack.append((u8(data, base), u8(data, base+1), u8(data, base+2)))
+    equip = read_item_group(off + 0x28)
+    backpack = read_item_group(off + 0x3A)
 
     # Spell book area (offsets 0x4C–0x57, 12 bytes of bitmasks)
     spells = data[off + 0x4C:off + 0x58]
@@ -191,12 +194,12 @@ def decode_record(data, slot):
 
 def format_items(items):
     parts = []
-    for item_id, bonus, flags in items:
-        if item_id == 0 and bonus == 0:
+    for item_id, charges, flags in items:
+        if item_id == 0 and charges == 0:
             continue
         s = f"#{item_id}"
-        if bonus:
-            s += f"+{bonus}"
+        if charges:
+            s += f"x{charges}"
         if flags:
             s += f"[{flags:02X}]"
         parts.append(s)
