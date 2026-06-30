@@ -3,7 +3,7 @@ name: Deploy Map Walker
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, feature/in-town-play-session]
     paths:
       - "wiki/maze-walker/**"
       - "tools/export_map_walker.py"
