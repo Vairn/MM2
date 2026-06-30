@@ -1,4 +1,4 @@
-# GitHub Pages — interactive map walker (HTML5/JS, not supported on GitHub Wiki).
+# GitHub Pages — interactive map walkers (HTML5/JS, not supported on GitHub Wiki).
 name: Deploy Map Walker
 
 on:
@@ -6,7 +6,9 @@ on:
     branches: [main, master]
     paths:
       - "wiki/maze-walker/**"
+      - "wiki/mm1-maze-walker/**"
       - "tools/export_map_walker.py"
+      - "tools/export_mm1_map_walker.py"
       - "tools/mm2_gfx_export.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
@@ -29,10 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Stage site at /maze-walker/
+      - name: Stage map walkers
         run: |
-          mkdir -p _site/maze-walker
+          mkdir -p _site/maze-walker _site/mm1-maze-walker
           cp -r wiki/maze-walker/. _site/maze-walker/
+          cp -r wiki/mm1-maze-walker/. _site/mm1-maze-walker/
 
       # Requires one-time enable: repo Settings → Pages → Source: GitHub Actions.
       # Until then GET /repos/{owner}/{repo}/pages returns 404 (see Pages REST API).
