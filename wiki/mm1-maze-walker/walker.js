@@ -155,8 +155,10 @@ function renderOutdoorView(ctx, scene) {
   for (const b of scene.horizon) blitTransparent(ctx, b.sheet, String(b.frame), b.x, b.y);
 }
 
+const WALL_DIR_SHIFT = [6, 4, 2, 0]; // N, E, S, W — matches view3d DIR_PAIR_SHIFT / ScummVM DIRMASK_* 
+
 function wallNibble(v, dir) {
-  return (v >> (dir * 2)) & 3;
+  return (v >> WALL_DIR_SHIFT[dir & 3]) & 3;
 }
 
 const WALL_MINI_COLORS = [
@@ -191,10 +193,10 @@ function renderWallMinimap(sc) {
         const col = WALL_MINI_COLORS[code];
         if (!col) continue;
         miniCtx.fillStyle = col;
-        if (d === 0) miniCtx.fillRect(px, py, MINI_TW, wallW);
-        if (d === 2) miniCtx.fillRect(px, py + MINI_TH - wallW, MINI_TW, wallW);
-        if (d === 3) miniCtx.fillRect(px, py, wallW, MINI_TH);
-        if (d === 1) miniCtx.fillRect(px + MINI_TW - wallW, py, wallW, MINI_TH);
+        if (d === 0) miniCtx.fillRect(px, py, MINI_TW, wallW); // N
+        if (d === 1) miniCtx.fillRect(px + MINI_TW - wallW, py, wallW, MINI_TH); // E
+        if (d === 2) miniCtx.fillRect(px, py + MINI_TH - wallW, MINI_TW, wallW); // S
+        if (d === 3) miniCtx.fillRect(px, py, wallW, MINI_TH); // W
       }
       if (c & 0x80) {
         miniCtx.fillStyle = "rgba(255,65,65,0.85)";
