@@ -63,7 +63,7 @@ export function movementBlocked(sc, x, y, facing) {
   const back = movementToCollisionDir((d + 2) & 3);
   const destIdx = ny * MAP_GRID + nx;
   if (collisionFieldWall(col[destIdx], back)) return true;
-  if (sc.outdoor) {
+  if (sc.outdoor && !sc.mapWalls) {
     const destV = sc.visual[destIdx];
     if ((destV & 0x60) === 0x60 || (destV & 0x80) !== 0) return true;
   }
@@ -358,6 +358,8 @@ export function stepParty(facing, x, y, screen, screens) {
 }
 
 export function selectIndoorSheets(env) {
+  if (env === "outside")
+    return { walls: "cave_32", floor: "cavef_32", torch: "cavet_32", sky: "sky_32" };
   if (env === "cavern") return { walls: "cave_32", floor: "cavef_32", torch: "cavet_32", sky: "sky_32" };
   if (env === "castle")
     return { walls: "castle_32", floor: "castlef_32", torch: "castlet_32", sky: "sky_32" };

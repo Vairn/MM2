@@ -10,9 +10,9 @@
   <div class="wrap">
     <header>
       <h1>Might and Magic I — map walker</h1>
-      <p><code>MAZEDATA.DTA</code>, 55 screens — dungeons use the indoor frustum; the 20
-        <code>area*</code> overland maps are converted to MM2 outdoor terrain encoding
-        (MM1 walls + MM2 sector template) so horizon view and sector neighbours work.</p>
+      <p><code>MAZEDATA.DTA</code>, 55 screens — dungeons and towns use the indoor frustum.
+        The 20 <code>area*</code> overland maps keep <strong>native MM1 MapWalls</strong>
+        geometry (same encoding as dungeons); sector links wrap on the 5×4 grid.</p>
     </header>
 
     <div id="loadError" class="error" hidden></div>
@@ -56,7 +56,7 @@
           <li><strong>S</strong> / <strong>↓</strong> — step backward</li>
           <li><strong>A</strong> / <strong>←</strong> — turn left</li>
           <li><strong>D</strong> / <strong>→</strong> — turn right</li>
-          <li>Pick another screen from the list (no cross-map links yet)</li>
+          <li>Overland: MM1 wall map + toroidal sector links (A1–E4)</li>
         </ul>
         <p class="hint">Regenerate: <code>python tools/export_mm1_map_walker.py</code></p>
       </aside>

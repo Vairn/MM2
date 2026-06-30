@@ -154,7 +154,70 @@ function renderOutdoorView(ctx, scene) {
   for (const b of scene.horizon) blitTransparent(ctx, b.sheet, String(b.frame), b.x, b.y);
 }
 
+function wallNibble(v, dir) {
+  return (v >> (dir * 2)) & 3;
+}
+
+const WALL_MINI_COLORS = [
+  null,
+  "rgba(110,110,125,0.95)",
+  "rgba(220,176,56,0.95)",
+  "rgba(96,196,112,0.95)",
+];
+
+function renderWallMinimap(sc) {
+  const w = MAP_GRID * MINI_TW;
+  const h = MAP_GRID * MINI_TH;
+  miniCanvas.width = w;
+  miniCanvas.height = h;
+  miniCtx.fillStyle = "#14141e";
+  miniCtx.fillRect(0, 0, w, h);
+  const wallW = Math.max(1, Math.floor(MINI_TW / 5));
+
+  for (let sy = 0; sy < MAP_GRID; sy++) {
+    const diskY = MAP_GRID - 1 - sy;
+    for (let sx = 0; sx < MAP_GRID; sx++) {
+      const idx = (diskY << 4) | sx;
+      const v = sc.visual[idx];
+      const c = sc.collision[idx];
+      const px = sx * MINI_TW;
+      const py = sy * MINI_TH;
+      const blocked = [0, 1, 2, 3].some((d) => (c >> (d * 2)) & 1);
+      miniCtx.fillStyle = blocked ? "#3a2828" : "#524038";
+      miniCtx.fillRect(px, py, MINI_TW, MINI_TH);
+      for (let d = 0; d < 4; d++) {
+        const code = wallNibble(v, d);
+        const col = WALL_MINI_COLORS[code];
+        if (!col) continue;
+        miniCtx.fillStyle = col;
+        if (d === 0) miniCtx.fillRect(px, py, MINI_TW, wallW);
+        if (d === 2) miniCtx.fillRect(px, py + MINI_TH - wallW, MINI_TW, wallW);
+        if (d === 3) miniCtx.fillRect(px, py, wallW, MINI_TH);
+        if (d === 1) miniCtx.fillRect(px + MINI_TW - wallW, py, wallW, MINI_TH);
+      }
+      if (c & 0x80) {
+        miniCtx.fillStyle = "rgba(255,65,65,0.85)";
+        miniCtx.beginPath();
+        miniCtx.arc(px + MINI_TW / 2, py + MINI_TH / 2, 2, 0, Math.PI * 2);
+        miniCtx.fill();
+      }
+    }
+  }
+
+  const px = state.x * MINI_TW;
+  const py = (MAP_GRID - 1 - state.y) * MINI_TH;
+  miniCtx.strokeStyle = "rgba(255,220,0,0.85)";
+  miniCtx.lineWidth = 1;
+  miniCtx.strokeRect(px + 0.5, py + 0.5, MINI_TW - 1, MINI_TH - 1);
+  miniCtx.strokeStyle = "#787887";
+  miniCtx.strokeRect(0, 0, w, h);
+}
+
 function renderMinimap(sc) {
+  if (sc.mapWalls) {
+    renderWallMinimap(sc);
+    return;
+  }
   const w = MAP_GRID * MINI_TW;
   const h = MAP_GRID * MINI_TH;
   miniCanvas.width = w;
@@ -204,7 +267,7 @@ function draw() {
   viewCtx.imageSmoothingEnabled = false;
   viewCtx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
 
-  if (sc.outdoor) {
+  if (sc.outdoor && !sc.mapWalls) {
     const grid = new StitchedOutdoor(maps.screens, state.screen);
     const scene = buildOutdoorScene(
       grid,
@@ -217,7 +280,13 @@ function draw() {
     renderOutdoorView(viewCtx, scene);
     locMode.textContent = sc.conversion
       ? `overland (${sc.conversion})`
-      : "overland (MM2 outdoor 3D)";
+      : "overland (MM2 terrain)";
+  } else if (sc.outdoor && sc.mapWalls) {
+    const grid = new StitchedVisual(maps.screens, state.screen);
+    const scene = buildIndoorScene(grid, state.x, state.y, state.facing);
+    renderIndoorView(viewCtx, sc, scene);
+    const bio = sc.sectorLabel || sc.biome || "overland";
+    locMode.textContent = `overland ${bio} (MM1 MapWalls)`;
   } else {
     const grid = new StitchedVisual(maps.screens, state.screen);
     const scene = buildIndoorScene(grid, state.x, state.y, state.facing);
@@ -346,7 +415,7 @@ async function init() {
 
   state.screen = 0;
   jumpEntry();
-  statusEl.textContent = "W/↑ forward · overland uses MM2 outdoor horizon";
+  statusEl.textContent = "W/↑ forward · overland uses MM1 MAZEDATA walls";
 }
 
 init();

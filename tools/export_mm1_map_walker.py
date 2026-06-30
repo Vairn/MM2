@@ -14,11 +14,7 @@ if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
 from mm1_maps import MM1_MAP_SLUGS, MM1_MAP_SCREENS, iter_mm1_screens  # noqa: E402
-from mm1_outdoor_codec import (  # noqa: E402
-    build_mm2_screen_to_mm1,
-    convert_mm1_area_screen,
-    load_mm2_templates,
-)
+from mm1_outdoor_codec import build_mm1_outdoor_meta  # noqa: E402
 from mm1_wallpix import gog_dir_from_mazedata  # noqa: E402
 from mm2_gfx_export import (  # noqa: E402
     frame_count_32,
@@ -120,20 +116,13 @@ def build_maps_payload(
     *,
     mm2_data: Path | None = None,
 ) -> dict:
-    templates = None
-    mm2_screen_to_mm1: dict[int, int] = {}
     gog_dir = gog_dir_from_mazedata(mazedata)
     if gog_dir is not None:
         print(f"  outdoor: MM1 OVR dir {gog_dir} (WALLPIX biomes)")
-    if mm2_data is not None:
-        map_dat = mm2_data / "map.dat"
-        attrib_dat = mm2_data / "attrib.dat"
-        if map_dat.is_file() and attrib_dat.is_file():
-            templates = load_mm2_templates(map_dat, attrib_dat)
-            mm2_screen_to_mm1 = build_mm2_screen_to_mm1(MM1_MAP_SLUGS)
-            print(f"  outdoor: MM2 templates loaded ({len(templates)} sectors)")
+    else:
+        print("  outdoor: no GOG OVR dir — overland uses default biome labels")
 
-    payload: dict = {"version": 5, "game": "mm1", "screens": []}
+    payload: dict = {"version": 6, "game": "mm1", "screens": []}
     outdoor_count = 0
     for sid, slug, title, visual, collision, entry, env in iter_mm1_screens(mazedata, exe=exe):
         screen: dict = {
@@ -148,34 +137,13 @@ def build_maps_payload(
             "visual": list(visual),
             "collision": list(collision),
         }
-        if templates is not None:
-            converted = convert_mm1_area_screen(
-                slug,
-                visual,
-                collision,
-                templates,
-                mm2_screen_to_mm1=mm2_screen_to_mm1,
-                gog_dir=gog_dir,
-            )
-            if converted is not None:
-                vis2, col2, meta = converted
-                screen["visual"] = list(vis2)
-                screen["collision"] = list(col2)
-                screen["outdoor"] = True
-                screen["env"] = meta["env"]
-                screen["neighbors"] = meta["neighbors"]
-                screen["sector"] = meta["sector"]
-                screen["surface"] = meta["surface"]
-                screen["conversion"] = meta["conversion"]
-                if "biome" in meta:
-                    screen["biome"] = meta["biome"]
-                if "wallLanes" in meta:
-                    screen["wallLanes"] = meta["wallLanes"]
-                    screen["wallBiomes"] = meta["wallBiomes"]
-                outdoor_count += 1
+        meta = build_mm1_outdoor_meta(slug, sid, gog_dir=gog_dir)
+        if meta is not None:
+            screen.update(meta)
+            outdoor_count += 1
         payload["screens"].append(screen)
     if outdoor_count:
-        print(f"  outdoor: converted {outdoor_count} area* screens to MM2 terrain encoding")
+        print(f"  outdoor: {outdoor_count} area* screens (native MM1 MapWalls, no MM2 template)")
     if len(payload["screens"]) != MM1_MAP_SCREENS:
         raise ValueError(f"expected {MM1_MAP_SCREENS} screens, got {len(payload['screens'])}")
     return payload

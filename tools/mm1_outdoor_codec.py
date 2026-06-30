@@ -55,6 +55,28 @@ MM1_AREA_SLUGS: tuple[str, ...] = tuple(
     f"area{letter}{num}" for letter in "abcde" for num in range(1, 5)
 )
 
+# MAZEDATA screen index per overland sector (5×4 toroidal grid, same topology as MM2).
+MM1_OVERLAND_GRID: tuple[tuple[int, ...], ...] = (
+    (14, 18, 22, 26, 30),  # A1..E1
+    (15, 19, 23, 27, 31),  # A2..E2
+    (16, 20, 24, 28, 32),  # A3..E3
+    (17, 21, 25, 29, 33),  # A4..E4
+)
+
+
+def mm1_overland_neighbors(screen_id: int) -> list[int]:
+    """Toroidal N/E/S/W MAZEDATA indices (matches MM2 overland wrap)."""
+    for row in range(len(MM1_OVERLAND_GRID)):
+        row_vals = MM1_OVERLAND_GRID[row]
+        for col in range(len(row_vals)):
+            if row_vals[col] == screen_id:
+                north = MM1_OVERLAND_GRID[(row - 1) % len(MM1_OVERLAND_GRID)][col]
+                south = MM1_OVERLAND_GRID[(row + 1) % len(MM1_OVERLAND_GRID)][col]
+                east = row_vals[(col + 1) % len(row_vals)]
+                west = row_vals[(col - 1) % len(row_vals)]
+                return [north, east, south, west]
+    return [-1, -1, -1, -1]
+
 
 def sector_from_slug(slug: str) -> str | None:
     if not slug.startswith("area") or len(slug) != 6:
@@ -191,6 +213,39 @@ def outdoor_style_from_wall_lanes(lanes: tuple[int, int, int]) -> dict:
         "surface": mm2_surface_from_wall_lanes(lanes),
         "openDefault": open_terrain_from_wall_lanes(lanes),
     }
+
+
+def build_mm1_outdoor_meta(
+    slug: str,
+    screen_id: int,
+    *,
+    gog_dir: Path | None = None,
+) -> dict | None:
+    """Walker metadata for MM1 overland — keeps native MapWalls pages, no MM2 template."""
+    sector = sector_from_slug(slug)
+    if sector is None:
+        return None
+    lanes: tuple[int, int, int] | None = None
+    if gog_dir is not None:
+        lanes = outdoor_wall_lanes(slug, gog_dir)
+    meta: dict = {
+        "outdoor": True,
+        "mapWalls": True,
+        "env": "outside",
+        "neighbors": mm1_overland_neighbors(screen_id),
+        "sector": ord(sector[0]) << 8 | ord(sector[1]),  # e.g. A1 -> 0x4131
+        "conversion": "mm1_native_mapwalls",
+    }
+    # Human-readable sector label for debug / future horizon use.
+    meta["sectorLabel"] = sector
+    if lanes is not None:
+        style = outdoor_style_from_wall_lanes(lanes)
+        meta.update(style)
+        meta["conversion"] = "mm1_native_mapwalls+wallpix_biome"
+    else:
+        meta["surface"] = 0xAA
+        meta["biome"] = "desert_32"
+    return meta
 
 
 def convert_mm1_area_screen(
