@@ -27,6 +27,9 @@
       <button type="button" id="btnBack" title="Step back (S / ↓)">↓ Back</button>
       <button type="button" id="btnLeft" title="Turn left (A / ←)">← Turn</button>
       <button type="button" id="btnRight" title="Turn right (D / →)">Turn →</button>
+      <label title="Disable collisions to walk through walls">
+        <input type="checkbox" id="chkNoclip"> No-clip
+      </label>
       <span id="status"></span>
     </div>
 
@@ -56,6 +59,8 @@
           <li><strong>S</strong> / <strong>↓</strong> — step backward</li>
           <li><strong>A</strong> / <strong>←</strong> — turn left</li>
           <li><strong>D</strong> / <strong>→</strong> — turn right</li>
+          <li>Click minimap — teleport to tile</li>
+          <li><strong>No-clip</strong> — walk through walls (debug)</li>
           <li>Overland: MM1 wall map + toroidal sector links (A1–E4)</li>
         </ul>
         <p class="hint">Regenerate: <code>python tools/export_mm1_map_walker.py</code></p>

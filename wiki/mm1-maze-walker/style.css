@@ -117,6 +117,10 @@ main {
   margin-bottom: 4px;
 }
 
+#minimap {
+  cursor: crosshair;
+}
+
 canvas {
   display: block;
   image-rendering: pixelated;

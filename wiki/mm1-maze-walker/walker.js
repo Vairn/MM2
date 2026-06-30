@@ -46,6 +46,7 @@ const locTile = document.getElementById("locTile");
 const locScreen = document.getElementById("locScreen");
 const locFacing = document.getElementById("locFacing");
 const locMode = document.getElementById("locMode");
+const chkNoclip = document.getElementById("chkNoclip");
 
 function cartoTable() {
   return manifest?.cartoTile || K_CARTO_TILE_FALLBACK;
@@ -209,6 +210,8 @@ function renderWallMinimap(sc) {
   miniCtx.strokeStyle = "rgba(255,220,0,0.85)";
   miniCtx.lineWidth = 1;
   miniCtx.strokeRect(px + 0.5, py + 0.5, MINI_TW - 1, MINI_TH - 1);
+  miniCtx.fillStyle = "rgba(255,220,0,0.25)";
+  miniCtx.fillRect(px + 1, py + 1, MINI_TW - 2, MINI_TH - 2);
   miniCtx.strokeStyle = "#787887";
   miniCtx.strokeRect(0, 0, w, h);
 }
@@ -315,12 +318,21 @@ function applyMove(next) {
 }
 
 function stepForward() {
-  applyMove(stepParty(state.facing, state.x, state.y, state.screen, maps.screens));
+  applyMove(
+    stepParty(state.facing, state.x, state.y, state.screen, maps.screens, chkNoclip.checked)
+  );
 }
 
 function stepBackward() {
   applyMove(
-    stepParty((state.facing + 2) & 3, state.x, state.y, state.screen, maps.screens)
+    stepParty(
+      (state.facing + 2) & 3,
+      state.x,
+      state.y,
+      state.screen,
+      maps.screens,
+      chkNoclip.checked
+    )
   );
 }
 
@@ -355,6 +367,23 @@ function bindControls() {
     state.screen = Number(screenSelect.value);
     jumpEntry();
   });
+
+  miniCanvas.addEventListener("click", (ev) => {
+    const rect = miniCanvas.getBoundingClientRect();
+    const scaleX = miniCanvas.width / rect.width;
+    const scaleY = miniCanvas.height / rect.height;
+    const x = (ev.clientX - rect.left) * scaleX;
+    const y = (ev.clientY - rect.top) * scaleY;
+    const tileX = Math.floor(x / MINI_TW);
+    const tileY = MAP_GRID - 1 - Math.floor(y / MINI_TH);
+    if (tileX >= 0 && tileX < MAP_GRID && tileY >= 0 && tileY < MAP_GRID) {
+      state.x = tileX;
+      state.y = tileY;
+      statusEl.textContent = `Teleported to ${tileLabel(state.x, state.y)}`;
+      draw();
+    }
+  });
+  miniCanvas.style.cursor = "crosshair";
 
   window.addEventListener("keydown", (ev) => {
     if (ev.target instanceof HTMLSelectElement) return;

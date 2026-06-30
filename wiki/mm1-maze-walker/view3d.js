@@ -319,9 +319,9 @@ export function buildIndoorScene(grid, x, y, facing) {
   return { hood, slots, blits: collectBlits(slots) };
 }
 
-export function stepParty(facing, x, y, screen, screens) {
+export function stepParty(facing, x, y, screen, screens, noclip = false) {
   const rec = screens[screen];
-  if (movementBlocked(rec, x, y, facing)) {
+  if (!noclip && movementBlocked(rec, x, y, facing)) {
     return { screen, x, y };
   }
   x += STEP_DX[facing & 3];
