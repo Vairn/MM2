@@ -143,6 +143,98 @@ bool eventVmIsTownServiceSelector(uint8_t sel)
     return false;
 }
 
+/* ROM opcode_len_tbl @ A4-$6CC8 (data hunk file offset 0x1336), read verbatim
+ * via tools/dump_event_token_table.py. Differs from naive "1 + argc" at op
+ * 0x00 (0, not 1) and op 0x25 (2, not 3) -- see header doc comment. */
+constexpr uint8_t kOpTokenDelta[0x33] = {
+    0,  2,  2,  2,  2,  2,  2,  1,  1,  1,  1,  3,  3,  2,  2,  1,  2,  2,  13, 11, 1,  4,  3,  3,  5,  5,  3,
+    2,  2,  2,  2,  7,  7,  4,  3,  3,  3,  2,  1,  1,  3,  1,  15, 2,  2,  3,  3,  1,  11, 4,  2,
+};
+
+uint8_t eventVmTokenDelta(uint8_t op)
+{
+    if (op < sizeof(kOpTokenDelta)) {
+        return kOpTokenDelta[op];
+    }
+    return 1;
+}
+
+Mm2ExecSelectorBin eventVmBinExecSelector(uint8_t sel)
+{
+    struct Range {
+        uint8_t lo;
+        uint8_t hi;
+        uint8_t category;
+        uint8_t subtract;
+    };
+    static const Range kBins[] = {
+        {0x09, 0x10, 0x3C, 0x08}, {0x11, 0x37, 0x3D, 0x10}, {0x38, 0x4B, 0x3E, 0x37},
+        {0x4C, 0x54, 0x3F, 0x4B}, {0x56, 0x5B, 0x40, 0x55}, {0x5C, 0x5E, 0x41, 0x5B},
+        {0x65, 0x69, 0x42, 0x64}, {0x6A, 0x7C, 0x43, 0x69}, {0x97, 0x98, 0x44, 0x96},
+        {0xE3, 0xF3, 0x45, 0xE2}, {0xF4, 0xFB, 0x46, 0xF3},
+    };
+    Mm2ExecSelectorBin out;
+    for (const Range &r : kBins) {
+        if (sel >= r.lo && sel <= r.hi) {
+            out.category = r.category;
+            out.index = static_cast<uint8_t>(sel - r.subtract);
+            out.matched = true;
+            break;
+        }
+    }
+    return out;
+}
+
+bool eventVmLocationStringRaw(const Mm2EventLocation *loc, int idx, const uint8_t **out,
+                              size_t *out_len)
+{
+    if (!loc || !out || !out_len || idx < 0 || !loc->raw) {
+        return false;
+    }
+    if (loc->string_table_offset < 0 ||
+        static_cast<size_t>(loc->string_table_offset) >= loc->raw_len) {
+        return false;
+    }
+
+    size_t pos = static_cast<size_t>(loc->string_table_offset);
+    int cur = 0;
+    while (pos < loc->raw_len) {
+        const size_t start = pos;
+        while (pos < loc->raw_len && loc->raw[pos] != 0xFF) {
+            ++pos;
+        }
+        if (cur == idx) {
+            *out = loc->raw + start;
+            *out_len = pos - start;
+            return true;
+        }
+        ++cur;
+        ++pos;
+    }
+    return false;
+}
+
+bool eventVmStringLooksLikeBytecode(const uint8_t *bytes, size_t len)
+{
+    if (!bytes || len == 0) {
+        return false;
+    }
+    const uint8_t op = bytes[0];
+    if (op == 0 || op >= 0x33) {
+        return false;
+    }
+    if (op == 0x12) {
+        return len >= 12;
+    }
+    if (op == 0x13) {
+        return len >= 10;
+    }
+    if (len >= 2 && bytes[1] < 0x20) {
+        return true;
+    }
+    return false;
+}
+
 int32_t eventVmResolveVarOffset(uint8_t group, uint8_t index)
 {
     /* event_op_var_resolve @ 0x15620 keys on a single id byte; `index` is unused
@@ -203,6 +295,31 @@ void eventVmStoreVar(uint8_t *a4, uint8_t group, uint8_t index, uint8_t val)
         return;
     }
     mm2_gs_set_u8(a4, off, val);
+}
+
+uint8_t eventVmSpellEyeTimer(const uint8_t *a4, bool outdoor_view)
+{
+    if (!a4) {
+        return 0;
+    }
+    const int32_t off = outdoor_view ? MM2_GS_CLASS_QUEST_CNT : MM2_GS_QUEST_COUNTER_B;
+    return mm2_gs_u8(a4, off);
+}
+
+void eventVmTickSpellEyeOnStep(uint8_t *a4, bool outdoor_view)
+{
+    /* spell_eye_step_tick @ 0x4672: pick Eagle (-$79A0) when -$79E2 != 0, else
+     * Wizard (-$799F); subq while nonzero. Protect-panel vars are OR'd into a
+     * refresh gate but the timer decrement is unconditional when active. */
+    if (!a4) {
+        return;
+    }
+    const int32_t off = outdoor_view ? MM2_GS_CLASS_QUEST_CNT : MM2_GS_QUEST_COUNTER_B;
+    uint8_t timer = mm2_gs_u8(a4, off);
+    if (timer == 0) {
+        return;
+    }
+    mm2_gs_set_u8(a4, off, static_cast<uint8_t>(timer - 1));
 }
 
 uint32_t eventVmPartyGoldTotal(const uint8_t *a4, const Mm2RosterFile *roster,
@@ -323,6 +440,18 @@ void eventVmClearTileEventFlag(uint8_t *a4, int y, int x)
                   static_cast<uint8_t>(mm2_gs_u8(a4, MM2_GS_TILE_VISITED + idx) & static_cast<uint8_t>(~0x80)));
     mm2_gs_set_u8(a4, MM2_GS_TILE_RT_FLAGS + idx,
                   static_cast<uint8_t>(mm2_gs_u8(a4, MM2_GS_TILE_RT_FLAGS + idx) & static_cast<uint8_t>(~0x80)));
+}
+
+void eventVmConsumeTileEncounterFlag(uint8_t *a4, world::MapWorld &world, int y, int x)
+{
+    eventVmClearTileEventFlag(a4, y, x);
+    if (!world.loaded() || y < 0 || y >= MM2_MAP_GRID_DIM || x < 0 || x >= MM2_MAP_GRID_DIM) {
+        return;
+    }
+    Mm2MapScreen &screen = world.mapFileMut().screens[world.currentScreen()];
+    const int idx = y * MM2_MAP_GRID_DIM + x;
+    screen.collision[idx] =
+        static_cast<uint8_t>(screen.collision[idx] & static_cast<uint8_t>(~MM2_MAP_COLL_EVENT));
 }
 
 void eventVmPatchMapTile(world::MapWorld &world, int y, int x, uint8_t visual, uint8_t collision)
@@ -569,6 +698,92 @@ bool eventVmCheckCode16(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch
         return eventVmPartyHasItem(a4, roster, launch, key_id, false);
     }
     return false;
+}
+
+const uint8_t kArenaAreaIndex[5] = {0, 2, 0, 0, 1};
+
+const uint32_t kArenaGoldReward[4][3] = {
+    {200, 1500, 500},
+    {2000, 5000, 3000},
+    {7000, 15000, 10000},
+    {20000, 50000, 30000},
+};
+
+Mm2ArenaTicket eventVmFindArenaTicket(const uint8_t *a4, const Mm2RosterFile *roster,
+                                      const Mm2PartyLaunch *launch)
+{
+    (void)a4;
+    Mm2ArenaTicket result;
+    if (!roster || !launch) {
+        return result;
+    }
+    for (int m = 0; m < launch->party_count && m < MM2_PARTY_LAUNCH_SLOTS; ++m) {
+        const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[m]);
+        if (!rec) {
+            continue;
+        }
+        for (int slot = 0; slot < MM2_ROSTER_ITEM_SLOTS; ++slot) {
+            const uint8_t id = rec->backpack_id[slot];
+            if (id >= 0xD0u && id <= 0xD3u) {
+                result.found = true;
+                result.color = static_cast<uint8_t>(id - 0xD0u);
+                result.member_slot = m;
+                result.backpack_slot = slot;
+                return result;
+            }
+        }
+    }
+    return result;
+}
+
+void eventVmConsumeArenaTicket(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                const Mm2ArenaTicket &ticket)
+{
+    if (!roster || !launch || !ticket.found) {
+        return;
+    }
+    if (ticket.member_slot < 0 || ticket.member_slot >= launch->party_count) {
+        return;
+    }
+    Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[ticket.member_slot]);
+    if (!rec || ticket.backpack_slot < 0 || ticket.backpack_slot >= MM2_ROSTER_ITEM_SLOTS) {
+        return;
+    }
+    rec->backpack_id[ticket.backpack_slot] = 0;
+    rec->backpack_charges[ticket.backpack_slot] = 0;
+    rec->backpack_flags[ticket.backpack_slot] = 0;
+}
+
+uint8_t eventVmArenaMonsterType(uint8_t color, int screen, int rng_1_to_16)
+{
+    if (color > 3) {
+        color = 3;
+    }
+    const uint8_t area = (screen >= 0 && screen < 5) ? kArenaAreaIndex[screen] : kArenaAreaIndex[0];
+    int roll = rng_1_to_16;
+    if (roll < 1) {
+        roll = 1;
+    }
+    if (roll > 16) {
+        roll = 16;
+    }
+    const int type = (static_cast<int>(color) * 3 + area) * 16 + roll;
+    return static_cast<uint8_t>(type & 0xFF);
+}
+
+uint32_t eventVmArenaGoldReward(uint8_t color, int screen)
+{
+    if (color > 3) {
+        color = 3;
+    }
+    int tier = screen;
+    if (tier < 0) {
+        tier = 0;
+    }
+    if (tier > 2) {
+        tier = 2;
+    }
+    return kArenaGoldReward[color][tier];
 }
 
 int eventVmSelectedPartySlot(const uint8_t *a4)

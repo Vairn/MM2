@@ -5,10 +5,10 @@
 //
 // These are pure functions over the traced rolls/comparisons so they can be
 // unit-tested deterministically. The map/door runtime state they consume in
-// the original (re-bundled tile tables -$55BA/-$54BA built by map_row_sampler
-// @ 0x190C, door-strength byte -$5608, trap byte -$5607, and the lock-clear
-// helper -$7F02 @ 0x4B06) is NOT modelled by the port yet — callers pass the
-// best-available inputs and document the gap. See GameSession::handleExplore*.
+// Door strength / trap byte come from the materialized attrib record (+0x12/+0x13,
+// runtime A4-$5608/-$5607). Lock clear mirrors -$7F02 @ 0x4B06 via collision
+// page wall-bit clear (mm2_map_clear_door_lock). Trap victim/damage @ 0x1A9A6 /
+// 0x1A90E is simplified in GameSession.
 
 #include "mm2/CppStdCompat.h"
 
@@ -62,7 +62,7 @@ struct BashDecision {
 
 /* 0x9BCA strength + 0x9C4C trap roll. Inputs:
  *   might_sum     = char0 +$6B (might base) [+ char1 +$6B if party>1]
- *   door_strength = -$5608 byte (GAP: not ported)
+ *   door_strength = attrib +0x12 (A4-$5608)
  *   roll_10_109   = rng(10,0x6D)   @ 0x9BFE  (then /10 -> 1..10; ==5 auto-success)
  *   trap_d100     = rng(1,100)     @ 0x9C54  (<0x33 -> trap springs)
  * All comparisons are byte-wise as in the ASM. */
@@ -85,7 +85,7 @@ struct UnlockDecision {
 /* 0x20D26 pick + 0x20D5C trap roll. Inputs:
  *   thievery    = picker roster +$1E      @ 0x20D44
  *   lock_d100   = rng(1,100)              @ 0x20D2E
- *   trap_byte   = -$5607 byte (GAP: not ported)
+ *   trap_byte   = attrib +0x13 (A4-$5607)
  *   trap_d100   = rng(1,100)              @ 0x20D64
  * Pick succeeds iff lock_d100 < 0x60 AND thievery >= lock_d100 (unsigned). */
 UnlockDecision unlockDoorRoll(int thievery, int lock_d100, int trap_byte, int trap_d100);

@@ -283,7 +283,11 @@ void AppHost::charChooseEnter()
     }
     char_create_prepare_done_ = true;
     MM2_DBG("MM2 GOTO: charChooseEnter startChooseParty\n");
-    character_ui_.startChooseParty(title_.roster());
+    const uint8_t town_filter = pending_choose_town_filter_;
+    pending_choose_town_filter_ = 1;
+    const Mm2PartyLaunch *saved =
+        pending_launch_.party_count > 0 ? &pending_launch_ : nullptr;
+    character_ui_.startChooseParty(title_.roster(), town_filter, saved);
     MM2_DBG(
         "MM2 GOTO: charChooseEnter done mode=%d active=%d redraw=%d chip=%lu\n",
         static_cast<int>(character_ui_.mode()),
@@ -509,9 +513,17 @@ void AppHost::inTownDraw()
 #endif
 }
 
+void AppHost::syncSessionRosterToTitle()
+{
+    pending_choose_town_filter_ = session_.gotoTownFilter();
+    pending_launch_ = session_.launch();
+    title_.roster() = session_.roster();
+}
+
 void AppHost::inTownEnd()
 {
     in_town_active_ = false;
+    session_.clearGotoTownRequest();
     /* shutdown() fully resets the session; re-assigning a temporary here
      * would shallow-copy ScreenCompositor's pixel buffer (double free). */
     session_.shutdown();
@@ -519,6 +531,18 @@ void AppHost::inTownEnd()
 #if !MM2_HOST_AMIGA
     char window_title[256];
     std::snprintf(window_title, sizeof(window_title), "MM2 (%s) — title menu", platform::hostName());
+    platform::setWindowTitle(window_title);
+#endif
+}
+
+void AppHost::inTownEndForGotoTown()
+{
+    in_town_active_ = false;
+    session_.clearGotoTownRequest();
+    session_.shutdown();
+#if !MM2_HOST_AMIGA
+    char window_title[256];
+    std::snprintf(window_title, sizeof(window_title), "MM2 (%s) — goto town", platform::hostName());
     platform::setWindowTitle(window_title);
 #endif
 }

@@ -88,6 +88,22 @@ export default defineConfig({
           ],
         },
         {
+          text: 'Might and Magic I (DOS)',
+          collapsed: false,
+          items: [
+            { text: 'MM1 Overview', link: '/docs/reverse-engineering/50-mm1-overview' },
+            { text: 'MAZEDATA format', link: '/docs/reverse-engineering/22-mm1-mazedata-format' },
+            { text: 'Outdoor conversion', link: '/docs/reverse-engineering/23-mm1-to-mm2-outdoor' },
+            { text: 'WALLPIX by sector', link: '/docs/reverse-engineering/24-mm1-outdoor-wallpix-by-sector' },
+            { text: 'Art & graphics', link: '/docs/reverse-engineering/51-mm1-art-and-graphics' },
+            { text: 'Items / monsters (status)', link: '/docs/reverse-engineering/52-mm1-items-monsters-events' },
+            { text: 'WALLPIX gallery', link: '/docs/gallery/mm1-walls' },
+            { text: 'MM1 2D maps', link: '/docs/gallery/mm1-maps' },
+            { text: 'MM1 gallery hub', link: '/docs/gallery/mm1-index' },
+            { text: 'MM1 map walker ↗', link: 'https://vairn.github.io/MM2/mm1-maze-walker/' },
+          ],
+        },
+        {
           text: 'Tools & Code',
           items: [
             { text: 'RE Tools (Python/C)', link: '/docs/tools/re-tools' },

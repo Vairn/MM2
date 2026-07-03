@@ -63,6 +63,7 @@ public:
     uint8_t envType() const { return mm2_attrib_env_type(&attrib()); }
     uint8_t mapCategory() const { return mm2_attrib_map_category(&attrib()); }
     bool isOutdoor() const { return mm2_attrib_is_outdoor(&attrib()) != 0; }
+    bool screenIsOutdoor(int screen_id) const;
 
     /* Roof bit for the 16x16 tile (attrib 0x20..0x3F). */
     bool roofBitAt(int x, int y) const
@@ -74,6 +75,16 @@ public:
      * centre visual page + four neighbour visual pages; out-of-world
      * neighbours are filled with 0xFF (solid). */
     gfx::View3DMapBuffers buildView3DMapBuffers() const;
+
+    struct SpellEyeSample {
+        uint8_t cell = 0;
+        int screen = -1;
+    };
+
+    /* spell_eye_cell_sample @ 0x1D9A — map byte for Eagle/Wizard Eye 5×5 grid.
+     * Outdoor (-$79E2): wraps into neighbour visual pages (attrib 0x05..0x08).
+     * Indoor: centre page only; out-of-range returns false. */
+    bool spellEyeSample(int mx, int my, SpellEyeSample *out) const;
 
 private:
     bool loaded_ = false;

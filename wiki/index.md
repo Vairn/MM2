@@ -37,6 +37,9 @@ features:
   - icon: 🗺️
     title: Map walker
     details: Interactive HTML5 top-down explorer for all 60 map.dat screens — collision, attrib links, and event tiles on GitHub Pages.
+  - icon: 🏰
+    title: Might & Magic I (DOS)
+    details: MAZEDATA mazes (55 screens), outdoor WALLPIX biomes, lagdotcom wall art — plus an MM1 map walker. Items/monsters not decoded yet.
   - icon: 📜
     title: Living documentation
     details: Pages sync from EXTRACTED/docs on each dev/build run — edit markdown in the repo, refresh the wiki.
@@ -75,6 +78,7 @@ features:
 | Edit `.dat` files | [MM2ED Editor](/docs/editor/mm2ed) + sidebar *Data formats* |
 | Trace combat or scripts | [Combat](/docs/reverse-engineering/17-combat-system) · [Event opcodes](/docs/reverse-engineering/07-event-script-opcodes) |
 | Browse decoded art | [Sprite gallery](/docs/gallery/) |
+| Explore MM1 mazes | [MM1 overview](/docs/reverse-engineering/50-mm1-overview) · [MM1 walker](https://vairn.github.io/MM2/mm1-maze-walker/) |
 | See open questions | [Open questions](/docs/reverse-engineering/05-open-questions) |
 
 </div>

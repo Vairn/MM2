@@ -133,6 +133,14 @@ Remake: `game/src/TitleScreen.cpp` — **320×200**, `Mm2Font8x8.inc`, menu on *
 | [`44-event-text-rendering.md`](44-event-text-rendering.md) | **Pixel-exact event text** — draw thunks, window kernel, per-op dest rects, prompt loops |
 | [`37-mount-farview-class-quest-event.md`](37-mount-farview-class-quest-event.md) | Class quests + Juror turn-in (loc 34) |
 | [`36-class-quest-hp-bug.md`](36-class-quest-hp-bug.md) | Class-quest reward HP bug @ `0x9D76` |
+| [`53-nordon-nordonna-quests.md`](53-nordon-nordonna-quests.md) | **Nordon goblet** `0x0A` `(10,2)`, **Nordonna** `(1,2)`, **Feldecarb** `0x0E` `(15,15)` |
+
+**Remake port (2026-07):** town-service menus in `TownServiceMenu.cpp` +
+`PlayTownServiceUi.cpp`; wiki walker in `townServices.js`. Pub/temple intro y/n
+→ menu; blacksmith direct shop — [`28-town-services.md`](28-town-services.md) §1.4.3.
+**Arena Games (`OP_0E 0x08`, ticket items) and Feldecarb Fountain farthing-flick
+(`0x0A` @ Middlegate `(2,10)`) are unrelated** — see doc 28 §5.2.1. Most
+per-location scripts remain unported.
 
 ---
 
@@ -144,7 +152,7 @@ Remake: `game/src/TitleScreen.cpp` — **320×200**, `Mm2Font8x8.inc`, menu on *
 | [`33-skills-and-hirelings.md`](33-skills-and-hirelings.md) | 15 skill sellers, 24 hirelings A–X |
 | [`34-commerce-formulas.md`](34-commerce-formulas.md) | Training, healing, portals, bar, shop cycle |
 | [`34-commerce-and-world-services.md`](34-commerce-and-world-services.md) | Extended commerce / world services notes |
-| [`28-town-services.md`](28-town-services.md) | Inn, temple, guild, training, **blacksmith inventories** (data hunk) |
+| [`28-town-services.md`](28-town-services.md) | Inn, temple, guild, training, blacksmith — **OP_0E dispatch**, static tables, **PlayTownServiceUi** port status (§1.4.3 intro flow) |
 | [`31-spell-sources.md`](31-spell-sources.md) | Where each spell is obtained in-game |
 
 **Runtime codecs (C + Python, not `.dat` files)**
@@ -171,9 +179,14 @@ Remake: `game/src/TitleScreen.cpp` — **320×200**, `Mm2Font8x8.inc`, menu on *
 
 | Doc | Description |
 |-----|-------------|
+| [`50-mm1-overview.md`](50-mm1-overview.md) | **MM1 hub** — decode status, 55-screen index, walker, tools |
 | [`22-mm1-mazedata-format.md`](22-mm1-mazedata-format.md) | DOS `MAZEDATA.DTA` layout |
 | [`23-mm1-to-mm2-outdoor.md`](23-mm1-to-mm2-outdoor.md) | MM1 outdoor → MM2 sector mapping |
 | [`24-mm1-outdoor-wallpix-by-sector.md`](24-mm1-outdoor-wallpix-by-sector.md) | MM1 wall sprite ids by sector |
+| [`51-mm1-art-and-graphics.md`](51-mm1-art-and-graphics.md) | WALLPIX sheets, lagdotcom exports, walker art |
+| [`52-mm1-items-monsters-events.md`](52-mm1-items-monsters-events.md) | Items / monsters / OVR events — **not decoded yet** |
+
+Interactive walker: [vairn.github.io/MM2/mm1-maze-walker/](https://vairn.github.io/MM2/mm1-maze-walker/)
 
 ---
 

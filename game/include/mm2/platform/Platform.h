@@ -56,10 +56,8 @@ uint32_t nowTicks();
 
 const char *hostName();
 
-#if MM2_HOST_AMIGA
-/** Probe intro.32; writes "" or "dh1:" etc. into out. Returns false if not found. */
+/** Probe intro.32 under hint, ".", "..", "../.."; writes resolved dir into out. */
 bool resolveDataDir(const char *hint, char *out, size_t out_cap);
-#endif
 
 }  // namespace mm2::platform
 

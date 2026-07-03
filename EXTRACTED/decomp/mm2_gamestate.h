@@ -96,10 +96,28 @@
  */
 #define MM2_GS_MONSTER_SLOTS        (-0x11DE)  /* byte[11] ($EE22) monster-type ids; [10]=overflow_type */
 #define MM2_GS_ENCOUNTER_OVERFLOW_TYPE (-0x11D4)  /* byte ($EE2C) overflow/breed monster type */
-#define MM2_GS_ENCOUNTER_MODE       (-0x796B)  /* byte  ($8693) 0x80=fixed fight, 0=seeded-random */
-#define MM2_GS_MONSTER_COUNT        (-0x77BE)  /* byte  ($8842) live monster count */
+#define MM2_GS_ENCOUNTER_MODE       (-0x796B)  /* byte  ($8693) 0x80=fixed fight, 0=seeded-random, 3=rest ambush */
+#define MM2_GS_MONSTER_COUNT        (-0x77BE)  /* byte  ($8842) live monster count (0..11) */
 #define MM2_GS_ENCOUNTER_REDRAW     (-0x4F4E)  /* word  ($B0B2) combat/redraw flag (cleared by OP_12) */
 #define MM2_GS_MONSTER_SLOT_COUNT   10
+#define MM2_GS_MONSTER_BATTLE_SLOTS 11 /* live_count can reach 11 (slot 10 aliases overflow_type) */
+
+/* ---- Combat round loop (0x12A22) battle arrays — doc 17-combat-system.md ----
+ * Parallel per-monster-slot arrays, index 0..10 (MM2_GS_MONSTER_BATTLE_SLOTS).
+ * Per-party-member acted flags are index 0..7 (party slot, not roster index). */
+#define MM2_GS_MONSTER_HP           (-0x53A)   /* word[11] ($7AC4) current HP */
+#define MM2_GS_MONSTER_STATUS       (-0x519)   /* byte[11] ($7AE5) bit0=awake/active */
+#define MM2_GS_MONSTER_SPEED        (-0x50E)   /* byte[11] ($7AF0) initiative */
+#define MM2_GS_MONSTER_ACTED        (-0x5E4A)  /* byte[10] ($21B4) acted-this-round flags */
+#define MM2_GS_PARTY_ACTED          (-0x5E40)  /* byte[8]  ($21BE) acted-this-round flags */
+
+/* ---- Random encounter picker (0x1213E/0x12072/0x11F0A) — doc 35 ----
+ * party_xp_budget/tier_mod computed once per encounter by encounter_xp_budget_init
+ * (0x11E58) from total party HP + disposition and from the highest party level. */
+#define MM2_GS_PARTY_XP_BUDGET      (-0x6FCA)  /* long  ($9036) picker budget = totalHP/8 (scaled by disposition) */
+#define MM2_GS_PICKER_TIER_MOD      (-0x6FC2)  /* byte  ($903E) = max(party level)/2, added to tier roll */
+#define MM2_GS_PICKER_DONE          (-0x6FC1)  /* byte  ($903F) picker loop done flag (budget/gate exhausted) */
+#define MM2_GS_MONSTER_FRIEND_COUNT (-0x11B7)  /* byte  ($6E47) picked monster's "friend count" (set by -$7EF6) */
 /* ---- Found-item / treasure-reward buffer (OP_2A @ 0x16D16, OP_19 overflow @ 0x16618) ----
  *
  * A 16-byte shared "pending loot" buffer in the A4 block. It is filled by event

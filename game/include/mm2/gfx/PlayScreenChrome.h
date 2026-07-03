@@ -10,7 +10,6 @@ namespace mm2::gfx {
 struct PlayPartySlot {
     bool present = false;
     bool bad_condition = false;   /* roster byte +$26 != 0 (0x622C) */
-    bool combat_checkmark = false; /* combat refresh: glyph 0x7E before slot digit */
     int hp = 0;                   /* roster word +$5E (0x6274) */
     char name[16] = {0};
 };

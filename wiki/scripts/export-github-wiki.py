@@ -69,6 +69,7 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("EXTRACTED/docs/34-commerce-and-world-services.md", "Commerce-World-Services"),
     ("EXTRACTED/docs/36-class-quest-hp-bug.md", "Class-Quest-HP-Bug"),
     ("EXTRACTED/docs/37-mount-farview-class-quest-event.md", "Mount-Farview-Class-Quest"),
+    ("EXTRACTED/docs/53-nordon-nordonna-quests.md", "Nordon-Nordonna-Quests"),
     ("EXTRACTED/docs/38-title-screen-and-intro-assets.md", "Title-Screen-Assets"),
     ("EXTRACTED/docs/39-title-screen-animation.md", "Title-Screen-Animation"),
     ("EXTRACTED/docs/39-character-ui-view-create.md", "Character-UI-View-Create"),
@@ -79,6 +80,9 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("EXTRACTED/docs/22-mm1-mazedata-format.md", "MM1-MAZEDATA-Format"),
     ("EXTRACTED/docs/23-mm1-to-mm2-outdoor.md", "MM1-to-MM2-Outdoor"),
     ("EXTRACTED/docs/24-mm1-outdoor-wallpix-by-sector.md", "MM1-Outdoor-WALLPIX"),
+    ("EXTRACTED/docs/50-mm1-overview.md", "MM1-Overview"),
+    ("EXTRACTED/docs/51-mm1-art-and-graphics.md", "MM1-Art-and-Graphics"),
+    ("EXTRACTED/docs/52-mm1-items-monsters-events.md", "MM1-Items-Monsters-Events"),
     ("game/README.md", "Game-Remake"),
     ("EXTRACTED/mm2-ANALYSIS.md", "Full-Analysis"),
     ("tools/RE-TOOLS.md", "RE-Tools"),
@@ -87,7 +91,9 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("CLAUDE.md", "Workspace-Notes"),
 ]
 
-EVENTS_HUB_TITLE = "Events-by-Location"
+DEFAULT_MM1_MAZEDATA = Path(
+    r"C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 1\MAZEDATA.DTA"
+)
 EVENTS_SRC_DIR = "EXTRACTED/docs/events"
 
 GALLERY_PAGES = {
@@ -169,6 +175,7 @@ def build_link_map() -> dict[str, str]:
     for title in GALLERY_PAGES.values():
         m[title] = title
     m["Map-Walker"] = "Map-Walker"
+    m["MM1-Map-Walker"] = "MM1-Map-Walker"
     m["Getting-Started"] = "Getting-Started"
     return m
 
@@ -443,7 +450,7 @@ def write_home(*, out: Path = OUT) -> None:
 | Town shops &amp; services | [Town Services](Town-Services) · [Spell Sources](Spell-Sources) · [Event to String Path](Event-to-String-Path) |
 | Audio / walk beep / SFX | [Audio Sounds Music](Audio-Sounds-Music) |
 | Exe-embedded UI strings | [Embedded Exe Strings](Embedded-Exe-Strings) |
-| MM1 map cross-walk | [MM1 MAZEDATA](MM1-MAZEDATA-Format) · [MM1 outdoor](MM1-to-MM2-Outdoor) |
+| MM1 (DOS) maps &amp; art | [MM1 Overview](MM1-Overview) · [MAZEDATA](MM1-MAZEDATA-Format) · [MM1 map walker ↗](MM1-Map-Walker) |
 | Browse decoded art | [Gallery](Gallery) |
 | See what's still unknown | [Open Questions](Open-Questions) |
 | Boot &amp; memory map | [Startup and Init](Startup-and-Init) · [Runtime Memory Map](Runtime-Memory-Map) · [Data Hunk](Data-Hunk-mm2-data-00) |
@@ -551,10 +558,16 @@ def write_sidebar() -> None:
 - [Time Era Calendar](Time-Era-Calendar)
 - [Game State Struct](Game-State-Struct)
 
-#### MM1 cross-walk
+#### Might and Magic I (DOS)
+- [MM1 Overview](MM1-Overview) ← **hub + decode status**
 - [MM1 MAZEDATA format](MM1-MAZEDATA-Format)
 - [MM1 to MM2 outdoor](MM1-to-MM2-Outdoor)
 - [MM1 WALLPIX by sector](MM1-Outdoor-WALLPIX)
+- [MM1 art &amp; graphics](MM1-Art-and-Graphics)
+- [MM1 items / monsters (status)](MM1-Items-Monsters-Events)
+- [MM1 map walker ↗](MM1-Map-Walker)
+- [MM1 2D maps gallery](MM1-Maps-Gallery)
+- [MM1 WALLPIX gallery](MM1-Walls-Gallery)
 
 #### Gallery
 - [Gallery home](Gallery)
@@ -718,6 +731,59 @@ def export_gallery(*, skip_gallery: bool) -> None:
     export_book_logo(OUT / "images" / "book-f00.png")
 
 
+def export_mm1_maze_walker(out_root: Path) -> None:
+    """Wiki link page for the MM1 HTML walker (GitHub Pages)."""
+    pages_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/mm1-maze-walker/"
+    walker_page = OUT / "MM1-Map-Walker.md"
+    walker_page.write_text(
+        "# MM1 map walker\n\n"
+        "Interactive **HTML5** first-person 3D explorer for all **55** MM1 `MAZEDATA.DTA` "
+        "screens — indoor dungeons/towns plus converted overland sectors A1–E4.\n\n"
+        "**GitHub Wiki cannot run JavaScript.** Open the walker on GitHub Pages:\n\n"
+        f"**[{pages_url}]({pages_url})**\n\n"
+        "Controls: **W/S** forward/back, **A/D** turn. "
+        "Indoor walls use MM2 `.32` stand-ins; outdoor horizons follow MM1 WALLPIX biomes.\n\n"
+        "See [MM1 Overview](MM1-Overview) · [MAZEDATA format](MM1-MAZEDATA-Format) · "
+        "[outdoor conversion](MM1-to-MM2-Outdoor).\n\n"
+        "### Local dev\n\n"
+        "```powershell\n"
+        "python tools/export_mm1_map_walker.py\n"
+        "cd wiki/mm1-maze-walker\n"
+        "python -m http.server 8081\n"
+        "# open http://localhost:8081/\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    print(f"  wiki page MM1-Map-Walker.md -> {pages_url}")
+
+
+def export_mm1_gallery_wiki(out_root: Path) -> None:
+    """MM1 2D maps + WALLPIX PNGs under images/gallery/mm1/."""
+    if not DEFAULT_MM1_MAZEDATA.is_file():
+        print("  skip MM1 gallery: MAZEDATA.DTA not found")
+        return
+    from export_mm1_gallery import export_mm1_gallery  # noqa: E402
+
+    img_out = out_root / "images" / "gallery" / "mm1"
+    export_mm1_gallery(
+        img_out,
+        mazedata=DEFAULT_MM1_MAZEDATA,
+        docs_out=out_root,
+        image_prefix="images/gallery/mm1",
+    )
+    renames = {
+        "mm1-index.md": "MM1-Gallery.md",
+        "mm1-maps.md": "MM1-Maps-Gallery.md",
+        "mm1-walls.md": "MM1-Walls-Gallery.md",
+    }
+    for src_name, title in renames.items():
+        src = out_root / src_name
+        if src.is_file():
+            (out_root / f"{title}.md").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+            src.unlink()
+            print(f"  MM1 gallery page {title}")
+
+
 def export_maze_walker(out_root: Path) -> None:
     """Copy HTML walker + export maps.json (GitHub Pages, not Wiki markdown)."""
     src = WIKI / "maze-walker"
@@ -774,8 +840,10 @@ def export_github_wiki(*, skip_gallery: bool = False) -> Path:
     print("Exporting event locations…")
     export_event_locations()
     export_gallery(skip_gallery=skip_gallery or not has_game_assets())
+    export_mm1_gallery_wiki(OUT)
     export_book_logo(OUT / "images" / "book-f00.png")
     export_maze_walker(OUT)
+    export_mm1_maze_walker(OUT)
     write_home(out=OUT)
     print("Done.")
     return OUT

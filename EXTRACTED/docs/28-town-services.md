@@ -50,12 +50,46 @@ Chained subtraction on the selector byte:
 | `0x04`                                               | `open_temple`          | `-$7D16`                         | Temple services + donations               |
 | `0x05`                                               | `open_mages_guild`     | `-$7D10`                         | Mage guild spell shop                     |
 | `0x06`                                               | `open_blacksmith_shop` | `0x1C54A`                        | Blacksmith (weapons/armor/specials)       |
-| `0x07`                                               | `open_general_store`   | `-$7DB8`                         | General store (Middlegate m11, Vulcania k6 only) |
-| `0x08`                                               | `open_arena_shop`      | `-$7DBE`                         | Arena / special shop                      |
-| `0x0A`                                               | `goblet_quest`         | `-$7DAC`                         | Goblet / farthing side quest              |
-| `0x0D`                                               | `enroll_mages_guild`   | `-$7DA0` (+ `$1A1F8` on success) | Guild membership                          |
+| `0x07`                                               | `open_general_store`   | `-$7DB8` → `0xA62C`              | General store (Middlegate m11, Vulcania k6 only) |
+| `0x08`                                               | `open_arena_shop`      | `-$7DBE` → `0x9D76`              | **Arena Games ticket-combat-reward engine** (byte-verified 2026-07 — see correction below; this is the ONLY path into `0x9D76`) |
+| `0x0A`                                               | `goblet_quest`         | `-$7DAC` → `0xD634`           | **Nordon goblet quest** @ Middlegate `(10,2)/W` (event 30, loc 60 str[9–15]) — **not** Feldecarb |
+| `0x0D`                                               | `enroll_mages_guild`   | `-$7DA0` → `0xD89C` (+ `$1A1F8`?) | Guild membership (20gp, shared string bank str[21]) |
 | `0x64`, `0x7E`–`0x83`, `0xC9`–`0xCF`, `0xE2`, `0xFD` | specials               | various                          | Portals / quests                          |
-| *default*                                            | (category shop)        | `0x15EDC` → `-$7DFA`             | Selector binned to category `0x3C`–`0x46` |
+| *default*                                            | (event-loader reinvoke) | `0x15EDC` → `-$7DFA` → `0x92F2`  | Selector binned to category `0x3C`–`0x46`, then re-enters `event_dat_loader` (NOT the arena engine — see correction below) |
+
+**Correction (2026-07, revised):** a first pass separated `0x07`/`0x08` from the
+default-range dispatch, then wrongly claimed the *default-range* thunk `-$7DFA`
+was the Arena Games engine (`0x9D76`). Byte-reading the A4 vtable trampoline
+table directly out of `EXTRACTED/ghidra/mm2_data_00.bin` (doc 49, file offset
+`0x7FFE+disp`) settles it:
+
+```text
+-$7DB8 (file off 0x0246): 4EF9 0000A62C  -> 0x0A62C  general store
+-$7DBE (file off 0x0240): 4EF9 00009D76  -> 0x09D76  Arena Games engine
+-$7DFA (file off 0x0204): 4EF9 000092F2  -> 0x092F2  event_dat_loader (!)
+```
+
+So explicit selector `0x08` (not the default range) is the arena engine's sole
+entry point; the default-range dispatch re-enters the event LOADER (the same
+routine used to load a normal on-map location) with a synthetic index —
+plausibly to pull one of event.dat's non-map "string bank" pseudo-records
+(§1.5 below). This was fixed in `game/src/events/EventTownServices.cpp` (arena
+logic moved to `case 0x08`; `default:` no longer shows the fabricated ticket
+text) and in the web walker's `selectorBin.js`/`eventVm.js`. See doc 07 §OP_0E
+for the full trace and the practical symptoms this caused (unrelated
+default-range quest/reward tiles — including the game-start Corak monologue —
+incorrectly demanding a ticket).
+
+### 1.5 Shared cross-town "string bank" (decoder location 60)
+
+Decoder location 60 (`Nordon/Nordonna/Corak`, `record kind: string_bank`) has
+no script segments of its own — it is a pure, town-invariant string pool
+referenced by several generic quests. Notably `str[21]` is the REAL
+enroll-mage-guild prompt ("A sleepy conjurer yawns...") and `str[23]`/`str[25]`
+are the REAL Feldecarb Fountain farthing-flick prompt/failure text — see doc 07
+§"event.dat shared cross-town string bank" for the full string listing. Nordon
+intro str[9] is wired into `case 0x0A`; Feldecarb str[23] into `default:` when
+`sel == 0x0E` (Middlegate event 17 @ `(15,15)`). Enroll str[21] in `case 0x0D`.
 
 
 Default-path binning (from `0x15EDC`, range helper `-$7E9C`):
@@ -110,19 +144,24 @@ Town index: Middlegate=1, Tundara=2, Sandsobar=2, Vulcania=4, Atlantium=5.
 See `[34-commerce-formulas.md](34-commerce-formulas.md)` for town-index table,
 day-bonus cycle, portals, bar food/drinks, and Fly landing coords.
 
-**Port status (`game/src/events/EventTownServices.cpp`).** The `OP_0E` selectors
-1–8 were de-fabricated (see `[07-event-script-opcodes.md](07-event-script-opcodes.md)`
-§OP_0E "Port status"): each now shows the real `str.dat` entry text and defers the
-interactive A–F menu (the engine handlers `0x1A132` / `-$7CD4` / `0x1D208` /
-`-$7D16` / `-$7D10` / `0x1C54A` / `-$7DB8` / `-$7DBE` are unported). The training
-(`level × index × 50`) and base living-healing (`level × index × 10`) costs are
-implemented as helpers `eventVmTrainingCostPerChar` / `eventVmHealingCostPerChar`
-and unit-tested, but charged per-character only inside the deferred menu. The dead
-(×10) / eradicated (×100) healing multipliers are a **known gap** — roster `$26`
-only groups `$80+` (Dead/Stone/Eradicated, see §5.3 / doc 06) and the
-dead-vs-eradicated threshold is not yet ASM-confirmed.
+**Port status (`game/src/events/EventTownServices.cpp`, `game/src/ui/PlayTownServiceUi.cpp`,
+wiki `maze-walker/townServices.js`).** Selectors **1–8** no longer auto-apply
+whole-party transactions (that was fabricated). With **`PlayTownServiceUi`**
+bound (`GameSession` → `EventRuntime::bindTownServiceUi`), the remake runs
+faithful interactive menus for temple, training, smith, mage guild, and tavern
+(leaf ops in `TownServiceTransactions.cpp`). **Entry flow differs by service**
+(see §1.4.3). Without a UI backend, each selector shows the real `str.dat` intro
+(or OP_0B sign title) and defers the engine menu. Training/healing cost helpers
+(`eventVmTrainingCostPerChar` / `eventVmHealingCostPerChar`) are implemented and
+unit-tested; dead (×10) / eradicated (×100) healing multipliers remain a **known
+gap**.
 
-### 1.4.1 Temple handler menu model (`0x1D208`, ASM-traced)
+### 1.4.1 Temple handler menu model (`-$7D16` → menu shell @ `0x1D650`, ASM-traced)
+
+> **Note:** selector `0x03` (tavern) enters static handler **`0x1D208`**; selector
+> `0x04` (temple) enters **`-$7D16`**. The key loop traced below (`0x1D650` /
+> `0x1D674`) is the temple menu shell; pub uses the same handler family at
+> `0x1D208` with different leaf dispatch.
 
 The temple open handler builds RNG caption pointer tables (`A4-$59EE` … `-$57F6`
 via `-$7DE2`) then enters a key loop. The **key→leaf** dispatch is a fixed jump
@@ -158,15 +197,46 @@ character's own gold**, not a pooled party total.
 The faithful leaf mutations above are implemented byte-exact in
 `TownServiceTransactions.{h,cpp}` and driven through a swappable UI backend
 `ITownServiceUi` (`TownServiceMenu.{h,cpp}`) — interactive selection is pluggable
-(CLAUDE.md), the costs/state are ASM-canonical. `eventExecTownSelector` runs the
-real temple (`0x03`) / training (`0x04`) menu when `EventRuntime::bindTownServiceUi`
-has been set; with no backend it shows the str.dat intro and defers (runtime
-behavior unchanged). Per-town constants: `EXTRACTED/decomp/mm2_town_tables.{h,c}`
-+ `tools/mm2_town_tables.py`. Unit tests: `game/tests/event_middlegate_test.cpp`
-(`testTownServiceTransactions`) — heal deducts `level×index×10` + restores HP +
-clears condition; training deducts `level×index×50` + raises the stat (cap +
-8-bit overflow guards); donation deducts `A4-$6742[map]` + sets the `A4-$799E`
-quest bit (0x1F all-five). See doc 07 §OP_0E "Town-service transaction layer".
+(CLAUDE.md), the costs/state are ASM-canonical. Per-town constants:
+`EXTRACTED/decomp/mm2_town_tables.{h,c}` + `tools/mm2_town_tables.py`. Unit tests:
+`game/tests/event_middlegate_test.cpp` (`testTownServiceTransactions`,
+`testPlayTownServiceUi`) — heal deducts `level×index×10` + restores HP +
+clears condition; training level-up deducts `level×index×50`; donation deducts
+`A4-$6742[map]` + sets the `A4-$799E` quest bit (0x1F all-five); smith buy
+uses `townSvcSmithBuy`. See doc 07 §OP_0E "Town-service transaction layer".
+
+### 1.4.3 Remake entry flow — intro y/n vs direct shop (2026-07)
+
+When a town-service UI backend is bound, **`eventExecTownSelector`** follows the
+original str.dat greeting pattern for pub/temple but **not** for the blacksmith:
+
+| `OP_0E` sel | Service | str.dat NPC intro (y/n)? | Menu on **Y** (backend bound) |
+| ----------- | ------- | ------------------------ | ----------------------------- |
+| `0x03` | Tavern | **Yes** — Amber / Rowena / Belinthra / Gabrielle / Lucindra (~lines 89–108) | A–E top menu (`townSvcRunTavern` → `PlayTownServiceUi`) |
+| `0x04` | Temple | **Yes** — five priest variants (~lines 343–357) | Heal / Restore Cond / Donate / cleric spells (`townSvcRunTemple`) |
+| `0x06` | Blacksmith | **Yes** — Svendegard / Drewnhald / … (~255–273); gates on `A4-$7951` @ `0x1C668` | Category menu A–F after y/n |
+| `0x02` | Training | **No** — OP_0B sign title + SPACE only | Level-up trainee prompt (no stat sub-menu) |
+| `0x05` | Mage guild | str.dat hall intro when **no** backend; with backend, membership gate (`0x1E410`) then spell shop | Four sorcerer spells/town |
+| `0x01` | Inn | **No** — OP_0B sign title + SPACE | Rest menu (partial port) |
+
+**Mechanism (C++):** pub/temple/blacksmith call `showServiceIntro` → `EventVmWait::YesNo` →
+on **Y**, `EventRuntime::finishPendingTownMenu` → `eventTownServiceRunBoundMenu`
+(`PendingTownMenu::Tavern` / `Temple` / `Smith`). `GameSession::tickEventInput` then calls
+`maybeOpenTownServiceMenu()` so the lower-band overlay opens in the same frame.
+Training opens directly (no str.dat y/n intro).
+
+**Wiki maze-walker** mirrors the same split in `eventVm.js` / `townServices.js`:
+tavern + temple prompt with transcribed intros; blacksmith goes straight to
+`runSmithService`. Tavern food/drink **effects** in the walker use simplified
+fixed-gp tables (`A4-$6760`, `PUB_DRINKS`) — the ROM's RNG-gated cost leaves
+(`0x18EC0` / `0x18F78`) and stat-bonus sick roll are still deferred (§13.3.1).
+
+**Still needs work (events / services broadly):** general store (`0x07`),
+tavern RNG drink/food VM paths, smith sell/identify/specials date-roll,
+default-range `-$7DFA` reinvocation, Feldecarb farthing **transaction** (`0x0A`),
+guild enroll (`0x0D`), and the bulk of per-location `event.dat` scripts beyond
+Middlegate smoke tests. **Arena (`0x08`) and Feldecarb farthing (`0x0A`) are
+separate** — do not conflate ticket combat with fountain farthings.
 
 ### 1.5 Portal connections (FAQ-sourced)
 
@@ -196,7 +266,7 @@ faithful by construction. (A character's `cond` byte is the facing mask: `W`
 
 | Town       | Inn `0x01` | Train `0x02` | Tavern `0x03` | Temple `0x04` | Guild `0x05` | Smith `0x06` | Store `0x07` | Notes                                                                              |
 | ---------- | ---------- | ------------ | ------------- | ------------- | ------------ | ------------ | ------------ | ---------------------------------------------------------------------------------- |
-| Middlegate | (3,7)/S    | (7,10)/E     | (6,4)/W       | (7,7)/N      | (14,7)/N     | (4,4)/W      | (10,12)/S    | arena `0x08` (2,13)/ANY; goblet `0x0A` (2,10)/W; enroll `0x0D` (12,1)/W; portal `0x11` (5,0)/W |
+| Middlegate | (3,7)/S    | (7,10)/E     | (6,4)/W       | (7,7)/N      | (14,7)/N     | (4,4)/W      | (10,12)/S    | arena **`0x08` (2,13)/ANY**; **Nordon goblet `0x0A` (10,2)/W**; **Feldecarb `0x0E` (15,15)**; enroll `0x0D` (12,1)/W; portal `0x11` (5,0)/W |
 | Atlantium  | (13,9)/S   | (4,10)/E     | (10,12)/E     | (7,4)/W      | (4,5)/W      | (13,6)/S     | —            | arena `0x08` (9,7)/ANY; Olympic/skill tiles `0x12`–`0x25` on separate tiles      |
 | Tundara    | (11,7)/W   | (6,11)/S     | (9,7)/W       | (13,11)/N    | (13,14)/S    | (10,11)/E    | —            | full `OP_0E` set present (the old "no hits" note was a cached-decode artifact)     |
 | Vulcania   | (0,7)/S    | (3,4)/W      | (2,3)/W       | (8,11)/W     | (5,11)/S     | (8,15)/E     | (5,10)/S     | many arena selectors `0x3E`–`0x48`                                                 |
@@ -247,7 +317,7 @@ Door labels (`OP_04`) match the same names where present.
 From `[11-str-decoded.txt](11-str-decoded.txt)` — global strings used by engine
 handlers (not per-location `event.dat` banks):
 
-### 3.1 Pub (`0x1A132`)
+### 3.1 Pub / tavern (`0x1D208`, selector `0x03`)
 
 - Menu: **A)** feeding frenzy **B)** drink **C)** specialties **D)** tip **E)** listen for rumors.
 - Drink lines **A–F** (Orc Beer … Mystic Brew).
@@ -261,9 +331,11 @@ handlers (not per-location `event.dat` banks):
 - Rumor hint embedded in str pool: **"Donate at all / temples"** (~line 171) — pub
 rumor **E)**, not hard-coded quest text.
 
-### 3.2 Blacksmith (`0x1C54A`)
+### 3.2 Blacksmith (`0x1C54A`, selector `0x06`)
 
-- NPC intros (~lines 255–273): **Svendegard**, **Morgan Drewnhald**, smelter smith,
+- NPC intros (~lines 255–273) exist in **`str.dat`** for the **deferred** (no-backend)
+  path; when the remake UI backend is bound the shop opens **without** this y/n
+  greet (§1.4.3). Intros: **Svendegard**, **Morgan Drewnhald**, smelter smith,
 friendly smith, **tough old** smith — map to towns by matching Drewnhald→Atlantium;
 align others with shop names above when play-testing.
 - Menu: **A)** Weapons **B)** Today's Specials **C)** Armor **D)** Misc **E)** Sell **F)** Identify.
@@ -347,46 +419,69 @@ put the magic `+` bonus in `flags`(`+$46`) and price; **Misc** puts the meta in
 `A4-$79B6`→`$681C`/`$6816`), and the Merchant-skill half-price discount
 (`-$7F32` @ `0x1BFB4`; FAQ §3-10 "cut in half for merchant prices").
 
-### 4.2 Default-range shops (`0x15EDC`)
+### 4.2 Default-range dispatch (`0x15EDC`)
 
 Selectors `**0x09`–`0xFB**` map to category `**0x3C`–`0x46**`, **not** the
-blacksmith handler. Same `**-$7DFA**` shell as other category shops:
-
-- Menu driver `**-$7F68**`: modes `**0x31**` = deduct gold, `**0x32**` = deduct gems,
-`**0x33**` = HP/food-style deduction (`0x7CB0`/`0x7D3E`).
-- Used for **general store**, **special shop**, **arena prizes**, **Vulcania**
-counter tiles, etc.
+blacksmith handler, and **not** the Arena Games engine either (see the 2026-07
+correction in §1.2/§1.4 above). `0x160AE` calls the *fixed* thunk `-$7DFA`,
+which byte-verification shows resolves to `0x092F2` — the **same
+`event_dat_loader`** used to enter a normal on-map location, called again with
+a synthetic category/index instead of a real map id. What that reinvocation
+actually loads/runs is **not yet reverse-engineered**; a plausible lead is one
+of event.dat's non-map "string bank" pseudo-records (§1.5 — decoder location
+60 is one such record), since the category+index pair could plausibly key into
+a table of such records, but this is speculation, not a trace.
 
 `**0x06` vs default:** only `**0x06**` enters `0x1C54A` (full smith UI + 6
-specials). Default bins share the generic shop shell with different underlying
-item pools keyed by **adjusted selector index** + category byte.
+specials). `0x07`/`0x08` are each their OWN distinct fixed handler (`-$7DB8`/
+`-$7DBE`), confirmed distinct from both each other and from the default-range
+thunk by direct byte inspection of the A4 vtable trampoline table.
 
-#### 4.2.1 Store/Special shop port status — **ENGINE-GATED (deferred)**
+#### 4.2.1 Store port status — **ENGINE-GATED (deferred)**
 
-General store (`0x07`→`-$7DB8`) and special shop (`0x08`→`-$7DBE`) both route
-through the shared category-shop thunk `-$7DFA`, whose runtime target is the
-**mega-handler `0x9D76`** (also serving arena/Monster Bowl ticket flows and
-class-quest rewards; thunk stubs are bound at init `0x24928`). Unlike the
-blacksmith, this is **not** a thin items.dat-gold buy:
+General store (`0x07` → `-$7DB8`) is confirmed to target `0xA62C` (byte-read
+from the trampoline table, doc 49) — no longer just a plausible candidate:
 
-- Buy loop `**0xA62C**`: Y/N shell (`-$7D0A` @ `0xA68C`) → character pick
-  (`-$7F98` mode `0x31` @ `0xA6F6`) → affordability **hard gate**
-  `**record+$66 ≥ 100 gp**` (`cmpi.l #$64,$66(a0)` @ `**0xA75E**`) → purchase
-  effect via the `**0xA3AE**` jump table (keyed on roster `+$50` nibbles).
+- Buy loop `**0xA62C**` (confirmed target of `-$7DB8`): Y/N shell (`-$7D0A` @
+  `0xA68C`) → character pick (`-$7F98` mode `0x31` @ `0xA6F6`) → affordability
+  **hard gate** `**record+$66 ≥ 100 gp**` (`cmpi.l #$64,$66(a0)` @ `**0xA75E**`)
+  → purchase effect via the `**0xA3AE**` jump table (keyed on roster `+$50`
+  nibbles).
 - Item pools are **not** the blacksmith `A4-$68xx` matrices; the general-store
   display reads per-slot bytes `A4-$7136`/`A4-$713C` (`0xA812`+) and menu-line
-  pointers `A4-$719E` (`0xA672`). `tools/dump_shop_tables.py` does not yet dump
-  these (unlike blacksmith `A4-$68xx`; extract via `0x7FFE − disp` in
-  `ghidra/mm2_data_00.bin`). Character pick in the buy loop uses `-$7F98` mode
-  `0x31` (`0xA6F6`), not the training key reader `-$7F68`→`0x042AA`.
-- For `0x07`/`0x08` the real town index stays in `A4-$79F2`, so Middlegate (0)
-  uses the simple `0xA644` menu while non-zero towns use the full `0xA11C` sheet
-  UI; default-range selectors temporarily set `A4-$79F2` to the category byte.
+  pointers `A4-$719E` (`0xA672`). `tools/dump_shop_tables.py` does not yet
+  dump these (unlike blacksmith `A4-$68xx`; extract via `0x7FFE − disp` in
+  `ghidra/mm2_data_00.bin`).
+- The real town index stays in `A4-$79F2` for `0x07` (unlike the default-range
+  path, which temporarily overwrites it with the category byte).
 
-Reproducing this faithfully requires porting the whole `0x9D76` subgraph, so the
-remake keeps the OP_0B sign-title + defer fallback (no fabricated buy). The
-`OP_0E` dispatch + default-range binning themselves are already byte-exact
+Reproducing this faithfully requires porting the `-$7DB8` shell, so the remake
+keeps the OP_0B sign-title + defer fallback (no fabricated buy). The `OP_0E`
+dispatch + default-range binning themselves are already byte-exact
 (`eventVmIsTownServiceSelector`).
+
+#### 4.2.2 Arena Games ticket-combat engine (`0x9D76`, explicit selector `0x08`)
+
+**Revised 2026-07** — byte-verified against the A4 vtable trampoline table
+(doc 49): explicit OP_0E selector `0x08` (thunk `-$7DBE`), NOT the
+default-range dispatch, is the sole path into `0x9D76`. Full detail lives in
+[`07-event-script-opcodes.md`](07-event-script-opcodes.md#arena-games-ticket-engine-0x9d76-explicit-selector-0x08);
+summary: whenever an event.dat script encodes selector `0x08` (e.g.
+Middlegate's arena-entrance tile), the engine unconditionally scans the
+party's backpacks for a ticket item `0xD0-0xD3`, denies with a fixed string if
+absent, otherwise consumes the ticket and arms a fixed combat encounter (same
+battle-slot array as OP_12) using
+`monster_type = ((color*3 + area[screen]) * 16) + rng(1,16)`; on victory it
+grants gold from a 4×3 (color × town-tier) table and prints `"Winner, you
+receive N gold"`. Ported: ticket scan/consume + monster-type and gold-table
+lookups (`EventVmHelpers.h`, `eventVmFindArenaTicket` /
+`eventVmArenaMonsterType` / `eventVmArenaGoldReward`) and the real deny/accept
+text (`EventTownServices.cpp` **`case 0x08`**). Not yet ported: reward
+granting on combat victory (no combat engine exists in the port yet — same gap
+as OP_12/13). The true default-range selectors (Olympic trials, post-victory
+combat tiers, Mount Farview reward, the game-start Corak monologue, ...) do
+**NOT** reach this engine — `default:` now shows the generic OP_0B/door sign
+title instead of fabricating ticket-check text.
 
 ---
 
@@ -443,7 +538,7 @@ Donation cost table `**A4-$6742`** (BE **u16** per town, index `**A4-$79F2`**
 gold). **Not** loaded from data-hunk `**0x25F72`** — that u16 cluster has no
 read/copy to `**-$6742**` in ASM.
 
-### 5.2 Donation quest (farthing / dime / flick)
+### 5.2 Temple donation quest
 
 **Tracking byte:** `**A4-$799E`** (global quest bitfield).
 
@@ -490,13 +585,40 @@ RNG: engine query -$7BB4(100,1); if result > 0x5A → "Today you are blessed!" b
 Temple menu shows donation amount from `**A4-$6742`** @ `**0x1D556**` (display
 only; debit uses same table @ `**0x1CA3A**`).
 
-**Quest item:** `**OP_0E` `0x0A`** (`goblet_quest`, `-$7DAC`) at Middlegate
-**(2,1)**. Cached scripts show gate text **"Fool, you have no farthing to flick!"**
-on related tiles — Olympic/farthing item gate tied to `**OP_28`** / inventory
-(not fully traced here without live `event.dat`).
-
 **Pub rumor:** str **"Donate at all temples"** — option **E)** in tavern; random
 rumor pool (below), not a dedicated quest opcode.
+
+### 5.2.1 Nordon goblet quest (`OP_0E` `0x0A`)
+
+**Middlegate tile:** **`(10,2)` facing W** (FAQ x,y; event table `(2,10)`) — event 30:
+`OP_0B` sign 0x14 (Nordon portrait) + **`OP_0E 0x0A`**.
+
+**Intro (loc 60 str[9], wired in `EventTownServices.cpp` `case 0x0A`):**
+*"The humble wizard Nordon asks, \"Will you do me a service (y/n)?\""*
+
+**Handler:** `-$7DAC` → `0xD634` (decoder name `goblet_quest`). **Known gap:** accept /
+return-goblet / visit-Nordonna branches inside `0xD634` not yet ported.
+
+**Goblet pickup:** Middlegate Cavern loc 17 `(7,0)` → item **224** / `0xE0`. Return to
+**Nordon**, not Feldecarb Fountain. Full chain: [`53-nordon-nordonna-quests.md`](53-nordon-nordonna-quests.md).
+
+### 5.2.2 Feldecarb Fountain — farthing flick (`OP_0E` `0x0E`)
+
+**Middlegate tile:** **`(15,15)`** (event 17: **`OP_0E 0x0E`** only — default-range
+dispatch into loc 60 string bank). **Not** `(10,2)` and **not** selector `0x0A`.
+
+**Prompt (loc 60 str[23], wired in `EventTownServices.cpp` when `sel == 0x0E`):**
+*"Fanciful Feldecarb Fountain flows full as fluttering faeries frolic
+fastidiously. Flick a farthing (y/n)?"*
+
+**Failure text (str[25]):** *"Fool, you have no farthing to flick!"*
+
+**Known gap:** farthing inventory check + castle-key reward (str[24]) not yet
+ASM-traced — intro y/n only, deferred transaction. Late-game step after Nordonna's
+temple-donation hint (loc 60 str[20]).
+
+**Do not confuse with:** Arena **`0x08` @ `(2,13)`** (ticket items `0xD0`–`0xD3`);
+`(2,1)` event 31 = `OP_0E 0x0B` (different selector).
 
 ### 5.3 Hireling vs party member (temple / services)
 
@@ -504,15 +626,19 @@ rumor pool (below), not a dedicated quest opcode.
 | Mechanism             | Field                           | Rule                                                                                                                                           |
 | --------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Hireling flag**     | roster `**$0B` bit 7** (`0x80`) | Set when hiring (`0x216E6`); **clear** for normal party members. Murray’s Cave uses `**OP_15`** `op=0x01 val=0x80` → *"No hirelings allowed!"* |
-| **Home town**         | roster `**$0B` & `0x7F*`*       | Values 1–5 (Middlegate…Tundara) for inn storage / guild membership                                                                             |
+| **Home town**         | roster `**$0B` & `0x7F*`*       | Values 1–5 (Middlegate…Tundara), written by `OP_0E 0x0D` enroll (`0x1A1CE`); inn storage binding only — **not** the guild-shop gate (see §6.2)  |
 | **Dead / gone**       | roster `**$26` ≥ `0x81`**       | `**OP_26**` party pick skips (`0x16C42`)                                                                                                       |
 | **Class / attr gate** | `**OP_2D`**                     | Checks `**$0C`/`$0E`/`$0F**` with arg bitmask (class/race/sex), not hireling bit                                                               |
 
 
 Temple member selection uses the same party iterator as other services (`-$7F20`
 slot lookup); hirelings with `**$0B.7**` still appear unless a script explicitly
-filters via `**OP_2D**` / `**OP_15**`. Guild **spell** purchase checks **guild
-membership** via roster `**$0B` low 7 bits** vs current town (see §6).
+filters via `**OP_2D**` / `**OP_15**`. Guild **spell** purchase instead checks
+`**$79` (class_quest_guild_mask)` against the per-town mask (`0x1E410`, see §6.2)
+— a **different field** from the `0x0D` enroll write above. `$79` is writable via
+(1) the generic event-script field selector `0x74` (`OP_15`/`18`/`1F`/`20`,
+`EventFieldMap.h`, already ported — some quest event may set it during normal
+play) or (2) the class-quest reward loop (`0x9D76` @ `0x9FE0`, doc 36).
 
 ---
 
@@ -524,6 +650,17 @@ membership** via roster `**$0B` low 7 bits** vs current town (see §6).
 | Open spell shop | `0x05`   | `-$7D10` → `**0x1E3E6`**                 | Four sorcerer spells per town; membership required |
 | Enroll          | `0x0D`   | `-$7DA0` → `**0x1A1B2**` / `**0x1A1F8**` | y/n; on success sets roster guild-home byte        |
 
+
+**C++ port:** `game/src/events/TownServiceTransactions.cpp` (`townSvcMageGuildMember`,
+`townSvcBuySpell`) + `game/src/events/TownServiceMenu.cpp` (`townSvcRunMageGuild`,
+temple's `TempleOption::BuySpell`), wired from `EventTownServices.cpp` `OP_0E 0x05`
+and playable via `PlayTownServiceUi`. Static stock tables live in
+`EXTRACTED/decomp/mm2_town_tables.{h,c}` (`mm2_mage_guild_stock`,
+`mm2_temple_spell_stock`, `mm2_mage_guild_member_mask`) mirrored in
+`tools/mm2_town_tables.py` / `wiki/maze-walker/{townTables,sessionState,townServices}.js`.
+`OP_0E 0x0D` enroll is intentionally **not** wired to a UI backend yet: its y/n
+NPC prompt string was not isolated in `str.dat`, and per CLAUDE.md ("never
+invent... strings") it stays on the faithful sign-intro fallback until found.
 
 ### 6.1 Prior RE errors (corrected)
 
@@ -617,6 +754,10 @@ These are `**OP_0E` default-path** selectors (category `**0x3D`**, index = selec
 `**0x10**` → **13..21**), used on **Olympic Trial / skill** tiles in Atlantium — **not**
 the mage-guild spell shop (`**0x05`**). They route through `**0x15EDC` → `-$7DFA**`
 with a temporary category byte in `**A4-$79F2**`, separate from `**0x1E3E6**`.
+**Corrected 2026-07:** `-$7DFA` is `event_dat_loader` (`0x092F2`), NOT the Arena
+Games engine (`0x9D76`, §4.2.2, reached only via explicit selector `0x08`) — see
+the correction in §1.2. What these Olympic Trial tiles actually run via the
+loader reinvocation is not yet reverse-engineered.
 
 ---
 
@@ -645,9 +786,10 @@ Embedded quest hints in rumor str pool (examples from `11-str-decoded.txt`):
 
 - **Blacksmith menu B)** → `**0x1C25A(1..6)`** → reads pre-rolled `**A4-$5A56**`
 entries (6 per town, built at shop open from `**-$7DE2**` RNG).
-- **General/special shops** (`0x07`/`0x08`/default range): inventory from
-category-specific tables inside `**-$7DFA`**; refreshed on each `**OP_0E**`
-entry (no separate save flag found in ASM skim).
+- **General store** (`0x07`) / default range: inventory from category-specific
+tables inside `**-$7DFA`** (`event_dat_loader` reinvocation, §4.2); refreshed
+on each `**OP_0E**` entry (no separate save flag found in ASM skim). Explicit
+selector `0x08` is the Arena Games ticket engine (§4.2.2), not a shop.
 - **Sandsobar** drunk guild recruit (ev 26): `**OP_24` `200`** gp — separate from
 smith specials.
 
@@ -777,20 +919,26 @@ Vulcania (5,3), Atlantium (9,4). `**OP_24`** gates in `**event.dat**` (typical
 | Topic                            | Status                                                                    |
 | -------------------------------- | ------------------------------------------------------------------------- |
 | `OP_0E` selector → handler map   | **Complete** (ASM)                                                        |
-| Per-town service **tiles**       | **Complete** for loc 0,1,3,4 from cached decode                           |
-| Tundara `**OP_0E`** wiring       | **Missing** in cached decode — titles only; needs `event.dat`             |
+| Per-town service **tiles**       | **Complete** — §2 matrix (all five towns, byte-exact from `event.dat`) |
+| Tundara `**OP_0E`** wiring       | **Complete** in current decode (old "missing" note was stale) |
+| `**PlayTownServiceUi`** (C++ game) | **Partial** — temple/training/smith/guild/tavern menus; intro y/n on pub/temple only (§1.4.3) |
+| **Wiki maze-walker services**    | **Partial** — same intro split; tavern uses fixed-gp simplification (§13.3.1) |
 | `**str.dat`** shop UI strings    | **Complete** (11-str-decoded.txt)                                         |
 | Blacksmith **item ids per town** | **Complete** — static 5×6 matrices @ `$68EE`…`$6876`                      |
 | Blacksmith **buy transaction**   | **PORTED** — `townSvcSmithBuy` (`0x1BE44`/`0x1BF16`/`0x1BDD6`), tested (§4.1.1) |
 | Blacksmith **sell/identify**     | **Deferred** — `0x1BC26` / `0x1B6E0` (presentation-heavy)                 |
-| Store/Special **buy**            | **Engine-gated** — mega-handler `0x9D76`, buy loop `0xA62C` (§4.2.1)       |
-| Tavern **food/drink/rumor**      | **Engine/RNG/VM-gated** — `0x1A132`/`0x18EC0`/`0x18F78`/`0x97FC` (§13.3.1)  |
+| Store/Special **buy**            | **Engine-gated** — store `-$7DB8`→`0xA62C` traced; buy loop not ported (§4.2.1) |
+| Default-range **Arena Games**    | **Ticket gate + monster-type/gold tables PORTED**; combat reward deferred (§4.2.2) |
+| Tavern **food/drink/rumor**      | **Partial** — menu shell + fixed gp in port/walker; ROM RNG/VM leaves deferred (§13.3.1) |
 | Temple **donation gold**         | **Complete** — `**A4-$6742`** BE u16 ×5 (not `**0x25F72**`)               |
 | Temple **donation bitfield**     | **Complete** — `**A4-$66B1`** → `**-$799E**`, `**0x1F**` reward           |
 | Temple **spell id bytes**        | **Complete** — `$66F6` cleric ×3/town only (no sorcerer @ temple)         |
+| Temple **spell buy transaction** | **PORTED** — `townSvcBuySpell` (`0x1D872`), shared with guild, tested    |
 | Farthing **quest item + flick**  | **Partial** — gate strings + `0x0A` selector; Gold Goblet = item **224**  |
-| Guild **membership byte**        | **Complete** (roster `$0B`, enroll `$1A1CE`)                              |
+| Guild **enroll write ($0B)**     | **Complete** (roster `$0B`, `0x1A1CE`) — NOT the purchase gate, see below |
+| Guild **membership gate ($79)**  | **Complete (read-side)** — `0x1E410` vs `$66A9` mask. Write paths: generic event field selector `0x74` (ported, `EventFieldMap.h`) or the unported/buggy `0x9D76`@`0x9FE0` reward loop (doc 36) |
 | Guild **spell tables**           | **Complete** — `$66E2` ids 5×4, `$6698` costs 5×4, `$6686` addends ×4     |
+| Guild **spell buy transaction**  | **PORTED** — `townSvcBuySpell` + `townSvcRunMageGuild` menu driver, tested |
 | Pub **rumor mechanism**          | **Complete** (stream `$119A` + RNG)                                       |
 | Pub **food costs + menu text**   | **Complete** — `$6760` BE u16 + str block per town                        |
 | Pub **meal item ids**            | **N/A** — roster `**$78`** encoding, not `items.dat`                      |
@@ -881,13 +1029,15 @@ fixed `**str.dat**` text blocks (see `food_menu_text` in `shop_tables.json`).
 resolved via `**0x18F78**` / `**-$7BB4**`. Same drink names all towns (`str.dat`
 lines 209–214).
 
-#### 13.3.1 Tavern port status — **ENGINE/RNG/VM-GATED (deferred)**
+#### 13.3.1 Tavern port status — **partial menu; RNG/VM effects deferred**
 
-Finer ASM tracing (for the C++ port) shows the pub is **not** a deterministic
-cost/effect leaf and is deferred with these addresses:
+Finer ASM tracing shows the pub cost/effect leaves are **not** deterministic gp
+deducts in the ROM handler; the remake and wiki walker use **simplified** fixed
+prices from `A4-$6760` / global drink table until the RNG paths are traced.
 
-- The `OP_0E 0x01` handler `**0x1A132**` is only the NPC intro + guild-enroll y/n.
-  The food/drink submenus enter via **selectors `0xC9`/`0xCA`** → `**0x1980A**`
+- **`OP_0E 0x03`** → static handler **`0x1D208`** (tavern / food shell). The
+  **`0x1A132`** address is the **inn** handler (`0x01`), not the pub.
+- Food/drink submenus also enter via **selectors `0xC9`/`0xCA`** → `**0x1980A**`
   and route through the runtime vtable thunk `**-$7D40**` (no static target).
 - Cost leaves `**0x18EC0**` (food) / `**0x18F78**` (drinks) are **RNG-gated**
   (`-$7BB4`): they produce a tier/addend **encoding byte** (food `A4-$6B08`/
@@ -908,8 +1058,10 @@ cost/effect leaf and is deferred with these addresses:
 - Drinks minigame (patron Y/N, gold pool, sick roll) is a separate leaf `**0x19E20**`
   (`0x19AD6`/`0x19D64`/`0x19B28`), not the `0x1980A` A–D loop.
 
-The remake keeps the faithful str.dat NPC intro + y/n and defers (no invented
-cost/effect).
+The remake shows the faithful str.dat NPC intro + y/n for pub/temple, then opens
+the pluggable A–E menu when a backend is bound (§1.4.3). Food/drink **effects**
+(RNG tiers, roster `+$78` encoding, sick roll) remain deferred — no invented
+stat bonuses in the C++ port.
 
 ### 13.4 Blacksmith / guild / temple spells
 
@@ -941,7 +1093,7 @@ with tavern food menus (§13 / `static_by_town.pub`).
 
 | Ref              | Category             | Event / usage                                                                                                                                                                                                                     |
 | ---------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **224**          | **dungeon_treasure** | **Gold Goblet** — pick up **Middlegate Cavern** loc **17** tile **(7,0)** (`OP_19` adds item `0xE0`); **not food** (no use power in `items.dat`). Return to Middlegate **(2,10)** for Nordon `**OP_0E` `0x0A`** (farthing flick). |
+| **224**          | **dungeon_treasure** | **Gold Goblet** — Middlegate Cavern loc **17** `(7,0)` (`OP_19` → `0xE0`). Return to **Nordon `(10,2)`**, not the fountain. See [`53-nordon-nordonna-quests.md`](53-nordon-nordonna-quests.md). |
 | **175**          | consumable           | Magic Meal — Create Food; treasure / Sandsobar smith misc                                                                                                                                                                         |
 | **176**          | consumable           | Antidote Ale — Cure Poison drink                                                                                                                                                                                                  |
 | (str)            | pub_meal             | Devils Food Brownie — Atlantium pub meal C only (roster `$78`)                                                                                                                                                                    |

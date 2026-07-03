@@ -2,6 +2,7 @@
 
 #include "mm2/GameState.h"
 
+#include "mm2/combat/CombatSession.h"
 #include "mm2/gameplay/ExploreActions.h"
 #include "mm2/gameplay/InGameCharacterSheet.h"
 #include "mm2/gameplay/InGameControlsScreen.h"
@@ -13,6 +14,7 @@
 #include "mm2/gfx/ScreenCompositor.h"
 #include "mm2/gfx/OutdoorView3D.h"
 #include "mm2/gfx/View3D.h"
+#include "mm2/gfx/ViewportAnmOverlay.h"
 #include "mm2/events/EventRuntime.h"
 #include "mm2/events/ScriptedSceneEngine.h"
 #include "mm2/platform/Platform.h"
@@ -22,6 +24,7 @@
 #include "mm2_party_launch.h"
 #include "mm2_roster_codec.h"
 #include "mm2_items_codec.h"
+#include "mm2_monsters_codec.h"
 #include "mm2_image32_codec.h"
 #include "mm2_gamestate.h"
 
@@ -58,6 +61,14 @@ public:
     bool shouldQuit() const { return quit_; }
     bool requestTitle() const { return back_to_title_; }
     void clearTitleRequest() { back_to_title_ = false; }
+    bool requestGotoTown() const { return back_to_goto_town_; }
+    void clearGotoTownRequest() { back_to_goto_town_ = false; }
+    /** Char-choose town filter (1..5) saved @ 0x1A1E2 → A4-$79AC after inn registry. */
+    uint8_t gotoTownFilter() const { return goto_town_filter_; }
+
+    const Mm2RosterFile &roster() const { return roster_; }
+    Mm2RosterFile &roster() { return roster_; }
+    const Mm2PartyLaunch &launch() const { return launch_; }
 
     bool awaitingContinuePrompt() const;
 
@@ -79,9 +90,11 @@ private:
     void renderFrameOverlayAnimOnly();
 #endif
     void renderView3D();
+    void renderCombatBackdrop();
     void renderIndoorView3D();
     void renderOutdoorView();
     void renderPartyPanel();
+    void refreshCombatSprite();
     void renderOverlays();
     void refreshWorldAfterMove(const gameplay::MoveResult &move);
     void tickOverlayInput(const platform::KeyState &keys);
@@ -91,9 +104,14 @@ private:
      * and run the faithful Might / thievery rolls (gameplay::ExploreActions). */
     void handleBashDoor();
     void handleUnlockDoor();
+    void applyDoorTrapDamage();
     /* Rest execution @ 0x19E20 -> 0x19AD6 (pay) / 0x19D64 (encounter) / 0x19B28
      * (heal + 0x55-tick advance), run after the Y/N confirm overlay resolves. */
     void executeRest();
+    /* Random step encounter @ 0x10A2, simplified gate: outdoor, non-town,
+     * same-screen forward step; rate byte = attrib.dat 0x09 (doc 35). */
+    void maybeTriggerStepEncounter();
+    void finishCombat();
     bool overlayBlocksInput() const;
     void tickEventInput(const platform::KeyState &keys);
     void tickOverlayAnimations();
@@ -106,6 +124,7 @@ private:
     void maybeQueueScriptedScenes(bool on_start);
     /** Open the interactive town-service overlay when an OP_0E selector requested it. */
     void maybeOpenTownServiceMenu();
+    void maybeFinishInnRegistry();
     void showStatusMessage(const char *msg);
     void markDirty();
 #if MM2_HOST_AMIGA
@@ -121,12 +140,19 @@ private:
     uint32_t start_flags_ = 0;
     bool quit_ = false;
     bool back_to_title_ = false;
+    bool back_to_goto_town_ = false;
+    uint8_t goto_town_filter_ = 1;
     bool assets_ok_ = false;
 
     Mm2PartyLaunch launch_{};
     Mm2RosterFile roster_{};
     Mm2ItemsFile items_{};
     bool has_items_ = false;
+    Mm2MonstersFile monsters_{};
+    bool has_monsters_ = false;
+    combat::CombatSession combat_;
+    gfx::ViewportAnmOverlay combat_sprite_{};
+    int combat_sprite_disk_ = -1;
 
     world::MapWorld world_;
     world::AutomapState automap_;

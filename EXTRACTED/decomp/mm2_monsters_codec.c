@@ -75,6 +75,33 @@ void mm2_monster_encode_abilities(Mm2MonsterRecord *record, const Mm2MonsterAbil
                   ((in->flee_tier & 0x03) << 5) | ((in->multiplies & 0x01) << 7));
 }
 
+static const uint32_t kHpXpMul[4] = {1u, 10u, 100u, 1000u};
+
+uint32_t mm2_monster_decode_hp(const Mm2MonsterRecord *record)
+{
+    uint8_t c;
+    if (!record) {
+        return 0;
+    }
+    c = MM2_FIELD(record, MM2_MON_OFF_HP);
+    return (uint32_t)((c & 0x3F) + 1) * kHpXpMul[(c >> 6) & 3];
+}
+
+uint32_t mm2_monster_decode_xp(const Mm2MonsterRecord *record)
+{
+    uint8_t c;
+    uint32_t xp;
+    if (!record) {
+        return 0;
+    }
+    c = MM2_FIELD(record, MM2_MON_OFF_XP);
+    xp = (uint32_t)((c & 0x1F) + 1) * kHpXpMul[(c & 0x60) >> 5];
+    if (c & 0x80) {
+        xp *= 1000u;
+    }
+    return xp;
+}
+
 Mm2MonstersError mm2_monsters_decode(const uint8_t *bytes, size_t bytes_size, Mm2MonstersFile *out)
 {
     size_t i;
@@ -217,9 +244,11 @@ void mm2_monster_name_to_cstr(const Mm2MonsterRecord *record, char *out, size_t 
         return;
     }
 
+    /* monsters.dat name field: each byte is (ASCII & 0x7F) | 0x80 (doc 16;
+     * monster_stat_unpacker @ 0x4C8E masks with #$7F into A4-$11D2). */
     end = MM2_MONSTER_NAME_SIZE;
     while (end > 0) {
-        uint8_t c = (uint8_t)record->name[end - 1];
+        const uint8_t c = (uint8_t)record->name[end - 1] & 0x7Fu;
         if (c != 0 && c != (uint8_t)' ') {
             break;
         }
@@ -230,7 +259,7 @@ void mm2_monster_name_to_cstr(const Mm2MonsterRecord *record, char *out, size_t 
         end = out_size - 1;
     }
     for (i = 0; i < end; i++) {
-        out[i] = record->name[i];
+        out[i] = (char)((uint8_t)record->name[i] & 0x7Fu);
     }
     out[end] = '\0';
 }
@@ -251,6 +280,6 @@ void mm2_monster_set_name(Mm2MonsterRecord *record, const char *name)
         if (name[i] == '\0') {
             break;
         }
-        record->name[i] = name[i];
+        record->name[i] = (char)(((uint8_t)name[i] & 0x7Fu) | 0x80u);
     }
 }

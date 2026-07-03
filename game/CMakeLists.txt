@@ -94,6 +94,7 @@ set(MM2_CODEC_SOURCES
   ${MM2_DECOMP}/mm2_items_codec.c
   ${MM2_DECOMP}/mm2_found_items.c
   ${MM2_DECOMP}/mm2_town_tables.c
+  ${MM2_DECOMP}/mm2_encounter.c
 )
 
 if(NOT AMIGA)
@@ -105,6 +106,7 @@ endif()
 set(MM2_AUTOMAP_SOURCES
   src/gfx/AutomapView.cpp
   src/world/AutomapState.cpp
+  src/gameplay/RosterSkills.cpp
 )
 
 if(NOT AMIGA)
@@ -142,6 +144,7 @@ if(NOT AMIGA)
   add_executable(movement_middlegate_test
     tests/movement_middlegate_test.cpp
     src/gameplay/Movement.cpp
+    src/events/EventVmHelpers.cpp
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(movement_middlegate_test PRIVATE include)
@@ -150,10 +153,22 @@ if(NOT AMIGA)
   add_executable(calendar_rollover_test
     tests/calendar_rollover_test.cpp
     src/gameplay/Movement.cpp
+    src/events/EventVmHelpers.cpp
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(calendar_rollover_test PRIVATE include)
   target_link_libraries(calendar_rollover_test PRIVATE mm2_codecs)
+
+  add_executable(combat_setup_test
+    tests/combat_setup_test.cpp
+    src/combat/EncounterPicker.cpp
+    src/combat/CombatSession.cpp
+    src/events/EventVmHelpers.cpp
+    src/gameplay/ExploreActions.cpp
+    src/world/MapWorld.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(combat_setup_test PRIVATE include)
+  target_link_libraries(combat_setup_test PRIVATE mm2_codecs)
 
   add_executable(playsession_input_test
     tests/playsession_input_test.cpp
@@ -165,6 +180,7 @@ if(NOT AMIGA)
     tests/explore_commands_test.cpp
     src/gameplay/ExploreActions.cpp
     src/gameplay/Movement.cpp
+    src/events/EventVmHelpers.cpp
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(explore_commands_test PRIVATE include)
@@ -173,6 +189,7 @@ if(NOT AMIGA)
   add_executable(automap_golden
     tests/automap_golden.cpp
     ${MM2_AUTOMAP_SOURCES}
+    src/events/EventVmHelpers.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
     src/gfx/EnvAssets.cpp
@@ -185,6 +202,8 @@ if(NOT AMIGA)
   add_executable(character_sheet_input_test
     tests/character_sheet_input_test.cpp
     src/gameplay/InGameCharacterSheet.cpp
+    src/gameplay/RosterSkills.cpp
+    src/ui/RosterSkillDisplay.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/PlayScreenChrome.cpp
     src/gfx/PartyStatusFormat.cpp
@@ -205,13 +224,47 @@ if(NOT AMIGA)
     src/events/EventVmHelpers.cpp
     src/events/EventPartyEffects.cpp
     src/events/EventTownServices.cpp
+    src/events/EventSkillBuy.cpp
     src/events/TownServiceTransactions.cpp
     src/events/TownServiceMenu.cpp
     src/events/EventCombatEncounter.cpp
     src/events/EventTextView.cpp
     src/events/ServiceSignResolver.cpp
     src/events/ScriptedSceneEngine.cpp
+    src/combat/EncounterPicker.cpp
+    src/combat/CombatSession.cpp
+    src/gameplay/ExploreActions.cpp
+    src/gameplay/RosterSkills.cpp
     src/ui/PlayTownServiceUi.cpp
+    src/gfx/ViewportAnmOverlay.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/PlayScreenChrome.cpp
+    src/gfx/CombatPanel.cpp
+    src/gfx/PartyStatusFormat.cpp
+    src/gfx/mm2_font8x8.c
+    src/world/MapWorld.cpp
+    src/runtime/Mm2Alloc.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(event_middlegate_test PRIVATE include)
+  target_link_libraries(event_middlegate_test PRIVATE mm2_codecs)
+
+  add_executable(event_town_skills_test
+    tests/event_town_skills_test.cpp
+    src/events/EventRuntime.cpp
+    src/events/EventVmHelpers.cpp
+    src/events/EventPartyEffects.cpp
+    src/events/EventTownServices.cpp
+    src/events/EventSkillBuy.cpp
+    src/events/TownServiceTransactions.cpp
+    src/events/TownServiceMenu.cpp
+    src/events/EventCombatEncounter.cpp
+    src/events/EventTextView.cpp
+    src/events/ServiceSignResolver.cpp
+    src/events/ScriptedSceneEngine.cpp
+    src/combat/EncounterPicker.cpp
+    src/combat/CombatSession.cpp
+    src/gameplay/ExploreActions.cpp
+    src/gameplay/RosterSkills.cpp
     src/gfx/ViewportAnmOverlay.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/PlayScreenChrome.cpp
@@ -220,8 +273,8 @@ if(NOT AMIGA)
     src/world/MapWorld.cpp
     src/runtime/Mm2Alloc.cpp
     src/runtime/PathScratch.cpp)
-  target_include_directories(event_middlegate_test PRIVATE include)
-  target_link_libraries(event_middlegate_test PRIVATE mm2_codecs)
+  target_include_directories(event_town_skills_test PRIVATE include)
+  target_link_libraries(event_town_skills_test PRIVATE mm2_codecs)
 
   add_executable(event_op_demo
     tests/event_op_demo.cpp
@@ -250,12 +303,14 @@ if(NOT AMIGA)
     src/gameplay/PlaySessionInput.cpp
     src/gameplay/ExploreActions.cpp
     src/gameplay/InGameCharacterSheet.cpp
+    src/ui/RosterSkillDisplay.cpp
     src/gameplay/InGameControlsScreen.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
     src/gfx/View3D.cpp
     src/gfx/OutdoorView3D.cpp
     src/gfx/PlayScreenChrome.cpp
+    src/gfx/CombatPanel.cpp
     src/gfx/PartyStatusFormat.cpp
     src/gfx/EnvAssets.cpp
     src/world/MapWorld.cpp
@@ -263,11 +318,14 @@ if(NOT AMIGA)
     src/events/EventVmHelpers.cpp
     src/events/EventPartyEffects.cpp
     src/events/EventTownServices.cpp
+    src/events/EventSkillBuy.cpp
     src/events/TownServiceTransactions.cpp
     src/events/TownServiceMenu.cpp
     src/events/EventCombatEncounter.cpp
     src/events/EventTextView.cpp
     src/events/ServiceSignResolver.cpp
+    src/combat/EncounterPicker.cpp
+    src/combat/CombatSession.cpp
     src/ui/PlayTownServiceUi.cpp
     src/gfx/ViewportAnmOverlay.cpp
     src/runtime/Mm2Alloc.cpp
@@ -300,6 +358,7 @@ set(MM2_GAME_SOURCES
   src/gameplay/ExploreActions.cpp
   src/gameplay/InGameCharacterSheet.cpp
   src/gameplay/InGameControlsScreen.cpp
+  src/gameplay/RosterSkills.cpp
   src/TitleScreen.cpp
   src/states/mm2_state.c
   src/states/mm2_app_context.c
@@ -312,14 +371,18 @@ set(MM2_GAME_SOURCES
   src/gfx/View3D.cpp
   src/gfx/OutdoorView3D.cpp
   src/gfx/PlayScreenChrome.cpp
+  src/gfx/CombatPanel.cpp
   src/gfx/PartyStatusFormat.cpp
   src/gfx/EnvAssets.cpp
   ${MM2_AUTOMAP_SOURCES}
   src/world/MapWorld.cpp
+  src/combat/EncounterPicker.cpp
+  src/combat/CombatSession.cpp
   src/events/EventRuntime.cpp
   src/events/EventVmHelpers.cpp
   src/events/EventPartyEffects.cpp
   src/events/EventTownServices.cpp
+  src/events/EventSkillBuy.cpp
   src/events/TownServiceTransactions.cpp
   src/events/TownServiceMenu.cpp
   src/events/EventCombatEncounter.cpp
@@ -334,6 +397,7 @@ set(MM2_GAME_SOURCES
   src/ui/CharacterUiController.cpp
   src/ui/StubCharacterUi.cpp
   src/ui/AmigaCharacterUi.cpp
+  src/ui/RosterSkillDisplay.cpp
   src/ui/PlayTownServiceUi.cpp
   ${MM2_PLATFORM_SOURCES}
 )

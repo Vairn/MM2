@@ -48,6 +48,14 @@ int MapWorld::neighborScreen(int slot) const
     return n;
 }
 
+bool MapWorld::screenIsOutdoor(int screen_id) const
+{
+    if (!loaded_ || screen_id < 0 || screen_id >= MM2_MAP_SCREEN_COUNT) {
+        return false;
+    }
+    return mm2_attrib_is_outdoor(&attrib_.records[screen_id]) != 0;
+}
+
 gfx::View3DMapBuffers MapWorld::buildView3DMapBuffers() const
 {
     gfx::View3DMapBuffers bufs{};
@@ -69,6 +77,72 @@ gfx::View3DMapBuffers MapWorld::buildView3DMapBuffers() const
     loadNeighbor(2, bufs.south);
     loadNeighbor(3, bufs.west);
     return bufs;
+}
+
+bool MapWorld::spellEyeSample(int mx, int my, SpellEyeSample *out) const
+{
+    if (!loaded_ || !out) {
+        return false;
+    }
+
+    out->screen = screen_;
+    if (!isOutdoor()) {
+        /* 0x1D9A indoor: both axes must be in 0..15 or sample returns 0. */
+        if (mx < 0 || my < 0 || mx >= MM2_MAP_GRID_DIM || my >= MM2_MAP_GRID_DIM) {
+            return false;
+        }
+        out->cell = visualPage()[(my << 4) | mx];
+        return true;
+    }
+
+    /* Outdoor: neighbour page pick @ 0x1DEA (E/W then S/N, same order as ASM). */
+    const uint8_t *page = visualPage();
+    int lx = mx;
+    int ly = my;
+    const unsigned xb = static_cast<unsigned>(mx) & 0xFFu;
+    const unsigned yb = static_cast<unsigned>(my) & 0xFFu;
+
+    if (xb > 0x0Fu && xb < 0x13u) {
+        const int n = neighborScreen(1); /* E → A4-$51BA */
+        if (n < 0) {
+            return false;
+        }
+        out->screen = n;
+        page = map_.screens[n].visual;
+        lx = static_cast<int>(xb & 0x0Fu);
+    } else if (xb >= 0xFCu) {
+        const int n = neighborScreen(3); /* W → A4-$50BA */
+        if (n < 0) {
+            return false;
+        }
+        out->screen = n;
+        page = map_.screens[n].visual;
+        lx = static_cast<int>(xb & 0x0Fu);
+    }
+
+    if (yb > 0x0Fu && yb < 0x13u) {
+        const int n = neighborScreen(2); /* S → A4-$53BA */
+        if (n < 0) {
+            return false;
+        }
+        out->screen = n;
+        page = map_.screens[n].visual;
+        ly = static_cast<int>(yb & 0x0Fu);
+    } else if (yb >= 0xFCu) {
+        const int n = neighborScreen(0); /* N → A4-$52BA */
+        if (n < 0) {
+            return false;
+        }
+        out->screen = n;
+        page = map_.screens[n].visual;
+        ly = static_cast<int>(yb & 0x0Fu);
+    }
+
+    if (lx < 0 || ly < 0 || lx >= MM2_MAP_GRID_DIM || ly >= MM2_MAP_GRID_DIM) {
+        return false;
+    }
+    out->cell = page[(ly << 4) | lx];
+    return true;
 }
 
 }  // namespace mm2::world

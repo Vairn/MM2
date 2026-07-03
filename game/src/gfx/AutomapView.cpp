@@ -1,5 +1,6 @@
 #include "mm2/gfx/AutomapView.h"
 
+#include "mm2/events/EventVmHelpers.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/world/Cartography.h"
 
@@ -90,7 +91,8 @@ void renderAutomap(ScreenCompositor &c, const EnvAssets &env, const world::MapWo
                 const int edge_kind = cell & 0x03;
                 if (edge_kind != 0) {
                     const int edge_frame = world::kCartoEdge[edge_kind - 1];
-                    blitCartoFrame(c, sheet, edge_frame, px, py);
+                    /* @0x23BA: indoor edge overlay blits at X - 0xE. */
+                    blitCartoFrame(c, sheet, edge_frame, px - kTileW, py);
                 }
             }
         }
@@ -104,6 +106,47 @@ void renderAutomap(ScreenCompositor &c, const EnvAssets &env, const world::MapWo
     }
 
     c.drawText(origin_x, origin_y + MM2_MAP_GRID_DIM * kTileH + 2, "(ESC) close map", 180, 180, 180, 255);
+}
+
+void renderSpellEyeOverlay(ScreenCompositor &c, const EnvAssets &env, const world::MapWorld &world,
+                           const GameStateView &gs)
+{
+    if (!world.loaded() || !gs.valid() || !env.automapReady()) {
+        return;
+    }
+    if (events::eventVmSpellEyeTimer(gs.a4(), world.isOutdoor()) == 0) {
+        return;
+    }
+
+    using namespace play_layout;
+
+    const mm2_image32_file &sheet = env.automap();
+    const int px = static_cast<int>(gs.coordX());
+    const int py = static_cast<int>(gs.coordY());
+
+    for (int row = 0; row < 5; ++row) {
+        for (int col = 0; col < 5; ++col) {
+            const int mx = px + col - 2;
+            const int my = py + row - 2;
+            const int dst_x = kSpellEyeOriginX + col * kTileW;
+            const int dst_y = kSpellEyeBottomY - row * kTileH;
+
+            world::MapWorld::SpellEyeSample sample{};
+            if (!world.spellEyeSample(mx, my, &sample)) {
+                c.fillRect(dst_x, dst_y, kTileW, kTileH, 12, 12, 22, 255);
+                continue;
+            }
+
+            const bool cell_outdoor =
+                world::cartoUsesOutb(sample.screen, world.screenIsOutdoor(sample.screen));
+            const int frame = world::cartoFrame(sample.screen, sample.cell, cell_outdoor);
+            blitCartoFrame(c, sheet, frame, dst_x, dst_y);
+
+            if (col == 2 && row == 2) {
+                blitCartoFrame(c, sheet, automapPartyArrowFrame(gs.facingKey()), dst_x, dst_y);
+            }
+        }
+    }
 }
 
 }  // namespace mm2::gfx

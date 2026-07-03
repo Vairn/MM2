@@ -156,13 +156,14 @@ public:
         compositor.drawText(8, 44, message_, 180, 180, 180, 255);
     }
 
-    void beginChooseParty(Mm2RosterFile &roster) override
+    void beginChooseParty(Mm2RosterFile &roster, uint8_t town_filter = 1,
+                          const Mm2PartyLaunch *saved_party = nullptr) override
     {
         roster_ = &roster;
-        party_town_ = 1;
+        party_town_ = (town_filter >= 1 && town_filter <= 5) ? static_cast<int>(town_filter) : 1;
         party_page_hirelings_ = false;
-        party_count_ = 0;
         has_party_launch_ = false;
+        restorePartySelection(saved_party);
     }
 
     UiResult tickChooseParty(const platform::KeyState &keys) override
@@ -186,6 +187,7 @@ public:
         }
         if (keys.last_ascii >= '1' && keys.last_ascii <= '5') {
             party_town_ = keys.last_ascii - '0';
+            clearPartySelection();
             return UiResult::Continue;
         }
         if (keys.ctrl && keys.last_ascii >= 'A' && keys.last_ascii <= 'X') {
@@ -226,7 +228,7 @@ public:
             char name[16];
             mm2_roster_name_to_cstr(&rec, name, sizeof(name));
             char line[64];
-            std::snprintf(line, sizeof(line), "%c%c- %-11s %s", isPartyMember(slot) ? '*' : ' ',
+            std::snprintf(line, sizeof(line), "%c%c- %-11s %s", isPartyListEntryChecked(slot) ? '*' : ' ',
                           static_cast<char>('A' + i), name, className(rec.class_id));
             compositor.drawText(8, 38 + i * 9, line, 200, 200, 200, 255);
         }
@@ -271,6 +273,41 @@ private:
             }
         }
         return false;
+    }
+
+    bool isPartyListEntryChecked(int slot) const { return isPartyMember(slot); }
+
+    void clearPartySelection() { party_count_ = 0; }
+
+    void restorePartySelection(const Mm2PartyLaunch *launch)
+    {
+        party_count_ = 0;
+        if (!launch || launch->party_count <= 0) {
+            return;
+        }
+        for (int i = 0; i < launch->party_count && party_count_ < 8; ++i) {
+            const int slot = launch->roster_slots[i];
+            if (slot < 0 || slot >= kPlayableSlots) {
+                continue;
+            }
+            const Mm2RosterRecord &rec = roster_->records[slot];
+            if (mm2_roster_slot_is_empty(&rec)) {
+                continue;
+            }
+            if ((rec.town_flags & 0x7F) != static_cast<uint8_t>(party_town_)) {
+                continue;
+            }
+            int char_count = 0;
+            for (int j = 0; j < party_count_; ++j) {
+                if (party_members_[j] < 24) {
+                    ++char_count;
+                }
+            }
+            if (slot < 24 && char_count >= 6) {
+                continue;
+            }
+            party_members_[party_count_++] = slot;
+        }
     }
 
     void togglePartyMember(int slot)

@@ -3,6 +3,7 @@
 // Tile size 14×11 (townb.32 / outb.32). Unexplored cells are skipped (helper @0x2182 → 0xFF).
 
 #include "mm2/GameState.h"
+#include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/EnvAssets.h"
 #include "mm2/gfx/ScreenCompositor.h"
 #include "mm2/world/AutomapState.h"
@@ -11,8 +12,8 @@
 namespace mm2::gfx {
 
 struct AutomapRenderParams {
-    int origin_x = 8;
-    int origin_y = 8;
+    int origin_x = play_layout::kAutomapOriginX;
+    int origin_y = play_layout::kAutomapOriginY;
     bool draw_edge_overlay = true;
     bool draw_party_marker = true;
 };
@@ -20,6 +21,10 @@ struct AutomapRenderParams {
 void renderAutomap(ScreenCompositor &c, const EnvAssets &env, const world::MapWorld &world,
                    const world::AutomapState &vis, const GameStateView &gs,
                    const AutomapRenderParams &params = {});
+
+/** Eagle/Wizard Eye 5×5 overhead @ 0x1E74 (party-centred cartography blit). */
+void renderSpellEyeOverlay(ScreenCompositor &c, const EnvAssets &env, const world::MapWorld &world,
+                           const GameStateView &gs);
 
 int automapPartyArrowFrame(char facing_key);
 

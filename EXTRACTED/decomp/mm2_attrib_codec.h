@@ -50,7 +50,9 @@ enum {
     MM2_ATTRIB_OFF_TRANSITION_COORD = 0x16, /* packed (Y<<4)|X dest pos */
     MM2_ATTRIB_OFF_LEVEL = 0x17,        /* floor/level (interior) */
     MM2_ATTRIB_OFF_LINK_AREA = 0x18,    /* a.k.a. transition_screen */
-    MM2_ATTRIB_OFF_FLAGS = 0x1A         /* btst bitfield (bits 0,3,4,5,6) */
+    MM2_ATTRIB_OFF_FLAGS = 0x1A,        /* btst bitfield (bits 0,3,4,5,6) */
+    MM2_ATTRIB_OFF_DOOR_STRENGTH = 0x12, /* materialized A4-$5608; bash @ 0x9C2A */
+    MM2_ATTRIB_OFF_DOOR_TRAP = 0x13     /* materialized A4-$5607; unlock @ 0x20D6E */
 };
 
 /* attrib byte 0x1A flag bits (asm btst sites). */
@@ -131,6 +133,16 @@ uint8_t mm2_attrib_transition_screen(const Mm2AttribRecord *r);
 /* flags byte (0x1A) and a single-bit test helper (bit 0..7). */
 uint8_t mm2_attrib_flags(const Mm2AttribRecord *r);
 int mm2_attrib_flag_bit(const Mm2AttribRecord *r, int bit);
+
+static inline uint8_t mm2_attrib_door_strength(const Mm2AttribRecord *r)
+{
+    return r->raw[MM2_ATTRIB_OFF_DOOR_STRENGTH];
+}
+
+static inline uint8_t mm2_attrib_door_trap_byte(const Mm2AttribRecord *r)
+{
+    return r->raw[MM2_ATTRIB_OFF_DOOR_TRAP];
+}
 
 /* Unpack a packed (Y<<4)|X coordinate byte (entry 0x0E / transition 0x16). */
 void mm2_attrib_unpack_coord(uint8_t packed, int *x, int *y);

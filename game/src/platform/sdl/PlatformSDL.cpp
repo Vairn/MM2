@@ -8,6 +8,9 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "mm2/DataPath.h"
+#include "mm2/runtime/PathScratch.h"
+
 namespace mm2::platform {
 
 namespace {
@@ -277,6 +280,38 @@ uint32_t nowTicks()
 }
 
 const char *hostName() { return "SDL2"; }
+
+bool resolveDataDir(const char *hint, char *out, size_t out_cap)
+{
+    if (!out || out_cap == 0) {
+        return false;
+    }
+
+    char *const probe = mm2_path_scratch_a();
+    static const char *const kCandidates[] = {hint, ".", "..", "../..", "../../.."};
+
+    for (const char *dir : kCandidates) {
+        if (!dir || dir[0] == '\0') {
+            continue;
+        }
+        if (!joinDataPath(probe, MM2_PATH_SCRATCH_CAP, dir, "intro.32")) {
+            continue;
+        }
+        SDL_RWops *rw = SDL_RWFromFile(probe, "rb");
+        if (!rw) {
+            continue;
+        }
+        SDL_RWclose(rw);
+        if (dir[0] == '.' && dir[1] == '\0') {
+            out[0] = '\0';
+        } else {
+            std::snprintf(out, out_cap, "%s", dir);
+        }
+        return true;
+    }
+
+    return false;
+}
 
 }  // namespace mm2::platform
 

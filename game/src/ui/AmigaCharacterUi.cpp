@@ -5,6 +5,7 @@
 #include "mm2/gfx/Mm2FontGlyphs.h"
 #include "mm2/ui/AmigaCharacterUiLayout.h"
 #include "mm2/ui/CharacterUiFactory.h"
+#include "mm2/ui/RosterSkillDisplay.h"
 #include "mm2/Mm2Dbg.h"
 #include "mm2/platform/Platform.h"
 #include "mm2/runtime/PathScratch.h"
@@ -94,25 +95,7 @@ const char *conditionName(uint8_t c)
     }
 }
 
-// FAQ save-state note: skill nibbles 1..15 map to these names (alphabetical).
-static const char *kSkillNames[] = {
-    "",
-    "Arms Master",
-    "Athlete",
-    "Cartographer",
-    "Crusader",
-    "Diplomat",
-    "Gambler",
-    "Gladiator",
-    "Hero",
-    "Linguist",
-    "Merchant",
-    "Mountaineering",
-    "Navigator",
-    "Pathfinder",
-    "Pickpocket",
-    "Soldier",
-};
+// FAQ save-state note: skill nibbles 1..15 — see RosterSkillDisplay.cpp.
 
 struct HirelingMeta {
     uint32_t base_cost;
@@ -129,148 +112,8 @@ static const HirelingMeta kHirelingMeta[] = {
     {250, 9, "Lin Mer"},   {500, 11, "Cru Sol"},  {600, 11, "Arm Pat"},
     {700, 13, "Dip Her"},  {1200, 13, "Cru Mer"},  {2000, 14, "Gla Sol"},
     {2000, 16, "Ath Gam"}, {4000, 15, "Arm Gla"}, {6000, 15, "Arm Mou"},
-    {15000, 19, "Dip Gam"}, {25000, 25, "Gam Nav"}, {50000, 21, "Lin Mer"},
+    {15000, 19, "Dip Gam"}, {25000, 25, "Gam Nav"},     {50000, 21, "Lin Mer"},
 };
-
-static const char *skillNameFromId(uint8_t id)
-{
-    if (id >= 1 && id <= 15) {
-        return kSkillNames[id];
-    }
-    return nullptr;
-}
-
-static const char *skillAbbrevToName(const char *abbrev)
-{
-    if (!abbrev || !abbrev[0]) {
-        return nullptr;
-    }
-    if (std::strncmp(abbrev, "Arm", 3) == 0) {
-        return "Arms Master";
-    }
-    if (std::strncmp(abbrev, "Ath", 3) == 0) {
-        return "Athlete";
-    }
-    if (std::strncmp(abbrev, "Car", 3) == 0) {
-        return "Cartographer";
-    }
-    if (std::strncmp(abbrev, "Cru", 3) == 0) {
-        return "Crusader";
-    }
-    if (std::strncmp(abbrev, "Dip", 3) == 0) {
-        return "Diplomat";
-    }
-    if (std::strncmp(abbrev, "Gam", 3) == 0) {
-        return "Gambler";
-    }
-    if (std::strncmp(abbrev, "Gla", 3) == 0) {
-        return "Gladiator";
-    }
-    if (std::strncmp(abbrev, "Her", 3) == 0) {
-        return "Hero";
-    }
-    if (std::strncmp(abbrev, "Lin", 3) == 0) {
-        return "Linguist";
-    }
-    if (std::strncmp(abbrev, "Mer", 3) == 0) {
-        return "Merchant";
-    }
-    if (std::strncmp(abbrev, "Mou", 3) == 0) {
-        return "Mountaineering";
-    }
-    if (std::strncmp(abbrev, "Nav", 3) == 0) {
-        return "Navigator";
-    }
-    if (std::strncmp(abbrev, "Pat", 3) == 0) {
-        return "Pathfinder";
-    }
-    if (std::strncmp(abbrev, "Pic", 3) == 0) {
-        return "Pickpocket";
-    }
-    if (std::strncmp(abbrev, "Sol", 3) == 0) {
-        return "Soldier";
-    }
-    return nullptr;
-}
-
-static bool isRosterSkillTemplate(const Mm2RosterRecord &rec)
-{
-    const uint8_t a = rec.secondary_skills[0];
-    const uint8_t b = rec.secondary_skills[1];
-    const uint8_t c = rec.secondary_skills[2];
-    if (a != b || b != c) {
-        return false;
-    }
-    return a == 0x05 || a == 0x0A;
-}
-
-static int collectRosterSkillNames(const Mm2RosterRecord &rec, const char **names, int max_names)
-{
-    if (isRosterSkillTemplate(rec)) {
-        return 0;
-    }
-    int count = 0;
-    for (int i = 0; i < 3 && count < max_names; ++i) {
-        const uint8_t byte = rec.secondary_skills[i];
-        const uint8_t lo = byte & 0x0F;
-        const uint8_t hi = (byte >> 4) & 0x0F;
-        for (int n = 0; n < 2; ++n) {
-            const uint8_t id = (n == 0) ? lo : hi;
-            const char *name = skillNameFromId(id);
-            if (!name) {
-                continue;
-            }
-            bool dup = false;
-            for (int j = 0; j < count; ++j) {
-                if (std::strcmp(names[j], name) == 0) {
-                    dup = true;
-                    break;
-                }
-            }
-            if (!dup) {
-                names[count++] = name;
-            }
-        }
-    }
-    return count;
-}
-
-static int collectHirelingSkillNames(int hireling_index, const char **names, int max_names)
-{
-    if (hireling_index < 0 || hireling_index >= static_cast<int>(sizeof(kHirelingMeta) / sizeof(kHirelingMeta[0]))) {
-        return 0;
-    }
-    const char *skills = kHirelingMeta[hireling_index].skills;
-    if (!skills || !skills[0]) {
-        return 0;
-    }
-    int count = 0;
-    const char *p = skills;
-    while (*p && count < max_names) {
-        while (*p == ' ') {
-            ++p;
-        }
-        if (!*p) {
-            break;
-        }
-        const char *start = p;
-        while (*p && *p != ' ') {
-            ++p;
-        }
-        char abbrev[8];
-        const std::size_t len = static_cast<std::size_t>(p - start);
-        if (len >= sizeof(abbrev)) {
-            continue;
-        }
-        ::memcpy(abbrev, start, len);
-        abbrev[len] = '\0';
-        const char *name = skillAbbrevToName(abbrev);
-        if (name) {
-            names[count++] = name;
-        }
-    }
-    return count;
-}
 
 static uint32_t hirelingDailyCost(int hireling_index, uint8_t level)
 {
@@ -290,12 +133,6 @@ static uint32_t hirelingDailyCost(int hireling_index, uint8_t level)
         }
     }
     return cost;
-}
-
-static uint8_t rosterDisplayThievery(const Mm2RosterRecord &rec)
-{
-    // Character sheet draw reads roster+$1E (see character_sheet_draw @ $3C42).
-    return rec.unknown_1a_20[4];
 }
 
 void drawCellText(gfx::ScreenCompositor &c, int row, int col, const char *text, uint8_t r = 255, uint8_t g = 255,
@@ -621,15 +458,17 @@ public:
         renderCreateRightPanel(compositor);
     }
 
-    void beginChooseParty(Mm2RosterFile &roster) override
+    void beginChooseParty(Mm2RosterFile &roster, uint8_t town_filter = 1,
+                          const Mm2PartyLaunch *saved_party = nullptr) override
     {
-        MM2_DBG("MM2 GOTO: AmigaCharacterUi::beginChooseParty\n");
+        MM2_DBG("MM2 GOTO: AmigaCharacterUi::beginChooseParty town=%u\n", town_filter);
         roster_ = &roster;
-        party_town_ = 1;
+        party_town_ = (town_filter >= 1 && town_filter <= 5) ? static_cast<int>(town_filter) : 1;
         party_page_ = PartyPage::Characters;
         party_sub_ = PartySub::List;
-        party_count_ = 0;
         has_party_launch_ = false;
+        /* ASM party assemble reads existing A4-$8696; only keys 1-5 clear it @ 0xC72. */
+        restorePartySelection(saved_party);
         markDirty();
     }
 
@@ -664,6 +503,7 @@ public:
         }
         if (keys.last_ascii >= '1' && keys.last_ascii <= '5') {
             party_town_ = keys.last_ascii - '0';
+            clearPartySelection();
             markDirty();
             return UiResult::Continue;
         }
@@ -1597,17 +1437,16 @@ private:
         drawCellText(c, r0 + 3, kSheetStatColSlash, buf);
         std::snprintf(buf, sizeof(buf), "Thievery %u%%", rosterDisplayThievery(rec));
         drawCellText(c, r0 + 4, kSheetStatColMid, buf);
-        static const char kEmptySkillSlot[] = ". . . . . . . . . . . . ";
         if (skill_count >= 1) {
             drawCellText(c, r0 + 5, kSheetStatColMid, skill_names[0]);
         } else {
-            drawCellText(c, r0 + 5, kSheetStatColMid, kEmptySkillSlot);
+            drawCellText(c, r0 + 5, kSheetStatColMid, kRosterEmptySkillSlot);
         }
 
         if (skill_count >= 2) {
             drawCellText(c, r0 + 6, kSheetStatColMid, skill_names[1]);
         } else {
-            drawCellText(c, r0 + 6, kSheetStatColMid, kEmptySkillSlot);
+            drawCellText(c, r0 + 6, kSheetStatColMid, kRosterEmptySkillSlot);
         }
         std::snprintf(buf, sizeof(buf), "Cond= %s", conditionName(rec.condition));
         drawCellText(c, r0 + 6, kSheetStatColRight, buf);
@@ -1728,6 +1567,9 @@ private:
         return false;
     }
 
+    /** Checkmark = roster slot is in the assembled party (A4-$8696). */
+    bool isPartyListEntryChecked(int slot) const { return isPartyMember(slot); }
+
     int partyCharacterCount() const
     {
         int n = 0;
@@ -1757,6 +1599,29 @@ private:
             return;  // max 6 normal characters
         }
         party_members_[party_count_++] = slot;
+    }
+
+    void clearPartySelection() { party_count_ = 0; }
+
+    void restorePartySelection(const Mm2PartyLaunch *launch)
+    {
+        party_count_ = 0;
+        if (!launch || launch->party_count <= 0) {
+            return;
+        }
+        for (int i = 0; i < launch->party_count && party_count_ < kMaxParty; ++i) {
+            const int slot = launch->roster_slots[i];
+            if (slot < 0 || slot >= kPlayableSlots) {
+                continue;
+            }
+            if (!isPartyListEntryVisible(slot)) {
+                continue;
+            }
+            if (!isHirelingSlot(slot) && partyCharacterCount() >= kMaxCharacters) {
+                continue;
+            }
+            party_members_[party_count_++] = slot;
+        }
     }
 
     void renderPartyChooser(gfx::ScreenCompositor &c)
@@ -1810,7 +1675,7 @@ private:
             std::snprintf(line, sizeof(line), "%c- %-*s%s", glyph, MM2_ROSTER_NAME_SIZE, name,
                           classAbbrev3(rec.class_id));
             drawCellText(c, row, text_col, line);
-            if (isPartyMember(slot)) {
+            if (isPartyListEntryChecked(slot)) {
                 drawCheckMark(c, row, check_col);
             }
         }

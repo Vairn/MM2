@@ -45,6 +45,16 @@ constexpr int kProtectFrameY = 6;
 constexpr int kProtectFrameW = 94;
 constexpr int kProtectFrameH = 126;
 
+// Eagle/Wizard Eye 5×5 overlay (spell_eye @ 0x1E74, blit loop @ 0x1F7E).
+// Dest X = col*0xE + 0xE8; dest Y = 0x3D - row*0xB (row 0 = bottom).
+constexpr int kSpellEyeOriginX = 0xE8;
+constexpr int kSpellEyeBottomY = 0x3D;
+
+// overland_map_view @ 0x2334: col-0 X=0x36; row-0 Y=0xAC (south / bottom row).
+constexpr int kAutomapOriginX = 0x36;
+constexpr int kAutomapBottomY = 0xAC;
+constexpr int kAutomapOriginY = kAutomapBottomY - 15 * 11; /* row 15 (north) → Y=7 */
+
 // Status strip ('O' Options, Day, Year, Face) — 8080 @ 0x60B6 row 0x12 cell dividers.
 constexpr int kStatusBarY = 134;
 constexpr int kStatusBarH = 10;

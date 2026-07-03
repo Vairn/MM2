@@ -60,6 +60,10 @@ public:
     void showPegasusIllustration(const char *data_dir);
     bool hasPegasusIllustration() const { return pegasus_overlay_.loaded(); }
 
+    /** Drop OP_01/02/03 console message layers before a shop menu repaints the
+     *  lower band (ASM -$7ED8 preset 5: cells (1,11)-(38,22)). Keeps OP_04+ sign. */
+    void clearConsoleMessageLayers();
+
     /** Draw all active layers onto the compositor (after 3D view). */
     void draw(gfx::ScreenCompositor &c) const;
 

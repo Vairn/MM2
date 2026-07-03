@@ -32,7 +32,8 @@ public:
     void startViewParty(Mm2RosterFile &roster);
     void startCreateCharacter(Mm2RosterFile &roster, int slot = -1);
     void prepareCreateCharacterAssets();
-    void startChooseParty(Mm2RosterFile &roster);
+    void startChooseParty(Mm2RosterFile &roster, uint8_t town_filter = 1,
+                          const Mm2PartyLaunch *saved_party = nullptr);
 
     CharacterUiMode mode() const { return mode_; }
     bool active() const { return mode_ != CharacterUiMode::None; }

@@ -139,6 +139,13 @@ def load_default_party(data_dir: Path) -> dict | None:
                     "speed": sb["Spd"],
                     "accuracy": sb["Acc"],
                     "luck": sb["Luck"],
+                    "thievery": data[off + 0x16],
+                    "unlockSkill": data[off + 0x1E],
+                    "homeTown": data[off + 0x0B] & 0x7F,
+                    "classQuestGuildMask": data[off + 0x79],
+                    "skillPack": data[off + 0x50],
+                    "spellBook": list(data[off + 0x4C : off + 0x58]),
+                    "pubMeal": data[off + 0x78],
                     "backpack": [
                         {"id": item_id, "charges": ch, "flags": fl}
                         for item_id, ch, fl in rec["backpack"]
@@ -315,6 +322,8 @@ def build_maps_payload(attrib: list[bytes], screens: list[tuple[bytes, bytes]], 
                     "minMonsters": a[0x0C],
                     "retreat": a[0x0D],
                 },
+                "doorStrength": a[0x12],
+                "doorTrap": a[0x13],
                 "sector": a[0x15],
                 # attrib +0x20..+0x3F: 256 roof bits → sky.32 frame 1 (ceiling) vs 0 (open)
                 "roof": list(a[0x20:0x40]),

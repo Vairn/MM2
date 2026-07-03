@@ -28,8 +28,8 @@ pull text from **`str.dat`** or the **executable** instead. ASM references:
 - **Numeric shop data** (donation gold, spell bytes, rolled stock) comes from
   **data-hunk master tables** and/or **RNG** at shop-open, not from `event.dat`.
 
-**Pub vs inn:** Food, drinks, and specialties are **`OP_0E` `0x01` → `0x1A132`**
-(tavern). The inn is **`0x02` → `-$7CD4`** (rest, registry, hirelings) and uses
+**Pub vs inn:** Food, drinks, and specialties are **`OP_0E` `0x03` → `0x1D208`**
+(tavern). The inn is **`0x01` → `0x1A132`** (rest, registry, hirelings) and uses
 mostly **exe-embedded** prompts (`0x19D00`…, doc 29).
 
 ---
@@ -92,15 +92,16 @@ range bins (see [`07-event-script-opcodes.md`](07-event-script-opcodes.md)).
 
 | Sel | Decoder name | Call | Notes |
 |-----|--------------|------|-------|
-| `0x01` | `open_tavern_food` | `0x1A132` | Pub menu; **`A4-$79F2`** town index |
-| `0x02` | `open_inn_lodging` | `-$7CD4` | Inn; exe strings + gold |
-| `0x03` | `open_temple` | `0x1D208` | Temple; `str.dat` + spell/donation tables |
-| `0x04` | `open_training` | `-$7D16` | Training; HP @ `0x9BCA` |
-| `0x05` | `open_mages_guild` | `-$7D10` | Guild spells; membership check |
-| `0x06` | `open_blacksmith_shop` | `0x1C54A` | Smith; RNG stock tables |
-| `0x07`–`0x08` | store / special | `-$7DB8` / `-$7DBE` | Generic shop shell |
-| `0x0A` | `goblet_quest` | `-$7DAC` | Side quest |
-| `0x0D` | `enroll_mages_guild` | `-$7DA0` | Sets roster `$0B` home town |
+| `0x01` | `open_inn_lodging` | `0x1A132` | Inn rest / dismiss; exe + str |
+| `0x02` | `open_training` | `-$7CD4` | Training hall; level-up from XP |
+| `0x03` | `open_tavern_food` | `0x1D208` | Pub menu; **`A4-$79F2`** town index |
+| `0x04` | `open_temple` | `-$7D16` | Temple; `str.dat` + spell/donation tables |
+| `0x05` | `open_mages_guild` | `-$7D10` | Guild spells; membership check `0x1E410` |
+| `0x06` | `open_blacksmith_shop` | `0x1C54A` | Smith; static + RNG stock tables |
+| `0x07`–`0x08` | store / arena | `-$7DB8` / `-$7DBE` | General store / Arena Games (`0x9D76`) |
+| `0x0A` | goblet quest | `-$7DAC` → `0xD634` | **Nordon** `(10,2)/W` event 30 — loc 60 str[9] |
+| `0x0E` | default-range | `-$7DFA` → loader | **Feldecarb Fountain** `(15,15)` event 17 — loc 60 str[23] (see doc 53) |
+| `0x0D` | `enroll_mages_guild` | `-$7DA0` | Sets roster `$0B` home town (not purchase gate) |
 
 Default path (`0x15EDC` → `-$7DFA`): selector binned to category `0x3C`–`0x46`;
 **temporarily overwrites** `A4-$79F2` with category byte for the call.
@@ -120,14 +121,17 @@ Global UI base: **`A4-$703e`** = loaded **`str.dat`** (see `0x7DF6`, `0x807A`,
 
 | Handler | Selector | Primary strings | Secondary |
 |---------|----------|-----------------|-----------|
-| Pub `0x1A132` | `0x01` | **`str.dat`** menus (food A–C, drinks A–F, rumors) | Pub NPC intros in str; rumor bytecode `A4-$119A` uses **event-style indices** into rumor stream |
-| Inn `-$7CD4` | `0x02` | **Embedded exe** (`0x19D00`…, doc 29) | Shared gold messages in str |
-| Temple `0x1D208` | `0x03` | **`str.dat`** priest lines + spell menu | Donation UI; spell names via spell index → str |
-| Training `-$7D16` | `0x04` | **`str.dat`** + **exe** training prompts | HP path messages @ `0x9BCA` |
+| Inn `0x1A132` | `0x01` | **Embedded exe** (`0x19D00`…, doc 29) | Shared gold messages in str |
+| Training `-$7CD4` | `0x02` | **`str.dat`** + **exe** training prompts | HP path messages @ `0x9BCA` |
+| Pub `0x1D208` | `0x03` | **`str.dat`** menus (food A–C, drinks A–F, rumors) | Pub NPC intros in str; rumor bytecode `A4-$119A` |
+| Temple `-$7D16` | `0x04` | **`str.dat`** priest lines + spell menu | Donation UI; spell names via spell index → str |
 | Guild `-$7D10` | `0x05` | **`str.dat`** + membership error (str ~369) | Spell list pointers `A4-$6AB4` |
-| Smith `0x1C54A` | `0x06` | **`str.dat`** + **exe** smith intros (`0x1C51C` PEA) | Category lines from `A4-$5AA6`; specials from RNG `A4-$5A56` |
+| Smith `0x1C54A` | `0x06` | **`str.dat`** smith intros (defer path) + category lines | Category lines from `A4-$5AA6`; specials from RNG `A4-$5A56` |
 
-### 4.1 Pub food (`0x1A132`) — not the inn
+**Remake note (doc 28 §1.4.3):** pub/temple show str.dat y/n intros before the
+menu; blacksmith opens the buy menu directly when `PlayTownServiceUi` is bound.
+
+### 4.1 Pub food (`0x1D208`) — not the inn
 
 - Town index: **`A4-$79F2`** (map screen 0–4).
 - Menu strings: **`str.dat`** block (~lines 109–127 in [`11-str-decoded.txt`](11-str-decoded.txt)).
@@ -160,16 +164,16 @@ flowchart TD
   exe[Embedded exe PEA strings]
   op01[OP_01..06 / 0B]
   op0e[OP_0E selector]
-  pub[0x1A132 pub]
-  inn[-7CD4 inn]
-  temple[0x1D208 temple]
+  inn[0x1A132 inn]
+  pub[0x1D208 pub]
+  temple[-7D16 temple]
   smith[0x1C54A smith]
 
   tile --> scan --> interp
   interp --> op01 --> evStr
   interp --> op0e
-  op0e --> pub --> strdat
   op0e --> inn --> exe
+  op0e --> pub --> strdat
   op0e --> temple --> strdat
   op0e --> smith --> strdat
   smith --> exe
@@ -198,4 +202,5 @@ need to be re-added to the repo; use doc 29 + capstone PEA xrefs meanwhile.
 | Event opcode → event.dat strings | **Complete** (ASM `0x15884` / `0x155BE`) |
 | `OP_0E` → handlers | **Complete** (`0x160C2`) |
 | Handlers → str.dat / exe | **Complete** (handler survey) |
+| Remake town-service UI | **Partial** — see [`28-town-services.md`](28-town-services.md) §1.4.3 |
 | Per-town numeric item/spell tables | See [`28-town-services.md`](28-town-services.md) §13 + `EXTRACTED/shop_tables.json` |

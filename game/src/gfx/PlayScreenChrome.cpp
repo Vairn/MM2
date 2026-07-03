@@ -225,8 +225,7 @@ void drawPlayPartyPanel(ScreenCompositor &c, const PlayPartySlot slots[8])
             continue;
         }
 
-        const PartyStatusPrefix prefix_style =
-            s.combat_checkmark ? PartyStatusPrefix::CombatCheckmark : PartyStatusPrefix::Exploration;
+        const PartyStatusPrefix prefix_style = PartyStatusPrefix::Exploration;
 
         char line[48];
         formatPartyStatusLine(line, sizeof(line), i, s.name, static_cast<uint16_t>(s.hp), prefix_style);

@@ -1,5 +1,7 @@
 #include "mm2/world/AutomapState.h"
 
+#include "mm2/gameplay/RosterSkills.h"
+
 namespace mm2::world {
 
 void AutomapState::clearAll()
@@ -31,19 +33,7 @@ void AutomapState::markVisited(int screen, int x, int y)
 
 bool AutomapState::rosterHasSkillId(const Mm2RosterRecord &rec, int skill_id)
 {
-    if (skill_id <= 0 || skill_id > 15) {
-        return false;
-    }
-    for (int i = 0; i < 3; ++i) {
-        const uint8_t byte = rec.secondary_skills[i];
-        if ((byte & 0x0F) == static_cast<uint8_t>(skill_id)) {
-            return true;
-        }
-        if (((byte >> 4) & 0x0F) == static_cast<uint8_t>(skill_id)) {
-            return true;
-        }
-    }
-    return false;
+    return gameplay::rosterHasSkillId(rec, static_cast<uint8_t>(skill_id));
 }
 
 bool AutomapState::partyHasCartographer(const Mm2RosterFile &roster, const Mm2PartyLaunch &launch)

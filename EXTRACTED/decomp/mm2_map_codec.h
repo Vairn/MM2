@@ -188,6 +188,37 @@ static inline int mm2_map_passability_blocked(uint8_t collision_cell, char facin
     return walls != 0;
 }
 
+/* Page-1 wall low bit for the facing direction (unlock/bash lock clear @ 0x4B06). */
+static inline uint8_t mm2_map_facing_wall_bit(char facing_key)
+{
+    switch (facing_key) {
+    case 'N': return MM2_MAP_COLL_N_WALL;
+    case 'E': return MM2_MAP_COLL_E_WALL;
+    case 'S': return MM2_MAP_COLL_S_WALL;
+    case 'W': return MM2_MAP_COLL_W_WALL;
+    default: return 0;
+    }
+}
+
+static inline int mm2_map_door_locked_at(const Mm2MapScreen *s, int x, int y, char facing_key)
+{
+    if (!s || x < 0 || y < 0 || x >= MM2_MAP_GRID_DIM || y >= MM2_MAP_GRID_DIM) {
+        return 0;
+    }
+    const uint8_t bit = mm2_map_facing_wall_bit(facing_key);
+    return (mm2_map_collision_at(s, x, y) & bit) != 0;
+}
+
+static inline void mm2_map_clear_door_lock(Mm2MapScreen *s, int x, int y, char facing_key)
+{
+    if (!s || x < 0 || y < 0 || x >= MM2_MAP_GRID_DIM || y >= MM2_MAP_GRID_DIM) {
+        return;
+    }
+    const uint8_t bit = mm2_map_facing_wall_bit(facing_key);
+    uint8_t *cell = &s->collision[(size_t)(y * MM2_MAP_GRID_DIM + x)];
+    *cell = (uint8_t)(*cell & ~bit);
+}
+
 /* Tile darkness for time-tick @ 0x69DC: bit 5 of A4-$55D6 after a step. */
 static inline int mm2_map_collision_is_dark(uint8_t collision_cell)
 {

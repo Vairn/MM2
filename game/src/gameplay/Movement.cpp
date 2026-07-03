@@ -1,5 +1,6 @@
 #include "mm2/gameplay/Movement.h"
 
+#include "mm2/events/EventVmHelpers.h"
 #include "mm2_map_codec.h"
 
 namespace mm2::gameplay {
@@ -41,12 +42,17 @@ char turnFacing(char key, bool right_cw)
 
 void latchEventOnTurn(GameStateView &gs)
 {
+    /* movement_turn @ 0x5802 also clears A4-$77BD when the turn updates coords. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 0);
     mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
 }
 
 void latchEventAfterStep(GameStateView &gs)
 {
     mm2_gs_set_u16(gs.a4(), kGsPositionChanged, 1);
+    /* movement_step @ 0x574E: clr.b A4-$77BD before the tile scanner runs so
+     * OP_2B on the destination tile (arena tier squares, etc.) sees latch=0. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 0);
     mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
 }
 
@@ -256,6 +262,7 @@ MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward)
 
     const uint8_t dest_cell = collisionAt(world, tx, ty);
     applyStepTimeTick(gs, dest_cell);
+    events::eventVmTickSpellEyeOnStep(gs.a4(), world.isOutdoor());
     latchEventAfterStep(gs);
 
     r.acted = true;

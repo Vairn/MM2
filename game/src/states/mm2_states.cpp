@@ -304,6 +304,12 @@ static void in_town_loop(void)
     if (h.shouldQuit()) {
         return;
     }
+    if (h.inTownRequestGotoTown()) {
+        h.syncSessionRosterToTitle();
+        h.inTownEndForGotoTown();
+        mm2_pending_change(&g_mm2_state_char_choose);
+        return;
+    }
     if (h.inTownRequestTitle()) {
         mm2_pending_change(&g_mm2_state_menu);
         return;

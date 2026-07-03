@@ -46,11 +46,17 @@ const char *parseDataDir(int argc, char **argv)
 
 int SDL_main(int argc, char **argv)
 {
-    const char *data_dir = parseDataDir(argc, argv);
+    const char *data_dir_hint = parseDataDir(argc, argv);
     const auto ui_kind = parseUiKind(argc, argv);
 
     if (!mm2::platform::init(&argc, &argv)) {
         return 1;
+    }
+
+    static char data_dir_buf[512];
+    const char *data_dir = data_dir_hint;
+    if (mm2::platform::resolveDataDir(data_dir_hint, data_dir_buf, sizeof(data_dir_buf))) {
+        data_dir = data_dir_buf;
     }
 
     if (!mm2::platform::beginDisplay()) {

@@ -236,6 +236,54 @@ def smith_price(base_gold: int, meta: int) -> int:
     return price
 
 
+# ---------------------------------------------------------------------------
+# Mage guild sorcerer / temple cleric spell-purchase stock (OP_0E 0x05 / 0x04
+# D-F). spell_index is the per-school flat index 0..47 (SpellBook.h), NOT the
+# 0..95 spells.dat index. Byte-exact from EXTRACTED/shop_tables.json
+# static_by_town.mage_guild_spells / temple_spells (data hunk A4-$66E2 /
+# A4-$66F6). See EXTRACTED/docs/28-town-services.md.
+# ---------------------------------------------------------------------------
+MAGE_GUILD_SLOTS = 4
+TEMPLE_SPELL_SLOTS = 3
+
+# [map][slot] = (spell_index 0..47, gold)
+MAGE_GUILD_STOCK = [
+    [(0, 10), (2, 1000), (6, 50), (9, 100)],              # Middlegate
+    [(41, 50000), (42, 50000), (44, 100000), (45, 100000)],  # Atlantium
+    [(21, 600), (22, 2000), (26, 3000), (28, 3000)],       # Tundara
+    [(31, 5000), (33, 5000), (35, 5000), (37, 25000)],     # Vulcania
+    [(13, 400), (14, 200), (17, 1000), (20, 500)],         # Sandsobar
+]
+
+# [map][slot] = (spell_index 0..47 cleric, gold); menu keys D/E/F.
+TEMPLE_SPELL_STOCK = [
+    [(0, 10), (1, 10), (5, 1000)],           # Middlegate
+    [(42, 20000), (46, 50000), (47, 100000)],  # Atlantium
+    [(14, 400), (18, 100), (23, 500)],         # Tundara
+    [(25, 2000), (30, 3000), (37, 10000)],     # Vulcania
+    [(8, 250), (11, 300), (13, 200)],          # Sandsobar
+]
+
+# Guild-membership bit in roster record+0x79 (class_quest_guild_mask), data
+# hunk A4-$66A9. ONLY written by the (unported, buggy) 0x9D76 class-quest
+# reward loop @ 0x9FE0 -- see EXTRACTED/docs/36-class-quest-hp-bug.md. Gating
+# spell purchase on this is ASM-confirmed (0x1E410); until the reward path is
+# ported this correctly denies membership for every fresh roster.
+MAGE_GUILD_MEMBER_MASK = [0x02, 0x04, 0x08, 0x10, 0x20]
+
+
+def mage_guild_stock(map_id: int) -> list[tuple[int, int]]:
+    return list(MAGE_GUILD_STOCK[map_id])
+
+
+def temple_spell_stock(map_id: int) -> list[tuple[int, int]]:
+    return list(TEMPLE_SPELL_STOCK[map_id])
+
+
+def mage_guild_member_mask(map_id: int) -> int:
+    return MAGE_GUILD_MEMBER_MASK[map_id]
+
+
 def _main() -> None:
     print("map town        idx add cap donation bit")
     for i, t in enumerate(TOWNS):

@@ -6631,9 +6631,40 @@
 0051be  2e2e0000          move.l    $0(a6), d7
 ;@LBL-START
 ; ========================================================================
-; 0051c2  party_setup_roster_copy  (LAB_51C2)
-;   New-game party setup: copies 8 roster slot words A4-$796A →
-;   A4-$5E5E, loads per-character records ($477E/$4476), engine init.
+; 0051c2  combat_encounter_entry  (LAB_51C2)  [RELABELED — was
+;   "party_setup_roster_copy"; that name does not match the behaviour below]
+;
+;   This is the target of the `-$7EDE(a4)` thunk (data-hunk offset 0x0120,
+;   byte-confirmed `4E F9 00 00 51 C2`), which is called from all 7 combat
+;   trigger sites (random step 0x11A2, arena win 0x9F0A, quest fight 0xD69C,
+;   scripted boss 0x14AD4, OP_12/13 0x1635E, tile collision 0x1771C, rest
+;   ambush 0x19E0E) and from nowhere else. Confirmed NOT new-game setup:
+;
+;     - 0x51CE: pushes the address of the null-terminated string "Encounter!"
+;       (bytes at 0x5306: 45 6e 63 6f 75 6e 74 65 72 21 00) and calls the
+;       print/banner thunk -$7EC0(a4) with it immediately on entry.
+;     - 0x51E2-0x520E: saves 8 words of `roster_index_tbl` (A4-$796A) into a
+;       scratch buffer (A4-$5E5E), plus the party-size field (A4-$795A) into
+;       A4-$5E60.
+;     - 0x521E-0x5264: for each party member (get_party_member_ptr via local
+;       call to $477E, i.e. the routine the -$7F20(a4) thunk also targets),
+;       copies record byte $27 -> $73 and $15 -> $70 (working combat-turn
+;       copies of two character fields).
+;     - 0x5266-0x5294: restores `roster_index_tbl` / party-size from the
+;       scratch copy saved above (so this save/restore is a *guard* around a
+;       call that may reorder the table, undone before returning).
+;     - 0x529C-0x5304: plays a sound (-$7FD4, footstep/beep thunk), redraws
+;       the party-status row (bsr $5312 = format_party_status_line — the
+;       existing comment there already notes "Callers land in 'Encounter!'
+;       string padding"), several redraw thunks, branches on the saved right
+;       panel mode (A4-$79B2 == 1 ? -$7EAE : local $5D54), then clears 5
+;       per-encounter scratch flags (A4-$7999.."$799D) before returning.
+;
+;   This routine only ARMS/DISPLAYS the encounter (banner + HUD refresh +
+;   turn-order scratch prep); it does not itself run the round loop
+;   (0x12A22) — that is picked up by the main scheduler once this returns
+;   and the right-panel mode is combat. See docs/35-encounter-tables.md and
+;   docs/17-combat-system.md.
 ; ========================================================================
 ;@LBL-END
 0051c2  4e55fffa          link.w    a5, #$fffa
@@ -22613,6 +22644,19 @@
 011e4e  196c86a7a1b3      move.b    -$7959(a4), -$5e4d(a4)
 011e54  4e5d              unlk      a5
 011e56  4e75              rts       
+;@LBL-START
+; ========================================================================
+; 011e58  encounter_xp_budget_init  (LAB_11E58)
+;   Called from combat setup (0x12CF4) before the random picker. Sums
+;   party hp_current (record+0x74) into A4-$6FCA, divides by 8 (long
+;   divide thunk -$7B4E -> 0x24D9A), then scales by disposition
+;   (A4-$79AE): /4 more if 0, /2 more if 1, unchanged if 2, x2 (long
+;   multiply thunk -$7B54 -> 0x24C74) if 3 — i.e. total party HP / 32,
+;   /16, /8, /4 respectively. Also writes A4-$6FC2 = half the highest
+;   party level (record+0x71 >> 1), the tier-roll modifier consumed by
+;   monster_adds_friends @ 0x11F0A. See docs/35-encounter-tables.md.
+; ========================================================================
+;@LBL-END
 011e58  4e55fff8          link.w    a5, #$fff8
 011e5c  422dfffd          clr.b     -$3(a5)
 011e60  42ac9036          clr.l     -$6fca(a4)

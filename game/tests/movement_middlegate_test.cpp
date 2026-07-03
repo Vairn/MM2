@@ -13,6 +13,7 @@
 
 #include "mm2_party_launch.h"
 #include "mm2/gamestate.h"
+#include "mm2_gamestate.h"
 
 namespace {
 
@@ -71,6 +72,14 @@ int main(int argc, char **argv)
     const mm2::gameplay::MoveResult w_block = mm2::gameplay::step(world, gs, true);
     expect(w_block.blocked && gs.coordX() == 7 && gs.coordY() == 4, "step W from (7,4) blocked", fails);
 
+    /* asm 0x574E: victory latch clears on successful step before tile events run. */
+    gs.setFacingKey('N');
+    mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 1);
+    const mm2::gameplay::MoveResult s_n2 = mm2::gameplay::step(world, gs, true);
+    expect(s_n2.moved && gs.coordY() == 5, "step N from (7,4) for latch clear", fails);
+    expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 0,
+           "COMBAT_VICTORY_LATCH cleared on successful step", fails);
+
     /* Screen 2 (dungeon): cell (1,0)=0x66 has S-dark in E-facing bundle 0x30.
      * 0x9424 AND #$55 must not treat darkness as a wall; step E -> (2,0). */
     expect(world.enterScreen(2), "enter screen 2", fails);
@@ -85,7 +94,7 @@ int main(int argc, char **argv)
     expect(gs.lightFactor() == 4, "dark destination drains light @ 0x69DC", fails);
 
     if (fails == 0) {
-        std::printf("OK: movement_middlegate_test (11 checks)\n");
+        std::printf("OK: movement_middlegate_test (13 checks)\n");
         return 0;
     }
     return 1;

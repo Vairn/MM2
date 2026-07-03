@@ -12,6 +12,15 @@ explodes the bytes into a block of A4-relative "current monster" combat globals.
 | 0x00 | name    | 14 bytes, each char masked `& 0x7F` (stored as char+128) |
 | 0x0E | hp code | `HP = ((c & 0x3F)+1) * hpmul[(c>>6)&3]` (table at `A4-$746C`) |
 | 0x0F | xp code | `XP = ((c & 0x1F)+1) * xpmul[(c&0x60)>>5]`, ×1000 if bit7 |
+
+**RESOLVED 2026-07**: `hpmul` is byte-verified in `EXTRACTED/ghidra/mm2_data_00.bin`
+at data-hunk offset `0xB92` (`A4-$746C`) as four big-endian words `0001 000A
+0064 03E8` = `{1, 10, 100, 1000}`. `xpmul`'s table address was not located, but
+the identical `{1, 10, 100, 1000}` shape reproduces all 13 FAQ §3-8 HP/XP
+cross-check rows in Appendix A exactly (Creepy Crawler HP 5/XP 150 through Mega
+Dragon HP 64000/XP 32000000), so it is used with high confidence. Implemented
+as `mm2_monster_decode_hp` / `mm2_monster_decode_xp` in
+`EXTRACTED/decomp/mm2_monsters_codec.c`.
 | 0x10 | treasure| reward pack (gold/gems/item/XP-bonus). **Not a combat ability.** Decoded by the reward routine at `0x10B74` |
 | 0x11 | Pabil   | **group attack**: low5 = verb index, bits5-7 = use-chance tier |
 | 0x12 | Sabil   | **single attack**: low5 = status effect, bit5 misc, bit6 archer, bit7 undead |

@@ -107,6 +107,36 @@ That helper:
 So these opcodes are deterministic but variable-length and need token table
 support for full static disassembly.
 
+**Table now extracted byte-exact (2026-07)** from the data hunk (`opcode_len_tbl`
+@ `A4-$6CC8`, file offset `0x1336`, 51 big-endian words) via
+`tools/dump_event_token_table.py` → `EXTRACTED/event_token_len_table.json`.
+It is **not** simply `1 + argc` for every opcode — 2 genuine ROM discrepancies:
+
+- **`OP_00` (invalid):** ROM skip delta is **`0`**, not `1`. Only matters if a
+  corrupt/pathological script skip-walks over a literal `0x00` byte (never
+  legitimately emitted).
+- **`OP_25` (check-code16):** the handler reads **2** argument bytes when
+  *executed* (own length 3 = `event_op25_code_check` @ `0x16B82`, two `jsr
+  $155BE` byte reads combined into a `u16`), but the ROM's skip-table entry
+  is only **2** (opcode + 1 byte) — a genuine off-by-one in the original
+  game's static length table. A skip walk (`OP_10`/`OP_11`/`OP_2B`) that
+  passes **over** an `OP_25` token (rather than executing it) under-counts
+  by one byte and permanently desyncs the parse cursor by 1 for the rest of
+  that script. Confirmed **not reachable** in the shipped `event.dat` (no
+  location's `OP_10`/`OP_11`/`OP_2B` skip range ever contains an `OP_25`
+  token — verified by scanning every location/segment with the node-based
+  decoder), so this is a byte-exactness fix with no observable gameplay
+  effect today, kept for 100% ASM fidelity per CLAUDE.md.
+
+**Port:** `eventVmTokenDelta()` (`game/include/mm2/events/EventVmHelpers.h` /
+`.cpp`) is the byte-exact table, consumed by `EventRuntime::skipTokens` (via
+`tokenDelta()`); the maze-walker mirrors it as `OP_TOKEN_DELTA` in
+`wiki/maze-walker/eventVm.js` (currently unused there — the walker's skip
+step operates on already-decoded opcode **nodes**, not raw bytes, so it is
+naturally opcode-aligned and cannot reproduce the `OP_25` byte-level quirk;
+`tools/decode_event.py`'s `ROM_SKIP_LEN` dict + `_token_skip_len()` already
+modeled this correctly for static disassembly/branch-target recovery).
+
 ## Text Display Opcodes (`OP_01`–`OP_06`)
 
 All six read a `u8` string index via `0x15884` → `0x155BE`, copy the resolved
@@ -261,19 +291,54 @@ The earlier MVP placeholder prose + auto heal/train/rest/gold-deduction for
 selectors 1–8 were fabrications (the engine never auto-applies a whole-party
 transaction without the player's menu selection) and have been **removed**. Each
 selector now presents the **real on-screen entry text transcribed byte-for-byte
-from `str.dat`** (`11-str-decoded.txt`) and **defers** the interactive A–F menu
-transaction to the unported engine:
+from `str.dat`** (`11-str-decoded.txt`) and either opens the ported menu (when
+`EventRuntime::bindTownServiceUi` is set) or **defers** the interactive engine:
 
-| selector | faithful entry now shown | str.dat lines | deferred engine (handler) |
-|----------|--------------------------|---------------|---------------------------|
-| `0x01` inn | OP_0B sign title + SPACE | (no NPC intro) | rest/dismiss (`0x1A132`); rest HP/SP+day amounts not ASM-confirmed |
-| `0x02` training | OP_0B sign title + SPACE | (no NPC intro) | level-up menu (`-$7CD4`→`0x8050`); cost = `level×index×50` per trained char |
-| `0x03` tavern | NPC y/n intro (Amber/Rowena/Belinthra/Gabrielle/Lucindra by map index) | 89–108 | menu A–E (`0x1D208`): food `0x18EC0`, drinks `0x18F78`, rumors `0x97FC` |
-| `0x04` temple | priest y/n intro by map index | 343–357 | A) Restore Cond B) Restore Algn C) Donations D–F) cleric spells (`-$7D16`); healing = `level×index×10` (×10 dead/×100 erad) per selected char |
-| `0x05` guild | hall y/n intro by map index | 328–342 | 4 sorcerer spells/town (`-$7D10`→`0x1E3E6`), membership gate `0x1E410` |
-| `0x06` smith | **PORTED buy menu** when UI+items bound, else smith y/n intro by map index | 255–273 | A–D buy ported (`0x1C54A`/`0x1C00E`/`0x1BE44`); Sell `0x1BC26` / Identify `0x1B6E0` deferred |
-| `0x07` store | OP_0B sign title + SPACE | (generic shell) | category shop (`-$7DB8`→`-$7DFA`→`0x9D76`); Middlegate m11 + Vulcania k6 only |
-| `0x08` arena | OP_0B sign title + SPACE | (generic shell) | arena / special shop (`-$7DBE`→`-$7DFA`→`0x9D76`); engine-gated |
+| selector | faithful entry now shown | str.dat lines | port / deferred engine (handler) |
+|----------|--------------------------|---------------|----------------------------------|
+| `0x01` inn | OP_0B sign title + SPACE | (no NPC intro) | rest/dismiss (`0x1A132`); partial inn menu in walker |
+| `0x02` training | OP_0B sign title + SPACE | (no NPC intro) | **PORTED** level-up menu (`-$7CD4`→`0x8050`); cost = `level×index×50` |
+| `0x03` tavern | NPC y/n intro → menu on **Y** | 89–108 | **PARTIAL** A–E menu (`0x1D208`); food/drink RNG leaves deferred |
+| `0x04` temple | priest y/n intro → menu on **Y** | 343–357 | **PORTED** heal/cond/donate/cleric spells (`-$7D16`); healing = `level×index×10` |
+| `0x05` guild | hall y/n intro (no backend) | 328–342 | **PORTED** spell shop when member (`-$7D10`→`0x1E3E6`); gate `0x1E410` |
+| `0x06` smith | **direct shop** (no y/n when UI bound) | 255–273 (defer path only) | **PORTED** A–D buy (`0x1C54A`/`0x1BE44`); Sell/Identify deferred |
+| `0x07` store | OP_0B sign title + SPACE | (generic shell) | general store `-$7DB8`→`0xA62C` traced, buy loop deferred |
+| `0x08` arena | **PORTED** ticket-check/combat engine (`0x9D76`) | "Sorry, but you must have a ticket…" / "The games master accepts…" | **Arena ticket** items `0xD0`–`0xD3`; Middlegate `(2,13)`. **Not** farthings. |
+| `0x0A` fountain | NPC y/n intro ("Fanciful Feldecarb Fountain…") | shared string bank (loc 60) str[23] | **Feldecarb Fountain** farthing-flick @ Middlegate `(2,10)/W`; handler deferred. **Unrelated to arena `0x08`.** |
+| `0x0D` enroll | NPC y/n intro ("A sleepy conjurer yawns…") | shared string bank (loc 60) str[21] | 20gp deduct + roster+$0B write transaction (`-$7DA0` → `0xD89C` → `0x1A1B2`) deferred |
+
+**Intro y/n → menu (2026-07):** pub (`0x03`) and temple (`0x04`) always show the
+str.dat greet and wait for y/n before `townSvcRunTavern` / `townSvcRunTemple`
+(`EventRuntime::PendingTownMenu` + `eventTownServiceRunBoundMenu`). Blacksmith
+(`0x06`) skips the greet and opens the category buy menu immediately when a UI
+backend is bound. See doc 28 §1.4.3.
+
+**Correction (2026-07, revised):** `-$7DB8` (`0x07`), `-$7DBE` (`0x08`), and `-$7DFA`
+(default-range) are three *different* fixed A4-relative addresses (a direct
+`jsr disp(a4)`, not a vtable lookup). A first pass correctly separated them but
+then **misidentified which one is the arena engine**, claiming `-$7DFA` (the
+default-range dispatch thunk) was `0x9D76`. Byte-reading the A4 vtable
+trampoline table directly out of `EXTRACTED/ghidra/mm2_data_00.bin` (file
+offset `0x7FFE+disp`) settles it definitively:
+
+```text
+-$7DB8 (file off 0x0246): 4EF9 0000A62C  -> 0x0A62C  general store buy loop
+-$7DBE (file off 0x0240): 4EF9 00009D76  -> 0x09D76  Arena Games ticket engine
+-$7DFA (file off 0x0204): 4EF9 000092F2  -> 0x092F2  event_dat_loader (!)
+```
+
+So **explicit selector `0x08` is the arena engine**, not the default-range bin.
+The default-range dispatch instead **re-enters the event loader** with a
+synthetic index — most likely to load one of event.dat's non-map "string bank"
+pseudo-records (e.g. decoder location 60, "Nordon/Nordonna/Corak" — see below)
+keyed by the category/index pair; that reinvocation is not reverse-engineered
+yet. The practical effect of the earlier mistake: every default-range selector
+(Atlantium Olympic trials, post-victory reward tiers, the game-start Corak
+monologue, ...) was showing the arena's "you must have a ticket to compete"
+text, which is why unrelated quests appeared to demand a ticket. Fixed in both
+`game/src/events/EventTownServices.cpp` (ticket engine moved to `case 0x08`,
+`default:` no longer fabricates ticket text) and the web walker's
+`selectorBin.js`/`eventVm.js`.
 
 Cost formulas are kept as documented helpers `eventVmTrainingCostPerChar` /
 `eventVmHealingCostPerChar` (FAQ §3-6, doc 34 §13.2; map→town-index `[1,5,2,4,2]`)
@@ -286,12 +351,13 @@ ASM-confirmed.
 **Town-service transaction layer — now ported (byte-exact leaf ops).** The
 faithful per-character mutations the temple/training engine performs are
 implemented in `game/src/events/TownServiceTransactions.{h,cpp}` and driven by a
-**swappable UI backend** `ITownServiceUi` (`TownServiceMenu.{h,cpp}`), so the
+**swappable UI backend** `ITownServiceUi` (`TownServiceMenu.{h,cpp}`) +
+`PlayTownServiceUi` (`game/src/ui/PlayTownServiceUi.cpp`), so the
 LOGIC/costs/state are ASM-canonical while interaction is pluggable (CLAUDE.md).
-`eventExecTownSelector` now runs the real temple (`0x04`) / training (`0x02`)
-menu when a UI backend is bound (`EventRuntime::bindTownServiceUi`); with no
-backend it falls back to the str.dat intro + deferral (no fabrication, so the
-current runtime is unchanged). Ported leaves:
+`eventExecTownSelector` runs temple (`0x04`), training (`0x02`), smith (`0x06`),
+guild (`0x05`), and tavern (`0x03`) menus when a UI backend is bound; pub/temple
+require y/n on the str.dat intro first (§ above). With no backend it falls back
+to intro + deferral (no fabrication). Ported leaves:
 
 | leaf (transaction) | ASM | behavior |
 |--------------------|-----|----------|
@@ -324,16 +390,123 @@ Poorman's Portal (Middlegate) remains a self-contained fixed-cost transaction
   (`0x019030`) rather than deducting gp; drink stat bonuses are applied by
   unported VM opcode handlers; sick/success roll `0x19D64`/`0x19B28`; rumors
   `0x97FC` walk per-location bytecode `A4-$119A` (display-only).
-- **Store** (`0x07`) / **Arena** (`0x08`): shared category-shop **mega-handler** `0x9D76`
-  (via `-$7DB8`/`-$7DBE`→`-$7DFA`; runtime stubs init `0x24928`). Buy loop `0xA62C`
+- **Store** (`0x07`, thunk `-$7DB8` → `0xA62C`) — byte-verified, own fixed
+  handler; separate from the arena engine below. The store buy loop `0xA62C`
   uses a hard `record+$66 ≥ 100 gp` gate (`0xA75E`) and an effect jump table
   `0xA3AE` keyed on roster `+$50` nibbles; item pools `A4-$7136`/`-$713C`.
+
+### Arena Games ticket engine (`0x9D76`, explicit selector `0x08`)
+
+**Revised 2026-07** — byte-verified by reading the A4 vtable trampoline table
+directly out of `EXTRACTED/ghidra/mm2_data_00.bin` (file offset `0x7FFE+disp`,
+doc 49): `-$7DBE` (file off `0x0240`) is `4EF9 00009D76`, i.e. **explicit OP_0E
+selector `0x08`** — NOT the default-range dispatch — is the sole path into
+this routine. (`-$7DFA`, the default-range thunk, is `4EF9 000092F2` = the
+SAME `event_dat_loader` used to enter a normal on-map location — an earlier
+pass misread the table and swapped these two, which made the port fabricate
+"you must have a ticket to compete" for every unrelated default-range selector
+including the game-start Corak monologue; see the correction note above.) This
+is **not** a generic shop, and there is no per-category branching inside it —
+selector `0x08` runs the exact same code, unconditionally, wherever an
+event.dat script encodes it (e.g. Middlegate's arena-entrance tile, event 9 in
+`EXTRACTED/docs/events/loc_00_middlegate.md`, decoder-labeled
+`open_arena_shop`):
+
+1. Scans every party member's **backpack only** (record `+0x3A..0x3F`, NOT
+   equipped slots), member-major then slot-minor (asm `0x9D9C-0x9DDA`), for a
+   ticket item `0xD0..0xD3` (Green/Yellow/Red/Black).
+2. On miss: shows `"Sorry, but you must have a ticket to compete in these
+   games."` (code strings `0xA082`/`0xA0A7`, byte-exact) and ends — no combat.
+3. On hit: consumes the ticket (thunk `-$7F26`), shows `"The games master
+   accepts your ticket.  Let the battle begin!"` (`0xA0BF`/`0xA0E5`), then
+   arms a **fixed encounter** through the *same* battle-slot array (`A4-$11DE`)
+   and combat thunk (`-$7EDE`) as OP_12, with
+   `monster_type = ((color*3 + area[screen]) * 16) + rng(1,16)`
+   (asm `0x9E86-0x9EC2`; `area[5]` = data hunk `0xE74` = `{0,2,0,0,1}` for
+   Middlegate/Atlantium/Tundara/Vulcania/Sandsobar).
+4. On victory (`A4-$77BD`): grants gold from a 4×3 table (data hunk `0xE7A`,
+   ticket color × town tier `min(screen,2)`) to the **first eligible** party
+   member and prints `"Winner, you receive N gold"` (`0xA0FC`/`0xA111`):
+
+   | color \\ tier | Middlegate | Atlantium | elsewhere |
+   |------|-----------:|----------:|----------:|
+   | Green (`0xD0`)  | 200   | 1,500  | 500    |
+   | Yellow (`0xD1`) | 2,000 | 5,000  | 3,000  |
+   | Red (`0xD2`)    | 7,000 | 15,000 | 10,000 |
+   | Black (`0xD3`)  | 20,000| 50,000 | 30,000 |
+
+   The same reward loop also has a **documented ROM bug** that corrupts
+   `record+0x79` instead of setting a class-quest flag cleanly — see
+   [`36-class-quest-hp-bug.md`](36-class-quest-hp-bug.md).
+
+Port status: `game/src/events/EventVmHelpers.{h,cpp}` implements the
+deterministic ticket scan/consume + monster-type/gold-table helpers
+(`eventVmFindArenaTicket`, `eventVmConsumeArenaTicket`,
+`eventVmArenaMonsterType`, `eventVmArenaGoldReward`), and
+`EventTownServices.cpp`'s **`case 0x08`** shows the real deny/accept text and
+arms the encounter via `eventRunFixedEncounter` (same as OP_12). The `default:`
+case (true default-range selectors) no longer fabricates ticket-check text —
+see the correction above; it falls back to the generic OP_0B/door sign title
+until the event-loader-reinvocation mechanism is reverse-engineered. Reward
+granting on victory is **not yet ported** (no combat engine / victory
+callback exists — same fidelity level as OP_12/13; see
+`EventCombatEncounter.h`). Codec/tables mirrored in
+`tools/mm2_selector_bin.py` and `wiki/maze-walker/selectorBin.js` (the web
+walker DOES run the full ticket→combat→reward loop synchronously for selector
+`0x08`, since it has no such engine gap).
 - Temple cleric-spell purchase D–F (`0x1DAC6` → spellbook bit; spell system), the
   donation `0x1F` reward grant (found-item buffer `A4-$794C`/`A4-$3F1C`, stat bump
-  `A4-$5770`, Nordon farthing payoff), the training **HP path** (`0x9BCA`, calendar
-  mode `0x9B48`), inn (`-$7CD4`), guild (`0x1E3E6`/enroll `0x1A1B2`), `0x0A` goblet
-  quest (`-$7DAC`), `0x64` portal (`-$7D9A`), plus the interactive presentation
-  (member-select UI, RNG caption tables).
+  `A4-$5770`), the training **HP path** (`0x9BCA`, calendar mode `0x9B48`),
+  inn (`-$7CD4`), guild enroll gold-deduct + roster+$0B write (`-$7DA0` →
+  `0xD89C` → `0x1A1B2`), `0x0A` Feldecarb Fountain farthing check + castle-key
+  reward (`-$7DAC` → `0xD634`), `0x64` portal (`-$7D9A`), plus the interactive
+  presentation (member-select UI, RNG caption tables).
+
+### `event.dat` shared cross-town "string bank" (decoder location 60)
+
+Decoder location 60 (`EXTRACTED/docs/events/loc_60_quest_nordon_nordonna_corak.md`,
+`record kind: string_bank`) has **no script segments of its own** — every
+"event" in it is `(missing script segment)` — it is a pure string pool. Its 28
+strings are the **real, town-invariant text** for several generic selectors
+that would otherwise show a fabricated/misleading placeholder:
+
+| str idx | text | used by |
+|---------|------|---------|
+| `[08]` | "The spirit of Corak proclaims, 'Fantastic adventure awaits you...'" | game-start Corak monologue |
+| `[09]`–`[15]` | Nordon's Goblet-quest dialogue | **Nordon @ Middlegate `(10,2)`** — accept quest, return goblet, visit Nordonna (see [`53-nordon-nordonna-quests.md`](53-nordon-nordonna-quests.md)) |
+| `[16]`–`[20]` | Nordonna's kobold-rescue + hireling reward | **Nordonna @ `(1,2)`**; sons rescued cavern loc 17 `(15,0)`; hire **A/B** at inn (doc 53) |
+| `[21]` | "A sleepy conjurer yawns, 'My friends, for only 20 gold I can enroll you in the local mage guild.' Buy in (y/n)?" | `0x0D` enroll mage guild |
+| `[22]` | "Not enough gold!" | shared rejection |
+| `[23]` | "Fanciful Feldecarb Fountain flows full as fluttering faeries frolic fastidiously. Flick a farthing (y/n)?" | `0x0A` **Feldecarb Fountain** @ Middlegate **`(2,10)/W`** (top-right of town) |
+| `[24]` | "You find a fabulous castle key!" | fountain success |
+| `[25]` | "Fool, you have no farthing to flick!" | fountain failure when no farthing item — **NOT** arena tickets (`0x08` @ `(2,13)`) |
+| `[26]` | key-purchase prompt (500gp) | locksmith |
+
+Note that Middlegate's OWN local string table happens to also contain "Fool,
+you have no farthing to flick!" at `str[20]` (coincidence: Nordon's farthing
+theme recurs locally too) — this is what the OP_0B str_idx/caption bug (see
+"`OP_0B` does not display text" below, and doc 28 §2.1) was accidentally
+displaying for the enroll-guild and goblet-quest doorways, since both those
+tiles' `OP_0B` calls happen to pass sign id `0x14`, which collided with local
+`str[20]` under the old (wrong) "str_idx doubles as a caption index" logic.
+
+### `OP_0B` does not display text (corrected 2026-07)
+
+Direct trace of `event_op0b_service_window` @ `0x15DB0` (asm, full listing in
+`EXTRACTED/mm2.capstone.annotated.asm`) shows it: (1) resolves `str_idx` (its
+first byte argument) through the per-env sign table @ `0x15756` into an `.anm`
+sign/portrait id, (2) draws the window frame + portrait bitmap via thunks
+`-$7FBC`/`-$7FC2`, and (3) sets exit-flag bit `2`. There is **no `jsr` to any
+text/string routine anywhere in the handler** — `str_idx` is a **sign lookup
+key only**, never a `str.dat` text index, despite the name. A prior port pass
+ALSO fed `str_idx` into `resolveString()` to fabricate a "service title"
+caption; because the sign-table key and the local string-table index share the
+same byte range, this produced byte-for-byte wrong text whenever a location
+happened to reuse a sign id that collided with an unrelated string (see the
+Middlegate `0x14`/`str[20]` and `0x03`/`str[3]` examples above). Fixed by
+removing the fabricated capture in `EventRuntime.cpp`'s `case 0x0B` — the sign
+graphic is still drawn (that part is real and ASM-confirmed), but no caption
+text is derived from it anymore.
 
 - **Default** (any other selector) -> `0x15EDC`, which bins the selector into a
   *service category* using engine range-check `-$7E9C` and calls town handler `-$7DFA`:
@@ -709,9 +882,9 @@ incomplete; **Unknown** = behaviour not traced.
 | `0B` | Partial | Service/title window (`-$7FBC`/`-$7FC2`); arg2 position byte semantics |
 | `0C` | Partial | Map transition (dest screen + packed entry coord); bit6 remap path |
 | `0D` | Verified | `0x06FB8` canned on-screen sequence player (idx 0..9; idx 0 gated by `-$79AF`, 1..9 by `-$79B0`). Presentation-only, no GS writes → port stubs it logic-faithfully |
-| `0E` | Partial | Dispatch + default-range bins **Verified** byte-exact (port `eventVmIsTownServiceSelector` matches `0x15EDC` ranges → categories `0x3C`–`0x46`). Default path also stores adjusted index into `A4-$5D46` and calls shop engine `-$7DFA` with screen-id temporarily set to the category byte. **Explicit-case dispatch now mapped byte-exact** (selector→handler-address table in §OP_0E). The shop/temple/training/guild engine (`-$7Dxx` vtable thunks) is **unported**, but the C++ `eventExecTownSelector` was **de-fabricated**: selectors 1–8 now show the **real `str.dat` entry text** (transcribed) and **defer** the interactive A–F menu (per-selector handler table in §OP_0E). Training/healing cost formulas are kept as documented helpers (`eventVmTrainingCostPerChar`/`eventVmHealingCostPerChar`, FAQ §3-6) and tested, not auto-applied. Dead/eradicated healing multipliers + the `0x0A`/`0x0D`/`0x64`/default-range shops remain documented KNOWN GAPS |
+| `0E` | Partial | Dispatch + default-range bins **Verified** byte-exact. **Ported with UI backend:** temple/training/smith/guild/tavern menus; pub/temple intro y/n → menu; smith direct shop (doc 28 §1.4.3). **Partial:** tavern food/drink RNG, inn rest, store `0xA62C`, default-range `-$7DFA` reinvoke, **arena `0x08` victory rewards**, **Feldecarb farthing transaction `0x0A`**, guild enroll `0x0D` — **arena tickets and farthings are separate mechanics** |
 | `0F` | Verified | End script / cleanup `0x171AC` |
-| `10`/`11` | Partial | Conditional token skip verified; static disasm needs full `-$6CC8` length table |
+| `10`/`11` | Verified | Conditional token skip; full `-$6CC8` length table now extracted byte-exact and ported (`eventVmTokenDelta`, includes the `OP_00`/`OP_25` ROM quirks — see §Notes on `*_SKIPTOK` Opcodes) |
 | `12` | Verified | 10 monster ids → `A4-$11DE`; mode=0x80; **tail1=`-$11D4` overflow/breed type, tail2=`-$77BE` live count** (see §OP_12/13). Combat run (`-$7EDE`) is unported engine |
 | `13` | Verified | Same setup, mode=0 (seeded-random); clears tail fields; random picker `0x1213E` augments |
 | `14` | Verified | Clear tile event / visited bit7 |
@@ -730,12 +903,12 @@ incomplete; **Unknown** = behaviour not traced.
 | `22` | Verified | Era range gate (`-$79B5`) |
 | `23` | Verified | Day-of-year gate (`0x16ADA`). day = low byte of `-$79DE[era]`. `arg1=0xB5`→odd-day, `arg1=0xB6`→even-day, else inclusive byte range `[arg1,arg2]`. Ported byte-exact (the `0xB5`/`0xB6` odd/even-day cases were previously missing). See §OP_23 |
 | `24` | Partial | Gold predicate via `0x155DA` + `-$7E66`; amounts 10/25/50/200/500 observed; exact compare op untested |
-| `25` | Partial | Non-gold `u16` code via `-$7E66`; decoded values `0`/`1`/`2` only |
+| `25` | Partial | Non-gold `u16` code via `-$7E66`; decoded values `0`/`1`/`2` only. Handler reads 2 arg bytes (own length 3), but its ROM skip-table entry is 2 — see §Notes on `*_SKIPTOK` Opcodes |
 | `26`/`27` | Partial | Party-member select; `27` uses alternate input path when arg mode=1 |
 | `28` | Partial | Consume item if present → cond; keys/tickets user-verified |
 | `29` | Verified | Force script abort |
 | `2A` | Verified | 14-byte treasure/reward block (u24 gold/exp, u16 gems, 3× id/charges/flags triplets). Fills the found-item buffer (`A4-$3F10` gold / `-$3F12` gems / `-$3F1C`-`-$3F19`-`-$3F16` items) + sentinel `A4-$794C=$FF`, byte-exact via `mm2_found_items_op2a_fill`. Does NOT distribute to the party (that is the deferred Search payoff `0x1B19C`); the old port's immediate member-0 deposit was a fabrication and was removed. See §Found-item / treasure buffer |
-| `2B` | Partial | Token skip only when `A4-$77BD` set (combat-related flag) |
+| `2B` | Verified | Token skip only when `A4-$77BD` (combat-victory latch) set; ASM-traced byte-exact @ `0x16D74` (reads `u8` count via `0x155BE`, tests latch, `jsr $157FC`). Port never itself *sets* the latch (no combat engine yet — same gap as OP_12/13) |
 | `2C` | Partial | Add to global counter `-$79B8`; sets redraw exit flag |
 | `2D` | Verified | Match party class/sex/race nibble (any/all mode); 2-value variant when arg1 has no high bits |
 | `2E` | Verified | OR arg2 into member `+(arg1-0x6E)+0x51` for two specific classes ({4,2}/{3,1}) |
@@ -829,6 +1002,15 @@ are mutually exclusive unless noted.
 
 **RE guess:** B — arena entrance tiles decompile to `exec_selector(0x10)` / `0x49` / etc., not `OP_12` in the visible script (**Partial**).
 
+**RESOLVED (2026-07, Verified):** B, precisely. Every default-range selector
+(`0x09`–`0x10`, `0x11`–`0x37`, `0x38`–`0x4B`, `0x4C`–`0x54`, `0x56`–`0x5B`,
+`0x5C`–`0x5E`, `0x65`–`0x69`, `0x6A`–`0x7C`, `0x97`–`0x98`, `0xE3`–`0xF3`,
+`0xF4`–`0xFB`) is binned by `0x15EDC` and dispatched — via the SAME fixed
+thunk `-$7DFA` — to the SAME `0x9D76` Arena Games **ticket-combat-reward**
+engine (ticket scan/consume, fixed encounter, gold reward). It is not a
+generic shop. See §"Default-range Arena Games ticket engine (`0x9D76`)"
+below and `EventVmHelpers.h`.
+
 **Your answer:** ___
 
 ---
@@ -858,6 +1040,14 @@ are mutually exclusive unless noted.
 - **D.** Tail byte 1 = gold reward multiplier; byte 2 unused.
 
 **RE guess:** A — scripts emit varied non-zero tails (`06 02`, `11 5C`, `05 F0`, …) with stable 10-byte monster blocks (**Partial**, tail table not dumped).
+
+**RESOLVED (Verified):** A. Tail byte 1 → `A4-$11D4` = overflow/breed monster
+**type id** (also a presence flag: 0 ⇒ no overflow group, and the XP tier for
+that group). Tail byte 2 → `A4-$77BE` = the live-monster **count** seed
+(recomputed by the combat setup at `0x12CE0` from the actual listed-slot
+count, so it is closer to a difficulty/count seed than "backdrop"). Neither
+byte is a terrain/backdrop id or a gold multiplier. Full trace in
+§"`OP_12` / `OP_13` Encounter Setup (Verified)" above.
 
 **Your answer:** ___
 

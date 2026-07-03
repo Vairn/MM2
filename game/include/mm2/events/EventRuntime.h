@@ -3,7 +3,9 @@
 // Milestone: text ops OP_01..OP_07, OP_09, OP_0F + OP_10/OP_11 skip (event 20).
 
 #include "mm2/GameState.h"
+#include "mm2/combat/CombatSession.h"
 #include "mm2/events/EventTextView.h"
+#include "mm2/gameplay/ExploreActions.h"
 #include "mm2/platform/Platform.h"
 #include "mm2/world/MapWorld.h"
 
@@ -68,13 +70,70 @@ public:
     void bindTownServiceUi(ITownServiceUi *ui) { town_service_ui_ = ui; }
     ITownServiceUi *townServiceUi() const { return town_service_ui_; }
 
+    /** Optional rng(min,max) source (0x22BC6 contract) for the OP_0E default-range
+     *  Arena Games ticket engine (asm 0x9D76's rng(1,16) @ thunk -$7BB4). When
+     *  null, the arena's difficulty roll falls back to a fixed 1 (documented gap,
+     *  no fabricated randomness). */
+    void bindRng(gameplay::Rng *rng) { rng_ = rng; }
+
+    /** Optional combat session: when bound, OP_12/OP_13 (and the arena ticket
+     *  encounter routed through eventExecTownSelector) actually run the fight
+     *  instead of only seeding A4 and aborting the script. */
+    void bindCombat(combat::CombatSession *combat) { combat_ = combat; }
+    combat::CombatSession *combat() const { return combat_; }
+
     void setPendingPortal(const EventPortalOffer &offer) { pending_portal_ = offer; pending_portal_active_ = true; }
     void clearPendingPortal() { pending_portal_active_ = false; }
     bool hasPendingPortal() const { return pending_portal_active_; }
 
+    /** After a str.dat service intro Y/N (OP_0E 0x03/0x04/0x06), open the bound
+     *  town-service menu on "yes" (ASM: handler shell gates on A4-$7951). */
+    enum class PendingTownMenu : uint8_t {
+        None = 0,
+        Tavern,
+        Temple,
+        Smith,
+        Inn,
+        GuildEnroll,
+        BrainDetox,
+        SkillBuy,
+    };
+    void setPendingTownMenu(PendingTownMenu kind) { pending_town_menu_ = kind; }
+    void setPendingSkillBuy(uint8_t skill_id, uint32_t gold_cost)
+    {
+        pending_skill_id_ = skill_id;
+        pending_skill_cost_ = gold_cost;
+        pending_town_menu_ = PendingTownMenu::SkillBuy;
+    }
+    bool hasPendingTownMenu() const { return pending_town_menu_ != PendingTownMenu::None; }
+    bool takePendingBrainDetoxMemberSelect()
+    {
+        const bool v = pending_brain_detox_member_;
+        pending_brain_detox_member_ = false;
+        return v;
+    }
+
+    int locationId() const { return location_id_; }
+
+    /** OP_0E default-range dispatch (0x15EDC → event_dat_loader): run overlay
+     *  location `category` string/script slot `index` (ASM stores index in
+     *  A4-$5D46). String banks (e.g. loc 61 arena tiers) embed bytecode in
+     *  str[index]; returns false when the slot is missing or not executable. */
+    bool runDefaultRangeOverlay(GameStateView &gs, world::MapWorld &world, uint8_t category,
+                                uint8_t index);
+
+    /** Set when the player accepts the inn registry y/n (OP_0E 0x01 @ 0x1A1B2). */
+    bool takePendingInnGotoTown()
+    {
+        const bool v = pending_inn_goto_town_;
+        pending_inn_goto_town_ = false;
+        return v;
+    }
+
 private:
     void initParsed(GameStateView &gs);
     int poolSeek(uint8_t event_id) const;
+    int poolSeekIn(const Mm2EventLocation *loc, uint8_t event_id) const;
     uint8_t contextMask(const GameStateView &gs) const;
     bool eraGateOpen(const GameStateView &gs, const world::MapWorld &world) const;
 
@@ -90,6 +149,7 @@ private:
     void applyMapTransition(GameStateView &gs, world::MapWorld &world, uint8_t dest_screen,
                             uint8_t dest_tile);
     bool finishPendingPortal(GameStateView &gs, world::MapWorld &world, bool accepted);
+    bool finishPendingTownMenu(GameStateView &gs, bool accepted);
 
     Mm2EventFile file_{};
     bool loaded_ = false;
@@ -107,8 +167,21 @@ private:
     const Mm2PartyLaunch *launch_ = nullptr;
     const Mm2ItemsFile *items_ = nullptr;
     ITownServiceUi *town_service_ui_ = nullptr;
+    gameplay::Rng *rng_ = nullptr;
+    combat::CombatSession *combat_ = nullptr;
     bool pending_portal_active_ = false;
     EventPortalOffer pending_portal_{};
+    PendingTownMenu pending_town_menu_ = PendingTownMenu::None;
+    bool pending_inn_goto_town_ = false;
+    bool pending_brain_detox_member_ = false;
+    bool pending_skill_buy_member_ = false;
+    uint8_t pending_skill_id_ = 0;
+    uint32_t pending_skill_cost_ = 0;
+
+    int inline_script_end_ = -1;
+    int saved_location_id_ = -1;
+    const Mm2EventLocation *saved_loc_ = nullptr;
+    uint8_t saved_work_buf_[MM2_GS_EVENT_WORK_SIZE]{};
 };
 
 }  // namespace mm2::events

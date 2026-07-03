@@ -355,3 +355,80 @@ uint32_t mm2_smith_price(uint32_t base_gold, uint8_t meta)
     }
     return price;
 }
+
+uint32_t mm2_smith_sell_price(uint32_t buy_style_price)
+{
+    /* 0x1BFCC: divu.w #2 on the buy-style price (Merchant /2 deferred). */
+    return buy_style_price / 2u;
+}
+
+uint32_t mm2_smith_identify_cost(uint8_t backpack_flags)
+{
+    const uint8_t meta = (uint8_t)(backpack_flags & 0x3Fu);
+    if (meta == 0) {
+        return 10u;
+    }
+    /* Midpoint of rng(1, meta*100) @ 0x1BF60 — deterministic until shop RNG wired. */
+    return (1u + (uint32_t)meta * 100u) / 2u;
+}
+
+/* Mage guild sorcerer spells [map][slot] = {spell_index 0..47, gold}. Decoded
+ * from EXTRACTED/shop_tables.json static_by_town.mage_guild_spells (data hunk
+ * A4-$66E2 ids, cost decode 0x1D97A). */
+static const Mm2SpellShopSlot kMageGuildStock[MM2_TOWN_COUNT][MM2_MAGE_GUILD_SLOTS] = {
+    {{0, 10}, {2, 1000}, {6, 50}, {9, 100}},         /* Middlegate */
+    {{41, 50000}, {42, 50000}, {44, 100000}, {45, 100000}}, /* Atlantium */
+    {{21, 600}, {22, 2000}, {26, 3000}, {28, 3000}},        /* Tundara */
+    {{31, 5000}, {33, 5000}, {35, 5000}, {37, 25000}},      /* Vulcania */
+    {{13, 400}, {14, 200}, {17, 1000}, {20, 500}},          /* Sandsobar */
+};
+
+/* Temple cleric spell-purchase slots (menu D/E/F) [map][slot] = {spell_index
+ * 0..47, gold}. spell_index = spells_dat_index - 48 (cleric school offset).
+ * Decoded from EXTRACTED/shop_tables.json static_by_town.temple_spells (data
+ * hunk A4-$66F6, decode 0x1DAC6). */
+static const Mm2SpellShopSlot kTempleSpellStock[MM2_TOWN_COUNT][MM2_TEMPLE_SPELL_SLOTS] = {
+    {{0, 10}, {1, 10}, {5, 1000}},        /* Middlegate */
+    {{42, 20000}, {46, 50000}, {47, 100000}}, /* Atlantium */
+    {{14, 400}, {18, 100}, {23, 500}},        /* Tundara */
+    {{25, 2000}, {30, 3000}, {37, 10000}},    /* Vulcania */
+    {{8, 250}, {11, 300}, {13, 200}},         /* Sandsobar */
+};
+
+/* Guild-membership bit in record+0x79 (class_quest_guild_mask), data hunk
+ * A4-$66A9. Writable via the generic event-script field selector 0x74 (ported,
+ * EventFieldMap.h) or the unported/buggy 0x9D76 class-quest reward loop @
+ * 0x9FE0 -- see mm2_town_tables.h and doc 36-class-quest-hp-bug.md. */
+static const uint8_t kMageGuildMemberMask[MM2_TOWN_COUNT] = {0x02, 0x04, 0x08, 0x10, 0x20};
+
+int mm2_mage_guild_stock(int map_id, Mm2SpellShopSlot out[MM2_MAGE_GUILD_SLOTS])
+{
+    int i;
+    if (!out || map_id < 0 || map_id >= MM2_TOWN_COUNT) {
+        return 0;
+    }
+    for (i = 0; i < MM2_MAGE_GUILD_SLOTS; ++i) {
+        out[i] = kMageGuildStock[map_id][i];
+    }
+    return 1;
+}
+
+int mm2_temple_spell_stock(int map_id, Mm2SpellShopSlot out[MM2_TEMPLE_SPELL_SLOTS])
+{
+    int i;
+    if (!out || map_id < 0 || map_id >= MM2_TOWN_COUNT) {
+        return 0;
+    }
+    for (i = 0; i < MM2_TEMPLE_SPELL_SLOTS; ++i) {
+        out[i] = kTempleSpellStock[map_id][i];
+    }
+    return 1;
+}
+
+uint8_t mm2_mage_guild_member_mask(int map_id)
+{
+    if (map_id < 0 || map_id >= MM2_TOWN_COUNT) {
+        return 0;
+    }
+    return kMageGuildMemberMask[map_id];
+}

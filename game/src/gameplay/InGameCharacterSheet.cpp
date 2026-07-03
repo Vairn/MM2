@@ -11,6 +11,7 @@
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/runtime/PathScratch.h"
 #include "mm2/ui/AmigaCharacterUiLayout.h"
+#include "mm2/ui/RosterSkillDisplay.h"
 
 #include "mm2_image32_codec.h"
 
@@ -275,13 +276,10 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
         return;
     }
 
-    if (session && session->sub_mode == SheetSubMode::SpellBook) {
-        renderSpellBook(c, roster, launch, party_slot);
-        return;
-    }
-
     const Mm2RosterRecord &rec = roster.records[roster_idx];
     const char disp_char = static_cast<char>('1' + party_slot);
+    const bool hireling = roster_idx >= kRosterHirelingPageOffset;
+    const int hireling_index = hireling ? (roster_idx - kRosterHirelingPageOffset) : -1;
 
     gfx::drawPlayModalBackdrop(c);
 
@@ -292,6 +290,10 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
                   alignHeaderName(rec.alignment_base), raceHeaderName(rec.race), className(rec.class_id),
                   (rec.class_quest_guild_mask & 0x80) ? "+" : "");
     drawBorderIntegratedTextAt(c, kPlayOverlayBorderRow, kSheetHeaderCol, header);
+
+    const char *skill_names[6] = {};
+    const int skill_count = hireling ? mm2::ui::collectHirelingSkillNames(hireling_index, skill_names, 6)
+                                     : mm2::ui::collectRosterSkillNames(rec, skill_names, 6);
 
     char buf[48];
     const int r0 = kSheetStatRowBase;
@@ -318,6 +320,19 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
     drawCellText(c, r0 + 3, kSheetStatColMid, buf);
     std::snprintf(buf, sizeof(buf), "SL=%u", rec.spell_level);
     drawCellText(c, r0 + 3, kInGameSheetSlashCol + 1, buf);
+
+    std::snprintf(buf, sizeof(buf), "Thievery %u%%", mm2::ui::rosterDisplayThievery(rec));
+    drawCellText(c, r0 + 4, kSheetStatColMid, buf);
+    if (skill_count >= 1) {
+        drawCellText(c, r0 + 5, kSheetStatColMid, skill_names[0]);
+    } else {
+        drawCellText(c, r0 + 5, kSheetStatColMid, mm2::ui::kRosterEmptySkillSlot);
+    }
+    if (skill_count >= 2) {
+        drawCellText(c, r0 + 6, kSheetStatColMid, skill_names[1]);
+    } else {
+        drawCellText(c, r0 + 6, kSheetStatColMid, mm2::ui::kRosterEmptySkillSlot);
+    }
 
     std::snprintf(buf, sizeof(buf), "Age=%u", rec.age);
     drawCellText(c, r0 + 0, kSheetStatColRight, buf);
@@ -369,6 +384,10 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
     }
 
     drawSheetEscFooter(c);
+
+    if (session && session->sub_mode == SheetSubMode::SpellBook) {
+        renderSpellBook(c, roster, launch, party_slot);
+    }
 }
 
 void InGameCharacterSheet::renderQuickRef(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
@@ -420,91 +439,58 @@ void InGameCharacterSheet::renderQuickRef(gfx::ScreenCompositor &c, const Mm2Ros
 void InGameCharacterSheet::renderSpellBook(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
                                            const Mm2PartyLaunch &launch, int party_slot) const
 {
-    gfx::drawPlayModalBackdrop(c);
-
     const int roster_idx = rosterIndexForPartySlot(launch, party_slot);
     if (roster_idx < 0 || roster_idx >= MM2_ROSTER_RECORD_COUNT) {
-        drawCellText(c, 2, 2, "No character selected.");
-        drawModalEscFooter(c);
         return;
     }
 
     const Mm2RosterRecord &rec = roster.records[roster_idx];
     const SpellSchool school = spellSchoolForClass(rec.class_id);
-
-    char name[16];
-    mm2_roster_name_to_cstr(&rec, name, sizeof(name));
-
-    char header[80];
-    std::snprintf(header, sizeof(header), "%c) %s -- Spell Book", static_cast<char>('1' + party_slot), name);
-    drawBorderIntegratedTextAt(c, kPlayOverlayBorderRow, kSheetHeaderCol, header);
-
-    /* Non-casters (Knight/Robber/Ninja/Barbarian) have no spell book. The retail
-       cast picker @ 0x65fa is only opened for caster classes. */
     if (school == SpellSchool::None) {
-        drawCellText(c, kSheetStatRowBase + 2, kSheetStatColLeft, "This class has no spell book.", 220, 220, 220);
-        drawSheetEscFooter(c);
         return;
     }
 
-    const SpellMeta *table = schoolSpellTable(school);
-    char sub[40];
-    std::snprintf(sub, sizeof(sub), "School: %s    Known: %d/%d", schoolName(school),
-                  knownSpellCount(rec, school), kSpellsPerSchool);
-    drawCellText(c, kSheetStatRowBase - 1, kSheetStatColLeft, sub, 200, 200, 200);
+    /* Spell-book popup @ 0x6736: window -$7C74(row $A, col $7, w $1D, h $13).
+       Grid renderer @ 0x65FA: title $6714, header $671F, rows = level 1..9,
+       known marks = font glyph $17, columns spaced every 2 cells from col $5.
+       Height clipped to fit the 24-row play overlay (cast prompt @ row $17). */
+    constexpr int kWinRow = 10;
+    constexpr int kWinCol = 7;
+    constexpr int kWinW = 29;
+    constexpr int kWinH = 14;
+    constexpr int kTitleRow = kWinRow + 1;
+    constexpr int kHeaderRow = kWinRow + 3;
+    constexpr int kGridRowBase = kWinRow + 4;
+    constexpr int kLvlCol = kWinCol + 2;
+    constexpr int kMarkColBase = kWinCol + 5;
+    constexpr uint8_t kKnownMark = 0x17;
 
-    /* Two columns of known spells, grouped (in flat school/level order). The
-       "Sn/m" tag carries school + level + number, so level grouping is implicit
-       in the ordering (matching the 0x65fa grid's level columns). */
-    constexpr int kListTopRow = kSheetStatRowBase + 1;
-    constexpr int kListBottomRow = 21;
-    constexpr int kColLeft = kSheetStatColLeft;   // 0x02
-    constexpr int kColRight = 0x14;               // 20
-    const int rows_per_col = kListBottomRow - kListTopRow + 1;
-    const int capacity = rows_per_col * 2;
+    c.fillRect(kWinCol * 8, kWinRow * 8, kWinW * 8, kWinH * 8, 0, 0, 128, 255);
+    c.drawConsoleBox(kWinRow, kWinCol, kWinW, kWinH, 255, 255, 0);
 
-    int shown = 0;
-    int hidden = 0;
-    for (int n = 0; n < kSpellsPerSchool; ++n) {
-        if (!spellKnownInBook(rec, n)) {
-            continue;
+    drawBorderIntegratedText(c, kTitleRow, kWinCol, kWinW, "Spell Book", 255, 255, 128);
+    drawCellText(c, kHeaderRow, kLvlCol, "Lvl 1 2 3 4 5 6 7", 255, 255, 255);
+
+    int flat = 0;
+    for (int level = 1; level <= kSpellLevels; ++level) {
+        const int row = kGridRowBase + (level - 1);
+        char lvl[4];
+        std::snprintf(lvl, sizeof(lvl), "%d", level);
+        drawCellText(c, row, kLvlCol, lvl, 255, 255, 255);
+
+        const int slots = kSpellsPerLevel[level - 1];
+        for (int slot = 0; slot < slots; ++slot) {
+            if (spellKnownInBook(rec, flat)) {
+                const int col = kMarkColBase + slot * 2;
+                c.drawGlyph(cellX(col), cellY(row), kKnownMark, 255, 255, 255, 255);
+            }
+            ++flat;
         }
-        if (shown >= capacity) {
-            ++hidden;
-            continue;
-        }
-        const SpellMeta &m = table[n];
-
-        char cost[12];
-        if (m.per_level) {
-            std::snprintf(cost, sizeof(cost), "%u/L", m.sp);
-        } else {
-            std::snprintf(cost, sizeof(cost), "%uSP", m.sp);
-        }
-        if (m.gems > 0) {
-            char gem[8];
-            std::snprintf(gem, sizeof(gem), "+%uG", m.gems);
-            std::strncat(cost, gem, sizeof(cost) - std::strlen(cost) - 1);
-        }
-
-        char line[24];
-        std::snprintf(line, sizeof(line), "%c%u/%u %-8.8s %s", schoolTag(school), m.level, m.number, m.name, cost);
-
-        const int col = (shown < rows_per_col) ? kColLeft : kColRight;
-        const int row = kListTopRow + (shown % rows_per_col);
-        drawCellText(c, row, col, line, 230, 230, 230);
-        ++shown;
     }
 
-    if (shown == 0) {
-        drawCellText(c, kListTopRow + 1, kColLeft, "No spells learned yet.", 220, 220, 220);
-    } else if (hidden > 0) {
-        char more[32];
-        std::snprintf(more, sizeof(more), "...and %d more", hidden);
-        drawCellText(c, kListBottomRow, kColRight, more, 200, 200, 160);
-    }
-
-    drawSheetEscFooter(c);
+    /* Cast picker prompt @ 0x79C6 (cast execution is still a GAP). */
+    drawCellText(c, 0x16, 0x0B, "Cast Spell Level:", 255, 255, 255);
+    drawCellText(c, 0x16, 0x17, "|", 255, 255, 255);
 }
 
 SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session, Mm2RosterFile &roster,

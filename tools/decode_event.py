@@ -32,6 +32,9 @@ import struct
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from mm2_selector_bin import format_exec_selector_bin  # noqa: E402
+
 
 def read_header(data: bytes) -> list[tuple[int, int]]:
     entries = []
@@ -758,8 +761,13 @@ def decompile_op(
     if op == 0x0E:
         sel = args[0] if args else 0
         label = SELECTOR_NAMES.get(sel)
+        bin_note = format_exec_selector_bin(sel)
+        if label and bin_note:
+            return f"exec_selector(0x{sel:02X})  # {label}; {bin_note}"
         if label:
             return f"exec_selector(0x{sel:02X})  # {label}"
+        if bin_note:
+            return f"exec_selector(0x{sel:02X})  # {bin_note}"
         return f"exec_selector(0x{sel:02X})"
     if op == 0x0B and len(args) >= 2:
         # OP_0B loads a signboard `.anm` sprite (NOT event-local / str.dat text).

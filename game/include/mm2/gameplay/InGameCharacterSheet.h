@@ -72,9 +72,8 @@ public:
     void renderQuickRef(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
                         const Mm2PartyLaunch &launch) const;
 
-    /** Spell-book view (cast picker grid @ 0x65fa). Lists the character's known
-        spells grouped by school/level with manual SP/gem costs. Rendered in-place
-        by renderSheet when the session is in the SpellBook sub-mode. */
+    /** Spell-book popup (grid @ 0x65fa inside window @ 0x6736). Overlays the
+        character sheet with the retail 9×7 known-spell grid and cast prompt. */
     void renderSpellBook(gfx::ScreenCompositor &c, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
                          int party_slot) const;
 

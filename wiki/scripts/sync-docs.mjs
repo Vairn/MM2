@@ -114,4 +114,8 @@ if (galleryResult.status !== 0 && galleryResult.status !== null) {
   console.warn('gallery export failed (missing assets or pillow?)');
 }
 
+// MM1 WALLPIX sheets (optional lagdotcom exports).
+const mm1GalleryScript = path.join(wikiRoot, 'scripts', 'export-mm1-gallery.py');
+spawnSync(py, [mm1GalleryScript], { stdio: 'inherit', cwd: repoRoot });
+
 console.log('Synced docs -> wiki/docs/');

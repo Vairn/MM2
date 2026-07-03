@@ -39,7 +39,7 @@ public:
      * Record the requested service + context, return false so the blocking driver
      * exits; the interactive menu then runs as a multi-frame overlay. ---- */
     bool chooseTempleOption(const mm2::events::TownServiceContext &ctx,
-                            mm2::events::TempleOption &out) override;
+                            mm2::events::TempleOption &out, int &out_spell_slot) override;
     bool chooseTrainingOption(const mm2::events::TownServiceContext &ctx,
                               mm2::events::TrainingOption &out, int &stat_id) override;
     bool chooseSmithCategory(const mm2::events::TownServiceContext &ctx, int &out_category) override;
@@ -49,6 +49,19 @@ public:
     {
         return false;
     }
+    bool chooseMageGuildSpell(const mm2::events::TownServiceContext &ctx,
+                              const Mm2SpellShopSlot[MM2_MAGE_GUILD_SLOTS], int &) override;
+    /* townSvcRunMageGuild checks the 0x1E410 party gate BEFORE ever calling
+     * chooseMageGuildSpell, so this fires instead when no member qualifies.
+     * Captures ctx (chooseMageGuildSpell never ran) and flags a "denied"
+     * overlay instead of a menu. */
+    void reportGuildNotMember(const mm2::events::TownServiceContext &ctx) override;
+
+    /* Tavern (0x1D208): capture the context and menu data, return false so
+     * townSvcRunTavern exits; the multi-frame overlay then takes over. */
+    bool chooseTavernOption(const mm2::events::TownServiceContext &ctx,
+                            const mm2::events::TavernMenuData &data,
+                            mm2::events::TavernOption &out) override;
 
     /* ---- Multi-frame overlay lifecycle (owned + driven by the host). ---- */
 
@@ -70,13 +83,27 @@ public:
     void render(gfx::ScreenCompositor &c) const;
 
 private:
-    enum class Kind : uint8_t { None, Temple, Training, Smith };
-    enum class Phase : uint8_t { Menu, SmithItems, Member };
+    enum class Kind : uint8_t { None, Temple, Training, Smith, MageGuild, Tavern };
+    enum class Phase : uint8_t { Menu, SmithItems, Denied, TavernFood, TavernDrink, TavernRumor };
+    enum class SmithMode : uint8_t { Buy, Sell, Identify };
 
     void applyTempleAndReturn(int party_slot);
     void applyTrainingAndReturn(int party_slot);
     void applySmithBuyAndReturn(int party_slot);
+    void applySmithSellAndReturn(int party_slot);
+    void applySmithIdentifyAndReturn(int party_slot);
+    void applyTavernFeedingFrenzy();
+    void applyGuildBuyAndReturn(int party_slot);
+    void showActiveMemberGold();
     void buildSmithView();
+    void buildSmithBackpackView();
+    void buildGuildStock();
+
+    const char *serviceTitle() const;
+    const char *selectPromptText() const;
+    bool showGatherGoldLine() const;
+    void drawLeftChrome(gfx::ScreenCompositor &c) const;
+    void drawTrainingPrompt(gfx::ScreenCompositor &c) const;
 
     bool pending_ = false;
     bool active_ = false;
@@ -84,11 +111,27 @@ private:
     Phase phase_ = Phase::Menu;
     mm2::events::TownServiceContext ctx_{};
 
-    /* Pending selection carried from the option/category menu into member-select. */
+    /* Last menu action context (temple spell slot, smith item slot, …). */
     mm2::events::TempleOption temple_opt_ = mm2::events::TempleOption::Exit;
-    int smith_category_ = 0;      /* smith: Mm2SmithCategory */
+    int temple_spell_slot_ = -1;  /* temple: chosen D/E/F spell slot 0..2 */
+    Mm2SpellShopSlot temple_spell_stock_[MM2_TEMPLE_SPELL_SLOTS]{};
+    int smith_category_ = 0;      /* smith: Mm2SmithCategory (buy mode) */
+    SmithMode smith_mode_ = SmithMode::Buy;
     int smith_slot_ = -1;         /* smith: chosen shop slot 0..5 */
+    bool smith_identify_pending_ = false; /* 0x1BBD6: dismiss identify text before next pick */
     mm2::events::SmithItemView smith_view_[MM2_SMITH_SLOTS]{};
+    Mm2SpellShopSlot guild_stock_[MM2_MAGE_GUILD_SLOTS]{};
+    int guild_slot_ = -1;         /* mage guild: chosen A-D spell slot 0..3 */
+    bool guild_denied_ = false;   /* 0x1E410 whole-party membership gate failed */
+
+    /* Tavern state */
+    mm2::events::TavernMenuData tavern_data_{};
+    mm2::events::TavernOption tavern_opt_ = mm2::events::TavernOption::Exit;
+    int tavern_sub_sel_ = -1;   /* food or drink index chosen in sub-menu */
+    int tavern_rumor_idx_ = 0;  /* E: cycles through rumor pool (A4-$594E) */
+    int tavern_tip_idx_   = 0;  /* D: cycles through tip   pool (A4-$58AE) — separate from E */
+    bool tavern_tipped_ = false; /* true when current TavernRumor phase was triggered by D */
+    int active_member_ = 0;         /* A4-$5A3A shop member index; digits 1..8 or # */
 
     char status_[96] = {};        /* last transaction feedback line */
 };

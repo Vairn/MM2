@@ -1,6 +1,8 @@
 /** Walker session party / quest stub — mirrors game EventVmHelpers + roster fields (subset). */
 "use strict";
 
+import { MAGE_GUILD_MEMBER_MASK } from "./townTables.js";
+
 /** @typedef {{ id: number, count: number, charges?: number, flags?: number }} InvStack */
 
 /** Field selector → record byte offset (from game/include/mm2/events/EventFieldMap.h). */
@@ -10,6 +12,9 @@ const FIELD_OFFSET = {
   0x76: 0x76,
   0x7b: 0x7b,
 };
+
+const GUILD_ENROLL_COST = 20;
+const BRAIN_DETOX_COST = 100;
 
 const TOWN_TRAIN_INDEX = { 0: 1, 1: 5, 2: 2, 3: 4, 4: 2 };
 const DONATION_GOLD = { 0: 20, 1: 250, 2: 40, 3: 120, 4: 40 };
@@ -55,12 +60,144 @@ export function memberFromExport(raw) {
     speed: raw.speed ?? 10,
     accuracy: raw.accuracy ?? 10,
     luck: raw.luck ?? 10,
+    thievery: raw.thievery ?? 0,
+    unlockSkill: raw.unlockSkill ?? 0,
     endurance: raw.endurance ?? 14,
     intelligence: raw.intelligence ?? 10,
     personality: raw.personality ?? 10,
+    homeTown: raw.homeTown ?? 0,
+    classQuestGuildMask: raw.classQuestGuildMask ?? 0,
+    /** Packed secondary-skill / title nibbles @ roster+0x50 (ASM selector 0x6D). */
+    skillPack: raw.skillPack ?? 0,
+    spellBook: raw.spellBook ?? new Array(12).fill(0),
+    pubMeal: raw.pubMeal ?? 0,
     equipped: raw.equipped ?? [],
     backpack: raw.backpack ?? [],
   });
+}
+
+/** Sorcerer flat spell index 0..47 in roster spellbook bytes @ +0x51 region. */
+export function memberSpellKnown(member, flatIndex) {
+  const book = member.spellBook ?? [];
+  const byte = flatIndex >> 3;
+  const bit = flatIndex & 7;
+  return ((book[byte] ?? 0) & (1 << bit)) !== 0;
+}
+
+export function memberGrantSpell(member, flatIndex) {
+  if (flatIndex < 0 || flatIndex > 47) return false;
+  if (!member.spellBook?.length) member.spellBook = new Array(12).fill(0);
+  const byte = flatIndex >> 3;
+  member.spellBook[byte] = (member.spellBook[byte] ?? 0) | (1 << (flatIndex & 7));
+  return true;
+}
+
+/**
+ * Mage-guild shop-open membership gate, ASM-confirmed at 0x1E410:
+ * (record+0x79 class_quest_guild_mask) & MAGE_GUILD_MEMBER_MASK[mapId] != 0.
+ */
+export function memberGuildMember(member, mapId) {
+  const mask = MAGE_GUILD_MEMBER_MASK[mapId] ?? 0;
+  return mask !== 0 && ((member.classQuestGuildMask ?? 0) & mask) !== 0;
+}
+
+/** Read a roster record byte by offset (mirrors eventVmApplyPartyByteOp field access). */
+export function getMemberFieldByte(member, offset) {
+  switch (offset) {
+    case 0x0b:
+      return member.homeTown ?? 0;
+    case 0x50:
+      return member.skillPack ?? 0;
+    case 0x79:
+      return member.classQuestGuildMask ?? 0;
+    default:
+      if (!member.rawFields) member.rawFields = {};
+      return member.rawFields[offset] ?? 0;
+  }
+}
+
+/** Write a roster record byte by offset (full byte replace @ 0x1A1D0 for home town). */
+export function setMemberFieldByte(member, offset, value) {
+  const v = value & 0xff;
+  switch (offset) {
+    case 0x0b:
+      member.homeTown = v;
+      return;
+    case 0x50:
+      member.skillPack = v;
+      return;
+    case 0x79:
+      member.classQuestGuildMask = v;
+      return;
+    default:
+      if (!member.rawFields) member.rawFields = {};
+      member.rawFields[offset] = v;
+  }
+}
+
+/** ASM @ 0x1A1B2: record+0x0B <- map+1 for each active party member (clears bit 7). */
+export function applyInnRegistry(session, mapId) {
+  if (mapId < 0 || mapId >= 5) return;
+  const home = (mapId + 1) & 0xff;
+  for (const m of ensureParty(session)) {
+    setMemberFieldByte(m, 0x0b, home);
+  }
+}
+
+/**
+ * OP_0E 0x0D guild enroll (eventApplyGuildEnroll): 20 gp party deduct, OR
+ * record+0x79 per-town mask on all members, then home-town registry write.
+ */
+export function applyGuildEnroll(session, mapId) {
+  const mask = MAGE_GUILD_MEMBER_MASK[mapId] ?? 0;
+  if (!mask) return { ok: false, reason: "badMap" };
+  if (sessionPartyGoldTotal(session) < GUILD_ENROLL_COST) {
+    return { ok: false, reason: "gold" };
+  }
+  sessionDeductGold(session, GUILD_ENROLL_COST);
+  for (const m of ensureParty(session)) {
+    setMemberFieldByte(m, 0x79, getMemberFieldByte(m, 0x79) | mask);
+  }
+  applyInnRegistry(session, mapId);
+  return { ok: true };
+}
+
+/** OP_0E 0x10 brain detox: 100 gp from selected member, clear roster+0x50 skills. */
+export function applyBrainDetox(session, memberSlot) {
+  const member = getPartyMember(session, memberSlot);
+  if ((member.gold | 0) < BRAIN_DETOX_COST) {
+    return { ok: false, reason: "gold" };
+  }
+  member.gold = (member.gold | 0) - BRAIN_DETOX_COST;
+  memberClearAllSkills(member);
+  syncSessionGoldFromParty(session);
+  return { ok: true };
+}
+
+/** Clear packed skill nibbles @ roster+0x50 (gameplay::rosterClearAllSkills). */
+export function memberClearAllSkills(member) {
+  member.skillPack = 0;
+}
+
+export function memberHasSkillId(member, skillId) {
+  const id = skillId & 0x0f;
+  if (id < 1 || id > 15) return false;
+  const packed = member.skillPack ?? 0;
+  return (packed & 0x0f) === id || ((packed >> 4) & 0x0f) === id;
+}
+
+export function memberGrantSkillId(member, skillId) {
+  const id = skillId & 0x0f;
+  if (id < 1 || id > 15) return;
+  let packed = member.skillPack ?? 0;
+  if ((packed & 0x0f) === 0) {
+    packed = (packed & 0xf0) | id;
+  } else if (((packed >> 4) & 0x0f) === 0) {
+    packed = (packed & 0x0f) | (id << 4);
+  } else {
+    return;
+  }
+  member.skillPack = packed & 0xff;
 }
 
 /** @param {object | null} manifest */
@@ -176,6 +313,83 @@ export function memberHasItem(member, id, consume = false) {
     }
   }
   return false;
+}
+
+/**
+ * OP_16 @ 0x16520: count item in equipped (+0x28) and backpack (+0x3A) slots.
+ * @param {object} member
+ * @param {number} itemId
+ */
+export function memberCountItem(member, itemId) {
+  if (!itemId) return 0;
+  let count = 0;
+  normalizeMemberBackpack(member);
+  for (let i = 0; i < BACKPACK_SLOTS; i++) {
+    if (member.backpack[i].id === itemId) count++;
+  }
+  const eq = member.equipped ?? [];
+  for (let i = 0; i < BACKPACK_SLOTS; i++) {
+    if (eq[i]?.id === itemId) count++;
+  }
+  return count;
+}
+
+/** OP_16: match count on the first party member with any hit (asm 0x16520). */
+export function sessionCountPartyItem(session, itemId) {
+  for (const m of ensureParty(session)) {
+    const count = memberCountItem(m, itemId);
+    if (count > 0) return count;
+  }
+  return 0;
+}
+
+/**
+ * OP_32 @ 0x17190 -> 0x04614: sum nibbles of record+0x50 equal to id over
+ * living members (condition < 0x81).
+ */
+export function sessionCountPartyNibbleMatches(session, id) {
+  let count = 0;
+  const want = id & 0x0f;
+  for (const m of ensureParty(session)) {
+    if ((m.condition ?? 0) >= 0x81) continue;
+    const packed = m.skillPack ?? 0;
+    if ((packed & 0x0f) === want) count++;
+    if (((packed >> 4) & 0x0f) === want) count++;
+  }
+  return count;
+}
+
+/** Arena Games ticket item ids (0xD0..0xD3 = Green/Yellow/Red/Black), asm 0x9DAE-0x9DC6. */
+export const ARENA_TICKET_LO = 0xd0;
+export const ARENA_TICKET_HI = 0xd3;
+export const ARENA_TICKET_COLOR_NAMES = ["Green", "Yellow", "Red", "Black"];
+
+/**
+ * asm 0x9D9C-0x9DDA: scan every party member's BACKPACK ONLY (not equipped
+ * slots), member-major then backpack-slot-minor order, first match wins.
+ * @param {object[]} party
+ */
+export function findArenaTicket(party) {
+  for (let m = 0; m < party.length; m++) {
+    const member = party[m];
+    normalizeMemberBackpack(member);
+    for (let slot = 0; slot < BACKPACK_SLOTS; slot++) {
+      const id = member.backpack[slot]?.id ?? 0;
+      if (id >= ARENA_TICKET_LO && id <= ARENA_TICKET_HI) {
+        return { found: true, color: id - ARENA_TICKET_LO, memberIndex: m, backpackSlot: slot };
+      }
+    }
+  }
+  return { found: false, color: 0, memberIndex: -1, backpackSlot: -1 };
+}
+
+/** asm 0x9E40 (thunk -$7F26): remove the ticket located by findArenaTicket. */
+export function consumeArenaTicket(party, ticket) {
+  if (!ticket?.found) return;
+  const member = party[ticket.memberIndex];
+  if (!member) return;
+  normalizeMemberBackpack(member);
+  member.backpack[ticket.backpackSlot] = { id: 0, charges: 0, flags: 0 };
 }
 
 /** @param {object | null} manifest @param {number} id */
@@ -323,17 +537,13 @@ export function sessionGiveItem(session, id, charges = 0, flags = 0) {
   return false;
 }
 
+/** OP_2A: fill found-item buffer only (mm2_found_items_op2a_fill — no party deposit). */
 export function sessionApplyTreasure(session, treasure) {
   if (!treasure) return;
-  if (treasure.gold > 0) sessionAddGold(session, treasure.gold);
-  if (treasure.gems > 0) sessionAddGems(session, treasure.gems);
-  for (const it of treasure.items ?? []) {
-    if (it.id) sessionGiveItem(session, it.id, it.charges ?? 0, it.flags ?? 0);
-  }
   session.foundItemBuffer = {
-    gold: treasure.gold,
-    gems: treasure.gems,
-    items: treasure.items ?? [],
+    gold: treasure.gold ?? 0,
+    gems: treasure.gems ?? 0,
+    items: [...(treasure.items ?? [])],
   };
 }
 
@@ -359,7 +569,7 @@ export function sessionStoreVar(session, group, val) {
 }
 
 /**
- * OP_15 (test) / OP_18 (masked write) on stub party fields.
+ * OP_15 (test) / OP_18 (masked write) on per-member roster fields.
  * @returns {boolean} cond result for test-only
  */
 export function sessionApplyPartyByteOp(
@@ -372,14 +582,41 @@ export function sessionApplyPartyByteOp(
   const off = resolveFieldOffset(selector);
   if (off == null) return false;
 
-  let byteVal = session.partyFields[off] ?? 0;
+  let members = count;
+  let selectedOnly = -1;
+  if (members === 0x09) {
+    selectedOnly = session.selectedMember ?? 0;
+    if (selectedOnly < 0) {
+      session.cond = 0;
+      return false;
+    }
+    members = 1;
+  } else if (members === 0 || members > 6) {
+    members = ensureParty(session).length;
+  }
+
+  let anyMatch = false;
+  const party = ensureParty(session);
+  for (let i = 0; i < members; i++) {
+    const partyIdx = selectedOnly >= 0 ? selectedOnly : i;
+    const member = party[partyIdx];
+    if (!member) continue;
+
+    let byteVal = getMemberFieldByte(member, off);
+    if (testOnly) {
+      if ((byteVal & val) !== 0) anyMatch = true;
+      continue;
+    }
+    if (masked) {
+      byteVal = (byteVal & andM) | orM;
+      setMemberFieldByte(member, off, byteVal);
+    }
+  }
   if (testOnly) {
-    session.cond = (byteVal & val) !== 0 ? 1 : 0;
-    return session.cond === 1;
+    session.cond = anyMatch ? 1 : 0;
+    return anyMatch;
   }
   if (masked) {
-    byteVal = (byteVal & andM) | orM;
-    session.partyFields[off] = byteVal & 0xff;
     session.cond = 1;
     return true;
   }

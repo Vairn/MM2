@@ -541,6 +541,21 @@ void EventTextView::clearPersistentOverlays()
     sign_placement_ = 0;
 }
 
+void EventTextView::clearConsoleMessageLayers()
+{
+    int kept = 0;
+    for (int i = 0; i < layer_count_; ++i) {
+        if (isPersistentOverlay(layers_[i].op)) {
+            if (kept != i) {
+                layers_[kept] = layers_[i];
+            }
+            ++kept;
+        }
+    }
+    layer_count_ = kept;
+    space_prompt_ = false;
+}
+
 void EventTextView::scriptCleanup(bool *redraw_status, bool *redraw_roster, bool *redraw_divider)
 {
     if (redraw_status) {

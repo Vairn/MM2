@@ -139,8 +139,12 @@ public:
     void inTownDraw();
 
     bool inTownRequestTitle() const { return session_.requestTitle(); }
+    bool inTownRequestGotoTown() const { return session_.requestGotoTown(); }
 
+    void syncSessionRosterToTitle();
     void inTownEnd();
+    void inTownEndForGotoTown();
+    uint8_t pendingChooseTownFilter() const { return pending_choose_town_filter_; }
 
 
 
@@ -173,6 +177,7 @@ private:
     bool pending_in_town_ = false;
 
     bool in_town_active_ = false;
+    uint8_t pending_choose_town_filter_ = 1;
     /** Set when inTownDraw rebuilt the playfield this frame (Amiga DB swap gate). */
     bool in_town_redrew_ = false;
     int play_title_screen_ = -1;

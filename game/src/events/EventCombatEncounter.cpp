@@ -5,7 +5,8 @@
 namespace mm2::events {
 
 void eventRunFixedEncounter(GameStateView &gs, EventTextView &text, EventVmWait &wait,
-                            const uint8_t *monster_block, int block_len, bool variant_b)
+                            const uint8_t *monster_block, int block_len, bool variant_b,
+                            combat::CombatSession *combat, const world::MapWorld *world)
 {
     (void)text;
     (void)wait;
@@ -35,10 +36,36 @@ void eventRunFixedEncounter(GameStateView &gs, EventTextView &text, EventVmWait 
         mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 0);
     }
 
-    /* 0x1635E: jsr -$7EDE (combat engine) runs here in the ROM — not ported.
-     * 0x16362: abort flag set so the event interpreter yields to combat.
+    /* 0x1635E: jsr -$7EDE (combat engine). */
+    if (combat && world) {
+        combat->enter(gs, *world);
+    }
+    /* 0x16362: abort flag set so the event interpreter yields to combat.
      * 0x16368-0x1637C: post-combat pending-event latch (-$7F1A → A4-$7952) is
-     * combat-engine territory and is intentionally not replicated. */
+     * driven by GameSession once combat->active() goes false. */
+    mm2_gs_set_u8(a4, MM2_GS_SCRIPT_ABORT, 1);
+}
+
+void eventRunTileAmbientEncounter(GameStateView &gs, combat::CombatSession *combat,
+                                  const world::MapWorld *world)
+{
+    uint8_t *a4 = gs.a4();
+    if (!a4) {
+        return;
+    }
+
+    /* 0x176F8-0x17718: zero battle slots + encounter mode before -$7EDE. */
+    mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_MODE, 0);
+    mm2_gs_set_u16(a4, MM2_GS_ENCOUNTER_REDRAW, 0);
+    for (int i = 0; i < MM2_GS_MONSTER_SLOT_COUNT; ++i) {
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, 0);
+    }
+    mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_OVERFLOW_TYPE, 0);
+    mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 0);
+
+    if (combat && world) {
+        combat->enter(gs, *world);
+    }
     mm2_gs_set_u8(a4, MM2_GS_SCRIPT_ABORT, 1);
 }
 

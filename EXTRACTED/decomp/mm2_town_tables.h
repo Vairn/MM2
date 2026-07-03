@@ -155,6 +155,60 @@ void mm2_smith_buy_fields(int category, uint8_t meta, uint8_t *out_price_meta,
  * a documented gap. */
 uint32_t mm2_smith_price(uint32_t base_gold, uint8_t meta);
 
+/* Sell proceeds (0x1BF16 category 5 @ 0x1BFCC): half the buy-style price computed
+ * from items.dat gold + backpack flags (+$46 low 6 bits). Merchant skill (-$7F32)
+ * may halve again — deferred. */
+uint32_t mm2_smith_sell_price(uint32_t buy_style_price);
+
+/* Identify fee (0x1BF16 category 6 @ 0x1BF48): flags & 0x3F == 0 -> 10 gp; else
+ * rng(1, meta*100). The port uses the deterministic midpoint until shop RNG is
+ * wired through TownServiceContext. */
+uint32_t mm2_smith_identify_cost(uint8_t backpack_flags);
+
+/* ------------------------------------------------------------------------- *
+ * Mage guild sorcerer-spell shop (OP_0E 0x05, handler A4 thunk -$7D10 ->
+ * 0x1E3E6; stock loop 0x1E618..0x1E650; purchase keys A-D @ 0x1E864, grant
+ * 0x1D872). 4 fixed slots/town; `spell_index` is the per-school flat index
+ * 0..47 used by mm2/gameplay/SpellBook.h (spellKnownInBook/spellLearnInBook),
+ * NOT the 0..95 spells.dat index. Decoded byte-exact from the data hunk via
+ * tools/dump_shop_tables.py -> EXTRACTED/shop_tables.json
+ * (static_by_town.mage_guild_spells) — see EXTRACTED/docs/28-town-services.md.
+ *
+ * MEMBERSHIP GATE (0x1E410, ASM-confirmed, doc 36): the shop only opens for a
+ * party that has >=1 member with `(record+0x79 class_quest_guild_mask) &
+ * kMageGuildMemberMask[map] != 0`. Two confirmed write paths for that byte:
+ *  1. The generic event-script field-selector dispatcher (OP_15/18/1F/20,
+ *     `game/include/mm2/events/EventFieldMap.h` selector 0x74 -> offset 0x79,
+ *     ASM-derived from `event_member_field_ptr` 0x17766 + jump table 0x17FEA)
+ *     — already ported; any event.dat script that sets this selector grants
+ *     real membership through normal gameplay.
+ *  2. The Mount-Farview/Arena class-quest reward loop (`or.b d1,$79(a0)` @
+ *     0x9FE0 inside 0x9D76) — a routine with confirmed pointer/offset bugs
+ *     (doc 36-class-quest-hp-bug.md) that is NOT yet ported.
+ * No location script has been confirmed (this pass) to actually exercise
+ * path 1 for these specific bits, so mm2_mage_guild_member() may still return
+ * false for a roster that hasn't triggered such a script — an accurate
+ * reflection of the current port, not an invented restriction. Do NOT gate on
+ * the OP_0E 0x0D "enroll" write (record+0x0B town_flags) — that is a
+ * different field (0x1A1CE) with no confirmed read site. */
+enum { MM2_MAGE_GUILD_SLOTS = 4, MM2_TEMPLE_SPELL_SLOTS = 3 };
+
+typedef struct Mm2SpellShopSlot {
+    uint8_t spell_index; /* 0..47, per-school flat index (SpellBook.h). */
+    uint32_t gold;       /* gp cost (static; ASM-confirmed byte-exact). */
+} Mm2SpellShopSlot;
+
+/* Fill the 4 mage-guild (sorcerer) slots for map_id 0..4. Returns 1 on success. */
+int mm2_mage_guild_stock(int map_id, Mm2SpellShopSlot out[MM2_MAGE_GUILD_SLOTS]);
+
+/* Fill the 3 temple (cleric) spell-purchase slots (menu D/E/F) for map_id 0..4.
+ * Returns 1 on success. */
+int mm2_temple_spell_stock(int map_id, Mm2SpellShopSlot out[MM2_TEMPLE_SPELL_SLOTS]);
+
+/* Per-town class_quest_guild_mask bit (record+0x79), data hunk A4-$66A9,
+ * byte-exact: {0x02, 0x04, 0x08, 0x10, 0x20}. 0 for an out-of-range map_id. */
+uint8_t mm2_mage_guild_member_mask(int map_id);
+
 #ifdef __cplusplus
 }
 #endif

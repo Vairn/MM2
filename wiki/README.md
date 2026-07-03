@@ -71,7 +71,8 @@ npm run dev
 |--------|---------|
 | `wiki/scripts/export-github-wiki.py` | Build GitHub Wiki tree → `wiki/gh-wiki/` |
 | `wiki/scripts/publish-github-wiki.py` | Git push `gh-wiki/` → `MM2.wiki.git` |
-| `wiki/scripts/export-gfx-gallery.py` | VitePress gallery only |
+| `wiki/scripts/export-gfx-gallery.py` | VitePress MM2 gallery only |
+| `wiki/scripts/export-mm1-gallery.py` | VitePress MM1 WALLPIX gallery (lagdotcom exports) |
 | `wiki/scripts/export-wiki-diagrams.py` | PNG flowcharts → `gh-wiki/images/diagrams/` |
 | `wiki/wiki_enrichments.py` | Per-page nav, TOC, diagrams, See also footers |
 | `tools/mm2_gfx_export.py` | Core sprite decoder/exporter |

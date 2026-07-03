@@ -38,7 +38,7 @@ import {
   drawMinimapAmbient,
   formatEventScriptFlow,
 } from "./ui.js";
-import { runEventScript } from "./eventVm.js";
+import { runEventScript, runQuestOverlay, runTileAmbientEncounter } from "./eventVm.js";
 import {
   createSessionState,
   formatSessionPartyPanel,
@@ -57,6 +57,20 @@ import {
   buildPlayPartySlots,
 } from "./playScreen.js";
 import { renderQuickRef, renderCharacterSheet } from "./inGameSheet.js";
+import {
+  ExploreRng,
+  WALL_OPEN,
+  WALL_DOOR,
+  ObstructionMsg,
+  forwardVisualField,
+  doorLockedAt,
+  clearDoorLock,
+  bashDoorRoll,
+  unlockDoorRoll,
+  partyMightSum,
+  bestPartyUnlockSkill,
+  applyDoorTrapDamage,
+} from "./exploreActions.js";
 
 const SCALE = 3;
 const MINI_TW = 14;
@@ -108,6 +122,8 @@ const chkNoclip = document.getElementById("chkNoclip");
 
 /** @type {ReturnType<createSessionState>} */
 let session = createSessionState();
+/** @type {ExploreRng} */
+let exploreRng = new ExploreRng();
 /** @type {"none"|"quickRef"|"characterSheet"} */
 let playOverlay = "none";
 /** @type {number} */
@@ -800,9 +816,15 @@ function draw() {
     if (ambientMsg && isAmbientStepTile(sc, pos)) {
       eventText = ambientMsg;
       if (!standingEventHint) standingEventHint = "Ambient random encounter";
-    } else if (ambientMsg && collisionAmbientPositions(sc).has(pos)) {
-      eventText = `${ambientMsg}\n(collision event flag, no script)`;
-      if (!standingEventHint) standingEventHint = "Ambient random encounter";
+    } else if (collisionAmbientPositions(sc).has(pos)) {
+      eventText = "Tile-flag fight — random monsters (collision 0x80, no script)";
+      if (!standingEventHint) standingEventHint = "Tile-flag fight";
+    } else {
+      const overlayHint = overlayQuestHint(state.screen, pos);
+      if (overlayHint) {
+        eventText = `${overlayHint}\n(quest overlay — no event.dat triplet; doc 53)`;
+        standingEventHint = overlayHint;
+      }
     }
   }
   eventScriptEl.textContent = eventText;
@@ -826,6 +848,101 @@ function draw() {
   if (uiState) drawUI();
 }
 
+function currentScreenRec() {
+  return maps?.screens?.[state.screen] ?? null;
+}
+
+function handleBashDoor() {
+  const sc = currentScreenRec();
+  if (!sc || sc.outdoor) {
+    stepForward();
+    return;
+  }
+
+  const field = forwardVisualField(sc.visual, state.x, state.y, state.facing);
+  if (field === WALL_OPEN) {
+    stepForward();
+    return;
+  }
+
+  if (!doorLockedAt(sc.collision, state.x, state.y, state.facing)) {
+    stepForward();
+    return;
+  }
+
+  if (field !== WALL_DOOR) {
+    statusEl.textContent = ObstructionMsg.Solid;
+    return;
+  }
+
+  const might = partyMightSum(session.party);
+  const doorStrength = sc.doorStrength ?? 0x0a;
+  const roll = exploreRng.range(10, 0x6d);
+  const trapRoll = exploreRng.range(1, 100);
+  const d = bashDoorRoll(might, doorStrength, roll, trapRoll);
+
+  if (d.outcome === "locked") {
+    statusEl.textContent = d.msg;
+    return;
+  }
+  if (d.outcome === "trap") {
+    const hit = applyDoorTrapDamage(session.party, exploreRng);
+    statusEl.textContent = hit
+      ? `Trap! ${hit.member.name} takes ${hit.damage} damage.`
+      : "Trap!";
+    syncPartyEditorsFromSession();
+    draw();
+    return;
+  }
+  if (d.clearsLock) {
+    clearDoorLock(sc.collision, state.x, state.y, state.facing);
+  }
+  stepForward();
+}
+
+function handleUnlockDoor() {
+  const sc = currentScreenRec();
+  if (!sc || sc.outdoor) {
+    return;
+  }
+
+  const field = forwardVisualField(sc.visual, state.x, state.y, state.facing);
+  if (field !== WALL_DOOR) {
+    return;
+  }
+
+  if (!doorLockedAt(sc.collision, state.x, state.y, state.facing)) {
+    statusEl.textContent = ObstructionMsg.NotLocked;
+    return;
+  }
+
+  const thievery = bestPartyUnlockSkill(session.party);
+  if (thievery <= 0) {
+    statusEl.textContent = ObstructionMsg.Locked;
+    return;
+  }
+
+  const lockRoll = exploreRng.range(1, 100);
+  const trapRoll = exploreRng.range(1, 100);
+  const trapByte = sc.doorTrap ?? 0x0a;
+  const d = unlockDoorRoll(thievery, lockRoll, trapByte, trapRoll);
+
+  if (d.outcome === "trap") {
+    const hit = applyDoorTrapDamage(session.party, exploreRng);
+    statusEl.textContent = hit
+      ? `Trap! ${hit.member.name} takes ${hit.damage} damage.`
+      : "Trap!";
+    syncPartyEditorsFromSession();
+    draw();
+    return;
+  }
+  if (d.clearsLock) {
+    clearDoorLock(sc.collision, state.x, state.y, state.facing);
+  }
+  statusEl.textContent = d.msg ?? ObstructionMsg.Locked;
+  draw();
+}
+
 function stepForward() {
   const next = stepParty(state.facing, state.x, state.y, state.screen, maps.screens, terrainLookup(), chkNoclip.checked);
   applyMove(next);
@@ -841,6 +958,7 @@ function applyMove(next) {
   state.screen = next.screen;
   state.x = next.x;
   state.y = next.y;
+  session.combatVictory = false;
   viewportOverlay = null;
   lastEventNotes = [];
   screenSelect.value = String(state.screen);
@@ -883,52 +1001,67 @@ let viewportOverlay = null;
 /** @type {string[]} */
 let lastEventNotes = [];
 
+/** Middlegate Nordonna overlay @ (1,2) — no event.dat triplet (doc 53). */
+const OVERLAY_QUEST_TILES = new Set([(1 << 4) | 2]);
+
+function overlayQuestHint(screenId, pos) {
+  if (screenId !== 0 || !OVERLAY_QUEST_TILES.has(pos)) return null;
+  if (pos === (1 << 4) | 2) return "Nordonna — hireling quest (overlay)";
+  return null;
+}
+
+function buildEventVmCtx() {
+  return {
+    screenId: state.screen,
+    tileX: state.x,
+    tileY: state.y,
+    manifest,
+    maps,
+    session,
+    resolveEventText,
+    waitForSpace,
+    promptYesNo,
+    promptMenuKey,
+    promptCombatResult,
+    onDraw: () => draw(),
+    onSessionChange: () => syncPartyEditorsFromSession(),
+    onVmStep: ({ trace, cond }) => {
+      lastVmTrace = trace;
+      lastVmCond = cond;
+      draw();
+    },
+    onViewportOverlay: (overlay) => {
+      viewportOverlay = overlay;
+      draw();
+    },
+    onTeleport: (dest, tx, ty) => {
+      state.screen = dest;
+      state.x = tx;
+      state.y = ty;
+      viewportOverlay = null;
+      session.combatVictory = false;
+      screenSelect.value = String(state.screen);
+      statusEl.textContent = `Entered ${maps.screens[dest]?.name ?? `screen ${dest}`}`;
+      draw();
+    },
+    onPatchTile: (ty, tx, visual, collision) => {
+      const sc = maps.screens[state.screen];
+      if (!sc) return;
+      const idx = (ty << 4) | tx;
+      if (visual != null && sc.visual) sc.visual[idx] = visual;
+      if (collision != null && sc.collision) sc.collision[idx] = collision;
+    },
+  };
+}
+
 async function runEvent(evtData, strings) {
   isEventRunning = true;
   lastVmTrace = [];
   try {
     const result = await runEventScript({
+      ...buildEventVmCtx(),
       evtData,
       strings,
-      screenId: state.screen,
-      tileX: state.x,
-      tileY: state.y,
-      manifest,
-      maps,
-      session,
-      resolveEventText,
-      waitForSpace,
-      promptYesNo,
-      promptMenuKey,
-      promptCombatResult,
-      onDraw: () => draw(),
-      onSessionChange: () => syncPartyEditorsFromSession(),
-      onVmStep: ({ trace, cond }) => {
-        lastVmTrace = trace;
-        lastVmCond = cond;
-        draw();
-      },
-      onViewportOverlay: (overlay) => {
-        viewportOverlay = overlay;
-        draw();
-      },
-      onTeleport: (dest, tx, ty) => {
-        state.screen = dest;
-        state.x = tx;
-        state.y = ty;
-        viewportOverlay = null;
-        session.combatVictory = false;
-        screenSelect.value = String(state.screen);
-        statusEl.textContent = `Entered ${maps.screens[dest]?.name ?? `screen ${dest}`}`;
-        draw();
-      },
-      onPatchTile: (ty, tx, visual, collision) => {
-        const sc = maps.screens[state.screen];
-        if (!sc) return;
-        const idx = (ty << 4) | tx;
-        if (visual != null && sc.visual) sc.visual[idx] = visual;
-        if (collision != null && sc.collision) sc.collision[idx] = collision;
-      },
     });
     lastEventNotes = result.notes;
     lastVmTrace = result.trace ?? lastVmTrace;
@@ -945,23 +1078,63 @@ async function runEvent(evtData, strings) {
   }
 }
 
+async function runOverlayQuest() {
+  isEventRunning = true;
+  try {
+    const result = await runQuestOverlay(buildEventVmCtx());
+    if (!result) return;
+    lastEventNotes = result.notes;
+    if (result.notes.length) {
+      statusEl.textContent = result.notes[result.notes.length - 1];
+    }
+    draw();
+  } finally {
+    isEventRunning = false;
+  }
+}
+
+async function runTileAmbientFight() {
+  isEventRunning = true;
+  try {
+    const result = await runTileAmbientEncounter(buildEventVmCtx());
+    lastEventNotes = result.notes;
+    if (result.notes.length) {
+      statusEl.textContent = result.notes[result.notes.length - 1];
+    }
+    syncPartyEditorsFromSession();
+    draw();
+  } finally {
+    isEventRunning = false;
+  }
+}
+
 function checkEvents() {
   if (!maps) return;
   const sc = maps.screens[state.screen];
-  if (!sc.events) return;
-
   const pos = (state.y << 4) | state.x;
 
-  for (const [evtId, evtData] of Object.entries(sc.events)) {
-    for (const trig of evtData.triggers) {
-      if (trig.pos === pos) {
-        if (triggerMatchesFacing(trig.flags, state.facing)) {
-          // Use setTimeout to allow the canvas to render before showing alerts
+  const overlayHint = overlayQuestHint(state.screen, pos);
+  if (overlayHint) {
+    setTimeout(() => runOverlayQuest(), 10);
+    return;
+  }
+
+  if (sc.events) {
+    for (const [, evtData] of Object.entries(sc.events)) {
+      for (const trig of evtData.triggers) {
+        if (trig.pos === pos && triggerMatchesFacing(trig.flags, state.facing)) {
           setTimeout(() => runEvent(evtData, sc.strings), 10);
           return;
         }
       }
     }
+  }
+
+  if (
+    collisionAmbientPositions(sc).has(pos) &&
+    !sessionTileCleared(session, state.screen, pos)
+  ) {
+    setTimeout(() => runTileAmbientFight(), 10);
   }
 }
 
@@ -1077,6 +1250,16 @@ function bindControls() {
         ev.preventDefault();
         turnRight();
         break;
+      case "b":
+      case "B":
+        ev.preventDefault();
+        handleBashDoor();
+        break;
+      case "u":
+      case "U":
+        ev.preventDefault();
+        handleUnlockDoor();
+        break;
       default:
         break;
     }
@@ -1116,7 +1299,7 @@ async function init() {
   jumpEntry();
   syncAnimCache();
   startAnimLoop();
-  statusEl.textContent = `W/↑ forward · Q quick ref · 1-6 view char · build ${BUILD_ID}`;
+  statusEl.textContent = `W/↑ forward · B bash · U unlock · Q quick ref · build ${BUILD_ID}`;
 }
 
 init();

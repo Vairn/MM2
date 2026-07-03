@@ -42,7 +42,8 @@ public:
     virtual UiResult tickCreateCharacter(const platform::KeyState &keys) = 0;
     virtual void renderCreateCharacter(gfx::ScreenCompositor &compositor) = 0;
 
-    virtual void beginChooseParty(Mm2RosterFile &roster) = 0;
+    virtual void beginChooseParty(Mm2RosterFile &roster, uint8_t town_filter = 1,
+                                  const Mm2PartyLaunch *saved_party = nullptr) = 0;
     virtual UiResult tickChooseParty(const platform::KeyState &keys) = 0;
     virtual void renderChooseParty(gfx::ScreenCompositor &compositor) = 0;
 

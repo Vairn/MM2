@@ -205,12 +205,19 @@ Training at Atlantium vs Middlegate is ~6 HP/level difference. [FAQ §4-2]
 - Monsters that **flee**: party **does NOT receive** treasure/XP.
 - **Friend summon cap**: only one friend-summon per fight; summon doubles the count of monsters not in the first 10; hard cap at 255 monsters total (>122 in back → summon impossible). [FAQ §3-8]
 
-XP accumulation: `0x10B74` per-monster reward decode; accumulated in `-$119E`, added to party total `-$6FC6` at victory `0x12430`. [ASM confirmed]
+XP accumulation: `0x10B74` per-monster reward decode; accumulated in `-$119E`, folded
+into `-$6FC6` at victory `0x12430`. [ASM confirmed] At `0x12430` the pool is
+**divided evenly** among party members whose roster condition byte (`+$26`) is
+**&lt; `0x80`** (dead/stoned excluded; unconscious with 0 HP still eligible).
+Defeat vs continue uses `0x13282`: members with `+$26 <= 0x10` keep the party
+"in fight."
 
 ## Open items (not fully reduced)
 - Exact to-hit / AC interaction and physical damage formula inside
   `0xCD90`/`0xCFD0`/`0x10118`.
-- HP/XP code -> value tables (`A4-$746C`, `A4-$7464`) numeric contents.
+- ~~HP/XP code -> value tables (`A4-$746C`, `A4-$7464`) numeric contents~~ —
+  **RESOLVED**, see doc 16 (`mm2_monster_decode_hp`/`_xp`). `A4-$7464` turned
+  out to be the `mres` (byte 0x19) resistance-tier table, not xpmul.
 - Full per-spell handler semantics (`0xBC00..0xC800`).
 
 ---

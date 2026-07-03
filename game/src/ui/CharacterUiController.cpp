@@ -80,14 +80,15 @@ void CharacterUiController::startViewParty(Mm2RosterFile &roster)
     ui_->beginViewParty(roster);
 }
 
-void CharacterUiController::startChooseParty(Mm2RosterFile &roster)
+void CharacterUiController::startChooseParty(Mm2RosterFile &roster, uint8_t town_filter,
+                                             const Mm2PartyLaunch *saved_party)
 {
-    MM2_DBG("MM2 GOTO: CharacterUiController::startChooseParty\n");
+    MM2_DBG("MM2 GOTO: CharacterUiController::startChooseParty town=%u\n", town_filter);
     roster_ = &roster;
     mode_ = CharacterUiMode::ChooseParty;
     quit_requested_ = false;
     party_launch_ready_ = false;
-    ui_->beginChooseParty(roster);
+    ui_->beginChooseParty(roster, town_filter, saved_party);
     MM2_DBG("MM2 GOTO: startChooseParty done needsRedraw=%d\n", needsRedraw() ? 1 : 0);
 }
 

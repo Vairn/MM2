@@ -112,6 +112,18 @@ void mm2_monster_set_name(Mm2MonsterRecord *record, const char *name);
 void mm2_monster_decode_abilities(const Mm2MonsterRecord *record, Mm2MonsterAbilities *out);
 void mm2_monster_encode_abilities(Mm2MonsterRecord *record, const Mm2MonsterAbilities *in);
 
+/* HP/XP decode (record bytes 0x0E/0x0F, unpacker 0x4C8E). hp/xp "mul" tables
+ * are both {1,10,100,1000}: hpmul is byte-verified at data-hunk A4-$746C
+ * (EXTRACTED/ghidra/mm2_data_00.bin off 0xB92 -> words 0001 000A 0064 03E8);
+ * xpmul's table address is not located, but the same {1,10,100,1000} shape
+ * reproduces all 13 FAQ SS3-8 HP/XP cross-check rows exactly (Creepy Crawler
+ * .. Mega Dragon, doc 16 Appendix A), so it is used with high confidence.
+ *   hp = ((c & 0x3F) + 1) * hpmul[(c >> 6) & 3]
+ *   xp = ((c & 0x1F) + 1) * xpmul[(c & 0x60) >> 5]; result *= 1000 if bit7 set
+ */
+uint32_t mm2_monster_decode_hp(const Mm2MonsterRecord *record);
+uint32_t mm2_monster_decode_xp(const Mm2MonsterRecord *record);
+
 #ifdef __cplusplus
 }
 #endif

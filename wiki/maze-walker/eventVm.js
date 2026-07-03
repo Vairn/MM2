@@ -15,6 +15,8 @@ import {
   sessionCheckCode16,
   sessionClearTileFlag,
   sessionAddGold,
+  sessionCountPartyItem,
+  sessionCountPartyNibbleMatches,
   syncSessionGoldFromParty,
   ITEM_GOLD_GOBLET,
   ITEM_FE_FARTHING,
@@ -24,13 +26,115 @@ import {
   runTempleService,
   runTrainingService,
   runSmithService,
+  runInnService,
+  runTavernService,
+  runGuildService,
+  runGuildEnrollTransaction,
+  runBrainDetoxService,
+  runInnRegistry,
+  runPortalTravel,
   runDeferredServiceMenu,
+  runArenaTicketSelector,
+  promptSelectMember,
 } from "./townServices.js";
 
-/** Token byte lengths for opcodes 0x00..0x32 (A4-$6CC8). */
+import { binExecSelector } from "./selectorBin.js";
+
+/** event.dat loc 61 str[22..25]: OP_12 bytecode for Middlegate combat tiles
+ * (OP_0E selectors 0x26..0x29). Bytes verified from event.dat @ 0x01356F. */
+const LOC_61_COMBAT_OVERLAY = {
+  22: [0x0e, 0x0e, 0x0e, 0x0e, 0x0e, 0x0e, 0x21, 0x21, 0x21, 0x21, 0x00, 0x00],
+  23: [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+  24: [0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+  25: [0x43, 0x43, 0x43, 0x43, 0x43, 0x43, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+};
+
+/**
+ * Default-range overlay (asm 0x15EDC → -$7DFA): loc 61 embedded OP_12 fights.
+ * @returns {Promise<boolean>} true when combat ran
+ */
+async function runDefaultRangeOverlayCombat(ctx, sel) {
+  const bin = binExecSelector(sel);
+  if (!bin || bin.category !== 0x3d) return false;
+  const args = LOC_61_COMBAT_OVERLAY[bin.index];
+  if (!args) return false;
+  await runOp12Combat(ctx, args);
+  return true;
+}
+
+/** Shared OP_12 fixed-encounter flow (map scripts + loc-61 overlays). */
+async function runOp12Combat(ctx, args) {
+  const { session, manifest, waitForSpace, promptYesNo, promptCombatResult, note, onSessionChange } =
+    ctx;
+  const enc = describeEncounter(manifest, 0x12, args, "");
+  const sprite = ctx.sprite ?? enc.sprite;
+  const modalText = `${enc.text}\n\nV = victory (continue script)\nN = flee (abort)`;
+  await waitForSpace(modalText, sprite, 0x12);
+  const won = promptCombatResult
+    ? await promptCombatResult(enc)
+    : await promptYesNo("Did the party win?", sprite, 0x12);
+  if (won) {
+    session.combatVictory = true;
+    note(`${enc.heading}: victory latch set`);
+  } else {
+    note(`${enc.heading}: fled — script ends`);
+    ctx.ended = true;
+  }
+  onSessionChange?.(session);
+}
+
+/**
+ * Tile-flag ambient fight @ asm 0x176F2: collision 0x80 with no event.dat triplet.
+ * Mirrors game eventRunTileAmbientEncounter + eventVmConsumeTileEncounterFlag.
+ */
+export async function runTileAmbientEncounter(ctx) {
+  const {
+    session,
+    manifest,
+    waitForSpace,
+    promptYesNo,
+    promptCombatResult,
+    onSessionChange,
+    maps,
+    screenId,
+    tileX,
+    tileY,
+  } = ctx;
+  const notes = [];
+  const enc = describeEncounter(manifest, 0x13, [], "");
+  const modalText = `${enc.text}\n\n(tile-flag @ 0x176F2 — random monsters)\n\nV = victory\nN = flee`;
+  await waitForSpace(modalText, enc.sprite, 0x13);
+  const won = promptCombatResult
+    ? await promptCombatResult(enc)
+    : await promptYesNo("Did the party win?", enc.sprite, 0x13);
+  if (won) {
+    session.combatVictory = true;
+    notes.push("Tile-flag encounter: victory latch set");
+  } else {
+    notes.push("Tile-flag encounter: fled");
+  }
+  sessionClearTileFlag(session, screenId, tileX, tileY, maps);
+  onSessionChange?.(session);
+  return { won, notes };
+}
+
+/** Token-skip byte lengths for opcodes 0x00..0x32, read byte-exact from the
+ * ROM's opcode_len_tbl @ A4-$6CC8 (data hunk file offset 0x1336; ground
+ * truth: tools/dump_event_token_table.py / EXTRACTED/event_token_len_table.json).
+ * Used ONLY by the skip-token walker (OP_10/OP_11/OP_2B) to advance PAST a
+ * token it does not execute — distinct from (and, at 2 opcodes, DIFFERENT
+ * than) "1 + argc":
+ *   - op 0x00 (invalid): ROM skip delta is 0, not 1.
+ *   - op 0x25 (check-code16): the handler reads 2 argument bytes when
+ *     EXECUTED (own length 3, see OP_ARGC), but the ROM's skip-table entry
+ *     is only 2 (opcode + 1 byte) — a genuine ROM quirk. A skip walk that
+ *     passes OVER an OP_25 token (rather than executing it) under-counts by
+ *     one byte in the original game, desyncing the token stream by 1.
+ * Mirrors game/src/events/EventVmHelpers.cpp `eventVmTokenDelta`.
+ */
 export const OP_TOKEN_DELTA = [
-  1, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 3, 3, 2, 2, 1, 2, 2, 13, 11, 1, 4, 3, 3, 5, 5, 3,
-  2, 2, 2, 2, 7, 7, 4, 3, 3, 3, 3, 1, 1, 3, 1, 15, 2, 2, 3, 3, 1, 11, 4, 2,
+  0, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 3, 3, 2, 2, 1, 2, 2, 13, 11, 1, 4, 3, 3, 5, 5, 3,
+  2, 2, 2, 2, 7, 7, 4, 3, 3, 3, 2, 1, 1, 3, 1, 15, 2, 2, 3, 3, 1, 11, 4, 2,
 ];
 
 export const OP_ARGC = {
@@ -46,14 +150,14 @@ export const OP_ARGC = {
 export const OPCODE_STATUS = {
   0x00: "real", 0x01: "real", 0x02: "real", 0x03: "real", 0x04: "real", 0x05: "real", 0x06: "real",
   0x07: "real", 0x08: "real", 0x09: "real", 0x0a: "real", 0x0b: "real", 0x0c: "real",
-  0x0d: "partial", 0x0e: "partial", /* temple/train/smith interactive; tavern/guild/inn deferred */
+  0x0d: "partial", 0x0e: "partial", /* OP_0E services: inn/tavern/guild/portal; store deferred */
   0x0f: "real", 0x10: "real", 0x11: "real",
   0x12: "partial", 0x13: "partial", 0x14: "real", 0x15: "real", 0x16: "real", 0x17: "real",
   0x18: "real", 0x19: "real", 0x1a: "real", 0x1b: "real", 0x1c: "partial", 0x1d: "partial",
   0x1e: "partial", 0x1f: "partial", 0x20: "partial", 0x21: "real", 0x22: "real", 0x23: "real",
-  0x24: "real", 0x25: "real", 0x26: "partial", 0x27: "partial", 0x28: "real", 0x29: "real",
-  0x2a: "real", 0x2b: "real", 0x2c: "real", 0x2d: "partial", 0x2e: "partial", 0x2f: "real",
-  0x30: "partial", 0x31: "partial", 0x32: "partial",
+  0x24: "real", 0x25: "real", 0x26: "real", 0x27: "real", 0x28: "real", 0x29: "real",
+  0x2a: "real", 0x2b: "real", 0x2c: "real", 0x2d: "real", 0x2e: "partial", 0x2f: "real",
+  0x30: "partial", 0x31: "partial", 0x32: "real",
 };
 
 const SELECTOR_SPRITES = {
@@ -83,6 +187,14 @@ const TEMPLE_INTRO = [
   "Ambergris and woodcedar incense burns\non the altar as the priest chants.\nHe asks, \"Do you need any help (y/n)?\"",
 ];
 
+const SMITH_INTRO = [
+  "The burly blacksmith Svendegard busily\nshapes a deadly sword in the forge.\nDo you care to see his work (y/n)?",
+  "The famous blacksmith Morgan\nDrewnhald asks if you wish to view\nweapons he has made available for\nsale.  View (y/n)?",
+  "Flames leap out from the brick\nsmelter as the sweaty smith says,\n\"Do you wish to see my humble\nwares (y/n)?\"",
+  "A friendly smith wipes his hands on a\nworn, leather apron.  He shakes your\nhand and asks, \"Care to see my wares\n(y/n)?\"",
+  "A tough old blacksmith glares at\nyour party and shouts \"Hey, only\ncowards browse!\"  View wares (y/n)?",
+];
+
 const MAGE_GUILD_INTRO = [
   "Sages in multi-hued robes congregate\nin the hall.  The archmage offers\nspells for sale.  Interested (y/n)?",
   "The meeting shifts towards entropy as\nyou step in.  A cabalist approaches\nyou with a spell list.  Buy (y/n)?",
@@ -91,13 +203,22 @@ const MAGE_GUILD_INTRO = [
   "Sorcerers sort phials of sands on\nthe shelves.  A man barks, \"Spells\n(y/n)?\"",
 ];
 
-const BLACKSMITH_INTRO = [
-  "The burly blacksmith Svendegard busily\nshapes a deadly sword in the forge.\nDo you care to see his work (y/n)?",
-  "The famous blacksmith Morgan\nDrewnhald asks if you wish to view\nweapons he has made available for\nsale.  View (y/n)?",
-  "Flames leap out from the brick\nsmelter as the sweaty smith says,\n\"Do you wish to see my humble\nwares (y/n)?\"",
-  "A friendly smith wipes his hands on a\nworn, leather apron.  He shakes your\nhand and asks, \"Care to see my wares\n(y/n)?\"",
-  "A tough old blacksmith glares at\nyour party and shouts \"Hey, only\ncowards browse!\"  View wares (y/n)?",
+/** exe-only innkeeper greets @ 0x19D00..0x1A200 (doc 29), map-index ordered. */
+const INN_INTRO = [
+  "A jolly old innkeeper waves his quill\nin the air as he asks, \"Will you sign\n the registry (y/n)?\"",
+  "The well-groomed whiskers of the old\nconcierge twitch as he proclaims, \"We\nhave the finest suites.  Sign\nin (y/n)?\"",
+  "Ordigon, the elderly innkeeper, rubs\nhis bushy white mustache and says,\n\"We have cozy, warm beds.  Sign-in\n(y/n)?\"",
+  "The aging host of the sleezy inn\nleers at you from behind his desk and\nasks, \"I suppose your party only wants\none room.  Stay (y/n)?\"",
+  "The proprietor blows a pile of dust\noff the register and asks eagerly,\n\"Can I sign you in (y/n)?\"",
 ];
+
+/** Loc 60 str[21] — OP_0E 0x0D guild enroll @ Middlegate (12,1). */
+const GUILD_ENROLL_INTRO =
+  "A sleepy conjurer yawns, \"My\nfriends, for only 20 gold I can\nenroll you in the local mage guild.\"\nBuy in (y/n)?";
+
+/** OP_0E 0x10 brain detox @ Middlegate (1,8) — FAQ §8-3. */
+const BRAIN_DETOX_INTRO =
+  "The surgically garbed Cerebral\nDetoxification Specialist will\n cleanse a party member of all\nsecondary skills for 100 gold.\nPay (y/n)?";
 
 const POORMANS_PORTAL =
   "A uniformed brownie stands before a shimmering energy field offering " +
@@ -110,25 +231,24 @@ const OP0D_SEQUENCE_NAMES = [
   "pre-transition redraw (exit-flag bit0)",
 ];
 
-const DEFERRED_SERVICE_LINES = {
-  0x01: ["Rest / dismiss roster (engine @ -$7CD4)", "Rest HP/SP + day advance — not simulated"],
-  0x03: [
-    "A) feeding frenzy  B) drink  C) specialties",
-    "D) tip the waitress  E) listen for rumors",
-    "Food/drink costs RNG-gated in engine",
-  ],
-  0x05: ["A–D sorcerer spells for sale", "Membership gate + spell stock per town — engine"],
-  0x07: ["General store category shop @ 0x9D76"],
-  0x08: ["Arena / special shop @ 0x9D76"],
-};
+const FELDECARB_FOUNTAIN_INTRO =
+  "Fanciful Feldecarb Fountain flows\nfull as fluttering faeries frolic\nfastidiously.  Flick a farthing (y/n)?";
 
-const GOBLET_QUEST_NO_FARTHING = "Fool, you have no farthing to flick!";
-const GOBLET_QUEST_PROMPT =
-  "Nordon eyes your pack. \"Return my stolen goblet\nand flick a farthing in yonder fountain (y/n)?\"";
-const GOBLET_QUEST_NO_GOBLET =
-  "Nordon scowls. \"I see no Gold Goblet — seek the\ngoblins in Middlegate Cavern (7,0).\"";
-const GOBLET_QUEST_SUCCESS =
-  "Nordon beams! \"Ah, my goblet! Take 2000 experience,\nthe spell Eagle Eye, and search for 1000 gold!\"";
+/** Loc 60 str[9]–[15] — Nordon @ Middlegate (10,2) event 30 OP_0E 0x0A. */
+const NORDON_INTRO =
+  "The humble wizard Nordon asks, \"Will\nyou do me a service (y/n)?\"";
+const NORDON_QUEST_GIVEN =
+  "Numerous rewards will be yours if you\nretreive one of my magical golden\ngoblets, ruthlessly stolen by the\ndreaded goblins who dwell in the cave\nbelow!";
+const NORDON_GOBLET_RETURN =
+  "Ah, you've found a goblet! For your\nbravery I grant you 2,000 exp, the\nspell Eagle Eye, and if you search,\n1,000 gold.";
+const NORDON_VISIT_SISTER =
+  "Now, visit my sister Nordonna. She\nlives nearby and could provide\nvaluable information.";
+
+/** Loc 60 str[16]–[20] — Nordonna @ (1,2); hirelings A/B unlock at inn after cavern rescue. */
+const NORDONNA_QUEST =
+  "Nordonna moans, \"My kidnapped sons are\nheld captive by the cruel kobolds in\nthe cave under this town. You've\nbraved this treacherous place for my\nbrother, now rescue Drog and Sir Hyron\nand I'll reward you well!\"";
+const NORDONNA_REWARD =
+  "My grateful sons are now available\nfor hire at Middlegate Inn. I reward\nyou with information to help you gain\nuntold riches! Travel through portals\nto all towns, donate at the temples,\nthen visit Feldecarb Fountain.";
 
 export function itemName(manifest, id) {
   if (!id || id <= 0) return null;
@@ -278,12 +398,11 @@ function signSpriteFromPseudo(pseudo) {
 
 function formatTreasureMessage(treasure, manifest, resolveEventText, session) {
   sessionApplyTreasure(session, treasure);
-  const parts = ["Treasure!"];
-  if (treasure.gold > 0) parts.push(`Gold: +${treasure.gold} (party ${session.gold})`);
-  if (treasure.gems > 0) parts.push(`Gems: +${treasure.gems} (party ${session.gems})`);
+  const parts = ["Treasure! (stored in found-item buffer — Search payoff deferred)"];
+  if (treasure.gold > 0) parts.push(`Gold: ${treasure.gold} gp`);
+  if (treasure.gems > 0) parts.push(`Gems: ${treasure.gems}`);
   for (const it of treasure.items) {
-    const placed = sessionGiveItem(session, it.id, it.charges, it.flags);
-    parts.push(`${itemName(manifest, it.id)}${placed ? "" : " → found-item buffer"}`);
+    parts.push(itemName(manifest, it.id) ?? `item #${it.id}`);
   }
   return resolveEventText(parts.join("\n"));
 }
@@ -313,10 +432,46 @@ function skipTokenNodes(nodes, fromIndex, count) {
   return fromIndex + count;
 }
 
+function op2dCheckMemberAttr(session, arg1, arg2) {
+  const useRace = (arg1 & 0x80) !== 0;
+  const useSex = (arg1 & 0x40) !== 0;
+  const useClass = !useRace && !useSex;
+  const anyMode = (arg1 & 0x20) !== 0;
+  const val1 = arg1 & 0x0f;
+  const val2 = (arg1 & 0xe0) === 0 ? arg2 & 0x0f : val1;
+  const party = session.party ?? [];
+  let match = false;
+  for (const rec of party) {
+    match = false;
+    if (useClass) match = rec.classId === val1;
+    if (useSex) match = rec.sex === val1;
+    if (useRace) match = rec.race === val1;
+    if (!match) {
+      if (useClass) match = rec.classId === val2;
+      if (useSex) match = rec.sex === val2;
+      if (useRace) match = rec.race === val2;
+    }
+    if (anyMode ? match : !match) break;
+  }
+  return match ? 1 : 0;
+}
+
 async function runTownService(ctx, sel, title, sprite) {
   ctx.title = title;
   ctx.sprite = sprite;
-  const { waitForSpace } = ctx;
+  const { waitForSpace, screenId, promptYesNo } = ctx;
+  const slot = townIntroSlot(screenId);
+
+  if (sel === 0x01) {
+    const yes = await promptYesNo(INN_INTRO[slot], sprite, 0x0e);
+    if (!yes) {
+      ctx.note("Inn registry declined");
+      return;
+    }
+    await runInnRegistry(ctx);
+    await runInnService(ctx);
+    return;
+  }
   if (sel === 0x02) {
     await waitForSpace(title, sprite, 0x0e);
     await runTrainingService(ctx);
@@ -330,51 +485,127 @@ async function runTownService(ctx, sel, title, sprite) {
     await runSmithService(ctx);
     return;
   }
-  const lines = DEFERRED_SERVICE_LINES[sel];
-  if (lines) {
-    if (sel === 0x01) await waitForSpace(title, sprite, 0x0e);
-    await runDeferredServiceMenu(ctx, sel, title, sprite, lines);
+  if (sel === 0x0d) {
+    await runGuildEnrollTransaction(ctx);
     return;
   }
-  if (sel === 0x07 || sel === 0x08 || isTownServiceSelector(sel)) {
+  if (sel === 0x64) {
+    const teleported = await runPortalTravel(ctx);
+    if (teleported) {
+      ctx.teleported = true;
+      ctx.ended = true;
+    }
+    return;
+  }
+  if (sel === 0x03) {
+    const slot = townIntroSlot(ctx.screenId);
+    const yes = await ctx.promptYesNo(TAVERN_INTRO[slot], sprite, 0x0e);
+    if (!yes) {
+      ctx.note(`${title}: declined`);
+      return;
+    }
+    await runTavernService(ctx);
+    return;
+  }
+  if (sel === 0x05) {
+    const slot = townIntroSlot(ctx.screenId);
+    const yes = await ctx.promptYesNo(MAGE_GUILD_INTRO[slot], sprite, 0x0e);
+    if (!yes) {
+      ctx.note(`${title}: declined`);
+      return;
+    }
+    await runGuildService(ctx);
+    return;
+  }
+  if (sel === 0x08) {
+    /* Arena Games ticket engine (0x08 -> thunk -$7DBE -> 0x9D76). CORRECTED
+     * 2026-07: byte-verified against the A4 vtable trampoline table in
+     * mm2_data_00.bin — explicit selector 0x08 is the SOLE path into 0x9D76,
+     * not the default-range dispatch (that thunk, -$7DFA, actually resolves
+     * to event_dat_loader / 0x92F2 — see selectorBin.js). */
+    await runArenaTicketSelector(ctx, sel);
+    return;
+  }
+  if (sel === 0x07) {
+    /* General store (-$7DB8 -> 0xA62C, byte-verified): distinct fixed handler,
+     * still not fully simulated (item pools / buy loop not ported). */
     await waitForSpace(title, sprite, 0x0e);
-    await runDeferredServiceMenu(ctx, sel, title, sprite, [
-      `Service selector 0x${sel.toString(16)}`,
-      "Shop engine @ -$7DFA / 0x9D76",
-    ]);
+    await runDeferredServiceMenu(ctx, sel, title, sprite, ["General store (thunk -$7DB8 -> 0xA62C)\n(deferred, buy loop not simulated)"]);
+    ctx.note(`exec_selector(0x${sel.toString(16)}) — General store (deferred)`);
+    return;
+  }
+  if (isTownServiceSelector(sel)) {
+    if (await runDefaultRangeOverlayCombat(ctx, sel)) {
+      return;
+    }
+    /* Text-only default-range overlays (quest copy, etc.) — not combat. */
+    await waitForSpace(title, sprite, 0x0e);
+    ctx.note(`exec_selector(0x${sel.toString(16)}) — default-range text overlay (deferred)`);
+    return;
   }
 }
 
-async function runGobletQuest(ctx, title, sprite) {
-  const { manifest, session, waitForSpace, promptYesNo, strings, resolveEventText } = ctx;
-  await waitForSpace(title, sprite, 0x0e);
-  if (!sessionHasItem(session, ITEM_GOLD_GOBLET, false)) {
-    const msg = strings?.[20] ? resolveEventText(strings[20]) : GOBLET_QUEST_NO_GOBLET;
-    await waitForSpace(msg, sprite, 0x0e);
-    ctx.note("Goblet quest: no Gold Goblet (item 224 / 0xE0) in inventory");
+/**
+ * Nordon goblet quest @ Middlegate (10,2) — loc 60 strings, overlay engine NOT in
+ * event.dat loc-00 triplets. Stub until quest overlay is ported (doc 53).
+ * Goblet pickup: cavern loc 17 (7,0) OP_19 item 0xE0. Return goblet HERE, not at fountain.
+ */
+async function runNordonGobletQuestStub(ctx) {
+  const { session, waitForSpace, promptYesNo, note, sprite } = ctx;
+  const yes = await promptYesNo(NORDON_INTRO, sprite, 0x0e);
+  if (!yes) {
+    note("Nordon: declined");
     return;
   }
-  const yes = await promptYesNo(GOBLET_QUEST_PROMPT, sprite, 0x0e);
+  await waitForSpace(NORDON_QUEST_GIVEN, sprite, 0x0e);
+  note("Nordon: quest given (overlay engine not fully ported — doc 53)");
+  if (sessionHasItem(session, ITEM_GOLD_GOBLET, false)) {
+    await waitForSpace(NORDON_GOBLET_RETURN, sprite, 0x0e);
+    await waitForSpace(NORDON_VISIT_SISTER, sprite, 0x0e);
+    note("Nordon: goblet turn-in stub (rewards not applied — engine deferred)");
+  }
+}
+
+/** Feldecarb Fountain @ (15,15) — event 17 OP_0E 0x0E (NOT Nordon 0x0A @ 10,2). */
+async function runFeldecarbFountain(ctx, sprite, op) {
+  const { session, waitForSpace, promptYesNo, note } = ctx;
+  const yes = await promptYesNo(FELDECARB_FOUNTAIN_INTRO, sprite, op);
   if (!yes) {
-    ctx.note("Goblet quest declined");
+    note("Feldecarb Fountain: declined");
     return;
   }
   if (!sessionHasItem(session, ITEM_FE_FARTHING, false)) {
-    const msg = strings?.[20] ? resolveEventText(strings[20]) : GOBLET_QUEST_NO_FARTHING;
-    await waitForSpace(msg, sprite, 0x0e);
-    ctx.note("Goblet quest: need Fe Farthing (item 212 / 0xD4) — Olympic Trial / temple donations");
+    await waitForSpace("Fool, you have no farthing to flick!", sprite, op);
+    note("Feldecarb Fountain: no Fe Farthing (item 212 / 0xD4)");
     return;
   }
-  sessionHasItem(session, ITEM_FE_FARTHING, true);
-  sessionHasItem(session, ITEM_GOLD_GOBLET, true);
-  sessionAddRewardStub(session);
-  await waitForSpace(GOBLET_QUEST_SUCCESS, sprite, 0x0e);
-  ctx.note("Goblet quest: turned in goblet + farthing — +1000 gold (stub reward)");
+  await waitForSpace(
+    "You find a fabulous castle key!\n(engine -$7DAC/0xD634 — item grant not yet ported)",
+    sprite,
+    op
+  );
+  note("Feldecarb Fountain: farthing flick (transaction stub)");
 }
 
-function sessionAddRewardStub(session) {
-  sessionAddGold(session, 1000);
-  session.flags[0x2b] = (session.flags[0x2b] ?? 0) | 1;
+/**
+ * Quest overlay NPCs @ Middlegate — no loc-00 event.dat triplets (doc 53).
+ * @returns {Promise<{notes: string[]}|null>} null if tile is not an overlay quest NPC
+ */
+export async function runQuestOverlay(ctx) {
+  const { screenId, tileX, tileY, note, waitForSpace } = ctx;
+  const notes = [];
+  const n = (msg) => {
+    notes.push(msg);
+    note?.(msg);
+  };
+  const local = { ...ctx, note: n };
+
+  if (screenId === 0 && tileY === 1 && tileX === 2) {
+    await waitForSpace(NORDONNA_QUEST, null, 0x0e);
+    n("Nordonna: quest dialogue stub (hirelings A/B after cavern 15,0 rescue — doc 53)");
+    return { notes };
+  }
+  return null;
 }
 
 /**
@@ -440,6 +671,8 @@ export async function runEventScript(ctx) {
   ctx.screenId = screenId;
   ctx.manifest = manifest;
   ctx.onSessionChange = onSessionChange;
+  ctx.teleported = false;
+  ctx.ended = false;
 
   const strAt = (idx) => (idx < strings.length ? resolveEventText(strings[idx]) : "");
 
@@ -551,7 +784,7 @@ export async function runEventScript(ctx) {
       }
 
       case 0x0e: {
-        const sel = args[0];
+        const sel = (args[0] ?? 0) & 0xff;
         vmStep(nodeIndex, op, `selector 0x${sel.toString(16)}`);
         const slot = townIntroSlot(screenId);
         const fallbackSheet = SELECTOR_SPRITES[sel];
@@ -579,41 +812,77 @@ export async function runEventScript(ctx) {
         }
 
         if (sel === 0x0a) {
-          await runGobletQuest(ctx, title, sprite);
+          await runNordonGobletQuestStub(ctx);
           break;
         }
 
-        if (sel === 0x03) {
-          const yes = await promptYesNo(TAVERN_INTRO[slot], sprite, op);
-          if (yes) await runTownService(ctx, sel, title, sprite);
-          else note(`${title}: declined`);
+        if (sel === 0x0e) {
+          await runFeldecarbFountain(ctx, sprite, op);
           break;
         }
+
+        if (sel === 0x10 && screenId === 0) {
+          const yes = await promptYesNo(BRAIN_DETOX_INTRO, sprite, op);
+          if (!yes) {
+            note("Brain detox declined");
+            break;
+          }
+          await runBrainDetoxService(ctx);
+          break;
+        }
+
+        ctx.tileX = tileX;
+        ctx.tileY = tileY;
+        ctx.onTeleport = onTeleport;
+
         if (sel === 0x04) {
           const yes = await promptYesNo(TEMPLE_INTRO[slot], sprite, op);
-          if (yes) await runTownService(ctx, sel, title, sprite);
-          else note(`${title}: declined`);
-          break;
+          if (!yes) {
+            note(`${title}: declined`);
+            break;
+          }
         }
-        if (sel === 0x05) {
-          const yes = await promptYesNo(MAGE_GUILD_INTRO[slot], sprite, op);
-          if (yes) await runTownService(ctx, sel, title, sprite);
-          else note(`${title}: declined`);
-          break;
-        }
+
         if (sel === 0x06) {
-          const yes = await promptYesNo(BLACKSMITH_INTRO[slot], sprite, op);
-          if (yes) await runTownService(ctx, sel, title, sprite);
-          else note(`${title}: declined`);
-          break;
+          const yes = await promptYesNo(SMITH_INTRO[slot], sprite, op);
+          if (!yes) {
+            note(`${title}: declined`);
+            break;
+          }
         }
-        if (sel === 0x01 || sel === 0x02) {
-          await runTownService(ctx, sel, title, sprite);
-          break;
+
+        if (sel === 0x0d) {
+          const yes = await promptYesNo(GUILD_ENROLL_INTRO, sprite, op);
+          if (!yes) {
+            note("Guild enroll declined");
+            break;
+          }
         }
-        if (sel === 0x07 || sel === 0x08 || isTownServiceSelector(sel)) {
+
+        const serviceHandled =
+          sel === 0x01 ||
+          sel === 0x02 ||
+          sel === 0x03 ||
+          sel === 0x04 ||
+          sel === 0x05 ||
+          sel === 0x06 ||
+          sel === 0x0d ||
+          sel === 0x64 ||
+          sel === 0x07 ||
+          sel === 0x08 ||
+          isTownServiceSelector(sel);
+
+        if (serviceHandled) {
+          if (sel === 0x02) {
+            await waitForSpace(title, sprite, op);
+          }
           await runTownService(ctx, sel, title, sprite);
-          note(`${SELECTOR_LABEL[sel] || title} (0x${sel.toString(16)})`);
+          if (ctx.teleported) {
+            teleported = true;
+            ended = true;
+            onSessionChange?.(session);
+            return { teleported, ended, aborted, notes, trace };
+          }
           break;
         }
 
@@ -648,6 +917,11 @@ export async function runEventScript(ctx) {
       case 0x12:
       case 0x13: {
         vmStep(nodeIndex, op, node.pseudo || "encounter");
+        if (op === 0x12) {
+          await runOp12Combat(ctx, args);
+          if (ctx.ended) return { teleported, ended, aborted, notes, trace };
+          break;
+        }
         const enc = describeEncounter(manifest, op, args, node.pseudo);
         const sprite = lastSignSprite ?? enc.sprite;
         lastSignSprite = null;
@@ -716,8 +990,7 @@ export async function runEventScript(ctx) {
 
       case 0x16: {
         const want = args[1] ?? 0;
-        let cond = 0;
-        if (sessionHasItem(session, want, false)) cond = 1;
+        const cond = sessionCountPartyItem(session, want);
         session.cond = cond;
         syncCond();
         vmStep(nodeIndex, op, `item #${want} → cond=${cond}`);
@@ -834,16 +1107,20 @@ export async function runEventScript(ctx) {
 
       case 0x26:
         vmStep(nodeIndex, op, "select member skill");
-        await waitForSpace("Who will learn this skill (1-8)?", null, op);
-        session.selectedMember = 1;
-        note("OP_26 select member — stub picks slot 1 (no roster UI)");
+        {
+          const slot = await promptSelectMember(ctx);
+          session.selectedMember = slot != null ? slot : 0;
+          note(`OP_26 select member → slot ${session.selectedMember + 1}`);
+        }
         break;
 
       case 0x27:
         vmStep(nodeIndex, op, "select member");
-        await waitForSpace("Select a party member (1-8):", null, op);
-        session.selectedMember = 1;
-        note("OP_27 select member — stub picks slot 1");
+        {
+          const slot = await promptSelectMember(ctx);
+          session.selectedMember = slot != null ? slot : 0;
+          note(`OP_27 select member → slot ${session.selectedMember + 1}`);
+        }
         break;
 
       case 0x28: {
@@ -899,12 +1176,15 @@ export async function runEventScript(ctx) {
         break;
       }
 
-      case 0x2d:
-        session.cond = 0;
+      case 0x2d: {
+        const arg1 = args[0] ?? 0;
+        const arg2 = args[1] ?? 0;
+        session.cond = op2dCheckMemberAttr(session, arg1, arg2);
         syncCond();
-        vmStep(nodeIndex, op, "member attr (needs roster)");
-        note("OP_2D member attr check — no roster (cond=0)");
+        vmStep(nodeIndex, op, `member attr 0x${arg1.toString(16)}/0x${arg2.toString(16)} → ${session.cond}`);
+        note(`OP_2D member check → cond=${session.cond}`);
         break;
+      }
 
       case 0x2f:
         session.inputBuffer = "";
@@ -927,10 +1207,10 @@ export async function runEventScript(ctx) {
 
       case 0x32: {
         const id = args[0] ?? 0;
-        session.cond = session.titleNibbleCount === id ? 1 : 0;
+        session.cond = sessionCountPartyNibbleMatches(session, id);
         syncCond();
-        vmStep(nodeIndex, op, `title nibble id=0x${id.toString(16)} → ${session.cond}`);
-        note(`OP_32 title nibble count — stub cond=${session.cond}`);
+        vmStep(nodeIndex, op, `nibble id=0x${id.toString(16)} → count=${session.cond}`);
+        note(`OP_32 title/skill nibble count → cond=${session.cond}`);
         break;
       }
 

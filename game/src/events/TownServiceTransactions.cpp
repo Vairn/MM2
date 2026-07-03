@@ -1,6 +1,12 @@
 #include "mm2/events/TownServiceTransactions.h"
 
+#include "mm2/gameplay/SpellBook.h"
+
+#include "mm2_items_codec.h"
 #include "mm2_town_tables.h"
+
+#include <cstdio>
+#include <cstring>
 
 namespace mm2::events {
 
@@ -230,6 +236,225 @@ TownSvcBuyResult townSvcSmithBuy(Mm2RosterRecord &rec, uint8_t item_id, uint8_t 
 
     r.bought = true;
     r.slot = slot;
+    return r;
+}
+
+TownSvcSellResult townSvcSmithSell(Mm2RosterRecord &rec, int backpack_slot, uint32_t price)
+{
+    TownSvcSellResult r;
+    r.price = price;
+    r.slot = backpack_slot;
+
+    /* 0x1BC2E: afflicted characters cannot sell. */
+    if (rec.condition != 0) {
+        r.price = 0;
+        r.reject = TownSvcSellReject::Condition;
+        return r;
+    }
+
+    if (backpack_slot < 0 || backpack_slot >= MM2_ROSTER_ITEM_SLOTS) {
+        r.price = 0;
+        r.reject = TownSvcSellReject::NoItem;
+        return r;
+    }
+
+    const Mm2RosterItemSlot slot = mm2_roster_backpack(&rec, backpack_slot);
+    if (slot.item_id == 0) {
+        r.price = 0;
+        r.reject = TownSvcSellReject::NoItem;
+        return r;
+    }
+
+    /* 0x1B62A: credit gold to the character's purse (record+$66). */
+    rec.gold += price;
+
+    /* Clear the backpack slot (-$7F26 path @ 0x1BC26). */
+    Mm2RosterItemSlot empty{};
+    mm2_roster_set_backpack(&rec, backpack_slot, empty);
+
+    r.sold = true;
+    return r;
+}
+
+static void appendIdentifyEffect(const Mm2ItemRecord *item, char *buf, size_t cap)
+{
+    if (!item || !buf || cap == 0 || item->effect_byte == 0) {
+        return;
+    }
+    const uint8_t eff = item->effect_byte;
+    char tmp[48];
+    if (eff >= 0x01 && eff <= 0x7F) {
+        static const char *kKinds[] = {"MaxHP", "Mgt", "Spd", "Acc", "?",
+                                       "Level", "SpLvl"};
+        const unsigned kind = (eff >> 4) & 0x7u;
+        const unsigned amt = eff & 0xFu;
+        const char *label = (kind < 7) ? kKinds[kind] : "?";
+        std::snprintf(tmp, sizeof(tmp), " use +%u %s", amt, label);
+    } else if (eff >= 0x81 && eff <= 0xB0) {
+        const int idx = eff - 0x81;
+        const char *nm = (idx < mm2::gameplay::kSpellsPerSchool)
+                             ? mm2::gameplay::kSorcererSpells[idx].name
+                             : "Sorcerer spell";
+        std::snprintf(tmp, sizeof(tmp), " casts %s", nm);
+    } else if (eff >= 0xB1 && eff <= 0xE0) {
+        const int idx = eff - 0xB0;
+        const char *nm = (idx < mm2::gameplay::kSpellsPerSchool)
+                             ? mm2::gameplay::kClericSpells[idx].name
+                             : "Cleric spell";
+        std::snprintf(tmp, sizeof(tmp), " casts %s", nm);
+    } else {
+        std::snprintf(tmp, sizeof(tmp), " effect 0x%02X", eff);
+    }
+    if (std::strlen(buf) + std::strlen(tmp) + 1 < cap) {
+        std::strncat(buf, tmp, cap - std::strlen(buf) - 1);
+    }
+}
+
+TownSvcIdentifyResult townSvcSmithIdentify(Mm2RosterRecord &rec, int backpack_slot,
+                                           const Mm2ItemsFile *items, uint32_t cost,
+                                           char *summary, size_t summary_cap)
+{
+    TownSvcIdentifyResult r;
+    r.cost = cost;
+
+    if (rec.condition != 0) {
+        r.cost = 0;
+        r.reject = TownSvcIdentifyReject::Condition;
+        return r;
+    }
+
+    if (backpack_slot < 0 || backpack_slot >= MM2_ROSTER_ITEM_SLOTS) {
+        r.cost = 0;
+        r.reject = TownSvcIdentifyReject::NoItem;
+        return r;
+    }
+
+    const Mm2RosterItemSlot slot = mm2_roster_backpack(&rec, backpack_slot);
+    if (slot.item_id == 0) {
+        r.cost = 0;
+        r.reject = TownSvcIdentifyReject::NoItem;
+        return r;
+    }
+
+    /* 0x1BDD6: gold check + deduct (same leaf as buy). */
+    if (!townSvcCharGoldDeduct(rec, cost)) {
+        r.cost = 0;
+        r.reject = TownSvcIdentifyReject::NotEnoughGold;
+        return r;
+    }
+
+    if (summary && summary_cap > 0) {
+        summary[0] = '\0';
+        char name[20] = "item";
+        if (items) {
+            const Mm2ItemRecord *irec = mm2_items_lookup(items, slot.item_id);
+            if (irec) {
+                mm2_item_name_to_cstr(irec, name, sizeof(name));
+                const uint8_t plus = static_cast<uint8_t>(slot.flags & 0x3Fu);
+                if (plus != 0) {
+                    std::snprintf(summary, summary_cap, "%s +%u", name, static_cast<unsigned>(plus));
+                } else {
+                    std::snprintf(summary, summary_cap, "%s", name);
+                }
+                if (slot.charges != 0) {
+                    char chg[24];
+                    std::snprintf(chg, sizeof(chg), ", %u charges", static_cast<unsigned>(slot.charges));
+                    if (std::strlen(summary) + std::strlen(chg) + 1 < summary_cap) {
+                        std::strncat(summary, chg, summary_cap - std::strlen(summary) - 1);
+                    }
+                }
+                appendIdentifyEffect(irec, summary, summary_cap);
+            } else {
+                std::snprintf(summary, summary_cap, "Item #%u", static_cast<unsigned>(slot.item_id));
+            }
+        }
+    }
+
+    r.identified = true;
+    return r;
+}
+
+/* Party food cap used by feeding frenzy (0x1CA84 cmpi.b #$28) and trade UI. */
+static constexpr uint8_t kTownPartyFoodMax = 0x28;
+
+TownSvcFeedingResult townSvcFeedingFrenzy(Mm2RosterRecord &payer, const Mm2PartyLaunch *launch,
+                                          Mm2RosterFile *roster, int map_id)
+{
+    TownSvcFeedingResult r;
+    Mm2TownCommerce town{};
+    if (!launch || !roster || !mm2_town_commerce(map_id, &town)) {
+        return r;
+    }
+    r.cost = town.donation_gold;
+
+    /* 0x1CA48 -> 0x1C9C0: payer gold check + deduct. */
+    if (!townSvcCharGoldDeduct(payer, r.cost)) {
+        return r;
+    }
+    r.paid = true;
+
+    /* 0x1CA6C: walk party slots 0..party_count-1, top food to 40 when below. */
+    for (int i = 0; i < launch->party_count; ++i) {
+        const int roster_idx = launch->roster_slots[i];
+        if (roster_idx < 0 || roster_idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        Mm2RosterRecord &member = roster->records[roster_idx];
+        if (member.food < kTownPartyFoodMax) {
+            member.food = kTownPartyFoodMax;
+            ++r.members_topped;
+        }
+    }
+    r.fed = true;
+    return r;
+}
+
+bool townSvcMageGuildMember(const Mm2RosterRecord &rec, int map_id)
+{
+    const uint8_t mask = mm2_mage_guild_member_mask(map_id);
+    return mask != 0 && (rec.class_quest_guild_mask & mask) != 0;
+}
+
+bool townSvcPartyHasMageGuildMember(const Mm2RosterRecord *const *members, int count,
+                                    int map_id)
+{
+    if (!members) {
+        return false;
+    }
+    for (int i = 0; i < count; ++i) {
+        if (members[i] && townSvcMageGuildMember(*members[i], map_id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TownSvcSpellResult townSvcBuySpell(Mm2RosterRecord &rec, int spell_index, uint32_t cost)
+{
+    TownSvcSpellResult r;
+    r.cost = cost;
+
+    /* 0x1D882: an unpopulated/zero-cost slot is not for sale. */
+    if (cost == 0) {
+        r.cost = 0;
+        r.reject = TownSvcSpellReject::NotForSale;
+        return r;
+    }
+    /* 0x1D898: afflicted characters cannot buy. */
+    if (rec.condition != 0) {
+        r.cost = 0;
+        r.reject = TownSvcSpellReject::Condition;
+        return r;
+    }
+    /* 0x1D8BA -> 0x1D90C (== 0x1C9C0): gold check + deduct. */
+    if (!townSvcCharGoldDeduct(rec, cost)) {
+        r.cost = 0;
+        r.reject = TownSvcSpellReject::NotEnoughGold;
+        return r;
+    }
+    /* 0x1D8D4/0x1D8FA: OR the flat-index bit into the record+0x51 spellbook. */
+    mm2::gameplay::spellLearnInBook(rec, spell_index);
+    r.learned = true;
     return r;
 }
 

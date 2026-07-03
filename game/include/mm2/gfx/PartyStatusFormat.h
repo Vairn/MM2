@@ -5,11 +5,12 @@
 
 #include "mm2_roster_codec.h"
 
-// Party status line layout traced from draw_party_status_panel @ 0x6178:
+// Party status line layout traced from draw_party_status_panel @ 0x6150:
 //   prefix " n)" (0x6204..0x6226) + 11-byte roster name field + " /" (0x6254..0x6266)
 //   + HP word roster +$5E (0x6274); CMPI #$03E7 @ 0x627A → "+++" @ 0x62EC else
 //   3-cell decimal @ 0x628E..0x62C2 (right-aligned; leading spaces when HP < 100 / < 10).
-// Combat active slot adds check glyph 0x7E before the digit (combat refresh ~0xDFD8).
+// Combat monster-list check glyph 0x7E is drawn only in the right-column roster
+// via combat_monster_line @ 0x1374A (A4-$702a), not on the party panel @ 0x6150.
 
 namespace mm2::gfx {
 
@@ -20,7 +21,7 @@ void formatPartyHpField(uint16_t hp, char *out, size_t cap);
 
 enum class PartyStatusPrefix : uint8_t {
     Exploration,     /* " n)" @ 0x6204 — leading space, digit, ')' */
-    CombatCheckmark, /* glyph 0x7E + digit + ')' — check drawn separately if no glyph */
+    CombatCheckmark, /* glyph 0x7E — combat_monster_line @ 0x1374A (monster rows only) */
 };
 
 /** Full line: prefix + name padded/truncated to 11 + " /" + HP field. Returns strlen(out). */

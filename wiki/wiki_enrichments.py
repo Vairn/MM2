@@ -67,9 +67,16 @@ SECTIONS: dict[str, str] = {
     "Commerce-World-Services": "Game systems",
     "Mount-Farview-Class-Quest": "Game systems",
     "Class-Quest-HP-Bug": "Game systems",
-    "MM1-MAZEDATA-Format": "MM1 cross-walk",
-    "MM1-to-MM2-Outdoor": "MM1 cross-walk",
-    "MM1-Outdoor-WALLPIX": "MM1 cross-walk",
+    "MM1-MAZEDATA-Format": "Might and Magic I (DOS)",
+    "MM1-to-MM2-Outdoor": "Might and Magic I (DOS)",
+    "MM1-Outdoor-WALLPIX": "Might and Magic I (DOS)",
+    "MM1-Overview": "Might and Magic I (DOS)",
+    "MM1-Art-and-Graphics": "Might and Magic I (DOS)",
+    "MM1-Items-Monsters-Events": "Might and Magic I (DOS)",
+    "MM1-Map-Walker": "Might and Magic I (DOS)",
+    "MM1-Gallery": "Might and Magic I (DOS)",
+    "MM1-Maps-Gallery": "Might and Magic I (DOS)",
+    "MM1-Walls-Gallery": "Might and Magic I (DOS)",
     "RE-Tools": "Tools",
     "MM2ED-Editor": "Tools",
     "C-Decomp-Scaffold": "Tools",
@@ -240,6 +247,32 @@ RELATED: dict[str, list[tuple[str, str]]] = {
         ("Amiga-3D-Render-Process", "Original blit pipeline"),
         ("3D-View-and-Game-Screen", "68k viewport layout"),
         ("Map-Walker", "HTML5 frustum preview"),
+    ],
+    "MM1-Overview": [
+        ("MM1-MAZEDATA-Format", "55-screen MAZEDATA layout"),
+        ("MM1-to-MM2-Outdoor", "Overland conversion"),
+        ("MM1-Art-and-Graphics", "WALLPIX decode status"),
+        ("MM1-Map-Walker", "Interactive 55-screen explorer"),
+    ],
+    "MM1-MAZEDATA-Format": [
+        ("MM1-Overview", "Hub + screen index"),
+        ("map-dat-Format", "MM2 equivalent layout"),
+        ("MM1-Map-Walker", "Walk every screen"),
+    ],
+    "MM1-to-MM2-Outdoor": [
+        ("MM1-Outdoor-WALLPIX", "Per-sector horizon lanes"),
+        ("MM1-Art-and-Graphics", "WALLPIX sheet layout"),
+        ("map-dat-Format", "MM2 outdoor page 0"),
+    ],
+    "MM1-Art-and-Graphics": [
+        ("MM1-Outdoor-WALLPIX", "Biome sheet table"),
+        ("GFX-Loading", "MM2 .32 walker stand-ins"),
+        ("MM1-Map-Walker", "Preview pipeline"),
+    ],
+    "MM1-Items-Monsters-Events": [
+        ("MM1-Overview", "Decode status"),
+        ("items-dat-Format", "MM2 item layout baseline"),
+        ("monsters-dat-Format", "MM2 monster layout baseline"),
     ],
 }
 
@@ -605,8 +638,15 @@ Combat is a round loop kicked off by event opcode **OP_12** - see
 | Tool | Link | What it does |
 |------|------|--------------|
 | **Map walker** | [GitHub Pages](https://Vairn.github.io/MM2/maze-walker/) | First-person 3D - all 60 screens |
+| **MM1 map walker** | [GitHub Pages](https://Vairn.github.io/MM2/mm1-maze-walker/) | MM1 MAZEDATA - 55 screens |
 | **Sprite gallery** | [Gallery](Gallery) | Decoded `.32` tilesets + `.anm` combat art |
 | **MM2ED** | [Editor docs](MM2ED-Editor) | Edit `.dat` files with live hex + previews |
+
+### Might and Magic I (DOS)
+
+Cross-walk docs for the predecessor: [MM1 Overview](MM1-Overview) - [MAZEDATA](MM1-MAZEDATA-Format) -
+[outdoor conversion](MM1-to-MM2-Outdoor) - [WALLPIX art](MM1-Art-and-Graphics).
+Items and monsters are **not decoded** yet - see [status page](MM1-Items-Monsters-Events).
 
 ---
 

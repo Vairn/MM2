@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Per-screen random-encounter tuning from attrib.dat bytes 0x09-0x0D.
  * Loaded into A4-$561A on screen enter; reads appear as -$5611..-$560D. */
 typedef struct Mm2EncounterTuning {
@@ -58,5 +62,9 @@ int mm2_encounter_setup_encode(const Mm2EncounterSetup *in, uint8_t *out);
 
 /* Final on-screen monster count per the combat-setup recompute @ 0x12CE0. */
 uint8_t mm2_encounter_live_count(const Mm2EncounterSetup *in);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
