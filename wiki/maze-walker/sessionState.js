@@ -2,16 +2,7 @@
 "use strict";
 
 import { MAGE_GUILD_MEMBER_MASK } from "./townTables.js";
-
-/** @typedef {{ id: number, count: number, charges?: number, flags?: number }} InvStack */
-
-/** Field selector → record byte offset (from game/include/mm2/events/EventFieldMap.h). */
-const FIELD_OFFSET = {
-  0x6d: 0x50,
-  0x74: 0x79,
-  0x76: 0x76,
-  0x7b: 0x7b,
-};
+import { resolveMemberFieldOffset } from "./eventFieldMap.js";
 
 const GUILD_ENROLL_COST = 20;
 const BRAIN_DETOX_COST = 100;
@@ -198,6 +189,14 @@ export function memberGrantSkillId(member, skillId) {
     return;
   }
   member.skillPack = packed & 0xff;
+}
+
+/** Both skill-pack nibbles occupied (rosterSkillSlotFull low+high). */
+export function memberSkillSlotsFull(member) {
+  const packed = member.skillPack ?? 0;
+  const lo = packed & 0x0f;
+  const hi = (packed >> 4) & 0x0f;
+  return lo >= 1 && lo <= 15 && hi >= 1 && hi <= 15;
 }
 
 /** @param {object | null} manifest */
@@ -478,10 +477,7 @@ export function donationGold(screenId) {
 }
 
 function resolveFieldOffset(selector) {
-  const sel = selector & 0x7f;
-  if (FIELD_OFFSET[sel] != null) return FIELD_OFFSET[sel];
-  if (sel <= 0x17) return null;
-  return sel <= 0x55 ? sel : null;
+  return resolveMemberFieldOffset(selector);
 }
 
 export function sessionAddGold(session, amount) {

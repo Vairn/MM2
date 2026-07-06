@@ -44,6 +44,36 @@ Outputs:
 | `extract_asm_parts.py` | `EXTRACTED/asm/*.asm` | Split listing into commented subsystem files |
 | `scan_a4_jsr.py` | stdout | List `JSR d(A4)` thunks with names from yaml |
 
+### PC DOS port (8086 — **not** 68k)
+
+GOG **`MM2.EXE`**, **`CGA.DRV`**, **`EGA.DRV`**:
+
+```powershell
+python tools\disasm_pc_x86.py "C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 2\MM2.EXE" `
+  "C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 2\CGA.DRV" `
+  "C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 2\EGA.DRV"
+```
+
+| Tool | Output | Use |
+|------|--------|-----|
+| `disasm_pc_x86.py` | `EXTRACTED/pc/mm2.capstone.asm`, `cga.capstone.asm`, `ega.capstone.asm` | PC x86 RE (Capstone `CS_MODE_16`) |
+| `decode_pc_gfx.py` | `EXTRACTED/pc_gfx/` | Extract `.4` / `.16` — wall sheets + monster atlas |
+| `export_monster_variants.py` | `EXTRACTED/monster_variants/` | Per-`monsters.dat` Amiga/CGA/EGA combat GIFs |
+| `gen_gfx_compare_html.py` | `EXTRACTED/pc_gfx/compare/` | Numbered slot index: monsters 01–74 + wall sheets |
+| `pc_gfx_export.py` | `wiki/public/gallery/pc/` | Wiki gallery for PC CGA/EGA assets |
+
+See **`EXTRACTED/docs/54-pc-dos-graphics-formats.md`** and **`EXTRACTED/pc/README.md`** for
+format specs (`0x2A42` LZW, `MONSTERS.*` u32 header, `0x6824` loader, prelude compositing, …).
+
+```powershell
+python tools\decode_pc_gfx.py "C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 2" --batch
+python tools\export_monster_variants.py
+python tools\gen_gfx_compare_html.py
+python wiki\scripts\export-platform-compare.py   # wiki: monsters + walls iframe page
+python wiki\scripts\export-monster-variants.py   # wiki gallery page
+python tools\pc_gfx_export.py
+```
+
 ### Data codec helpers (`items.dat`, `str.dat`)
 
 Python:

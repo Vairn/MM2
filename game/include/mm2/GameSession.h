@@ -88,6 +88,7 @@ private:
     bool canUsePartialView3DRefresh() const;
     void renderFrameView3DOnly();
     void renderFrameOverlayAnimOnly();
+    void renderFrameCombatAnimOnly();
 #endif
     void renderView3D();
     void renderCombatBackdrop();
@@ -153,6 +154,9 @@ private:
     combat::CombatSession combat_;
     gfx::ViewportAnmOverlay combat_sprite_{};
     int combat_sprite_disk_ = -1;
+#if MM2_HOST_AMIGA
+    bool combat_backdrop_cached_ = false;
+#endif
 
     world::MapWorld world_;
     world::AutomapState automap_;

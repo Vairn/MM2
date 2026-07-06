@@ -43,6 +43,8 @@ import {
   ARENA_TICKET_COLOR_NAMES,
 } from "./sessionState.js";
 
+import { applySkillBuy } from "./skillBuy.js";
+
 /** @param {object} member @param {number} amount */
 function charGoldDeduct(member, amount) {
   const need = amount | 0;
@@ -684,6 +686,37 @@ export async function runBrainDetoxService(ctx) {
     0x0e
   );
   note(`Brain detox ${member.name} −100 gp, skill pack cleared`);
+  ctx.onSessionChange?.(session);
+}
+
+/** OP_0E default-range skill vendor transaction (eventApplySkillBuy). */
+export async function runSkillBuyTransaction(ctx, offer) {
+  const { session, waitForSpace, note, sprite, title } = ctx;
+  let slot = session.selectedMember ?? 0;
+  if (!offer.memberAlreadySelected) {
+    const picked = await promptSelectMember(ctx);
+    if (picked == null) {
+      note(`Skill buy 0x${offer.execSelector.toString(16)} cancelled`);
+      return;
+    }
+    slot = picked;
+  }
+  const r = applySkillBuy(session, slot, offer.skillId, offer.goldCost);
+  if (!r.ok) {
+    if (r.reason === "full") {
+      await waitForSpace("You already have two skills!", sprite, 0x0e);
+    } else {
+      await waitForSpace("Not enough gold!", sprite, 0x0e);
+    }
+    note(`Skill buy failed (${r.reason})`);
+    return;
+  }
+  await waitForSpace(
+    `${title}\n\nSkill #${offer.skillId} granted to party member ${slot + 1}.\n(${offer.goldCost} gp checked — bytecode does not deduct)`,
+    sprite,
+    0x0e
+  );
+  note(`Skill buy 0x${offer.execSelector.toString(16)} skill=${offer.skillId}`);
   ctx.onSessionChange?.(session);
 }
 

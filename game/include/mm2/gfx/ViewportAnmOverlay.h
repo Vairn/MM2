@@ -107,15 +107,16 @@ private:
 
     void resetPlayback(AnmLoopMode loop);
 
+    void syncComposeOriginFromCache();
+
 
 
 #if MM2_HOST_AMIGA
 
-    /* All composed cels are pre-built into chip BOBs once at load; per-tick
-     * playback just re-points cur_cel_ and issues one blitCopyMask. */
+    /* Per-cel chip cache: compose each frame once, then index-only playback. */
     mm2_anm_planar_cache cache_{};
 
-    const mm2_anm_composite_planar *cur_cel_ = nullptr;
+    mutable bool hw_palette_live_ = false;
 
 #else
 

@@ -117,6 +117,12 @@ uint8_t mm2_attrib_surface_flag(const Mm2AttribRecord *r);
 int mm2_attrib_is_outside(const Mm2AttribRecord *r); /* surface_flag != 0 */
 int mm2_attrib_is_outdoor(const Mm2AttribRecord *r); /* planes 41..44 or outside */
 
+/* A4-$79E2 on screen enter @ 0x1BDC: outdoor surface / elemental 3D vs dungeon 3D. */
+int mm2_attrib_view_mode(const Mm2AttribRecord *r);
+
+/* A4-$7660 materialized from attrib surface_flag low nibble @ 0x1650 (area_env_gfx_loader). */
+uint8_t mm2_attrib_runtime_env_id(const Mm2AttribRecord *r);
+
 /* slot: 0..3; slots (0,2) and (1,3) are opposite directions. */
 uint8_t mm2_attrib_neighbor(const Mm2AttribRecord *r, int slot);
 

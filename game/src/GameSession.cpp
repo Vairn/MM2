@@ -303,6 +303,7 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     if (has_world) {
         has_sky = env_.loadGlobal(data_dir_);
         has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
+        combat::encounterSyncScreenContext(gs_, world_);
     }
     assets_ok_ = has_world && has_env && has_sky;
     events_loaded_ = events_.load(data_dir_);
@@ -371,6 +372,9 @@ void GameSession::tickBootstrap()
     case 1: {
         MM2_DBG("MM2 GOTO: bootstrap world load screen=%d\n", gs_.screenId());
         const bool has_world = world_.load(data_dir_) && world_.enterScreen(gs_.screenId());
+        if (has_world) {
+            combat::encounterSyncScreenContext(gs_, world_);
+        }
         assets_ok_ = has_world;
         bootstrap_step_ = 2;
         markDirty();
@@ -471,6 +475,7 @@ void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
             world_.enterScreen(gs_.screenId());
             const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
             assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
+            combat::encounterSyncScreenContext(gs_, world_);
             if (events_loaded_) {
                 refreshEventsForScreen();
             }
@@ -480,19 +485,20 @@ void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
         }
         automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_,
                                                launch_);
-        if (move.moved && !move.screen_changed) {
-            maybeTriggerStepEncounter();
+        if (move.moved) {
+            gameplay::latchExploreEventsAfterMove(gs_);
         }
     }
 }
 
 void GameSession::maybeTriggerStepEncounter()
 {
-    /* Random step encounter @ 0x10A2 (outdoor terrain class 4 + dual RNG gates). */
+    /* Random step encounter @ 0x10A2 on the departure tile (before coords update). */
     if (!has_monsters_ || combat_.active()) {
         return;
     }
-    if (!combat::encounterTryStepRandom(gs_, world_, rng_)) {
+    const bool triggered = combat::encounterTryStepRandom(gs_, world_, rng_);
+    if (!triggered) {
         return;
     }
     if (!combat_.enter(gs_, world_)) {
@@ -546,6 +552,7 @@ void GameSession::refreshWorldAfterEventTransition()
     world_.enterScreen(gs_.screenId());
     const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
     assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
+    combat::encounterSyncScreenContext(gs_, world_);
     if (events_loaded_) {
         /* OP_0C map_transition: drop OP_0B portraits / popups from the prior screen
          * (enterLocation → text_.reset). Without this, Middlegate shop .anm overlays
@@ -559,6 +566,10 @@ void GameSession::finishCombat()
 {
     combat_sprite_.unload();
     combat_sprite_disk_ = -1;
+#if MM2_HOST_AMIGA
+    combat_backdrop_cached_ = false;
+    mm2_amiga_viewport_cache_invalidate();
+#endif
     /* Combat's own -$7EDE call already ran synchronously inside the OP_12/13/
      * arena handler that armed it, so the event VM already aborted the script
      * that same tick (0x16362/abortScript). Re-scan for tile events now that
@@ -789,6 +800,7 @@ void GameSession::handleBashDoor()
 
     /* 0x9B7A/0x9B82: outdoor, or no wall ahead -> a plain forward step + tick. */
     if (world_.isOutdoor() || field == MM2_MAP_WALL_OPEN) {
+        maybeTriggerStepEncounter();
         gameplay::MoveResult move = gameplay::step(world_, gs_, true);
         refreshWorldAfterMove(move);
         return;
@@ -796,6 +808,7 @@ void GameSession::handleBashDoor()
 
     /* 0x9B88: door already unlocked (no wall bit) -> step through. */
     if (!forwardDoorBlocked(world_, x, y, facing)) {
+        maybeTriggerStepEncounter();
         gameplay::MoveResult move = gameplay::step(world_, gs_, true);
         refreshWorldAfterMove(move);
         return;
@@ -838,6 +851,7 @@ void GameSession::handleBashDoor()
     }
 
     /* 0x9C66: step forward + time tick. */
+    maybeTriggerStepEncounter();
     gameplay::MoveResult move = gameplay::step(world_, gs_, true);
     refreshWorldAfterMove(move);
 }
@@ -1354,6 +1368,9 @@ void GameSession::tick(const platform::KeyState &keys)
         return;
     }
 
+    /* 0x1290: clear -$4F4E once per play-loop iteration before input dispatch. */
+    mm2_gs_set_u16(gs_.a4(), MM2_GS_ENCOUNTER_REDRAW, 0);
+
     maybeFinishInnRegistry();
 
     if (overlay_ != PlayOverlay::None) {
@@ -1372,9 +1389,11 @@ void GameSession::tick(const platform::KeyState &keys)
                     move = gameplay::turn(world_, gs_, true);
                     break;
                 case gameplay::ExploreCode::Forward:
+                    maybeTriggerStepEncounter();
                     move = gameplay::step(world_, gs_, true);
                     break;
                 case gameplay::ExploreCode::Back:
+                    maybeTriggerStepEncounter();
                     move = gameplay::step(world_, gs_, false);
                     break;
                 default:
@@ -1709,7 +1728,18 @@ void GameSession::renderFrame(bool overlay_anim_only)
 #endif
 
     if (combat_active) {
+#if MM2_HOST_AMIGA
+        if (!combat_backdrop_cached_) {
+            mm2_amiga_restore_play_world_palette();
+            renderCombatBackdrop();
+            mm2_amiga_viewport_cache_save();
+            combat_backdrop_cached_ = true;
+        } else {
+            mm2_amiga_viewport_cache_restore();
+        }
+#else
         renderCombatBackdrop();
+#endif
         refreshCombatSprite();
         if (combat_sprite_.loaded()) {
             combat_sprite_.blitCentered(compositor_, 0);
@@ -1842,6 +1872,22 @@ void GameSession::renderFrameOverlayAnimOnly()
     }
 }
 
+void GameSession::renderFrameCombatAnimOnly()
+{
+    if (!mm2_amiga_copy_front_to_back()) {
+        renderFrame(false);
+        play_buffer_valid_ = true;
+        return;
+    }
+
+    mm2_amiga_viewport_cache_restore();
+    refreshCombatSprite();
+    if (combat_sprite_.loaded()) {
+        combat_sprite_.blitCentered(compositor_, 0);
+    }
+    gfx::drawPlayViewportDivider(compositor_);
+}
+
 void GameSession::renderFrameView3DOnly()
 {
     if (!mm2_amiga_copy_front_to_back()) {
@@ -1874,12 +1920,20 @@ void GameSession::renderFrameView3DOnly()
 void GameSession::render()
 {
 #if MM2_HOST_AMIGA
-    /* Sign / portrait cel tick: copy HUD from front, restore cached 3D hood, repaint overlays. */
+    /* Sign / portrait / combat monster cel tick: copy HUD from front, restore
+     * cached viewport hood, repaint animated overlay only. */
     if (overlay_anim_dirty_ && !view3d_dirty_ && !chrome_dirty_ && !text_dirty_ &&
-        mm2_amiga_viewport_cache_valid() && !viewportHiddenByOverlay()) {
-        renderFrameOverlayAnimOnly();
-        play_buffer_valid_ = true;
-        return;
+        !viewportHiddenByOverlay()) {
+        if (combat_.active() && combat_backdrop_cached_) {
+            renderFrameCombatAnimOnly();
+            play_buffer_valid_ = true;
+            return;
+        }
+        if (mm2_amiga_viewport_cache_valid()) {
+            renderFrameOverlayAnimOnly();
+            play_buffer_valid_ = true;
+            return;
+        }
     }
 
     if (canUsePartialView3DRefresh()) {

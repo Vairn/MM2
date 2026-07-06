@@ -270,6 +270,7 @@ using ::memset;
 using ::size_t;
 using ::snprintf;
 using ::strcmp;
+using ::strchr;
 using ::strncpy;
 using ::strlen;
 

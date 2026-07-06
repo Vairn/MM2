@@ -71,22 +71,50 @@ void mm2_anm_composite_planar_free(mm2_anm_composite_planar *img);
  * many cels cost more chip RAM than the single-buffer mm2_anm_composite_frame_planar.
  */
 typedef struct mm2_anm_planar_cache {
-    mm2_anm_composite_planar *cels; /* array[count]; each owns its bitmap+mask */
+    mm2_anm_composite_planar *cels; /* optional; only when mm2_anm_composite_build_cache() */
     int count;
     int width;  /* shared canvas width  (frame-independent union) */
     int height; /* shared canvas height */
+    uint8_t map_to_host_palette;
+    /* Metadata for lazy single-buffer compose (no cels[] unless build_cache). */
+    const mm2_anm_file *source;
+    mm2_anm_compose_canvas canvas;
+    uint8_t remap[MM2_ANM_PALETTE_COLORS];
+    uint8_t lazy_ready;
 } mm2_anm_planar_cache;
 
 /**
- * Compose every frame (0..frame_count-1) into its own planar cel. The pen remap
- * is computed ONCE and shared across all cels (see map_to_host_palette). Frees any
- * previous contents of `out` first. Returns 0 (and frees) on allocation failure.
+ * Prepare planar cache metadata (canvas + shared pen remap) and allocate per-cel
+ * slots (chip bitmaps composed lazily via mm2_anm_composite_cache_ensure()).
+ * Caller must keep `anm` alive until mm2_anm_composite_cache_free().
+ */
+int mm2_anm_composite_cache_init(const mm2_anm_file *anm, uint8_t map_to_host_palette,
+                                 mm2_anm_planar_cache *out);
+
+/** Compose one cel into chip RAM if not built yet. Returns 0 on failure. */
+int mm2_anm_composite_cache_ensure(mm2_anm_planar_cache *cache, int frame_idx);
+
+/**
+ * Compose `frame_idx` into reusable `out` using cache metadata from cache_init().
+ * Reuses `out->bitmap`/`out->mask` after the first call (fast animation playback).
+ */
+int mm2_anm_composite_frame_cached(const mm2_anm_planar_cache *cache, int frame_idx,
+                                     mm2_anm_composite_planar *out);
+
+/**
+ * Compose every frame (0..frame_count-1) into its own planar cel. Prefer
+ * cache_init + cache_ensure at playback time for faster first paint.
  */
 int mm2_anm_composite_build_cache(const mm2_anm_file *anm, uint8_t map_to_host_palette,
                                   mm2_anm_planar_cache *out);
 
-/** Selected cel, or NULL when idx is out of range / cache empty. */
-const mm2_anm_composite_planar *mm2_anm_composite_cache_at(const mm2_anm_planar_cache *cache, int frame_idx);
+/** Selected cel, building it first when using a lazy cache_init(). */
+const mm2_anm_composite_planar *mm2_anm_composite_cache_cel(mm2_anm_planar_cache *cache,
+                                                            int frame_idx);
+
+/** Selected cel when already built; NULL if missing (lazy cache). */
+const mm2_anm_composite_planar *mm2_anm_composite_cache_at(const mm2_anm_planar_cache *cache,
+                                                            int frame_idx);
 
 void mm2_anm_composite_cache_free(mm2_anm_planar_cache *cache);
 #endif

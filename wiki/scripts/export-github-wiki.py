@@ -34,6 +34,7 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("EXTRACTED/docs/06-event-dat-format.md", "event-dat-Format"),
     ("EXTRACTED/docs/06-roster-format.md", "roster-dat-Format"),
     ("EXTRACTED/docs/07-anm-tv-format.md", "ANM-TV-Format"),
+    ("EXTRACTED/docs/54-pc-dos-graphics-formats.md", "PC-DOS-Graphics-Formats"),
     ("EXTRACTED/docs/07-dat-files-and-formats.md", "dat-Files-and-Formats"),
     ("EXTRACTED/docs/07-event-script-opcodes.md", "Event-Script-Opcodes"),
     ("EXTRACTED/docs/42-event-dsl-format.md", "Event-Script-DSL"),
@@ -95,6 +96,7 @@ DEFAULT_MM1_MAZEDATA = Path(
     r"C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 1\MAZEDATA.DTA"
 )
 EVENTS_SRC_DIR = "EXTRACTED/docs/events"
+EVENTS_HUB_TITLE = "Events-by-Location"
 
 GALLERY_PAGES = {
     "index": "Gallery",
@@ -176,6 +178,9 @@ def build_link_map() -> dict[str, str]:
         m[title] = title
     m["Map-Walker"] = "Map-Walker"
     m["MM1-Map-Walker"] = "MM1-Map-Walker"
+    m["Monster-Variants"] = "Monster-Variants"
+    m["Platform-Graphics-Index"] = "Platform-Graphics-Index"
+    m["Platform-Monsters-01-74"] = "Platform-Monsters-01-74"
     m["Getting-Started"] = "Getting-Started"
     return m
 
@@ -381,6 +386,7 @@ def write_home(*, out: Path = OUT) -> None:
 
 <ul>
 <li><a href="{WIKI_BASE}/Monster-Sprites">Monster .anm</a> — GIF + contact sheets</li>
+<li><a href="{WIKI_BASE}/Monster-Variants">Monster variants</a> — Amiga vs CGA/EGA</li>
 <li><a href="{WIKI_BASE}/World-Sprites">World sprites</a> · <a href="{WIKI_BASE}/Tilesets">tilesets</a></li>
 <li><a href="{WIKI_BASE}/Monsters">Monsters catalog</a> · <a href="{WIKI_BASE}/Items-Catalog">items catalog</a></li>
 <li><a href="{WIKI_BASE}/Map-Cartography">Auto-map cartography</a> · <a href="{WIKI_BASE}/3D-View-Graphics">3D views</a></li>
@@ -572,6 +578,9 @@ def write_sidebar() -> None:
 #### Gallery
 - [Gallery home](Gallery)
 - [Monster sprites](Monster-Sprites)
+- [Monster variants (Amiga / PC)](Monster-Variants)
+- [Platform graphics index](Platform-Graphics-Index)
+- [Platform monsters 01–74](Platform-Monsters-01-74)
 - [World sprites](World-Sprites)
 - [Monsters catalog](Monsters)
 - [Items catalog](Items-Catalog)
@@ -695,6 +704,7 @@ def export_gallery(*, skip_gallery: bool) -> None:
             "<h3>Combat &amp; world</h3>\n\n"
             "<ul>\n"
             "<li><a href=\"Monster-Sprites\">Monster .anm</a> — GIF animations</li>\n"
+            "<li><a href=\"Monster-Variants\">Monster variants</a> — Amiga vs CGA/EGA</li>\n"
             "<li><a href=\"World-Sprites\">World sprites</a> — town &amp; overland</li>\n"
             "<li><a href=\"Monsters\">Monsters catalog</a> · "
             "<a href=\"Items-Catalog\">Items catalog</a></li>\n"
@@ -729,6 +739,67 @@ def export_gallery(*, skip_gallery: bool) -> None:
         },
     )
     export_book_logo(OUT / "images" / "book-f00.png")
+    export_monster_variants_wiki(OUT)
+    export_platform_compare_wiki(OUT)
+
+
+def export_platform_compare_wiki(out_root: Path) -> None:
+    """Numbered monster + wall slot compare under images/gallery/platform-compare/."""
+    from gen_gfx_compare_html import DEFAULT_GOG, main as compare_main  # noqa: E402
+
+    gog = DEFAULT_GOG
+    if not (gog / "MONSTERS.4").is_file():
+        print("  skip platform compare: GOG MONSTERS.4/.16 not found")
+        return
+    gallery = out_root / "images" / "gallery" / "platform-compare"
+    print("Exporting platform graphics index…")
+    rc = compare_main(
+        [
+            "-o",
+            str(gallery),
+            "--github-wiki-dir",
+            str(out_root),
+            "--data",
+            str(ROOT),
+            "--gog",
+            str(gog),
+        ]
+    )
+    if rc != 0:
+        print(f"  platform compare export failed (rc={rc})", file=sys.stderr)
+
+
+def export_monster_variants_wiki(out_root: Path) -> None:
+    """Amiga / CGA / EGA side-by-side under images/gallery/monster-variants/."""
+    from export_monster_variants import DEFAULT_GOG, main as export_variants_main  # noqa: E402
+
+    gog = DEFAULT_GOG
+    if not (gog / "MONSTERS.4").is_file() or not (gog / "MONSTERS.16").is_file():
+        print("  skip monster variants: GOG MONSTERS.4/.16 not found")
+        return
+    gallery = out_root / "images" / "gallery" / "monster-variants"
+    md_out = out_root / "Monster-Variants.md"
+    print("Exporting monster variants (Amiga / CGA / EGA)…")
+    rc = export_variants_main(
+        [
+            "-o",
+            str(gallery),
+            "--markdown",
+            str(md_out),
+            "--image-prefix",
+            "images/gallery/monster-variants",
+            "--github-wiki",
+            "--no-html",
+            "--data",
+            str(ROOT),
+            "--monsters",
+            str(ROOT / "monsters.dat"),
+            "--gog",
+            str(gog),
+        ]
+    )
+    if rc != 0:
+        print(f"  monster variants export failed (rc={rc})", file=sys.stderr)
 
 
 def export_mm1_maze_walker(out_root: Path) -> None:

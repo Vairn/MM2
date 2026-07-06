@@ -74,13 +74,14 @@ void ViewportAnmOverlay::unload()
 
     const bool had_anm = anm_loaded_;
 
+    hw_palette_live_ = false;
+
 #endif
 
 #if MM2_HOST_AMIGA
 
     mm2_anm_composite_cache_free(&cache_);
-
-    cur_cel_ = nullptr;
+    hw_palette_live_ = false;
 
 #else
 
@@ -152,27 +153,21 @@ bool ViewportAnmOverlay::setComposedFrame(int frame_idx)
 
 #if MM2_HOST_AMIGA
 
-    /* Cels are pre-composed at load (mm2_anm_composite_build_cache) — selecting a
-     * frame is just a pointer + dimension swap, no software composite/remap. */
-    const mm2_anm_composite_planar *cel = mm2_anm_composite_cache_at(&cache_, frame_idx);
-
-    if (!cel) {
-
+    /* Lazy per-cel chip cache — each frame composed once, then reused. */
+    if (same && mm2_anm_composite_cache_at(&cache_, frame_idx) != NULL) {
         return false;
-
     }
-
-    if (same && cur_cel_ == cel) {
-
+    if (!mm2_anm_composite_cache_ensure(&cache_, frame_idx)) {
         return false;
-
     }
-
-    cur_cel_ = cel;
-
-    w_ = cel->width;
-
-    h_ = cel->height;
+    {
+        const mm2_anm_composite_planar *cel = mm2_anm_composite_cache_at(&cache_, frame_idx);
+        if (!cel) {
+            return false;
+        }
+        w_ = cel->width;
+        h_ = cel->height;
+    }
 
 #else
 
@@ -204,18 +199,43 @@ bool ViewportAnmOverlay::setComposedFrame(int frame_idx)
 
 #endif
 
-    mm2_anm_compose_canvas canvas{};
-    if (mm2_anm_compose_canvas_of(&anm_, &canvas)) {
-        compose_min_x_ = canvas.min_x;
-        compose_min_y_ = canvas.min_y;
-    } else {
-        compose_min_x_ = 0;
-        compose_min_y_ = 0;
-    }
-
     composed_frame_ = frame_idx;
 
     return !same;
+
+}
+
+
+
+void ViewportAnmOverlay::syncComposeOriginFromCache()
+
+{
+
+#if MM2_HOST_AMIGA
+
+    compose_min_x_ = cache_.canvas.min_x;
+
+    compose_min_y_ = cache_.canvas.min_y;
+
+#else
+
+    mm2_anm_compose_canvas canvas{};
+
+    if (mm2_anm_compose_canvas_of(&anm_, &canvas)) {
+
+        compose_min_x_ = canvas.min_x;
+
+        compose_min_y_ = canvas.min_y;
+
+    } else {
+
+        compose_min_x_ = 0;
+
+        compose_min_y_ = 0;
+
+    }
+
+#endif
 
 }
 
@@ -264,10 +284,11 @@ void ViewportAnmOverlay::resetPlayback(AnmLoopMode loop)
 #if MM2_HOST_AMIGA
 void ViewportAnmOverlay::applyHardwarePalette() const
 {
-    if (!anm_loaded_ || use_host_palette_) {
+    if (!anm_loaded_ || use_host_palette_ || hw_palette_live_) {
         return;
     }
     mm2_amiga_apply_anm_palette(anm_.palette_words);
+    hw_palette_live_ = true;
 }
 #endif
 
@@ -295,9 +316,8 @@ bool ViewportAnmOverlay::loadFromPath(const char *path, AnmLoopMode loop, bool a
 
 #if MM2_HOST_AMIGA
 
-    /* A: build one chip BOB+mask per composed cel up front, with the pen remap
-     * computed once (C). Steady-state playback is then a single hardware blit. */
-    if (!mm2_anm_composite_build_cache(&anm_, use_host_palette_ ? 1 : 0, &cache_)) {
+    /* Lazy chip cache: metadata at load, compose the active cel on demand. */
+    if (!mm2_anm_composite_cache_init(&anm_, use_host_palette_ ? 1 : 0, &cache_)) {
 
         unload();
 
@@ -310,6 +330,7 @@ bool ViewportAnmOverlay::loadFromPath(const char *path, AnmLoopMode loop, bool a
     resetPlayback(loop);
 
 #if MM2_HOST_AMIGA
+    syncComposeOriginFromCache();
     if (apply_hw_palette) {
         applyHardwarePalette();
     }
@@ -444,7 +465,38 @@ bool ViewportAnmOverlay::tick()
     if (next_frame == prev_frame) {
         return false;
     }
-    return setComposedFrame(next_frame);
+    const bool changed = setComposedFrame(next_frame);
+
+#if MM2_HOST_AMIGA
+    /* Compose the upcoming cel during the inter-frame delay (retail vblank ticks). */
+    if (animating_) {
+        int warm_frame = next_frame;
+        if (use_sequence_) {
+            const int pair_count = mm2_anm_seq_block_pair_count(&seq_, 0);
+            if (pair_count > 0) {
+                int warm_step = seq_step_ + 1;
+                if (warm_step >= pair_count) {
+                    warm_step = (loop_mode_ == AnmLoopMode::Loop) ? 0 : pair_count - 1;
+                }
+                warm_frame = mm2_anm_seq_frame_at(&seq_, 0, warm_step);
+            }
+        } else {
+            const int frame_count = static_cast<int>(anm_.frame_count);
+            if (frame_count > 1) {
+                int warm_step = seq_step_ + 1;
+                if (warm_step >= frame_count) {
+                    warm_step = (loop_mode_ == AnmLoopMode::Loop) ? 0 : frame_count - 1;
+                }
+                warm_frame = warm_step;
+            }
+        }
+        if (warm_frame != next_frame) {
+            (void)mm2_anm_composite_cache_ensure(&cache_, warm_frame);
+        }
+    }
+#endif
+
+    return changed;
 }
 
 
@@ -463,13 +515,17 @@ void ViewportAnmOverlay::blitAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) 
 
     (void)c;
 
-    if (!cur_cel_ || !cur_cel_->bitmap) {
-
+    const mm2_anm_composite_planar *cel = mm2_anm_composite_cache_at(&cache_, composed_frame_);
+    if (!cel || !cel->bitmap) {
         return;
-
     }
 
-    platform::blitAnmComposed(cur_cel_, dst_x, dst_y);
+    /* Retail loads .anm pens 3-17 into hardware immediately before the blit
+     * (combat / OP_0B / scripted sprites pass apply_hw_palette=false on load
+     * so env backdrop can keep pens 3-17 while the hood is painted). */
+    applyHardwarePalette();
+
+    platform::blitAnmComposed(cel, dst_x, dst_y);
 
 #else
 

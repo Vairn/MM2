@@ -124,6 +124,27 @@ int mm2_attrib_is_outdoor(const Mm2AttribRecord *r)
                                r->raw[MM2_ATTRIB_OFF_SURFACE_FLAG]);
 }
 
+int mm2_attrib_view_mode(const Mm2AttribRecord *r)
+{
+    uint8_t cat;
+    if (!r) {
+        return 0;
+    }
+    cat = r->raw[MM2_ATTRIB_OFF_MAP_CATEGORY];
+    if (cat == 3 || cat == 4 || cat == 6) {
+        return 1;
+    }
+    if (r->raw[MM2_ATTRIB_OFF_SURFACE_FLAG] != 0) {
+        return 1;
+    }
+    return mm2_is_elemental_plane((int)r->raw[MM2_ATTRIB_OFF_AREA_ID]) ? 1 : 0;
+}
+
+uint8_t mm2_attrib_runtime_env_id(const Mm2AttribRecord *r)
+{
+    return r ? (uint8_t)(r->raw[MM2_ATTRIB_OFF_SURFACE_FLAG] & 0x0F) : 0;
+}
+
 uint8_t mm2_attrib_neighbor(const Mm2AttribRecord *r, int slot)
 {
     if (!r || slot < 0 || slot > 3) {

@@ -329,6 +329,28 @@ body {
   width: auto;
 }
 
+/* Monster variants — three GIF columns */
+.vp-doc .monster-variants-wrap table img {
+  max-height: 72px;
+}
+
+.vp-doc .monster-variants-wrap table {
+  font-size: 0.82rem;
+}
+
+.vp-doc .monster-variants-wrap td small {
+  color: var(--mm2-text-dim);
+}
+
+.vp-doc .platform-compare-frame {
+  width: 100%;
+  min-height: 70vh;
+  height: min(85vh, 1200px);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background: #1a1a22;
+}
+
 .vp-doc h3 + p > img,
 .vp-doc h2 + p > img {
   max-width: 100%;

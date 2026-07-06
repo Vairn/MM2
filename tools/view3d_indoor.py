@@ -56,6 +56,7 @@ from view3d_trace import (  # noqa: E402
     describe_nibbles,
     load_map,
     set_facing,
+    torch_overlay_for,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -397,8 +398,8 @@ def compose_with_panel(view: Image.Image, n0: Image.Image, c1: Image.Image, c2: 
     d.text((mx, pad + 36), f"Tile: {tile_notation(x, y)}  ({x},{y})", fill=(180, 180, 200, 255))
     d.text((mx + 2, my + 2), "normal", fill=(220, 220, 230, 255))
     d.text((mx + cell_w + gap + 2, my + 2), "code=1", fill=(220, 220, 230, 255))
-    d.text((mx + 2, my + cell_h + gap + 2), "code=2 door", fill=(220, 220, 230, 255))
-    d.text((mx + cell_w + gap + 2, my + cell_h + gap + 2), "code=3 torch", fill=(220, 220, 230, 255))
+    d.text((mx + 2, my + cell_h + gap + 2), "code=2 torch", fill=(220, 220, 230, 255))
+    d.text((mx + cell_w + gap + 2, my + cell_h + gap + 2), "code=3 door", fill=(220, 220, 230, 255))
     nz = [f"{SLOT_NAMES[i]}={v}" for i, v in enumerate(slots) if v]
     d.text((mx, out_h - pad - 22), "Slots:", fill=(180, 180, 200, 255))
     d.text((mx + 40, out_h - pad - 22), " ".join(nz[:4]), fill=(180, 180, 200, 255))
@@ -440,37 +441,10 @@ def render_indoor_view(scene: View3DScene, sheets: SheetSet, data_dir: Path, *, 
 
     for b in draw_blits:
         blit(canvas, sprite(sheets.walls, b.frame), b.x, b.y)
-        if b.code != 3 or b.depth > 2:
-            continue
-        tf = tx = ty = None
-        if b.kind == "front":
-            tf = 0x12 + b.depth * 3
-            tx = (105, 108, 107)[b.depth]
-            ty = (44, 52, 60)[b.depth]
-        elif b.kind == "left":
-            if b.frame in (12, 14, 2, 3):
-                if b.depth == 0:
-                    continue
-                tf = 0x12 + b.depth * 3
-                tx = (8, 16, 64)[b.depth]
-                ty = (44, 52, 60)[b.depth]
-            else:
-                tf = b.depth * 3
-                tx = (8, 43, 73)[b.depth]
-                ty = (49, 55, 59)[b.depth]
-        elif b.kind == "right":
-            if b.frame in (13, 15, 2, 3):
-                if b.depth == 0:
-                    continue
-                tf = 0x12 + b.depth * 3
-                tx = (202, 199, 152)[b.depth]
-                ty = (44, 52, 60)[b.depth]
-            else:
-                tf = 9 + b.depth * 3
-                tx = (196, 166, 142)[b.depth]
-                ty = (49, 55, 59)[b.depth]
-        if tf is not None:
-            blit(canvas, sprite(sheets.torch, tf), int(tx), int(ty))
+        tb = torch_overlay_for(b, phase=0)
+        if tb is not None:
+            tf, tx, ty = tb
+            blit(canvas, sprite(sheets.torch, tf), tx, ty)
 
     if with_minimap:
         normal = render_minimap(visual, collision, x, y, facing, screen=screen, data_dir=data_dir, outdoor=False)

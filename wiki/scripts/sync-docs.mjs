@@ -118,4 +118,16 @@ if (galleryResult.status !== 0 && galleryResult.status !== null) {
 const mm1GalleryScript = path.join(wikiRoot, 'scripts', 'export-mm1-gallery.py');
 spawnSync(py, [mm1GalleryScript], { stdio: 'inherit', cwd: repoRoot });
 
+// PC DOS .4/.16 gallery (GOG install or EXTRACTED/pc_gfx).
+const pcGalleryScript = path.join(wikiRoot, 'scripts', 'export-pc-gfx-gallery.py');
+spawnSync(py, [pcGalleryScript], { stdio: 'inherit', cwd: repoRoot });
+
+// Monster variants: Amiga / CGA / EGA side-by-side (monsters.dat index).
+const variantsScript = path.join(wikiRoot, 'scripts', 'export-monster-variants.py');
+spawnSync(py, [variantsScript], { stdio: 'inherit', cwd: repoRoot });
+
+// Platform compare: numbered monster + wall slots (Amiga / CGA / EGA).
+const platformCompareScript = path.join(wikiRoot, 'scripts', 'export-platform-compare.py');
+spawnSync(py, [platformCompareScript], { stdio: 'inherit', cwd: repoRoot });
+
 console.log('Synced docs -> wiki/docs/');

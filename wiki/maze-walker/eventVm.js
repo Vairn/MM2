@@ -35,13 +35,16 @@ import {
   runPortalTravel,
   runDeferredServiceMenu,
   runArenaTicketSelector,
+  runSkillBuyTransaction,
   promptSelectMember,
 } from "./townServices.js";
 
+import { skillBuyOfferForExecSelector } from "./skillBuy.js";
+import { applyFeldecarbFountain, applyNordonGobletReturn, NORDON_GOBLET_XP, NORDON_GOBLET_GOLD } from "./questRewards.js";
+
 import { binExecSelector } from "./selectorBin.js";
 
-/** event.dat loc 61 str[22..25]: OP_12 bytecode for Middlegate combat tiles
- * (OP_0E selectors 0x26..0x29). Bytes verified from event.dat @ 0x01356F. */
+/** @deprecated use runDefaultRangeOverlay — kept for tests referencing combat bytes. */
 const LOC_61_COMBAT_OVERLAY = {
   22: [0x0e, 0x0e, 0x0e, 0x0e, 0x0e, 0x0e, 0x21, 0x21, 0x21, 0x21, 0x00, 0x00],
   23: [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
@@ -50,16 +53,52 @@ const LOC_61_COMBAT_OVERLAY = {
 };
 
 /**
- * Default-range overlay (asm 0x15EDC → -$7DFA): loc 61 embedded OP_12 fights.
- * @returns {Promise<boolean>} true when combat ran
+ * Default-range overlay VM re-entry (asm runDefaultRangeOverlay @ EventRuntime.cpp).
+ * Uses WALKER_OVERLAYS from export_map_walker.py when ctx.overlays is set.
+ * @returns {Promise<boolean>}
  */
-async function runDefaultRangeOverlayCombat(ctx, sel) {
+async function runDefaultRangeOverlay(ctx, sel) {
   const bin = binExecSelector(sel);
-  if (!bin || bin.category !== 0x3d) return false;
-  const args = LOC_61_COMBAT_OVERLAY[bin.index];
-  if (!args) return false;
-  await runOp12Combat(ctx, args);
-  return true;
+  if (!bin) return false;
+
+  const overlays = ctx.overlays ?? {};
+  const loc = overlays[String(bin.category)] ?? overlays[bin.category];
+  let slot = loc?.slots?.[String(bin.index)] ?? loc?.slots?.[bin.index];
+
+  /* Fallback: legacy hardcoded loc-61 combat bytes if bundle lacks overlays. */
+  if (!slot && bin.category === 0x3d && LOC_61_COMBAT_OVERLAY[bin.index]) {
+    slot = {
+      kind: "bytecode",
+      nodes: [{ op: 0x12, args: LOC_61_COMBAT_OVERLAY[bin.index], pseudo: "encounter_setup(...)" }],
+    };
+  }
+  if (!slot) return false;
+
+  if (slot.kind === "text") {
+    const text = ctx.resolveEventText?.(slot.text) ?? slot.text;
+    await ctx.waitForSpace(text, ctx.sprite, 0x0e);
+    ctx.note(`overlay cat 0x${bin.category.toString(16)} idx ${bin.index}: text`);
+    return true;
+  }
+
+  if (slot.kind === "bytecode" && slot.nodes?.length) {
+    const inner = {
+      ...ctx,
+      evtData: { nodes: slot.nodes },
+      strings: loc?.strings ?? [],
+    };
+    const result = await runEventScript(inner);
+    if (result.teleported) {
+      ctx.teleported = true;
+      ctx.ended = true;
+    }
+    if (result.ended && !result.teleported) ctx.ended = true;
+    ctx.note(
+      `overlay cat 0x${bin.category.toString(16)} idx ${bin.index}: VM (${slot.nodes.length} nodes)`
+    );
+    return true;
+  }
+  return false;
 }
 
 /** Shared OP_12 fixed-encounter flow (map scripts + loc-61 overlays). */
@@ -535,12 +574,24 @@ async function runTownService(ctx, sel, title, sprite) {
     return;
   }
   if (isTownServiceSelector(sel)) {
-    if (await runDefaultRangeOverlayCombat(ctx, sel)) {
+    const offer = skillBuyOfferForExecSelector(sel);
+    if (offer) {
+      if (!offer.memberAlreadySelected && offer.intro) {
+        const yes = await ctx.promptYesNo(offer.intro, sprite, 0x0e);
+        if (!yes) {
+          ctx.note(`skill buy 0x${sel.toString(16)} declined`);
+          return;
+        }
+      }
+      await runSkillBuyTransaction(ctx, offer);
       return;
     }
-    /* Text-only default-range overlays (quest copy, etc.) — not combat. */
+    if (await runDefaultRangeOverlay(ctx, sel)) {
+      if (ctx.teleported) return;
+      return;
+    }
     await waitForSpace(title, sprite, 0x0e);
-    ctx.note(`exec_selector(0x${sel.toString(16)}) — default-range text overlay (deferred)`);
+    ctx.note(`exec_selector(0x${sel.toString(16)}) — default-range overlay missing`);
     return;
   }
 }
@@ -558,33 +609,44 @@ async function runNordonGobletQuestStub(ctx) {
     return;
   }
   await waitForSpace(NORDON_QUEST_GIVEN, sprite, 0x0e);
-  note("Nordon: quest given (overlay engine not fully ported — doc 53)");
+  note("Nordon: quest given");
   if (sessionHasItem(session, ITEM_GOLD_GOBLET, false)) {
+    const slot = await promptSelectMember(ctx);
+    if (slot == null) {
+      note("Nordon goblet turn-in cancelled");
+      return;
+    }
+    sessionHasItem(session, ITEM_GOLD_GOBLET, true);
+    const r = applyNordonGobletReturn(session, slot);
     await waitForSpace(NORDON_GOBLET_RETURN, sprite, 0x0e);
     await waitForSpace(NORDON_VISIT_SISTER, sprite, 0x0e);
-    note("Nordon: goblet turn-in stub (rewards not applied — engine deferred)");
+    note(
+      `Nordon: goblet returned — +${NORDON_GOBLET_XP} XP, Eagle Eye, +${NORDON_GOBLET_GOLD} gp (${r.member.name})`
+    );
+    ctx.onSessionChange?.(session);
   }
 }
 
 /** Feldecarb Fountain @ (15,15) — event 17 OP_0E 0x0E (NOT Nordon 0x0A @ 10,2). */
 async function runFeldecarbFountain(ctx, sprite, op) {
-  const { session, waitForSpace, promptYesNo, note } = ctx;
+  const { session, waitForSpace, promptYesNo, note, onSessionChange } = ctx;
   const yes = await promptYesNo(FELDECARB_FOUNTAIN_INTRO, sprite, op);
   if (!yes) {
     note("Feldecarb Fountain: declined");
     return;
   }
-  if (!sessionHasItem(session, ITEM_FE_FARTHING, false)) {
+  const r = applyFeldecarbFountain(session);
+  if (!r.ok) {
     await waitForSpace("Fool, you have no farthing to flick!", sprite, op);
     note("Feldecarb Fountain: no Fe Farthing (item 212 / 0xD4)");
     return;
   }
-  await waitForSpace(
-    "You find a fabulous castle key!\n(engine -$7DAC/0xD634 — item grant not yet ported)",
-    sprite,
-    op
-  );
-  note("Feldecarb Fountain: farthing flick (transaction stub)");
+  const msg = r.placed
+    ? "You find a fabulous castle key!"
+    : "You find a fabulous castle key!\n(stored in found-item buffer — backpacks full)";
+  await waitForSpace(msg, sprite, op);
+  note("Feldecarb Fountain: farthing consumed, castle key granted");
+  onSessionChange?.(session);
 }
 
 /**

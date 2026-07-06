@@ -92,6 +92,7 @@ python tools\mm2_found_items.py                       # OP_2A / OP_19 found-item
 | [`46-scripted-scene-graphics.md`](46-scripted-scene-graphics.md) | **Corak ghost + Pegasus illustration** — castle engine (`0x6FB8`/`0x64F8`/`0x316E`); **§10 full scene catalog** (loc 60–70, blobs 63/65/68, `play_song_scripted` ids 2–6) |
 | [`47-amiga-3d-render-process.md`](47-amiga-3d-render-process.md) | **3D blit pipeline** — environment dispatch, frustum builder, painter's algorithm |
 | [`48-amiga-cpp-play-screen-draw-walkthrough.md`](48-amiga-cpp-play-screen-draw-walkthrough.md) | **Remake play screen** — per-frame vs per-move draw path in `game/` (Amiga ACE) |
+| [`54-pc-dos-graphics-formats.md`](54-pc-dos-graphics-formats.md) | **PC DOS `.4` / `.16`** — LZW sheets, monster RLE, three MONSTERS loaders, Amiga `NN.anm` cross-ref |
 
 ---
 
@@ -228,6 +229,7 @@ Outputs: `EXTRACTED/mm2.annotated.asm`, `EXTRACTED/asm/` splits.
 ```powershell
 python wiki/scripts/export-github-wiki.py          # full gallery if assets present
 python wiki/scripts/export-github-wiki.py --skip-gallery
+python wiki/scripts/export-pc-gfx-gallery.py       # PC DOS .4/.16 gallery (needs GOG install)
 python wiki/scripts/publish-github-wiki.py       # push to MM2.wiki.git
 ```
 

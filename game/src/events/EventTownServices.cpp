@@ -229,6 +229,7 @@ bool runBoundMenu(EventRuntime &rt, GameStateView &gs, Mm2RosterFile *roster,
     ctx.items = items;
     ctx.a4 = gs.a4();
     ctx.map_id = location_id;
+    ctx.rng = rt.rng();
     switch (kind) {
     case MenuKind::Temple:
         townSvcRunTemple(*ui, ctx);

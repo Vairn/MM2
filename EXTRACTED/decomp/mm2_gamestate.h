@@ -38,7 +38,9 @@
  * the offset record only; do not use it for quest bits. */
 #define MM2_GS_ENGINE_FLAG_79E8 (-0x79E8)  /* byte  ($8618) untraced engine flag */
 #define MM2_GS_SCREEN_MODE_PREV (-0x79E6)  /* byte  ($861A) */
+#define MM2_GS_VIEW_MODE        (-0x79E2)  /* byte  ($861E) 0=dungeon 3D, 1=outdoor surface @ 0x10D6 */
 #define MM2_GS_SIGN_ENV_ID      (-0x79E3)  /* byte  ($861D) OP_0B table pick @ 0x15772 */
+#define MM2_GS_RUNTIME_ENV      (-0x7660)  /* byte  ($89A0) area gfx env id; surface_flag&0xF @ 0x1650 */
 #define MM2_GS_BUSY_STATUS      (-0x79E5)  /* byte  ($861B) */
 #define MM2_GS_ERA              (-0x79B6)  /* word  ($864A) era/timeline 0..9 */
 /* Low byte of the era word; read as the "current era" by event gating.

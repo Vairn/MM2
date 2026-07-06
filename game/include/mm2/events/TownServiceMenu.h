@@ -18,6 +18,10 @@
 
 #include <cstdint>
 
+namespace mm2::gameplay {
+class Rng;
+}
+
 namespace mm2::events {
 
 /* Temple menu (handler 0x1D208). Option set as traced: per-character HP/condition
@@ -54,6 +58,7 @@ struct TownServiceContext {
     const Mm2ItemsFile *items = nullptr; /* items.dat, for blacksmith pricing */
     uint8_t *a4 = nullptr;
     int map_id = 0;
+    gameplay::Rng *rng = nullptr; /* 0x22BC6 / -$7BB4; drink sick roll @ 0x19D64 */
 };
 
 /* One blacksmith shop slot as presented to the UI (item id + computed buy price

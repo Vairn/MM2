@@ -47,15 +47,6 @@ void latchEventOnTurn(GameStateView &gs)
     mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
 }
 
-void latchEventAfterStep(GameStateView &gs)
-{
-    mm2_gs_set_u16(gs.a4(), kGsPositionChanged, 1);
-    /* movement_step @ 0x574E: clr.b A4-$77BD before the tile scanner runs so
-     * OP_2B on the destination tile (arena tier squares, etc.) sees latch=0. */
-    mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 0);
-    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
-}
-
 uint8_t collisionAt(const world::MapWorld &world, int x, int y)
 {
     return world.collisionAt(x, y);
@@ -263,12 +254,18 @@ MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward)
     const uint8_t dest_cell = collisionAt(world, tx, ty);
     applyStepTimeTick(gs, dest_cell);
     events::eventVmTickSpellEyeOnStep(gs.a4(), world.isOutdoor());
-    latchEventAfterStep(gs);
 
     r.acted = true;
     r.moved = true;
     r.screen_changed = screen_changed;
     return r;
+}
+
+void latchExploreEventsAfterMove(GameStateView &gs)
+{
+    mm2_gs_set_u16(gs.a4(), MM2_GS_ENCOUNTER_REDRAW, 1);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
 }
 
 }  // namespace mm2::gameplay

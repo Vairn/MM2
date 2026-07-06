@@ -2,11 +2,10 @@
 
 #include "mm2/gameplay/SpellBook.h"
 
+#include "mm2/CppStdCompat.h"
+
 #include "mm2_items_codec.h"
 #include "mm2_town_tables.h"
-
-#include <cstdio>
-#include <cstring>
 
 namespace mm2::events {
 

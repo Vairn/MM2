@@ -328,6 +328,24 @@ int main()
         }
     }
 
+    /* ---- Town screens: no random step fights (doc 35; env type $11). */
+    {
+        mm2::world::MapWorld townWorld;
+        if (townWorld.load("../..") && townWorld.enterScreen(0)) {
+            std::memset(&gs_image, 0, sizeof(gs_image));
+            mm2::GameStateView townGs(mm2_gs_base_from_image(gs_image));
+            encounterSyncScreenContext(townGs, townWorld);
+            gameplay::Rng townRng(1);
+            expect(!encounterTryStepRandom(townGs, townWorld, townRng),
+                   "town interior: random step encounter blocked", fails);
+            if (townWorld.enterScreen(7)) {
+                encounterSyncScreenContext(townGs, townWorld);
+                expect(mm2_gs_u8(townGs.a4(), MM2_GS_RUNTIME_ENV) == 0x04,
+                       "town gate: runtime env is $04 not wilderness $0A", fails);
+            }
+        }
+    }
+
     if (fails == 0) {
         std::printf("OK: combat_setup_test\n");
         return 0;

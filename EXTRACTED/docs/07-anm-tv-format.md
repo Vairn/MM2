@@ -98,6 +98,12 @@ frames 0..N-1; **Sequence** uses the embedded `(frame,delay)` stream (combat cli
 `editor/src/core/Gfx.cpp` or share the module) for any `.anm` draw — do not upload
 raw patch frames as sprites.
 
+**PC DOS equivalent:** `MONSTERS.4` / `MONSTERS.16` combat blobs use the same prelude
+semantics — per-frame header `(x,y,w,h)` matches Amiga prelude slot `N−1` for patch
+frame `N`. Export: `tools/decode_pc_gfx.py` `composite_pc_combat_frame()`. Full notes:
+[`54-pc-dos-graphics-formats.md`](54-pc-dos-graphics-formats.md). Side-by-side gallery:
+[`monster-variants`](/docs/gallery/monster-variants) (wiki).
+
 ## Loader/Saver Roundtrip Strategy
 
 Because some control fields are still partially unknown, the safest saver strategy is:

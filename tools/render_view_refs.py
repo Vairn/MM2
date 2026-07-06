@@ -438,6 +438,36 @@ def decode_planes(data: bytes, off: int, frame_bytes: int) -> tuple[int, bytes]:
     return cur, bytes(out)
 
 
+def amiga_frame_mask(sheet: str, frame: int, data_dir: Path) -> list[list[bool]]:
+    """Pen-0 transparency mask for one ``.32`` frame (True = transparent)."""
+    b = (data_dir / sheet).read_bytes()
+    n = read_u16be(b, 0)
+    info = 4
+    w = read_u16be(b, info + frame * 6)
+    h = read_u16be(b, info + frame * 6 + 2)
+    cur = info + n * 6 + 64
+    bpr = ((w + 15) >> 3) & 0xFFFE
+    rs = h * bpr
+    for f in range(frame):
+        fw = read_u16be(b, info + f * 6)
+        fh = read_u16be(b, info + f * 6 + 2)
+        rs2 = fh * (((fw + 15) >> 3) & 0xFFFE)
+        cur, _ = decode_planes(b, cur, 5 * rs2)
+    _, planes = decode_planes(b, cur, 5 * rs)
+    mask: list[list[bool]] = []
+    for y in range(h):
+        row: list[bool] = []
+        for x in range(w):
+            idx = 0
+            for pl in range(5):
+                bp = pl * rs + y * bpr + (x >> 3)
+                bit = (planes[bp] >> (7 - (x & 7))) & 1
+                idx |= bit << pl
+            row.append(idx == 0)
+        mask.append(row)
+    return mask
+
+
 def load_frame(sheet: str, frame: int, data_dir: Path) -> Image.Image:
     """Decode one .32 frame; only pen index 0 is transparent (blit mask)."""
     b = (data_dir / sheet).read_bytes()

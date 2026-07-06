@@ -97,6 +97,8 @@ const state = {
 let maps = null;
 /** @type {object | null} */
 let manifest = null;
+/** @type {object | null} event.dat overlay locations 0x3C..0x46 for OP_0E default-range VM */
+let overlays = null;
 /** @type {Map<string, HTMLImageElement>} */
 const images = new Map();
 
@@ -200,6 +202,7 @@ async function loadData() {
         maps: bundle.WALKER_MAPS,
         manifest: bundle.WALKER_MANIFEST,
         sprites: bundle.WALKER_SPRITES,
+        overlays: bundle.WALKER_OVERLAYS ?? {},
       };
     }
   } catch {
@@ -209,6 +212,7 @@ async function loadData() {
     maps: await loadJson("maps.json"),
     manifest: await loadJson("sprites.json"),
     sprites: null,
+    overlays: {},
   };
 }
 
@@ -1017,6 +1021,7 @@ function buildEventVmCtx() {
     tileY: state.y,
     manifest,
     maps,
+    overlays,
     session,
     resolveEventText,
     waitForSpace,
@@ -1272,6 +1277,7 @@ async function init() {
     const data = await loadData();
     maps = data.maps;
     manifest = data.manifest;
+    overlays = data.overlays ?? {};
     if (manifest.font) initFont(manifest.font);
     session = createSessionState({ manifest });
     if (manifest.defaultParty?.members?.length) {

@@ -2,15 +2,13 @@
 
 #include "mm2/CppStdCompat.h"
 
+#include "mm2/gameplay/ExploreActions.h"
 #include "mm2/gameplay/SpellBook.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/ui/AmigaCharacterUiLayout.h"
 
 #include "mm2_gamestate.h"
-
-#include <cstdlib>
-#include <cstring>
 
 namespace mm2::ui {
 
@@ -126,12 +124,12 @@ int drawMultiline(gfx::ScreenCompositor &c, int row, int col, const char *text, 
     }
     const char *p = text;
     while (*p) {
-        const char *nl = std::strchr(p, '\n');
+        const char *nl = ::strchr(p, '\n');
         if (nl) {
             char buf[48];
             const std::size_t n = static_cast<std::size_t>(nl - p);
             const std::size_t copy = (n < sizeof(buf) - 1) ? n : sizeof(buf) - 1;
-            std::memcpy(buf, p, copy);
+            __builtin_memcpy(buf, p, copy);
             buf[copy] = '\0';
             drawCell(c, row++, col, buf, r, g, b);
             p = nl + 1;
@@ -842,10 +840,8 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
             if (ctx_.a4) {
                 mm2_gs_set_u8(ctx_.a4, -0x71DC, 0xFD);
             }
-            /* 0x19D64: sick roll — RNG(50)==2 (2% chance). The authentic game
-             * RNG is not accessible here; std::rand() is a placeholder until
-             * TownServiceContext gains an Rng pointer. */
-            const bool sick = (std::rand() % 50) == 2;
+            /* 0x19D64: sick roll — rng(1,50)==2 (2% chance, same leaf as rest ambush). */
+            const bool sick = ctx_.rng && ctx_.rng->range(1, 50) == 2;
             if (sick) {
                 /* bset #4, $26(rec) for each living party member (condition < 0x80). */
                 if (ctx_.launch) {
@@ -923,7 +919,7 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
         if (tavern_tipped_ && status_[0] == '\0') {
             drawCell(c, kBandRowFirst, kOptCol, "    Thank you -");
             drawCell(c, kBandRowFirst + 1, kOptCol, "Please come again");
-        } else if (tavern_tipped_ && std::strchr(status_, '\n') == nullptr &&
+        } else if (tavern_tipped_ && ::strchr(status_, '\n') == nullptr &&
                    status_[0] != '\0') {
             drawCell(c, kBandRowFirst, kOptCol, "    Thank you -");
             drawCell(c, kBandRowFirst + 1, kOptCol, "Please come again");

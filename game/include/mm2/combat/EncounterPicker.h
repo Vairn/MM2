@@ -51,9 +51,13 @@ void encounterPickerBudgetCheck(GameStateView &gs, const Mm2AttribRecord &attrib
 void encounterAddsFriends(GameStateView &gs, const Mm2AttribRecord &attrib, gameplay::Rng &rng,
                           FriendCountLookup friend_count_lookup, const void *ctx);
 
-/** 0x10A2 random step encounter: outdoor-only gates, tile-class lookup (table
- *  @ A4-$720A / data-hunk off 0xDF4), attrib step-rate roll, then rng(1,5).
- *  Seeds A4 for mode=0 picker combat when all gates pass. */
+/** Mirror screen enter @ 0x923E/0x16EA: seed A4-$861E (view) and A4-$89A0 (runtime env)
+ *  from attrib — not on every step roll (retail reads live GS @ 0x10D6/0x10DE). */
+void encounterSyncScreenContext(GameStateView &gs, const world::MapWorld &world);
+
+/** 0x10A2 random step encounter @ departure tile: rate roll, -$4F4E/-$77BD suppress,
+ *  path-1 (wilderness env $0A + class 4 → mode $02 preseed, else mode $0). Path-2
+ *  @ 0x11AA (failed rate) is not random combat. Call before forward/back step. */
 bool encounterTryStepRandom(GameStateView &gs, const world::MapWorld &world, gameplay::Rng &rng);
 
 }  // namespace mm2::combat

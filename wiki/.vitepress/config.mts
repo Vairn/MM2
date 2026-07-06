@@ -45,6 +45,7 @@ export default defineConfig({
           items: [
             { text: 'GFX Loading (.32)', link: '/docs/reverse-engineering/06-gfx-loading' },
             { text: 'ANM / TV Format', link: '/docs/reverse-engineering/07-anm-tv-format' },
+            { text: 'PC DOS (.4 / .16)', link: '/docs/reverse-engineering/54-pc-dos-graphics-formats' },
             { text: '3D View & Game Screen', link: '/docs/reverse-engineering/15-3d-view-and-game-screen' },
           ],
         },
@@ -82,9 +83,12 @@ export default defineConfig({
           items: [
             { text: 'Gallery Home', link: '/docs/gallery/' },
             { text: 'Monsters', link: '/docs/gallery/monsters' },
+            { text: 'Monster variants (Amiga/PC)', link: '/docs/gallery/monster-variants' },
+            { text: 'Platform index (numbered)', link: '/docs/gallery/platform-compare' },
             { text: 'Tilesets (.32)', link: '/docs/gallery/tilesets' },
             { text: 'Map Cartography', link: '/docs/gallery/maps' },
             { text: '3D View Graphics', link: '/docs/gallery/views' },
+            { text: 'PC DOS (CGA/EGA)', link: '/docs/gallery/pc-index' },
           ],
         },
         {

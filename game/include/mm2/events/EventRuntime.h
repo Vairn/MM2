@@ -75,6 +75,7 @@ public:
      *  null, the arena's difficulty roll falls back to a fixed 1 (documented gap,
      *  no fabricated randomness). */
     void bindRng(gameplay::Rng *rng) { rng_ = rng; }
+    gameplay::Rng *rng() const { return rng_; }
 
     /** Optional combat session: when bound, OP_12/OP_13 (and the arena ticket
      *  encounter routed through eventExecTownSelector) actually run the fight

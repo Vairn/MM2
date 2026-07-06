@@ -27,9 +27,13 @@ struct MoveResult {
 /* Rotate facing without moving (0x5838). Sets event latch -$7952. */
 MoveResult turn(world::MapWorld &world, GameStateView &gs, bool right_cw);
 
-/* Step forward/back (0x5816 → 0x56FC / 0x5762). Sets -$4F4E; applies 0x69DC
- * when forward/back succeeds. Screen edge uses attrib neighbours @ 0x1D0A. */
+/* Step forward/back (0x5816 → 0x56FC / 0x5762). Applies 0x69DC when forward/back
+ * succeeds. Screen edge uses attrib neighbours @ 0x1D0A. Call
+ * latchExploreEventsAfterMove after the step encounter check (doc 43 loop order). */
 MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward);
+
+/* After movement: set -$4F4E, clear -$77BD, latch tile events (0x5748 tail). */
+void latchExploreEventsAfterMove(GameStateView &gs);
 
 /* time_tick @ 0x69DC(n): n==1 on successful step drains light on dark tiles. */
 void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest);

@@ -188,8 +188,14 @@ mm2_anm_error mm2_anm_load_file(const char *path, mm2_anm_file *out) {
     }
     memset(&anm, 0, sizeof(anm));
 
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+    systemUse();
+#endif
     fp = fopen(path, "rb");
     if (!fp) {
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
         return MM2_ANM_ERR_IO;
     }
     fseek(fp, 0, SEEK_END);
@@ -198,16 +204,25 @@ mm2_anm_error mm2_anm_load_file(const char *path, mm2_anm_file *out) {
 
     if (fsize < 64) {
         fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
         return MM2_ANM_ERR_BAD_FORMAT;
     }
 
     buf = (uint8_t *)malloc(fsize);
     if (!buf) {
         fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
         return MM2_ANM_ERR_NOMEM;
     }
     got = fread(buf, 1, fsize, fp);
     fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+    systemUnuse();
+#endif
     if (got != fsize) {
         free(buf);
         return MM2_ANM_ERR_IO;
