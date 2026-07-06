@@ -33,7 +33,6 @@ from render_view_refs import (  # noqa: E402
     blit,
 )
 from view3d_indoor import StitchedVisual, build_scene, load_map  # noqa: E402
-from view3d_trace import torch_overlay_for  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 PC_GFX = ROOT / "EXTRACTED" / "pc_gfx"
@@ -47,7 +46,6 @@ SCREEN, X, Y, FACING = 0, 7, 3, 0
 _AMIGA_MASK_SHEET = {
     "town": "town.32",
     "townf": "townf.32",
-    "townt": "townt.32",
     "sky": "sky.32",
     "cave": "cave.32",
     "castle": "castle.32",
@@ -141,11 +139,6 @@ def render_pc(variant: str, scene) -> Image.Image:
     blit(canvas, sprite("sky", 0), ORIGIN_X, SKY_Y)
     for b in scene.blits:
         blit(canvas, sprite("town", b.frame), b.x, b.y)
-    for b in scene.blits:
-        tb = torch_overlay_for(b, phase=0)
-        if tb is not None:
-            tf, tx, ty = tb
-            blit(canvas, sprite("townt", tf), tx, ty)
     return canvas
 
 
@@ -191,14 +184,7 @@ def main() -> int:
     print(f"wrote {compare}")
     print(f"blits ({len(scene.blits)}):")
     for b in scene.blits:
-        print(f"  {b.kind:5s} frame={b.frame:2d} @ ({b.x},{b.y}) code={b.code}")
-    torches = [tb for b in scene.blits if (tb := torch_overlay_for(b))]
-    if torches:
-        print(f"torch overlays ({len(torches)}):")
-        for b in scene.blits:
-            tb = torch_overlay_for(b)
-            if tb:
-                print(f"  townt frame={tb[0]:2d} @ ({tb[1]},{tb[2]})  from {b.kind} d={b.depth}")
+        print(f"  {b.kind:5s} frame={b.frame:2d} @ ({b.x},{b.y})")
     return 0
 
 

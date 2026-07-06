@@ -272,53 +272,6 @@ def collect_blits(slots: Sequence[int]) -> List[View3DBlit]:
     return blits
 
 
-def torch_overlay_for(b: View3DBlit, phase: int = 0) -> tuple[int, int, int] | None:
-    """``townt.32`` flame overlay for map field **2** torch walls (``view3dTorchBlitFor`` / -$4F62).
-
-    Returns ``(frame, x, y)`` or ``None``. Field 3 doors must not get overlays.
-    """
-    if b.code != 2 or b.depth > 2:
-        return None
-    flicker = phase % 3
-    if b.kind == "front":
-        return (
-            0x12 + b.depth * 3 + flicker,
-            (105, 108, 107)[b.depth],
-            (44, 52, 60)[b.depth],
-        )
-    left_far = {12, 14, 2, 3}
-    right_far = {13, 15, 2, 3}
-    if b.kind == "left":
-        if b.frame in left_far:
-            if b.depth == 0:
-                return None
-            return (
-                0x12 + b.depth * 3 + flicker,
-                (8, 16, 64)[b.depth],
-                (44, 52, 60)[b.depth],
-            )
-        return (
-            b.depth * 3 + flicker,
-            (8, 43, 73)[b.depth],
-            (49, 55, 59)[b.depth],
-        )
-    if b.kind == "right":
-        if b.frame in right_far:
-            if b.depth == 0:
-                return None
-            return (
-                0x12 + b.depth * 3 + flicker,
-                (202, 199, 152)[b.depth],
-                (44, 52, 60)[b.depth],
-            )
-        return (
-            9 + b.depth * 3 + flicker,
-            (196, 166, 142)[b.depth],
-            (49, 55, 59)[b.depth],
-        )
-    return None
-
-
 def build_scene(visual: bytes, x: int, y: int, facing: int) -> View3DScene:
     scene = View3DScene()
     scene.hood = refresh_neighbourhood(visual, x, y, facing)
