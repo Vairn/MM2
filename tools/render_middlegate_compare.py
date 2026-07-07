@@ -15,14 +15,7 @@ if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
 from attrib_codec import AttribFile  # noqa: E402
-from decode_pc_gfx import (  # noqa: E402
-    _offset_table_u16,
-    _offset_table_u32,
-    bpp_for_ext,
-    lzw_decompress,
-    render_wall_frame_rgba,
-    row_bytes,
-)
+from decode_pc_gfx import parse_wall_sheet, render_wall_frame_rgba  # noqa: E402
 from render_view_refs import (  # noqa: E402
     FLOOR_Y,
     ORIGIN_X,
@@ -51,11 +44,11 @@ _AMIGA_MASK_SHEET = {
     "castle": "castle.32",
 }
 
-_SHEET_CACHE: dict[tuple[str, str], tuple[bytes, int, list[int], list[int]]] = {}
+_SHEET_CACHE: dict[tuple[str, str], dict] = {}
 _MASK_CACHE: dict[tuple[str, int], list[list[bool]]] = {}
 
 
-def _load_sheet_blob(variant: str, stem: str) -> tuple[bytes, int, list[int], list[int]]:
+def _load_sheet_info(variant: str, stem: str) -> dict:
     key = (variant, stem)
     if key in _SHEET_CACHE:
         return _SHEET_CACHE[key]
@@ -63,30 +56,8 @@ def _load_sheet_blob(variant: str, stem: str) -> tuple[bytes, int, list[int], li
     path = GOG / f"{stem.upper()}{ext}"
     if not path.is_file():
         path = ROOT / f"{stem.upper()}{ext}"
-    raw = path.read_bytes()
-    import struct
-
-    usize = struct.unpack_from("<I", raw, 0)[0]
-    dec = lzw_decompress(raw[4:], usize)
-    bpp = bpp_for_ext(ext)
-    fc = dec[0] & 0x3F
-    u16 = _offset_table_u16(dec, fc)
-    u32 = _offset_table_u32(dec, fc)
-    _SHEET_CACHE[key] = (dec, bpp, u16, u32)
-    return dec, bpp, u16, u32
-
-
-def _logical_frame_offset(dec: bytes, u16: list[int], u32: list[int], frame: int) -> int | None:
-    """Map Amiga-style frame index → PC blob offset (u16 for 0..15, u32 for door band)."""
-    if frame < 16 and frame * 2 < len(u16):
-        off = u16[frame * 2]
-        if 0 < off < len(dec):
-            return off
-    if frame < len(u32):
-        off = u32[frame]
-        if 0 < off < len(dec):
-            return off
-    return None
+    _SHEET_CACHE[key] = parse_wall_sheet(path)
+    return _SHEET_CACHE[key]
 
 
 def _amiga_mask(stem: str, frame: int) -> list[list[bool]] | None:
@@ -101,26 +72,21 @@ def _amiga_mask(stem: str, frame: int) -> list[list[bool]] | None:
 
 def load_pc_frame(variant: str, stem: str, frame: int) -> Image.Image:
     """Decode one wall/floor/sky frame with PC driver-style masking."""
-    import struct
-
-    dec, bpp, u16, u32 = _load_sheet_blob(variant, stem)
-    off = _logical_frame_offset(dec, u16, u32, frame)
-    if off is None:
+    sheet = _load_sheet_info(variant, stem)
+    frames = sheet["frames"]
+    if frame >= len(frames):
         raise FileNotFoundError(f"{variant}/{stem} frame {frame}")
-    w, h = struct.unpack_from("<HH", dec, off)
-    rb = row_bytes(w, bpp)
-    pix = dec[off + 4 : off + 4 + rb * h]
-    if len(pix) < rb * h:
-        raise ValueError(f"{variant}/{stem} frame {frame}: short pixel run")
+    fr = frames[frame]
     rgba = render_wall_frame_rgba(
-        w,
-        h,
-        pix,
-        bpp,
+        fr.width,
+        fr.height,
+        fr.pixels,
+        sheet["bpp"],
         cga_palette=1,
         amiga_mask=_amiga_mask(stem, frame),
+        frame=frame,
     )
-    im = Image.new("RGBA", (w, h))
+    im = Image.new("RGBA", (fr.width, fr.height))
     im.putdata(rgba)
     return im
 

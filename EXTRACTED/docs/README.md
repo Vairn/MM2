@@ -93,6 +93,10 @@ python tools\mm2_found_items.py                       # OP_2A / OP_19 found-item
 | [`47-amiga-3d-render-process.md`](47-amiga-3d-render-process.md) | **3D blit pipeline** — environment dispatch, frustum builder, painter's algorithm |
 | [`48-amiga-cpp-play-screen-draw-walkthrough.md`](48-amiga-cpp-play-screen-draw-walkthrough.md) | **Remake play screen** — per-frame vs per-move draw path in `game/` (Amiga ACE) |
 | [`54-pc-dos-graphics-formats.md`](54-pc-dos-graphics-formats.md) | **PC DOS `.4` / `.16`** — LZW sheets, monster RLE, three MONSTERS loaders, Amiga `NN.anm` cross-ref |
+| [`apple2-graphics.md`](apple2-graphics.md) | **Apple II** — woz-a-day retail WOZ2, custom loader + quarter-track layout (gfx TBD) |
+| [`c64-graphics.md`](c64-graphics.md) | **Commodore 64** — custom IEC loader on all sides, gfx format TBD |
+| [`snes-graphics.md`](snes-graphics.md) | **SNES** — PPU path; field walls/font/UI + monster table `$14:8060` (78 sheets) |
+| [`genesis-graphics.md`](genesis-graphics.md) | **Genesis** — native VDP/CRAM path; packed ROM `0x30000`+ (gfx TBD) |
 
 ---
 
@@ -233,4 +237,4 @@ python wiki/scripts/export-pc-gfx-gallery.py       # PC DOS .4/.16 gallery (need
 python wiki/scripts/publish-github-wiki.py       # push to MM2.wiki.git
 ```
 
-Interactive map walker: [vairn.github.io/MM2/maze-walker/](https://vairn.github.io/MM2/maze-walker/)
+Interactive map walker: [vairn.github.io/MM2/maze-walker/](https://vairn.github.io/MM2/maze-walker/) — Amiga embedded sprites plus lazy-loaded **PC CGA/EGA** wallsets (`parse_wall_sheet` packed-u32 decode). Toolbar: **Graphics** + **Wallset** override.

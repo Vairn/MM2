@@ -7,6 +7,7 @@
 |----------|------|
 | Disassembly | [`EXTRACTED/pc/`](../pc/README.md) — `mm2.capstone.asm`, `cga.capstone.asm`, `ega.capstone.asm` |
 | Decoder | `tools/decode_pc_gfx.py` |
+| Encoder + round-trip validation | `tools/encode_pc_gfx.py` (`--roundtrip`) |
 | Gallery export | `tools/pc_gfx_export.py` → `wiki/public/gallery/pc/` |
 | Extracted PNGs | `EXTRACTED/pc_gfx/{cga,ega}/` walls; `EXTRACTED/pc_gfx/monsters/{cga,ega}/` combat |
 
@@ -55,7 +56,7 @@ Used for first-person view walls, floors, skies, UI sprites (`THROW`, `TOWN`, `S
 |--------|-------|
 | `+0` | `frame_count` = `dec[0] & 0x3F`; **class** = `dec[0] >> 6` (`gfx_format_class_check` @ `0x5C5A`) |
 | `+1` | `flags` — low nibble + bits 4–5 (`frame_index_scale` @ `0x42EA`) |
-| `+2` | Offset table: **u32 LE** or **u16 LE** × `frame_count` (auto-scored by round-trip) |
+| `+2` | Offset table: **u32 LE** `(end<<16)|start` pairs or plain u32 offsets × `frame_count` (auto-scored) |
 | per offset | Frame blob |
 
 ### Per-frame blob
@@ -76,11 +77,23 @@ map-mask for screen writes.
 
 1. `load_wall_gfx_sheet` @ `0x5234` LZW-decompresses the file into a resource record.
 2. `frame_index_scale` @ `0x42EA` derives a frame index from `dec[1]` flags and viewport state
-   (`word ptr [0x9E0C]`).
+   (`word ptr [0x9E0C]`). For sheets with `dec[1]=0` and scale 0, the default logical frame
+   budget is **8** (`mov word ptr [0x9e0c], 8` @ `0x433A`) — matches `MASTER.16`.
 3. `pick_frame_from_sheet` walks driver token stream (`parse_resource_token` @ `0x366E`) to
-   resolve the sheet slot, then returns a pointer into the decompressed blob at the chosen
-   frame offset.
+   resolve the sheet slot, then indexes the offset table at **`logical_index × 2`**
+   (`shl ax, 1` @ `0x5E60` before the table pointer add).
 4. `CGA.DRV` blit @ `0x65A` / EGA equivalent copies rows to video or off-screen buffer.
+
+**Packed u32 tables:** sheets like `MASTER.16` store each entry as **`(frame_end << 16) | frame_start`**
+(u32 LE). `dec[0] & 0x3F` is the **frame count** (15 on GOG `MASTER.16`). Frame 14 is the
+**320×196 EGA title screen** ("Might and Magic Book Two" + pegasus); frames 0–13 are menu/UI
+sprites stored in the same blob. The region after the first eight small frames is **not** a
+separate script block — it holds additional packed frame records and pixel data until the title
+bitmap @ `0x2B10`. MM2.EXE indexes with `index×4` @ `0x7018`.
+
+**Grouped u16 view:** the same bytes can be read as interleaved u16 `[start, end]` pairs (the
+first eight frames only). Runtime `pick_frame_from_sheet` uses `index×2` for that view @ `0x5E60`.
+Tools prefer the packed-u32 interpretation when it decodes more frames with matching end offsets.
 
 There is **no compositing** within a wall sheet — each frame is a complete image. Extraction writes:
 
@@ -269,6 +282,44 @@ manager @ `077D:0344` loads `.OVL` files listed in the descriptor table (seg `0x
 Title/menu flow uses **`1MENU1.OVL`** / **`1MENU2.OVL`** (see title screen table above).
 
 The sprite **decode** itself is in the video drivers (`CGA.DRV` / `EGA.DRV`), not the overlay.
+
+---
+
+## Encoder + round-trip validation (`tools/encode_pc_gfx.py`)
+
+Inverse operations for everything above, plus a `--roundtrip` mode that
+decodes every real `.4`/`.16` file in a GOG install, re-encodes, decodes
+again, and compares:
+
+```powershell
+python tools\encode_pc_gfx.py --roundtrip
+python tools\encode_pc_gfx.py --roundtrip --gog "C:\...\Might and Magic 2" --out-root EXTRACTED\pc_gfx_roundtrip
+```
+
+| Codec | Status | Verified against |
+|-------|--------|-------------------|
+| LZW compressor (inverse of `lzw_decompress` @ `MM2.EXE 0x2A42`) | **Byte-identical**, 60/60 wall sheets + 111/111 monster picture blobs | full decompressed payload of every real GOG `.4`/`.16` |
+| CGA 2bpp / EGA 4bpp pixel pack | **Byte-identical**, 756/756 frames | every wall-sheet frame in the GOG install |
+| Monster nibble-RLE encoder | **Pixel-identical**, 807/807 frames | every combat-sprite frame (base + delta) |
+| Monster atlas container rebuild | **Pixel-identical**, 111/111 pictures | full `MONSTERS.4`/`MONSTERS.16` rebuild (fresh blob offsets; frame content decodes identically) |
+| Wall-sheet container rebuild (frame-level, byte-exact) | 28/60 sheets byte-identical; rest have a documented gap (below) | `parse_wall_sheet` frame list rebuilt at original offsets |
+
+The LZW compressor's key subtlety (found by fuzzing + testing against every
+real file): the decompressor's dictionary is always exactly one entry behind
+the compressor's own (the `code >= dict_next` "KwKwK" branch is what makes
+that safe for *code values*), so the compressor's code-width growth check
+must trigger one entry later than the decompressor's own check
+(`dict_next > dict_limit`, not `>=`) to stay bit-aligned. Getting this wrong
+silently corrupts output starting at the first width transition (~code 256)
+while looking correct on small test files that never reach it.
+
+### Known gap: wall-sheet payload rebuild (encode path)
+
+Packed-u32 wall sheets (`CASTLE`, `CAVE`, `TOWN`, `MASTER`, outdoor biomes, `*B` border sets, …) decode **all** frames correctly via `parse_wall_sheet` / `PcGfx.cpp`, but `encode_pc_gfx.rebuild_wall_sheet_payload` is not yet byte-identical to the original decompressed blob for those sheets (interstitial bytes between packed table entries). This affects **container rebuild only** — LZW round-trip and per-frame pixel encode/decode remain correct.
+
+Grouped-u16 sheets (`CASTLET`, `CAVET`, `TOWNT` on some builds) share the same `[start, end]` interleaving; tools pick grouped u16 or packed u32 by score. Every frame the decoder extracts still re-encodes pixel-perfectly.
+
+**Maze walker export** (`tools/export_map_walker.py`) uses `parse_wall_sheet` for PC `.4`/`.16` PNGs under `wiki/maze-walker/pc/` (386 frames per CGA/EGA variant on GOG). The browser lazy-loads those trees; bump `PC_GFX_BUILD_ID` in `wiki/maze-walker/version.js` after re-export.
 
 ---
 

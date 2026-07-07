@@ -29,6 +29,23 @@
       <label title="Disable collisions to walk through walls">
         <input type="checkbox" id="chkNoclip"> No-clip
       </label>
+      <label title="Wall/floor/sky sprite set (PC uses Amiga pen-0 masks)">
+        Graphics
+        <select id="gfxSelect">
+          <option value="amiga" selected>Amiga</option>
+          <option value="cga">PC CGA</option>
+          <option value="ega">PC EGA</option>
+        </select>
+      </label>
+      <label title="Override indoor wall/floor/torch sheets (auto follows map env)">
+        Wallset
+        <select id="wallsetSelect">
+          <option value="auto" selected>Auto (map env)</option>
+          <option value="town">Town</option>
+          <option value="cavern">Cavern</option>
+          <option value="castle">Castle</option>
+        </select>
+      </label>
       <span id="status"></span>
     </div>
 

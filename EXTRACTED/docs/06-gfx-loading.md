@@ -9,11 +9,10 @@
 
 ## Filename Pointer Table
 
-In DATA hunk 0, offset `0x07B0..0x0838` is a contiguous array of relocated longwords that resolve to code-hunk string addresses:
+In DATA hunk 0, offset `0x07B0..0x0838` is a contiguous array of relocated longwords that resolve to code-hunk string addresses (catalogue begins @ `DATA_gfx_and_dat_filenames` / `0x230`):
 
-- `monsters.32`
-- `globe.32`
 - `disk.32`
+- `globe.32`
 - `book.32`
 - `throw.32`
 - `intro.32` (title background — see [`38-title-screen-and-intro-assets.md`](38-title-screen-and-intro-assets.md), animation [`39-title-screen-animation.md`](39-title-screen-animation.md))
@@ -50,6 +49,8 @@ In DATA hunk 0, offset `0x07B0..0x0838` is a contiguous array of relocated longw
 - `roster.dat`
 
 The `.dat` files are in the same table, so this appears to be a unified asset/resource list, not a graphics-only list.
+
+**Combat sprites are not a `.32` sheet.** Monster art is **`NN.anm`** (TV animation blobs) indexed by `monsters.dat` byte @ `0x15 & 0x7F`. On PC DOS the parallel atlas is **`MONSTERS.4` / `MONSTERS.16`** (see [`54-pc-dos-graphics-formats.md`](54-pc-dos-graphics-formats.md)). There is **no** `monsters.32` in the retail Amiga install or filename catalogue.
 
 **Not planar graphics:** `globe.32` is an XOR-obfuscated blob of copy-protection / title
 string tables (decoded by `tools/decode_globe_amiga.py`; UI prompts documented in

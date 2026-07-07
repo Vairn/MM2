@@ -92,19 +92,20 @@ sprites, sky/floor backdrops, cartography minimap).
 **https://vairn.github.io/MM2/maze-walker/**
 
 ```powershell
-python tools/export_map_walker.py   # writes wiki/maze-walker/walker-bundle.js (~3.3 MiB)
+# Amiga bundle + PC CGA/EGA PNG trees (pass GOG install for .4/.16)
+python tools/export_map_walker.py --pc-gog "C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 2"
 cd wiki/maze-walker
 python -m http.server 8080
 # http://localhost:8080/
 ```
 
-The bundle embeds all 60 map screens plus `.32`/`.anm` sprite frames as base64 — commit
-`walker-bundle.js` and Pages works with no game data on CI. Requires local
-`map.dat`, `attrib.dat` (env, neighbours, roof/ceiling mask +0x20..+0x3F, per-screen
-encounter rates +0x09..+0x0D), and `event.dat` (decoded scripts for the minimap/sidebar).
-Minimap legend includes ambient random-encounter zones (attrib step rate on cavern/dungeon
-tiles) and collision `0x80` tiles without an `event.dat` script. Use `--split` for loose
-PNG debugging only.
+The bundle embeds all 60 map screens plus Amiga `.32`/`.anm` sprite frames as base64.
+**PC wallsets** live under `pc/cga/` and `pc/ega/` (lazy-loaded `manifest.json` + PNGs).
+Commit `walker-bundle.js` and `pc/**` then push — GitHub Actions deploys Pages.
+
+Toolbar: **Graphics** (Amiga / PC CGA / PC EGA) and **Wallset** (Auto / Town / Cavern / Castle).
+PC sprites use Amiga pen-0 masks where applicable; decode via `parse_wall_sheet` (packed u32).
+Bump `PC_GFX_BUILD_ID` in `version.js` after re-exporting PC trees.
 
 Controls match the Python/C++ viewers: **W/↑** step forward, **S/↓** back,
 **A/←** turn left, **D/→** turn right.

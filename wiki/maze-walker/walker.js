@@ -1,5 +1,5 @@
 /** MM2 first-person map walker — ports view3d_indoor.py / view3d_outdoor.py / MapSection. */
-import { BUILD_ID } from "./version.js";
+import { BUILD_ID, PC_GFX_BUILD_ID } from "./version.js";
 
 import {
   MAP_GRID,
@@ -19,6 +19,10 @@ import {
   torchBlitFor,
   TORCH_PHASE_COUNT,
   K_CARTO_TILE_FALLBACK,
+  GFX_MODES,
+  INDOOR_WALLSET_IDS,
+  sheetSuffix,
+  remapSheetKey,
 } from "./view3d.js";
 import { StitchedOutdoor, buildOutdoorScene } from "./outdoor3d.js";
 import {
@@ -102,6 +106,12 @@ let overlays = null;
 /** @type {Map<string, HTMLImageElement>} */
 const images = new Map();
 
+/** @type {"amiga"|"cga"|"ega"} */
+let gfxMode = "amiga";
+/** @type {"auto"|"town"|"cavern"|"castle"} */
+let wallsetOverride = "auto";
+const pcGfxLoaded = { cga: false, ega: false };
+
 const viewCanvas = document.getElementById("view");
 const uiCanvas = document.getElementById("uiLayer");
 const miniCanvas = document.getElementById("minimap");
@@ -121,6 +131,8 @@ const partyStateEl = document.getElementById("partyState");
 const editGoldEl = document.getElementById("editGold");
 const editDayEl = document.getElementById("editDay");
 const chkNoclip = document.getElementById("chkNoclip");
+const gfxSelect = document.getElementById("gfxSelect");
+const wallsetSelect = document.getElementById("wallsetSelect");
 
 /** @type {ReturnType<createSessionState>} */
 let session = createSessionState();
@@ -166,12 +178,30 @@ async function loadSpriteTable(spriteTable) {
   );
 }
 
-async function loadSpritesFromPaths() {
-  if (!manifest) return;
+async function loadSpritesFromPaths(pathPrefix = "", sheetsMap = null, cacheV = "") {
+  const source = sheetsMap ?? manifest?.sheets;
+  if (!source) return;
+  const q = cacheV ? `?v=${cacheV}` : "";
   const tasks = [];
-  const loadFromMap = (mapObj) => {
-    if (!mapObj) return;
-    for (const [key, sheet] of Object.entries(mapObj)) {
+  for (const [key, sheet] of Object.entries(source)) {
+    for (const [frameStr, fr] of Object.entries(sheet.frames)) {
+      const cacheKey = `${key}:${frameStr}`;
+      if (images.has(cacheKey) || !fr.path) continue;
+      tasks.push(
+        new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            images.set(cacheKey, img);
+            resolve();
+          };
+          img.onerror = () => reject(new Error(fr.path));
+          img.src = pathPrefix + fr.path + q;
+        })
+      );
+    }
+  }
+  if (!sheetsMap && manifest?.anm) {
+    for (const [key, sheet] of Object.entries(manifest.anm)) {
       for (const [frameStr, fr] of Object.entries(sheet.frames)) {
         const cacheKey = `${key}:${frameStr}`;
         if (images.has(cacheKey) || !fr.path) continue;
@@ -183,15 +213,47 @@ async function loadSpritesFromPaths() {
               resolve();
             };
             img.onerror = () => reject(new Error(fr.path));
-            img.src = fr.path;
+            img.src = pathPrefix + fr.path + q;
           })
         );
       }
     }
-  };
-  loadFromMap(manifest.sheets);
-  loadFromMap(manifest.anm);
+  }
   await Promise.all(tasks);
+}
+
+async function ensurePcGfx(mode) {
+  if (mode === "amiga" || pcGfxLoaded[mode]) return;
+  const prefix = `pc/${mode}/`;
+  const pcMan = await loadJson(`${prefix}manifest.json?v=${PC_GFX_BUILD_ID}`);
+  await loadSpritesFromPaths(prefix, pcMan.sheets, PC_GFX_BUILD_ID);
+  pcGfxLoaded[mode] = true;
+  if (!manifest.pc) manifest.pc = {};
+  manifest.pc[mode] = pcMan;
+}
+
+async function setGfxMode(mode) {
+  if (!GFX_MODES.includes(mode) || mode === gfxMode) return;
+  if (mode !== "amiga") {
+    const prev = statusEl.textContent;
+    statusEl.textContent = `Loading ${mode.toUpperCase()} sprites…`;
+    try {
+      await ensurePcGfx(mode);
+    } catch (err) {
+      statusEl.textContent = `PC ${mode} unavailable (${err.message})`;
+      if (gfxSelect) gfxSelect.value = gfxMode;
+      return;
+    }
+    statusEl.textContent = prev;
+  }
+  gfxMode = mode;
+  try {
+    localStorage.setItem("mm2-walker-gfx", mode);
+  } catch {
+    /* private browsing */
+  }
+  if (gfxSelect) gfxSelect.value = mode;
+  draw();
 }
 
 async function loadData() {
@@ -250,9 +312,9 @@ function resolveAnmFrame(sheetKey, baseFrame = 0) {
   return String(step);
 }
 
-/** Indoor walls + animated townt.32 torch overlay on map field-2 (wall+torch) cells only. */
+/** Indoor walls + animated townt.32 torch overlay on map field-3 (wall+torch) cells only. */
 function renderIndoorView(ctx, sc, scene, phase) {
-  const sheets = selectIndoorSheets(sc.env);
+  const sheets = selectIndoorSheets(sc.env, gfxMode, wallsetOverride);
   const skyFrame = skyFrameFor(sc, state.x, state.y);
   blitTransparent(ctx, sheets.floor, "0", ORIGIN_X, FLOOR_Y);
   blitTransparent(ctx, sheets.sky, String(skyFrame), ORIGIN_X, SKY_Y);
@@ -267,10 +329,15 @@ function renderIndoorView(ctx, sc, scene, phase) {
 }
 
 function renderOutdoorView(ctx, scene) {
-  blitTransparent(ctx, "outf_32", "0", ORIGIN_X, FLOOR_Y);
-  blitTransparent(ctx, "sky_32", "0", ORIGIN_X, SKY_Y);
-  for (const b of scene.decor) blitTransparent(ctx, b.sheet, String(b.frame), b.x, b.y);
-  for (const b of scene.horizon) blitTransparent(ctx, b.sheet, String(b.frame), b.x, b.y);
+  const sfx = sheetSuffix(gfxMode);
+  blitTransparent(ctx, `outf${sfx}`, "0", ORIGIN_X, FLOOR_Y);
+  blitTransparent(ctx, `sky${sfx}`, "0", ORIGIN_X, SKY_Y);
+  for (const b of scene.decor) {
+    blitTransparent(ctx, remapSheetKey(b.sheet, gfxMode), String(b.frame), b.x, b.y);
+  }
+  for (const b of scene.horizon) {
+    blitTransparent(ctx, remapSheetKey(b.sheet, gfxMode), String(b.frame), b.x, b.y);
+  }
 }
 
 function triggerMatchesFacing(flags, facing) {
@@ -746,12 +813,12 @@ function draw() {
     const grid = new StitchedOutdoor(maps.screens, state.screen);
     const scene = buildOutdoorScene(grid, state.x, state.y, state.facing, maps.screens, terrainLookup());
     renderOutdoorView(viewCtx, scene);
-    locMode.textContent = "outdoor 3D";
+    locMode.textContent = `outdoor 3D · ${gfxMode}`;
   } else {
     const grid = new StitchedVisual(maps.screens, state.screen);
     const scene = buildIndoorScene(grid, state.x, state.y, state.facing);
     renderIndoorView(viewCtx, sc, scene, torchPhase());
-    locMode.textContent = `${sc.env} interior`;
+    locMode.textContent = `${sc.env} interior · ${gfxMode}`;
   }
 
   /* OP_04/05/06 persistent viewport text — hidden when full-screen sheet overlays are up. */
@@ -1172,6 +1239,25 @@ function bindControls() {
   if (editGoldEl) editGoldEl.addEventListener("change", applyPartyEditorsToSession);
   if (editDayEl) editDayEl.addEventListener("change", applyPartyEditorsToSession);
 
+  if (gfxSelect) {
+    gfxSelect.addEventListener("change", () => {
+      void setGfxMode(gfxSelect.value);
+    });
+  }
+
+  if (wallsetSelect) {
+    wallsetSelect.addEventListener("change", () => {
+      const next = wallsetSelect.value;
+      wallsetOverride = INDOOR_WALLSET_IDS.includes(next) ? next : "auto";
+      try {
+        localStorage.setItem("mm2-walker-wallset", wallsetOverride);
+      } catch {
+        /* private browsing */
+      }
+      draw();
+    });
+  }
+
   miniCanvas.addEventListener("click", (ev) => {
     if (uiState || playOverlay !== "none") return;
     const rect = miniCanvas.getBoundingClientRect();
@@ -1291,6 +1377,22 @@ async function init() {
       `Could not load walker data (${err.message}). Run: python tools/export_map_walker.py`;
     statusEl.textContent = "No data.";
     return;
+  }
+
+  try {
+    const savedGfx = localStorage.getItem("mm2-walker-gfx");
+    if (savedGfx && GFX_MODES.includes(savedGfx)) {
+      gfxMode = savedGfx;
+      if (gfxSelect) gfxSelect.value = savedGfx;
+      if (savedGfx !== "amiga") await ensurePcGfx(savedGfx);
+    }
+    const savedWallset = localStorage.getItem("mm2-walker-wallset");
+    if (savedWallset && INDOOR_WALLSET_IDS.includes(savedWallset)) {
+      wallsetOverride = savedWallset;
+      if (wallsetSelect) wallsetSelect.value = savedWallset;
+    }
+  } catch {
+    /* ignore */
   }
 
   for (const sc of maps.screens) {

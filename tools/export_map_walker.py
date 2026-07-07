@@ -61,6 +61,8 @@ DATA_BIN = ROOT / "EXTRACTED" / "ghidra" / "mm2_data_00.bin"
 A4 = 0x7FFE
 BUNDLE_NAME = "walker-bundle.js"
 
+DEFAULT_GOG = Path(r"C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 2")
+
 # OP_0E default-range overlay categories (asm 0x15EDC bins -> event.dat loc 60..70).
 OVERLAY_CATEGORIES = list(range(0x3C, 0x47))
 
@@ -354,6 +356,134 @@ def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
     return manifest, sprites
 
 
+_PC_SHEET_CACHE: dict[tuple[str, str], dict] = {}
+
+# Ceiling/torch overlay sheets: no Amiga pen-0 void — use overlay colour-key path.
+_PC_OVERLAY_SHEETS = frozenset({"townt.32", "cavet.32", "castlet.32"})
+
+
+def _resolve_pc_blob(stem: str, variant: str, gog_dir: Path, data_dir: Path) -> Path | None:
+    ext = ".4" if variant == "cga" else ".16"
+    for base in (gog_dir, data_dir, ROOT):
+        path = base / f"{stem.upper()}{ext}"
+        if path.is_file():
+            return path
+    return None
+
+
+def _load_pc_sheet_info(variant: str, stem: str, path: Path) -> dict:
+    from decode_pc_gfx import parse_wall_sheet  # noqa: E402
+
+    key = (variant, stem)
+    if key not in _PC_SHEET_CACHE:
+        _PC_SHEET_CACHE[key] = parse_wall_sheet(path)
+    return _PC_SHEET_CACHE[key]
+
+
+def _render_pc_walker_frame(
+    variant: str,
+    stem: str,
+    frame: int,
+    pc_path: Path,
+    amiga_sheet: str,
+    data_dir: Path,
+):
+    from decode_pc_gfx import render_overlay_frame_rgba, render_wall_frame_rgba, row_bytes  # noqa: E402
+    from render_view_refs import amiga_frame_mask  # noqa: E402
+    from PIL import Image  # noqa: E402
+
+    sheet = _load_pc_sheet_info(variant, stem, pc_path)
+    frames = sheet["frames"]
+    if frame >= len(frames):
+        raise FileNotFoundError(f"{variant}/{stem} frame {frame}")
+    fr = frames[frame]
+    w, h, pix, bpp = fr.width, fr.height, fr.pixels, sheet["bpp"]
+    rb = row_bytes(w, bpp)
+    if len(pix) < rb * h:
+        raise ValueError(f"{variant}/{stem} frame {frame}: short pixel run")
+
+    if amiga_sheet in _PC_OVERLAY_SHEETS:
+        cga_sil = None
+        if variant == "ega":
+            cga_path = _resolve_pc_blob(stem, "cga", pc_path.parent, data_dir)
+            if cga_path is not None:
+                cga_sheet = _load_pc_sheet_info("cga", stem, cga_path)
+                cga_frames = cga_sheet["frames"]
+                if frame < len(cga_frames):
+                    cfr = cga_frames[frame]
+                    cga_sil = cfr.pixels
+        rgba = render_overlay_frame_rgba(w, h, pix, bpp, cga_silhouette=cga_sil)
+    else:
+        mask = None
+        if resolve_asset(data_dir, amiga_sheet):
+            mask = amiga_frame_mask(amiga_sheet, frame, data_dir)
+        rgba = render_wall_frame_rgba(
+            w,
+            h,
+            pix,
+            bpp,
+            cga_palette=1,
+            amiga_mask=mask,
+            frame=frame,
+        )
+    img = Image.new("RGBA", (w, h))
+    img.putdata(rgba)
+    return img
+
+
+def export_pc_walker_gfx(out_dir: Path, data_dir: Path, gog_dir: Path | None) -> None:
+    """Write wiki/maze-walker/pc/{cga,ega}/sprites + manifest.json (lazy-loaded in browser)."""
+    gog = gog_dir or (DEFAULT_GOG if DEFAULT_GOG.is_dir() else ROOT)
+    pc_root = out_dir / "pc"
+    total = 0
+    for variant in ("cga", "ega"):
+        variant_dir = pc_root / variant
+        sprite_root = variant_dir / "sprites"
+        sprite_root.mkdir(parents=True, exist_ok=True)
+        sheets_meta: dict[str, dict] = {}
+        for sheet in WALKER_SHEETS:
+            if not resolve_asset(data_dir, sheet):
+                continue
+            stem = sheet.replace(".32", "")
+            pc_path = _resolve_pc_blob(stem, variant, gog, data_dir)
+            if pc_path is None:
+                continue
+            key = f"{stem}_{variant}"
+            frames_meta: dict[str, dict] = {}
+            pc_info = _load_pc_sheet_info(variant, stem, pc_path)
+            n = len(pc_info["frames"])
+            for fi in range(n):
+                try:
+                    img = _render_pc_walker_frame(variant, stem, fi, pc_path, sheet, data_dir)
+                except (FileNotFoundError, ValueError):
+                    break
+                rel = f"sprites/{key}/{fi}.png"
+                out_png = variant_dir / rel
+                out_png.parent.mkdir(parents=True, exist_ok=True)
+                img.save(out_png, format="PNG")
+                frames_meta[str(fi)] = {"w": img.width, "h": img.height, "path": rel}
+                total += 1
+            if frames_meta:
+                sheets_meta[key] = {"file": pc_path.name, "frames": frames_meta}
+        manifest = {
+            "view": {
+                "w": VIEW_W,
+                "h": VIEW_H,
+                "originX": ORIGIN_X,
+                "skyY": SKY_Y,
+                "floorY": FLOOR_Y,
+            },
+            "variant": variant,
+            "sheets": sheets_meta,
+        }
+        (variant_dir / "manifest.json").write_text(
+            json.dumps(manifest, separators=(",", ":")), encoding="utf-8"
+        )
+        print(f"  pc/{variant}: {len(sheets_meta)} sheets, {sum(len(s['frames']) for s in sheets_meta.values())} frames")
+    if total == 0:
+        print("  pc: skipped (no GOG .4/.16 blobs found — pass --pc-gog)")
+
+
 def build_maps_payload(attrib: list[bytes], screens: list[tuple[bytes, bytes]], data_dir: Path) -> dict:
     """map.dat pages + attrib.dat per-screen fields (env, neighbours, roof ceiling mask)."""
     event_path = data_dir / "event.dat"
@@ -456,7 +586,14 @@ def write_embedded_bundle(out_dir: Path, maps: dict, manifest: dict, sprites: di
     return bundle_path
 
 
-def export_map_walker(out_dir: Path, data_dir: Path | None = None, *, split: bool = False) -> dict:
+def export_map_walker(
+    out_dir: Path,
+    data_dir: Path | None = None,
+    *,
+    split: bool = False,
+    pc_gog: Path | None = None,
+    skip_pc: bool = False,
+) -> dict:
     data = resolve_data_dir(data_dir)
     if not (data / "map.dat").is_file():
         raise FileNotFoundError(f"map.dat not found under {data}")
@@ -499,6 +636,9 @@ def export_map_walker(out_dir: Path, data_dir: Path | None = None, *, split: boo
         )
         print(f"  split: maps.json + sprites.json + {len(sprites)} PNGs")
 
+    if not skip_pc:
+        export_pc_walker_gfx(out_dir, data, pc_gog)
+
     return maps
 
 
@@ -518,9 +658,26 @@ def main() -> int:
         action="store_true",
         help="Also write maps.json, sprites.json, and loose PNGs (local dev)",
     )
+    ap.add_argument(
+        "--pc-gog",
+        type=Path,
+        default=None,
+        help="GOG install dir with TOWN.4 / TOWN.16 (default: standard GOG path or repo root)",
+    )
+    ap.add_argument(
+        "--skip-pc",
+        action="store_true",
+        help="Do not export PC CGA/EGA sprite trees under pc/",
+    )
     args = ap.parse_args()
     try:
-        export_map_walker(args.out, args.data, split=args.split)
+        export_map_walker(
+            args.out,
+            args.data,
+            split=args.split,
+            pc_gog=args.pc_gog,
+            skip_pc=args.skip_pc,
+        )
     except FileNotFoundError as exc:
         print(exc, file=sys.stderr)
         return 1

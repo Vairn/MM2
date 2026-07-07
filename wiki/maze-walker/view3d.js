@@ -182,7 +182,7 @@ export function collectBlits(slots) {
   const leftBase = [12, 14, 2, 3];
   const rightBase = [13, 15, 2, 3];
   const blits = [];
-  /** Populated at paint time for field===2 only (ASM -$4F62/-$4F76/-$4F8A). */
+  /** Populated at paint time for field===3 only (ASM -$4F62/-$4F76/-$4F8A). */
   const torchBlits = [];
 
   function paint(kind, paintDepth, code) {
@@ -381,12 +381,42 @@ export function stepParty(facing, x, y, screen, screens, terrainLookup = null, n
   };
 }
 
-export function selectIndoorSheets(env) {
-  if (env === "cavern") return { walls: "cave_32", floor: "cavef_32", torch: "cavet_32", sky: "sky_32" };
-  if (env === "castle")
-    return { walls: "castle_32", floor: "castlef_32", torch: "castlet_32", sky: "sky_32" };
+export function selectIndoorSheets(env, gfxMode = "amiga", wallset = "auto") {
+  const s = sheetSuffix(gfxMode);
+  const pick = (base) => ({
+    walls: `${base.walls}${s}`,
+    floor: `${base.floor}${s}`,
+    torch: `${base.torch}${s}`,
+    sky: `${base.sky}${s}`,
+  });
+  if (wallset !== "auto" && INDOOR_WALLSETS[wallset]) return pick(INDOOR_WALLSETS[wallset]);
+  if (env === "cavern") return pick(INDOOR_WALLSETS.cavern);
+  if (env === "castle") return pick(INDOOR_WALLSETS.castle);
   // town + other interior defaults
-  return { walls: "town_32", floor: "townf_32", torch: "townt_32", sky: "sky_32" };
+  return pick(INDOOR_WALLSETS.town);
+}
+
+/** Manual wallset override for the indoor 3D picker (`auto` = follow attrib env). */
+export const INDOOR_WALLSET_IDS = ["auto", "town", "cavern", "castle"];
+
+export const INDOOR_WALLSETS = {
+  town: { walls: "town", floor: "townf", torch: "townt", sky: "sky" },
+  cavern: { walls: "cave", floor: "cavef", torch: "cavet", sky: "sky" },
+  castle: { walls: "castle", floor: "castlef", torch: "castlet", sky: "sky" },
+};
+
+/** Amiga `.32` keys vs PC `.4`/`.16` exports (`town_cga`, `town_ega`, …). */
+export const GFX_MODES = ["amiga", "cga", "ega"];
+
+export function sheetSuffix(gfxMode = "amiga") {
+  if (gfxMode === "cga" || gfxMode === "ega") return `_${gfxMode}`;
+  return "_32";
+}
+
+export function remapSheetKey(key32, gfxMode = "amiga") {
+  if (!key32 || gfxMode === "amiga") return key32;
+  if (key32.endsWith("_32")) return `${key32.slice(0, -3)}${sheetSuffix(gfxMode)}`;
+  return key32;
 }
 
 export function roofAt(sc, x, y) {
@@ -419,7 +449,7 @@ const LEFT_FAR_FRAMES = [12, 14, 2, 3];
 const RIGHT_FAR_FRAMES = [13, 15, 2, 3];
 
 export function torchBlitFor(wb, phase = 0) {
-  /* map.dat page-0 field 3 = wall+torch (NEVER door=2). Caller passes torchBlits[] (code===3) only. */
+  /* map.dat page-0 field 3 = wall+torch overlay slot (NEVER door=2). Caller passes torchBlits[] (code===3) only. */
   if (wb.code !== 3 || wb.depth > 2) return null;
   const flicker = ((phase % TORCH_PHASE_COUNT) + TORCH_PHASE_COUNT) % TORCH_PHASE_COUNT;
   const baseFrame = wb.frame;
