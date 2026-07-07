@@ -358,16 +358,23 @@ def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
 
 _PC_SHEET_CACHE: dict[tuple[str, str], dict] = {}
 
-# Ceiling/torch + outdoor horizon/floor/sky: CGA silhouette colour-key path.
+# Indoor ceiling/torch overlays: full CGA pen 0/1 silhouette colour-key.
 _PC_OVERLAY_SHEETS = frozenset({
     "townt.32",
     "cavet.32",
     "castlet.32",
+})
+
+# Outdoor horizon mountains/trees: same paired void mask on every frame (front + side).
+_PC_OUTDOOR_HORIZON_SHEETS = frozenset({
     "outdoor1.32",
     "outdoor2.32",
     "outdoor3.32",
+})
+
+# Outdoor floor only — front frames still use pen-0 void where present.
+_PC_OUTDOOR_OVERLAY_SHEETS = frozenset({
     "outf.32",
-    "sky.32",
 })
 
 # Biome decor + minimap border sheets (wall layout, outdoor front key=0).
@@ -445,8 +452,11 @@ def _render_pc_walker_frame(
     data_dir: Path,
 ):
     from decode_pc_gfx import (  # noqa: E402
+        render_outdoor_frame_rgba,
+        render_outdoor_wall_frame_rgba,
         render_overlay_frame_rgba,
         render_pc_wall_frame_rgba,
+        render_sky_frame_rgba,
         row_bytes,
     )
     from PIL import Image  # noqa: E402
@@ -466,6 +476,30 @@ def _render_pc_walker_frame(
 
     if amiga_sheet in _PC_OVERLAY_SHEETS:
         rgba = render_overlay_frame_rgba(w, h, pix, bpp, cga_silhouette=cga_sil)
+    elif amiga_sheet == "sky.32":
+        rgba = render_sky_frame_rgba(
+            w, h, pix, bpp, cga_silhouette=cga_sil, ega_silhouette=ega_sil
+        )
+    elif amiga_sheet in _PC_OUTDOOR_HORIZON_SHEETS:
+        rgba = render_outdoor_wall_frame_rgba(
+            w,
+            h,
+            pix,
+            bpp,
+            frame=frame,
+            cga_silhouette=cga_sil,
+            ega_silhouette=ega_sil,
+        )
+    elif amiga_sheet in _PC_OUTDOOR_OVERLAY_SHEETS:
+        rgba = render_outdoor_frame_rgba(
+            w,
+            h,
+            pix,
+            bpp,
+            frame=frame,
+            cga_silhouette=cga_sil,
+            ega_silhouette=ega_sil,
+        )
     else:
         outdoor = amiga_sheet in _PC_OUTDOOR_WALL_SHEETS
         rgba = render_pc_wall_frame_rgba(

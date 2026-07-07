@@ -470,6 +470,175 @@ def resample_amiga_rgba(
     return out
 
 
+def _outdoor_overlay_void_key(
+    eidx: int, cidx: int, *, is_side: bool
+) -> bool:
+    """Paired void mask for outdoor horizon/floor overlay art."""
+    if is_side:
+        return eidx == 8 and cidx < 2
+    return eidx == 0 or (eidx == 8 and cidx < 2)
+
+
+def _outdoor_wall_void_key(eidx: int, cidx: int) -> bool:
+    """Paired void mask for outdoor biome wall decor (front and side cones)."""
+    return eidx == 8 and cidx < 2
+
+
+def render_outdoor_frame_rgba(
+    width: int,
+    height: int,
+    pixels: bytes,
+    bpp: int,
+    *,
+    frame: int | None = None,
+    cga_silhouette: bytes | None = None,
+    ega_silhouette: bytes | None = None,
+    cga_palette: int = 1,
+) -> list[tuple[int, int, int, int]]:
+    """Decode outdoor horizon/floor sheets with paired void masks.
+
+    Side-like frames (base 4..11): void where EGA pen 8 and CGA pen 0/1.
+    Front/other frames: void where EGA pen 0, or EGA pen 8 with CGA pen 0/1.
+    Falls back to index colour-key when the paired variant blob is missing.
+    """
+    base = frame & 0x0F if frame is not None else None
+    is_side = base is not None and 4 <= base <= 11
+    pal = _palette_for_bpp(bpp, cga_palette)
+    idxs = decode_wall_frame_indices(width, height, pixels, bpp)
+    out: list[tuple[int, int, int, int]] = []
+
+    if bpp == 4:
+        cidx = (
+            decode_wall_frame_indices(width, height, cga_silhouette, 2)
+            if cga_silhouette is not None
+            else None
+        )
+        for i, idx in enumerate(idxs):
+            r, g, b = pal[idx]
+            if cidx is not None:
+                key = _outdoor_overlay_void_key(idx, cidx[i], is_side=is_side)
+            else:
+                key = idx in wall_transparent_indices(
+                    bpp, frame, outdoor=True
+                )
+            out.append((r, g, b, 0 if key else 255))
+        return out
+
+    eidx = (
+        decode_wall_frame_indices(width, height, ega_silhouette, 4)
+        if ega_silhouette is not None
+        else None
+    )
+    for i, idx in enumerate(idxs):
+        r, g, b = pal[idx]
+        if eidx is not None:
+            key = _outdoor_overlay_void_key(eidx[i], idx, is_side=is_side)
+        else:
+            key = idx in wall_transparent_indices(bpp, frame, outdoor=True)
+        out.append((r, g, b, 0 if key else 255))
+    return out
+
+
+def render_outdoor_wall_frame_rgba(
+    width: int,
+    height: int,
+    pixels: bytes,
+    bpp: int,
+    *,
+    frame: int | None = None,
+    cga_silhouette: bytes | None = None,
+    ega_silhouette: bytes | None = None,
+    cga_palette: int = 1,
+) -> list[tuple[int, int, int, int]]:
+    """Decode outdoor biome wall decor — front and side use the same paired void mask."""
+    pal = _palette_for_bpp(bpp, cga_palette)
+    idxs = decode_wall_frame_indices(width, height, pixels, bpp)
+    out: list[tuple[int, int, int, int]] = []
+
+    if bpp == 4:
+        cidx = (
+            decode_wall_frame_indices(width, height, cga_silhouette, 2)
+            if cga_silhouette is not None
+            else None
+        )
+        for i, idx in enumerate(idxs):
+            r, g, b = pal[idx]
+            if cidx is not None:
+                key = _outdoor_wall_void_key(idx, cidx[i])
+            else:
+                key = idx in wall_transparent_indices(
+                    bpp, frame, outdoor=True
+                )
+            out.append((r, g, b, 0 if key else 255))
+        return out
+
+    eidx = (
+        decode_wall_frame_indices(width, height, ega_silhouette, 4)
+        if ega_silhouette is not None
+        else None
+    )
+    for i, idx in enumerate(idxs):
+        r, g, b = pal[idx]
+        if eidx is not None:
+            key = _outdoor_wall_void_key(eidx[i], idx)
+        else:
+            key = idx in wall_transparent_indices(bpp, frame, outdoor=True)
+        out.append((r, g, b, 0 if key else 255))
+    return out
+
+
+def render_sky_frame_rgba(
+    width: int,
+    height: int,
+    pixels: bytes,
+    bpp: int,
+    *,
+    cga_silhouette: bytes | None = None,
+    ega_silhouette: bytes | None = None,
+    cga_palette: int = 1,
+) -> list[tuple[int, int, int, int]]:
+    """Decode SKY frames: pen-0 void when present, else CGA pen-1 silhouette."""
+    pal = _palette_for_bpp(bpp, cga_palette)
+    idxs = decode_wall_frame_indices(width, height, pixels, bpp)
+    out: list[tuple[int, int, int, int]] = []
+
+    if bpp == 4:
+        cidx = (
+            decode_wall_frame_indices(width, height, cga_silhouette, 2)
+            if cga_silhouette is not None
+            else None
+        )
+        use_ega0 = cidx is not None and any(
+            e == 0
+            for e in decode_wall_frame_indices(
+                width, height, pixels, bpp
+            )
+        )
+        for i, idx in enumerate(idxs):
+            r, g, b = pal[idx]
+            if cidx is not None:
+                key = idx == 0 if use_ega0 else cidx[i] == 1
+            else:
+                key = idx in (0, 1, 9, 10, 11)
+            out.append((r, g, b, 0 if key else 255))
+        return out
+
+    eidx = (
+        decode_wall_frame_indices(width, height, ega_silhouette, 4)
+        if ega_silhouette is not None
+        else None
+    )
+    use_ega0 = eidx is not None and any(e == 0 for e in eidx)
+    for i, idx in enumerate(idxs):
+        r, g, b = pal[idx]
+        if eidx is not None:
+            key = eidx[i] == 0 if use_ega0 else idx == 1
+        else:
+            key = idx in (0, 1)
+        out.append((r, g, b, 0 if key else 255))
+    return out
+
+
 def wall_transparent_indices(
     bpp: int, frame: int | None = None, *, outdoor: bool = False
 ) -> tuple[int, ...]:
@@ -538,14 +707,22 @@ def render_pc_wall_frame_rgba(
     Indoor front walls/doors (frames 0..3, 16..19): fully opaque.
     Indoor side walls/doors (frames 4..11, 20..27): void only where the paired
     CGA grid is pen 0/1 **and** EGA is pen 8 (CGA pen 1 when decoding ``.4``).
-    Outdoor biome decor: simple index key (front=0, side=8/1).
+    Outdoor biome decor: front and side cones both key void where EGA pen 8
+    meets CGA pen 0/1 (same paired mask as indoor side walls).
     """
     base = frame & 0x0F if frame is not None else None
     is_side = base is not None and 4 <= base <= 11
 
     if outdoor:
-        return render_wall_frame_rgba(
-            width, height, pixels, bpp, frame=frame, outdoor=True
+        return render_outdoor_wall_frame_rgba(
+            width,
+            height,
+            pixels,
+            bpp,
+            frame=frame,
+            cga_silhouette=cga_silhouette,
+            ega_silhouette=ega_silhouette,
+            cga_palette=cga_palette,
         )
 
     if is_side:
