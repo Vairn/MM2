@@ -471,16 +471,14 @@ def resample_amiga_rgba(
 
 
 def wall_transparent_indices(bpp: int, frame: int | None = None) -> tuple[int, ...]:
-    """Colour-key indices for PC wall blits when no Amiga mask is available.
+    """Colour-key indices for PC wall blits.
 
-    CGA.DRV / EGA.DRV compare each pixel against resource byte +7 (runtime ``[0x342]``)
-    before ``drv_blit``. Side-wall cones (frames 4..11) were converted with EGA pen 8 /
-    CGA pen 1 in void areas while pen 0 remains real black detail elsewhere — so a
-    global ``index == 0`` mask is wrong for those frames.
+    Front walls (frames 0-3) are fully opaque rectangles — no mask.
+    Side-wall cones (frames 4-11) have void areas keyed by EGA pen 8 / CGA pen 1.
     """
     if frame is not None and 4 <= frame <= 11:
         return (1,) if bpp == 2 else (8,)
-    return (0,)
+    return ()
 
 
 def render_overlay_frame_rgba(
