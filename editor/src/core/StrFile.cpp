@@ -1,5 +1,7 @@
 #include "core/StrFile.h"
 
+#include "core/PcDatLzw.h"
+
 namespace mm2 {
 
 bool StrFile::decode(const Bytes& bytes) {
@@ -19,7 +21,11 @@ Bytes StrFile::encode() const {
 
 bool StrFile::load(const std::string& path) {
     Bytes b;
-    if (!readFile(path, b)) return false;
+    if (!pcDatReadFlexible(path, b)) return false;
+    // GOG STR.DAT is LZW-compressed (whole-file container); its decoded
+    // length differs slightly from the Amiga str.dat (platform-specific
+    // string table), which is expected. No-op on already-plain files.
+    b = pcDatDecompressFlat(b);
     return decode(b);
 }
 

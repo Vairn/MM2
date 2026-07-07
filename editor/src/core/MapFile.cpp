@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "core/PcDatLzw.h"
+
 namespace mm2 {
 
 bool MapFile::decode(const Bytes& bytes) {
@@ -26,7 +28,11 @@ Bytes MapFile::encode() const {
 
 bool MapFile::load(const std::string& path) {
     Bytes b;
-    if (!readFile(path, b)) return false;
+    if (!pcDatReadFlexible(path, b)) return false;
+    // GOG MAP.DAT stores each of the 60 screens as its own LZW blob behind a
+    // u16 offset table; reassembling them reproduces the flat Amiga map.dat
+    // byte-identical. No-op on already-plain files.
+    b = pcDatDecompressMap(b);
     return decode(b);
 }
 

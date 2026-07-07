@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "core/PcDatLzw.h"
+
 namespace mm2 {
 
 std::string ItemRecord::nameStr() const {
@@ -53,7 +55,9 @@ Bytes ItemsFile::encode() const {
 
 bool ItemsFile::load(const std::string& path) {
     Bytes b;
-    if (!readFile(path, b)) return false;
+    // GOG ITEMS.DAT is already plain (byte-identical to items.dat); only the
+    // filename casing differs, so this just needs the flexible lookup.
+    if (!pcDatReadFlexible(path, b)) return false;
     return decode(b);
 }
 

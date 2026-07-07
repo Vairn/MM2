@@ -15,6 +15,39 @@ Canonical set in project root (same bytes are mirrored under `EXTRACTED/` and `M
 - `spells.dat` - 256 bytes
 - `str.dat` - 7808 bytes
 
+## GOG/PC `.DAT` compression (confirmed against a real GOG install)
+
+The GOG DOS build wraps **some** `.DAT` files in the same custom LZW codec
+used by the PC `.4`/`.16` graphics (`lzw_decompress` traced to `MM2.EXE
+@0x2A42`; see [`54-pc-dos-graphics-formats.md`](54-pc-dos-graphics-formats.md)).
+Detection/decompression: Python `tools/pc_dat_lzw.py` (canonical LZW impl
+shared via `tools/mm2_lzw.py`); C++ `editor/src/core/PcDatLzw.{h,cpp}`, wired
+into `AttribFile`/`MonstersFile`/`StrFile`/`MapFile`/`EventFile`'s `load()`.
+
+| GOG file | Container | Result vs Amiga file |
+|----------|-----------|------------------------|
+| `ATTRIB.DAT` | flat (`u32 LE size` + LZW, whole file) | **byte-identical** to `attrib.dat` |
+| `MONSTERS.DAT` | flat | **byte-identical** to `monsters.dat` |
+| `STR.DAT` | flat | decodes cleanly to 7707 bytes (Amiga is 7808 — different platform string table, not a decode error) |
+| `MAP.DAT` | table: `u16 LE[60]` offset table (one 512-byte screen blob per entry, each `u32 LE size` + LZW) | reassembled 60 screens **byte-identical** to `map.dat` |
+| `EVENTSI.DAT` + `EVENTSO.DAT` | table: `u32 LE[71]` offset table each (indoor / outdoor halves of the 71 `event.dat` locations; mutually exclusive per slot) | merged (71x6-byte BE header + concatenated blobs) reproduces `event.dat` to within **18/95687 bytes** — all single-byte platform content differences (same offsets/lengths; verified `0x02` Amiga vs `0x01` PC at each diff), not decode errors |
+| `ITEMS.DAT` | plain (not compressed) | **byte-identical** to `items.dat` |
+| `ROSTER.DAT` / `SPELLS.DAT` / `DEFAULT.DAT` | plain (not compressed) | different **size** from the Amiga file (e.g. `SPELLS.DAT` 192 bytes vs `spells.dat` 256) — a structural/record-layout difference between platforms, out of scope here |
+
+Both table containers reuse the `MONSTERS.4`/`.16` combat-atlas convention:
+`entry[0] == table_byte_size` (also slot 0's blob offset) for `MAP.DAT`
+(which never has an empty first screen); `EVENTSI.DAT`/`EVENTSO.DAT` instead
+use a fixed 71-slot count since slot 0 can legitimately be empty in either
+half. `entry[k] == 0` always means "no blob for slot k".
+
+The editor's `EventFile::load()` tries plain `event.dat` first, then falls
+back to `EVENTSI.DAT`+`EVENTSO.DAT` auto-merge if only those exist. Saving
+from the editor always writes plain Amiga-format `.dat` files (round-trip
+back to the GOG-compressed shape is not wired into the editor's save path);
+`tools/pc_dat_lzw.py --compress` re-compresses the flat container for
+offline round-trip testing, reusing the verified LZW compressor from
+`tools/encode_pc_gfx.py`.
+
 ## Confirmed Formats
 
 ## `items.dat` (confirmed)

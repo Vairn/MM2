@@ -42,7 +42,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PC_GFX_OUT = ROOT / "EXTRACTED" / "pc_gfx"
 
-_LZW_MASK = {9: 0x1FF, 10: 0x3FF, 11: 0x7FF, 12: 0xFFF}
+if str(ROOT / "tools") not in sys.path:
+    sys.path.insert(0, str(ROOT / "tools"))
+# Canonical impl lives in mm2_lzw.py; re-exported here since several tools do
+# `from decode_pc_gfx import lzw_decompress`.
+from mm2_lzw import lzw_decompress  # noqa: E402
 
 # IBM CGA 320x200x4 BIOS palettes. MM2's CGA.DRV drv_init (@0x2A8) issues
 # INT 10h AH=0Bh with BX=0x0101 -> selects *palette 1* (black/cyan/magenta/white).
@@ -60,81 +64,6 @@ _EGA_RGB = [
 ]
 
 
-def lzw_decompress(source: bytes, dest_size: int) -> bytes:
-    """MM2.EXE LZW decompressor (0x2A42)."""
-    dict_root = [0] * 4096
-    dict_code = [0] * 4096
-    bits_read = 0
-    out = bytearray()
-
-    def read_code(width: int) -> int | None:
-        nonlocal bits_read
-        base = bits_read // 8
-        if base >= len(source):
-            return None
-        b0 = source[base]
-        b1 = source[base + 1] if base + 1 < len(source) else 0
-        b2 = source[base + 2] if base + 2 < len(source) else 0
-        word = b0 | (b1 << 8) | (b2 << 16)
-        word >>= bits_read % 8
-        code = word & _LZW_MASK[width]
-        bits_read += width
-        return code
-
-    def expand(code: int) -> list[int]:
-        stack: list[int] = []
-        while code > 0xFF:
-            stack.append(dict_root[code])
-            code = dict_code[code]
-        stack.append(code)
-        stack.reverse()
-        return stack
-
-    code_width = 9
-    dict_limit = 0x200
-    dict_next = 0x102
-    prev: int | None = None
-
-    while len(out) < dest_size:
-        code = read_code(code_width)
-        if code is None:
-            break
-        if code == 0x100:
-            code_width = 9
-            dict_limit = 0x200
-            dict_next = 0x102
-            code = read_code(code_width)
-            if code is None:
-                break
-            out.append(code & 0xFF)
-            prev = code
-            continue
-        if code == 0x101:
-            break
-        if prev is None:
-            break
-        # ASM 0x2C38-0x2C40: the dictionary link-walk ends at the ROOT char,
-        # i.e. the *first* character of the string, which is expand()[0].
-        if code < dict_next:
-            chars = expand(code)
-            first = chars[0]
-        else:
-            chars = expand(prev)
-            first = chars[0]
-            chars = chars + [first]
-        out.extend(chars)
-        if dict_next < 4096:
-            dict_root[dict_next] = first
-            dict_code[dict_next] = prev
-            dict_next += 1
-            if dict_next >= dict_limit and code_width < 12:
-                code_width += 1
-                dict_limit <<= 1
-        prev = code
-
-    return bytes(out[:dest_size])
-
-
 def row_bytes(width: int, bpp: int) -> int:
     if bpp == 2:
         return (width + 3) // 4
@@ -148,12 +77,27 @@ def bpp_for_ext(ext: str) -> int:
 
 @dataclass
 class WallFrame:
-    index: int
+    index: int  # logical frame index (0..N-1)
     offset: int
     width: int
     height: int
     header_size: int
     pixels: bytes
+    table_slot: int = -1  # offset-table slot (grouped u16 uses even slots only)
+
+
+def _computed_frame_end(dec: bytes, off: int, bpp: int, end_limit: int) -> int:
+    """Byte offset immediately after frame pixels @ off (u16 LE w/h + packed rows)."""
+    if off + 4 > end_limit or off + 4 > len(dec):
+        return 0
+    width, height = struct.unpack_from("<HH", dec, off)
+    if not _valid_frame_dims(width, height, bpp):
+        return 0
+    rb = row_bytes(width, bpp)
+    pix_end = off + 4 + rb * height
+    if pix_end > end_limit or pix_end > len(dec):
+        return 0
+    return pix_end
 
 
 def _frame_end(offsets: list[int], index: int, dec_len: int) -> int:
@@ -189,6 +133,75 @@ def _offset_table_u32(dec: bytes, frame_count: int) -> list[int]:
     return [struct.unpack_from("<I", dec, 2 + i * 4)[0] for i in range(frame_count)]
 
 
+def _extract_packed_u32_frames(dec: bytes, frame_count: int, bpp: int) -> list[WallFrame]:
+    """Extract frames from a u32 table where each entry is (end<<16)|start.
+
+    Used by MASTER.16 (title screen + UI sprites) and several grouped outdoor
+    sheets (DESERT, CASTLE, TOWN, …). MM2.EXE indexes with index*4 @ 0x7018.
+    """
+    frames: list[WallFrame] = []
+    for i in range(frame_count):
+        pos = 2 + i * 4
+        if pos + 4 > len(dec):
+            break
+        u32 = struct.unpack_from("<I", dec, pos)[0]
+        start = u32 & 0xFFFF
+        end = u32 >> 16
+        if start < 2 or start >= len(dec):
+            continue
+        if end <= start:
+            end = len(dec)
+        if start + 4 > end:
+            continue
+        width, height = struct.unpack_from("<HH", dec, start)
+        if not _valid_frame_dims(width, height, bpp):
+            continue
+        hdr = _frame_header_size(dec, start, width, height, bpp, end)
+        if hdr == 0:
+            continue
+        rb = row_bytes(width, bpp)
+        pix_off = start + hdr
+        pix_len = rb * height
+        frames.append(
+            WallFrame(
+                index=len(frames),
+                offset=start,
+                width=width,
+                height=height,
+                header_size=hdr,
+                pixels=dec[pix_off : pix_off + pix_len],
+                table_slot=i,
+            )
+        )
+    return frames
+
+
+def _packed_u32_end_matches(dec: bytes, frame_count: int, bpp: int) -> tuple[int, int]:
+    """Return (end_matches, valid_entries) for packed-u32 scoring."""
+    matches = 0
+    valid = 0
+    for i in range(frame_count):
+        pos = 2 + i * 4
+        if pos + 4 > len(dec):
+            break
+        u32 = struct.unpack_from("<I", dec, pos)[0]
+        start = u32 & 0xFFFF
+        end = u32 >> 16
+        if start < 2 or start + 4 > len(dec):
+            continue
+        width, height = struct.unpack_from("<HH", dec, start)
+        if not _valid_frame_dims(width, height, bpp):
+            continue
+        rb = row_bytes(width, bpp)
+        expected = start + 4 + rb * height
+        if expected > len(dec):
+            continue
+        valid += 1
+        if end == expected or (end == 0 and expected <= len(dec)):
+            matches += 1
+    return matches, valid
+
+
 def _offset_table_u16(dec: bytes, frame_count: int) -> list[int]:
     if 2 + frame_count * 2 > len(dec):
         return []
@@ -196,26 +209,102 @@ def _offset_table_u16(dec: bytes, frame_count: int) -> list[int]:
 
 
 def _pick_offset_table(dec: bytes, frame_count: int, bpp: int) -> tuple[str, list[int]]:
-    """Pick u16 vs u32 table (MM2.EXE uses index*4 @ 0x7018 for u32 slots)."""
+    """Pick packed u32 vs plain u32 vs u16 table layout."""
     if frame_count == 0:
         return "u16", []
     u16 = _offset_table_u16(dec, frame_count)
     u32 = _offset_table_u32(dec, frame_count)
-    scored: list[tuple[int, str, list[int]]] = []
-    for kind, table in (("u32", u32), ("u16", u16)):
-        if not table:
-            continue
-        n = len(_extract_wall_frames(dec, table, bpp))
-        scored.append((n, kind, table))
+    packed_frames = _extract_packed_u32_frames(dec, frame_count, bpp)
+    plain_frames = _extract_wall_frames(dec, u32, bpp) if u32 else []
+    u16_frames = _extract_wall_frames(dec, u16, bpp) if u16 else []
+
+    scored: list[tuple[int, int, str, list[int]]] = []
+    if u32:
+        scored.append((len(plain_frames), 1 if len(plain_frames) == frame_count else 0, "u32", u32))
+    if packed_frames:
+        end_m, end_v = _packed_u32_end_matches(dec, frame_count, bpp)
+        end_bonus = 1 if end_v > 0 and end_m >= max(2, end_v * 2 // 3) else 0
+        scored.append((len(packed_frames), end_bonus, "packed_u32", u32))
+    if u16:
+        scored.append((len(u16_frames), 0, "u16", u16))
+
     if not scored:
         return "u16", u16
-    scored.sort(key=lambda item: (item[0], 1 if item[1] == "u32" else 0), reverse=True)
-    _, kind, table = scored[0]
+    scored.sort(key=lambda item: (item[0], item[1], 1 if item[2] == "u32" else 0), reverse=True)
+    _, _, kind, table = scored[0]
     return kind, table
 
 
-def _extract_wall_frames(dec: bytes, offsets: list[int], bpp: int) -> list[WallFrame]:
+def _is_grouped_u16_table(dec: bytes, offsets: list[int], bpp: int) -> bool:
+    """True when odd slots store the end offset of the preceding even-slot frame.
+
+    MM2.EXE pick_frame_from_sheet @ 0x5D4A indexes the u16 table at logical_index*2
+    (see shl ax,1 @ 0x5E60). On-disk grouped sheets (MASTER, CASTLE.4, …) interleave
+    [frame_start, frame_end] pairs; only the even slots are frame headers.
+    """
+    if len(offsets) < 4:
+        return False
+    pairs = 0
+    matches = 0
+    for i in range(0, len(offsets) - 1, 2):
+        start = offsets[i]
+        if start < 2 or start + 4 > len(dec):
+            continue
+        width, height = struct.unpack_from("<HH", dec, start)
+        if not _valid_frame_dims(width, height, bpp):
+            continue
+        end_limit = _frame_end(offsets, i, len(dec))
+        expected = _computed_frame_end(dec, start, bpp, end_limit)
+        if expected <= start:
+            continue
+        pairs += 1
+        if offsets[i + 1] == expected:
+            matches += 1
+    return pairs >= 2 and matches >= max(2, pairs * 2 // 3)
+
+
+def _extract_grouped_u16_frames(dec: bytes, offsets: list[int], bpp: int) -> list[WallFrame]:
+    """Extract logical frames from an interleaved u16 start/end offset table."""
     frames: list[WallFrame] = []
+    logical = 0
+    for i in range(0, len(offsets), 2):
+        off = offsets[i]
+        if off < 2 or off >= len(dec):
+            continue
+        end = offsets[i + 1] if i + 1 < len(offsets) else len(dec)
+        if end <= off:
+            end = len(dec)
+        if off + 4 > end:
+            continue
+        width, height = struct.unpack_from("<HH", dec, off)
+        if not _valid_frame_dims(width, height, bpp):
+            continue
+        hdr = _frame_header_size(dec, off, width, height, bpp, end)
+        if hdr == 0:
+            continue
+        rb = row_bytes(width, bpp)
+        pix_off = off + hdr
+        pix_len = rb * height
+        frames.append(
+            WallFrame(
+                index=logical,
+                offset=off,
+                width=width,
+                height=height,
+                header_size=hdr,
+                pixels=dec[pix_off : pix_off + pix_len],
+                table_slot=i,
+            )
+        )
+        logical += 1
+    return frames
+
+
+def _extract_wall_frames(dec: bytes, offsets: list[int], bpp: int) -> list[WallFrame]:
+    if _is_grouped_u16_table(dec, offsets, bpp):
+        return _extract_grouped_u16_frames(dec, offsets, bpp)
+    frames: list[WallFrame] = []
+    logical = 0
     for i, off in enumerate(offsets):
         if off < 2 or off >= len(dec):
             continue
@@ -233,14 +322,16 @@ def _extract_wall_frames(dec: bytes, offsets: list[int], bpp: int) -> list[WallF
         pix_len = rb * height
         frames.append(
             WallFrame(
-                index=i,
+                index=logical,
                 offset=off,
                 width=width,
                 height=height,
                 header_size=hdr,
                 pixels=dec[pix_off : pix_off + pix_len],
+                table_slot=i,
             )
         )
+        logical += 1
     return frames
 
 
@@ -255,11 +346,15 @@ def parse_wall_sheet(path: Path) -> dict:
     dec = lzw_decompress(raw[4:], dec_size)
     if len(dec) < dec_size:
         raise ValueError(f"{path}: LZW got {len(dec)} bytes, expected {dec_size}")
-    frame_count = dec[0] & 0x3F
-    if frame_count == 0:
-        raise ValueError(f"{path}: invalid frame_count {frame_count}")
-    offset_kind, offsets = _pick_offset_table(dec, frame_count, bpp)
-    frames = _extract_wall_frames(dec, offsets, bpp)
+    table_slot_count = dec[0] & 0x3F
+    if table_slot_count == 0:
+        raise ValueError(f"{path}: invalid frame_count {table_slot_count}")
+    offset_kind, offsets = _pick_offset_table(dec, table_slot_count, bpp)
+    grouped_u16 = offset_kind == "u16" and _is_grouped_u16_table(dec, offsets, bpp)
+    if offset_kind == "packed_u32":
+        frames = _extract_packed_u32_frames(dec, table_slot_count, bpp)
+    else:
+        frames = _extract_wall_frames(dec, offsets, bpp)
     if not frames:
         raise ValueError(f"{path}: no decodable frames ({offset_kind} table)")
     return {
@@ -268,7 +363,9 @@ def parse_wall_sheet(path: Path) -> dict:
         "ext": path.suffix.lower(),
         "bpp": bpp,
         "uncompressed_size": dec_size,
-        "frame_count": frame_count,
+        "frame_count": len(frames),
+        "table_slot_count": table_slot_count,
+        "grouped_u16": grouped_u16,
         "offset_kind": offset_kind,
         "frames": frames,
         "compressed_bytes": len(raw) - 4,
@@ -332,6 +429,32 @@ def decode_wall_frame_indices(width: int, height: int, pixels: bytes, bpp: int) 
     return out
 
 
+def resample_amiga_mask(
+    mask: list[list[bool]], width: int, height: int
+) -> list[list[bool]]:
+    """Scale an Amiga pen-0 mask to PC frame dimensions (nearest-neighbour).
+
+    PC wall blobs are often 1–3 px taller than the matching ``.32`` frame; using
+    the Amiga mask without scaling leaves the extra scanlines fully opaque.
+    """
+    src_h = len(mask)
+    if src_h == 0:
+        return [[True] * width for _ in range(height)]
+    src_w = len(mask[0])
+    if src_w == width and src_h == height:
+        return mask
+    out: list[list[bool]] = []
+    for y in range(height):
+        sy = min(src_h - 1, (y * src_h) // height) if height else 0
+        src_row = mask[sy]
+        row: list[bool] = []
+        for x in range(width):
+            sx = min(src_w - 1, (x * src_w) // width) if width else 0
+            row.append(src_row[sx])
+        out.append(row)
+    return out
+
+
 def wall_transparent_indices(bpp: int, frame: int | None = None) -> tuple[int, ...]:
     """Colour-key indices for PC wall blits when no Amiga mask is available.
 
@@ -345,6 +468,39 @@ def wall_transparent_indices(bpp: int, frame: int | None = None) -> tuple[int, .
     return (0,)
 
 
+def render_overlay_frame_rgba(
+    width: int,
+    height: int,
+    pixels: bytes,
+    bpp: int,
+    *,
+    cga_palette: int = 1,
+    cga_silhouette: bytes | None = None,
+) -> list[tuple[int, int, int, int]]:
+    """Decode townt/cavet/castlet overlay frames for the walker.
+
+    These Amiga sheets have no pen-0 void (full 32-colour art), so the Amiga
+    mask path cannot key them. CGA uses pens 0/1 as void; EGA reuses the CGA
+    pixel grid at each location (same frame geometry) for the alpha silhouette.
+    """
+    pal = _palette_for_bpp(bpp, cga_palette)
+    idxs = decode_wall_frame_indices(width, height, pixels, bpp)
+    cga_idxs: list[int] | None = None
+    if bpp == 4 and cga_silhouette is not None:
+        cga_idxs = decode_wall_frame_indices(width, height, cga_silhouette, 2)
+    out: list[tuple[int, int, int, int]] = []
+    for i, idx in enumerate(idxs):
+        r, g, b = pal[idx]
+        if bpp == 2:
+            key = idx in (0, 1)
+        elif cga_idxs is not None:
+            key = cga_idxs[i] < 2
+        else:
+            key = idx in (0, 1, 9, 10, 11)
+        out.append((r, g, b, 0 if key else 255))
+    return out
+
+
 def render_wall_frame_rgba(
     width: int,
     height: int,
@@ -354,19 +510,26 @@ def render_wall_frame_rgba(
     cga_palette: int = 1,
     transparent_indices: tuple[int, ...] | None = None,
     amiga_mask: list[list[bool]] | None = None,
+    frame: int | None = None,
 ) -> list[tuple[int, int, int, int]]:
     """Decode wall frame to RGBA with PC driver-style transparency.
 
     Prefer ``amiga_mask`` (pen 0 from the matching ``.32`` frame) when available —
-    that is the authoritative silhouette. Otherwise use ``transparent_indices`` or
+    that is the authoritative silhouette, resampled when PC ``width``/``height``
+    differ. Side-wall void pens (frames 4..11) are also keyed when the mask
+    misses driver void colour. Otherwise use ``transparent_indices`` or
     ``wall_transparent_indices``.
     """
     pal = _palette_for_bpp(bpp, cga_palette)
     idxs = decode_wall_frame_indices(width, height, pixels, bpp)
+    void_idxs = wall_transparent_indices(bpp, frame)
     if transparent_indices is None and amiga_mask is None:
-        transparent_indices = wall_transparent_indices(bpp)
-    mask_h = len(amiga_mask) if amiga_mask else 0
-    mask_w = len(amiga_mask[0]) if amiga_mask else 0
+        transparent_indices = void_idxs
+    if amiga_mask is not None:
+        src_h = len(amiga_mask)
+        src_w = len(amiga_mask[0]) if src_h else 0
+        if src_w != width or src_h != height:
+            amiga_mask = resample_amiga_mask(amiga_mask, width, height)
     out: list[tuple[int, int, int, int]] = []
     for y in range(height):
         for x in range(width):
@@ -374,7 +537,9 @@ def render_wall_frame_rgba(
             idx = idxs[i]
             r, g, b = pal[idx]
             if amiga_mask is not None:
-                key = y < mask_h and x < mask_w and amiga_mask[y][x]
+                key = amiga_mask[y][x]
+                if not key and idx in void_idxs:
+                    key = True
             else:
                 key = idx in transparent_indices  # type: ignore[operator]
             out.append((r, g, b, 0 if key else 255))
@@ -1351,12 +1516,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"frame {args.frame}: {fr.width}x{fr.height} -> {dest.resolve()}")
         return 0
     if args.info or args.output is None:
-        print(f"{path.name}: {info['frame_count']} slots ({info['offset_kind']}), "
-              f"{len(info['frames'])} decoded @{info['bpp']}bpp")
+        slots = info["table_slot_count"]
+        grouped = info.get("grouped_u16", False)
+        kind = info["offset_kind"]
+        slot_note = f"{slots} entries"
+        if kind == "packed_u32":
+            slot_note += " (packed u32 start|end<<16)"
+        elif grouped:
+            slot_note += " (grouped u16: even=start, odd=end)"
+        print(f"{path.name}: {len(info['frames'])} frames from {slot_note} [{kind}] "
+              f"@{info['bpp']}bpp")
         print(f"  compressed payload: {info['compressed_bytes']} bytes")
         print(f"  decompressed: {len(info['decompressed'])} / {info['uncompressed_size']} bytes")
         for fr in info["frames"][:12]:
-            print(f"  frame {fr.index:2d} @{fr.offset:#x} hdr={fr.header_size} "
+            slot = f" slot={fr.table_slot}" if fr.table_slot >= 0 else ""
+            print(f"  frame {fr.index:2d} @{fr.offset:#x}{slot} hdr={fr.header_size} "
                   f"{fr.width}x{fr.height}")
         if len(info["frames"]) > 12:
             print(f"  ... +{len(info['frames']) - 12} more")

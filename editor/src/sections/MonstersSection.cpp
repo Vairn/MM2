@@ -1,23 +1,99 @@
 #include "sections/MonstersSection.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <string>
 
+#include "app/App.h"
 #include "imgui.h"
 #include "widgets/HexView.h"
 #include "widgets/Texture.h"
 #include "widgets/UiLayout.h"
 
+namespace fs = std::filesystem;
+
 namespace mm2 {
 
-MonstersSection::~MonstersSection() { releaseTextures(); }
+namespace {
+
+// Case-insensitive lookup of MONSTERS.4 / MONSTERS.16 within `dir` (GOG ships
+// ALLCAPS filenames, but the host filesystem may be case-sensitive).
+std::string findMonstersFile(const std::string& dir, const std::string& ext) {
+    std::error_code ec;
+    if (dir.empty() || !fs::is_directory(dir, ec)) return "";
+    for (auto& e : fs::directory_iterator(dir, ec)) {
+        if (!e.is_regular_file()) continue;
+        std::string extLower = e.path().extension().string();
+        std::transform(extLower.begin(), extLower.end(), extLower.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (extLower != ext) continue;
+        if (pcIsMonstersFile(e.path().filename().string())) return e.path().string();
+    }
+    return "";
+}
+
+}  // namespace
+
+MonstersSection::~MonstersSection() {
+    releaseTextures();
+    releasePcTextures();
+}
 
 void MonstersSection::releaseTextures() {
     for (unsigned int t : textures_) freeTexture(t);
     textures_.clear();
     for (unsigned int t : composedTextures_) freeTexture(t);
     composedTextures_.clear();
+}
+
+void MonstersSection::releasePcTextures() {
+    for (unsigned int t : pcComposedTextures_) freeTexture(t);
+    pcComposedTextures_.clear();
+}
+
+void MonstersSection::buildPcComposedTextures() {
+    releasePcTextures();
+    if (!pcPic_ || !pcPic_->ok) return;
+    std::vector<uint8_t> rgba;
+    pcComposedTextures_.reserve(pcPic_->frames.size());
+    for (int i = 0; i < static_cast<int>(pcPic_->frames.size()); ++i) {
+        pcCompositeMonsterFrame(*pcPic_, i, pcCgaPalette_, rgba);
+        pcComposedTextures_.push_back(makeTextureRGBA(rgba.data(), kPcCombatCanvasW, kPcCombatCanvasH));
+    }
+}
+
+void MonstersSection::syncPcSprite(App& app, uint8_t picture) {
+    // Pull the shared PC assets folder (set by PcGfxSection or auto-detected
+    // on folder open); reset cached atlases if it changed.
+    if (pcDir_ != app.state().pcDataDir) {
+        pcDir_ = app.state().pcDataDir;
+        pcAtlasCgaLoaded_ = false;
+        pcAtlasEgaLoaded_ = false;
+        pcPicId_ = -1;
+    }
+    if (pcMode_ == PcSpriteMode::Amiga) return;
+
+    const bool wantCga = (pcMode_ == PcSpriteMode::Cga);
+    PcMonstersAtlas& atlas = wantCga ? pcAtlasCga_ : pcAtlasEga_;
+    bool& atlasLoaded = wantCga ? pcAtlasCgaLoaded_ : pcAtlasEgaLoaded_;
+    if (!atlasLoaded) {
+        std::string path = findMonstersFile(pcDir_, wantCga ? ".4" : ".16");
+        if (!path.empty()) pcLoadMonstersAtlas(path, atlas);
+        atlasLoaded = true;
+    }
+
+    const int pictureId = picture & 0x7F;
+    if (pcPicId_ == pictureId && pcPicVariant_ == pcMode_) return;  // already decoded
+    pcPicId_ = pictureId;
+    pcPicVariant_ = pcMode_;
+    pcState_ = 0;
+    pcElapsed_ = 0.0f;
+    pcLastTick_ = ImGui::GetTime();
+    pcPic_ = atlas.ok ? pcMonsterPictureForId(atlas, pictureId) : std::nullopt;
+    buildPcComposedTextures();
+    pcPlaying_ = pcPic_ && pcPic_->frames.size() > 1;
 }
 
 void MonstersSection::buildSpriteComposedTextures() {
@@ -52,6 +128,10 @@ bool MonstersSection::load(const std::string& dataDir) {
     spritePic_ = -1;
     spriteCanvasW_ = spriteCanvasH_ = 0;
     spriteCanvasMinX_ = spriteCanvasMinY_ = 0;
+    releasePcTextures();
+    pcPic_.reset();
+    pcPicId_ = -1;
+    pcAtlasCgaLoaded_ = pcAtlasEgaLoaded_ = false;
     return loaded;
 }
 
@@ -96,7 +176,6 @@ void MonstersSection::loadSprite(uint8_t picture) {
 }
 
 void MonstersSection::draw(App& app) {
-    (void)app;
     if (!loaded) {
         ImGui::TextDisabled("monsters.dat not loaded.");
         return;
@@ -141,9 +220,91 @@ void MonstersSection::draw(App& app) {
 
         ImGui::TableNextColumn();
         ImGui::SeparatorText("Sprite");
-        ImGui::Text("%s", spriteFile_.c_str());
         ImGui::TextDisabled("picture=%u  (file %u, flag 0x80=%s)", pic, pic & 0x7F,
                             (pic & 0x80) ? "set" : "clear");
+
+        ui::SetFieldMed();
+        const char* pcModeLabel = pcMode_ == PcSpriteMode::Amiga ? "Amiga (.anm)"
+                                  : pcMode_ == PcSpriteMode::Cga  ? "PC CGA (.4)"
+                                                                   : "PC EGA (.16)";
+        if (ImGui::BeginCombo("Sprite source", pcModeLabel)) {
+            if (ImGui::Selectable("Amiga (.anm)", pcMode_ == PcSpriteMode::Amiga)) pcMode_ = PcSpriteMode::Amiga;
+            if (ImGui::Selectable("PC CGA (.4)", pcMode_ == PcSpriteMode::Cga)) pcMode_ = PcSpriteMode::Cga;
+            if (ImGui::Selectable("PC EGA (.16)", pcMode_ == PcSpriteMode::Ega)) pcMode_ = PcSpriteMode::Ega;
+            ImGui::EndCombo();
+        }
+        syncPcSprite(app, pic);
+
+        if (pcMode_ != PcSpriteMode::Amiga) {
+            if (!pcDir_.empty() && pcMode_ == PcSpriteMode::Cga) {
+                ui::SetFieldShort();
+                const char* palLabel = pcCgaPalette_ == 0 ? "green/red/brown" : "cyan/magenta/white";
+                if (ImGui::BeginCombo("CGA palette", palLabel)) {
+                    if (ImGui::Selectable("green/red/brown", pcCgaPalette_ == 0)) {
+                        pcCgaPalette_ = 0;
+                        buildPcComposedTextures();
+                    }
+                    if (ImGui::Selectable("cyan/magenta/white (MM2 default)", pcCgaPalette_ == 1)) {
+                        pcCgaPalette_ = 1;
+                        buildPcComposedTextures();
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+            if (pcDir_.empty()) {
+                ImGui::TextDisabled("No PC assets folder set (open one from the PC Walls section).");
+            } else if (!pcPic_ || !pcPic_->ok) {
+                ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "No PC sprite for picture id %d in %s.", pic & 0x7F,
+                                   pcMode_ == PcSpriteMode::Cga ? "MONSTERS.4" : "MONSTERS.16");
+            } else {
+                const int n = static_cast<int>(pcPic_->frames.size());
+                ImGui::TextDisabled("%d raw frames  flags=0x%X", n, pcPic_->flags);
+                ImGui::Checkbox("Play##pcmon", &pcPlaying_);
+                ImGui::SameLine();
+                ImGui::Checkbox("Loop##pcmon", &pcLoop_);
+                ui::SetFieldShort();
+                ImGui::SliderFloat("Speed##pcmon", &pcSpeed_, 0.1f, 4.0f, "%.2fx");
+                ImGui::SliderInt("State##pcmon", &pcState_, 0, n > 0 ? n - 1 : 0);
+                ImGui::SliderFloat("Zoom##pcmon", &spriteZoom_, 1.0f, 6.0f, "%.0fx");
+
+                if (pcPlaying_ && n > 1) {
+                    const double now = ImGui::GetTime();
+                    const float dt = static_cast<float>((pcLastTick_ > 0.0) ? (now - pcLastTick_) : 0.0);
+                    pcLastTick_ = now;
+                    pcElapsed_ += (dt > 0.0f) ? dt : 0.0f;
+                    const float frameDur = 0.125f / ((pcSpeed_ > 0.0f) ? pcSpeed_ : 1.0f);
+                    while (pcElapsed_ >= frameDur) {
+                        pcElapsed_ -= frameDur;
+                        ++pcState_;
+                        if (pcState_ >= n) {
+                            if (pcLoop_)
+                                pcState_ = 0;
+                            else {
+                                pcState_ = n - 1;
+                                pcPlaying_ = false;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    pcLastTick_ = ImGui::GetTime();
+                }
+                if (pcState_ < 0) pcState_ = 0;
+                if (pcState_ >= n) pcState_ = (n > 0) ? (n - 1) : 0;
+
+                if (pcState_ >= 0 && pcState_ < static_cast<int>(pcComposedTextures_.size())) {
+                    unsigned int tex = pcComposedTextures_[static_cast<size_t>(pcState_)];
+                    if (tex)
+                        ImGui::Image(static_cast<ImTextureID>(tex), ImVec2(kPcCombatCanvasW * spriteZoom_,
+                                                                           kPcCombatCanvasH * spriteZoom_));
+                    ImGui::TextDisabled("state %d/%d  (%dx%d canvas, %dbpp)", pcState_, n - 1, kPcCombatCanvasW,
+                                        kPcCombatCanvasH, pcPic_->bpp);
+                }
+            }
+        }
+
+        ImGui::Text("%s", spriteFile_.c_str());
+        if (pcMode_ != PcSpriteMode::Amiga) ImGui::TextDisabled("(Amiga sprite decoded below for comparison)");
         if (sprite_.ok || !sprite_.frames.empty()) {
             int n = static_cast<int>(sprite_.frames.size());
             ImGui::TextDisabled("%d frames  depth=%d", n, sprite_.depth);

@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "core/PcDatLzw.h"
+
 namespace mm2 {
 
 bool AttribFile::decode(const Bytes& bytes) {
@@ -22,7 +24,10 @@ Bytes AttribFile::encode() const {
 
 bool AttribFile::load(const std::string& path) {
     Bytes b;
-    if (!readFile(path, b)) return false;
+    if (!pcDatReadFlexible(path, b)) return false;
+    // GOG ATTRIB.DAT is LZW-compressed (whole-file container); decompresses
+    // byte-identical to the Amiga attrib.dat. No-op on already-plain files.
+    b = pcDatDecompressFlat(b);
     return decode(b);
 }
 

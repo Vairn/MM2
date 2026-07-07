@@ -1,6 +1,9 @@
 #include "core/EventFile.h"
 
+#include <filesystem>
+
 #include "core/EventOps.h"
+#include "core/PcDatLzw.h"
 
 namespace mm2 {
 
@@ -17,7 +20,17 @@ const char* eventCondName(uint8_t cond) {
 }
 
 bool EventFile::load(const std::string& path) {
-    if (!readFile(path, raw)) return false;
+    // Plain event.dat (Amiga, or already-decompressed) takes priority; GOG
+    // splits it into EVENTSI.DAT (indoor) + EVENTSO.DAT (outdoor) instead --
+    // each is its own per-location LZW table, merged into an Amiga-shaped
+    // blob by pcDatLoadEventAuto (see PcDatLzw.h for the container format).
+    if (pcDatReadFlexible(path, raw)) {
+        decode();
+        return true;
+    }
+    std::string dir = std::filesystem::path(path).parent_path().string();
+    if (dir.empty()) dir = ".";
+    if (!pcDatLoadEventAuto(dir, raw)) return false;
     decode();
     return true;
 }

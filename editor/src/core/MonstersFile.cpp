@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "core/PcDatLzw.h"
+
 namespace mm2 {
 
 namespace {
@@ -146,7 +148,10 @@ Bytes MonstersFile::encode() const {
 
 bool MonstersFile::load(const std::string& path) {
     Bytes b;
-    if (!readFile(path, b)) return false;
+    if (!pcDatReadFlexible(path, b)) return false;
+    // GOG MONSTERS.DAT is LZW-compressed (whole-file container); decompresses
+    // byte-identical to the Amiga monsters.dat. No-op on already-plain files.
+    b = pcDatDecompressFlat(b);
     return decode(b);
 }
 

@@ -23,6 +23,9 @@ public:
     // The four backdrop environments the engine selects between.
     enum class Env { Town, Cavern, Castle, Outdoor };
 
+    // Manual override for 3D indoor wall/floor/torch sheets (Auto follows attrib).
+    enum class WallsetOverride { Auto = 0, Town, Cavern, Castle };
+
     void drawGrid(const char* id, std::array<uint8_t, kMapPageSize>& page, int& selTile,
                   bool markEvents = false);
     void drawCartoGrid(const char* id, std::array<uint8_t, kMapPageSize>& page, int& selTile,
@@ -84,6 +87,7 @@ public:
     float zoom_ = 3.0f;
     float viewZoom_ = 2.0f;
     int skyFrame_ = 0;
+    int wallsetOverride_ = 0;  // WallsetOverride as int for ImGui::Combo
 };
 
 }  // namespace mm2

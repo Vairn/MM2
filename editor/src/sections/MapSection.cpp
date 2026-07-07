@@ -418,6 +418,14 @@ void MapSection::drawOutdoorView3D() {
 
 void MapSection::drawView3D() {
     Env env = envOf(screen_);
+    if (env != Env::Outdoor) {
+        const char* wallsetLabels[] = {"Auto (map env)", "Town", "Cavern", "Castle"};
+        ImGui::SetNextItemWidth(180);
+        ImGui::Combo("Wallset##3d", &wallsetOverride_, wallsetLabels, IM_ARRAYSIZE(wallsetLabels));
+        if (wallsetOverride_ == static_cast<int>(WallsetOverride::Town)) env = Env::Town;
+        else if (wallsetOverride_ == static_cast<int>(WallsetOverride::Cavern)) env = Env::Cavern;
+        else if (wallsetOverride_ == static_cast<int>(WallsetOverride::Castle)) env = Env::Castle;
+    }
     if (env == Env::Outdoor) {
         drawOutdoorView3D();
         return;

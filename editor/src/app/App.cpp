@@ -10,8 +10,10 @@
 #include "sections/EventSection.h"
 #include "sections/GfxSection.h"
 #include "sections/ItemsSection.h"
+#include "core/PcGfx.h"
 #include "sections/MapSection.h"
 #include "sections/MonstersSection.h"
+#include "sections/PcGfxSection.h"
 #include "sections/RosterSection.h"
 #include "sections/SpellsSection.h"
 #include "sections/StrSection.h"
@@ -33,6 +35,8 @@ void App::registerSections() {
     sections_.push_back(std::make_unique<EventSection>());
     sections_.push_back(std::make_unique<GfxSection>("Graphics (.32)", ".32", /*isAnm=*/false));
     sections_.push_back(std::make_unique<GfxSection>("Animations (.anm)", ".anm", /*isAnm=*/true));
+    sections_.push_back(std::make_unique<PcGfxSection>("PC Walls (CGA .4)", ".4"));
+    sections_.push_back(std::make_unique<PcGfxSection>("PC Walls (EGA .16)", ".16"));
 }
 
 std::string App::itemName(int id) const {
@@ -52,6 +56,9 @@ void App::openDataFolder(const std::string& dir) {
 
 void App::openDataFolderNow(const std::string& dir) {
     state_.dataDir = dir;
+    if (state_.pcDataDir.empty()) {
+        state_.pcDataDir = pcFindAssetsDir(dir);  // GOG PC install alongside the Amiga folder, if any
+    }
     int ok = 0, total = 0;
     for (auto& s : sections_) {
         ++total;

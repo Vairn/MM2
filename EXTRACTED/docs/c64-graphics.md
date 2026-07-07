@@ -1,0 +1,614 @@
+﻿# Commodore 64 graphics (Might and Magic II)
+
+Initial RE notes for the **1988 C64** port (six disk sides). **Confirmed facts only**; gaps marked explicitly.
+
+| Artifact | Path |
+|----------|------|
+| D64 images | `EXTRACTED/c64/MM2-1.D64` â€¦ `MM2-6.D64` |
+| Track map | `EXTRACTED/c64/analysis/track_map.json` + `track_map_summary.md` |
+| Loader chain | `EXTRACTED/c64/analysis/loader_chain.json` |
+| Sector chains | `EXTRACTED/c64/analysis/sector_chains.json` |
+| Gfx scan | `EXTRACTED/c64/analysis/gfx_scan.json` |
+| T18 loader dump | `EXTRACTED/c64/asm/t18_loader_mm2-1.bin` + `.asm` |
+| Investigation | `EXTRACTED/disk_investigation/protection_investigation.json` |
+| PC reference | `EXTRACTED/docs/54-pc-dos-graphics-formats.md` |
+| Amiga reference | `EXTRACTED/docs/06-gfx-loading.md` |
+
+---
+
+## Disk provenance (confirmed 2026-07)
+
+| Check | Result |
+|-------|--------|
+| File timestamps | **1996-05-27** on all six `.D64` (dump/copy date; not proof of crack) |
+| BAM disk name | `MIGHT AND MAGIC` (or `MIGHT & MAGIC` on MM2-3/4) â€” publisher label |
+| Publisher strings | `NEW WORLD COMP.`, `M. & MAGIC 2/HTL` on T18 (all disks) |
+| Crack / trainer strings | **None** â€” no `CRACKED`, `TRAINER`, `FREE VERSION`, scene group banners |
+| False positives | `FLT` substring on MM2-4/6 is **binary noise** inside data sectors, not Fairlight |
+| Assessment | **Original publisher custom layout**, not a scene crack. All six sides share the same IEC loader stub. |
+
+**Correction (2026-07):** These disks are **not** â€œcracked versions with a hidden normal DOS catalog.â€ Every side uses a **non-CBM directory** (T18S1+ = loader code). Data sides are not extractable via `extract_c64_d64.py` either â€” catalog parse yields **zero files** on MM2-2â€¦6 as well as MM2-1.
+
+---
+
+## Disk layout (confirmed)
+
+| Field | Value |
+|-------|-------|
+| Image size | 174,848 bytes (standard D64) |
+| BAM location | Track 18, sector 0 |
+| Volume label | `MIGHT AND MAGIC` (PETSCII) |
+| Directory track | 18 â€” **sectors 1+ are IEC loader code**, not CBM filenames |
+| BAM dir pointer | **`T160 S160`** (invalid) on **all six disks** â€” intentional non-DOS layout |
+| Boot | `LOAD "*",8,1` â€” T18 holds loader; T1S0 link `T0 S255` on **all disks** |
+
+Standard **`tools/extract_c64_d64.py`** parsing finds bogus "filenames" (6502 opcodes) on **every** disk. The catalog area was **never** a usable CBM directory on any side.
+
+**Prior mislabel:** â€œcopy protectionâ€ / â€œside A encrypted.â€ Accurate description: **custom NWC IEC loader + packed data tracks**. MM2-1 boot disk has **high-entropy** packed chains (T19, avg entropy ~6.9); MM2-2â€¦6 data disks store payload in **`data`/`text_mixed` tracks** without large PRG chains â€” still loaded through the same T18 IEC stub, not plain `OPEN/READ` files.
+
+**Interleave fix (2026-07):** tracks 1â€“17 require **21** interleave entries (sector 20 â†’ physical slot 12). Earlier tools omitted this slot and mis-addressed T1S20 / high tracks.
+
+## Loader / disk I/O (confirmed, partial)
+
+### T18 sector roles (all six disks)
+
+| Sector | Role | Evidence |
+|--------|------|----------|
+| T18S0 | BAM | Valid disk name; links to T18S1 |
+| T18S1 | **IEC bit-bang** | `STA/STX/LDA/EOR $DD00`; MD5 **`a01c0d810d46c0aa53113ddfee40b60c`** identical on all disks |
+| T18S6 | IEC helper | `LDA/BIT $DD00` |
+| T18S10 | Copyright strings | PETSCII `NEW WORLD COMP.`, `MAGIC 2/HTâ€¦` region |
+| T18S15 | **IEC bit-bang** | 10Ã— `STA $DD00` in payload |
+| T18S16 | **KERNAL LOAD stub** (MM2-1 only continues) | PETSCII `NEW WORLD COMP.` + `JSR $BAFF/$BDFF/$D5FF` + `JMP ($A702)` |
+
+**BAM chain (all disks):** `T18S0 â†’ T18S1 â†’ T18S16`  
+**MM2-1 only:** `T18S16 â†’ T18S2` (link then leaves track 18 â€” invalid T220)
+
+Static disassembly base for T18S1 payload: **`$0400`** (`tools/c64_dump_sector.py --org 0x400`).
+
+Concatenated loader sectors (S1+S6+S15+S16): `EXTRACTED/c64/asm/t18_loader_mm2-1.bin` (1016 bytes).
+
+### IEC routine summary (T18S1 @ $0400)
+
+```
+STA $DD00 / STX $DD00 / LDA $DD00 / EOR $DD00
+JSR $3004          ; nibble transfer helper (same sector)
+BIT $A900          ; serial bus status
+JSR $0805          ; read byte via IEC
+STA ($FC),Y        ; store to load buffer
+```
+
+`$DD00` is the C64 **serial bus / 1541** port â€” confirms drive communication, not file metadata.
+
+### KERNAL stub (T18S16, MM2-1)
+
+```
+JSR $3403
+LDA #$02 / LDX #$08 / LDY #$01
+JSR $BAFF          ; SETLFS
+LDA #$0F / LDX #$A9 / LDY #$02
+JSR $BDFF          ; SETNAM
+LDA #$00
+JSR $D5FF          ; LOAD
+JMP ($A702)
+```
+
+**`JSR $0334`** at T18S16 `$0421` before SETLFS — init in decompressed RAM (**`$0334` = `$00` offline**). Prior note `$3403` was a disasm misread of `$0334`.
+
+**Correction (2026-07-07):** Boot entry is **`$081D`** (`LDA #$93` / `JSR $FFD2` …). Address **`$081E` holds the `$93` immediate byte** — starting there executes undocumented opcode → **JAM** with VICE `-jamaction 1`.
+
+---
+
+## Track map (confirmed â€” heuristic)
+
+Generated by `tools/c64_track_map.py` across all disks. Classes: `empty`, `iec_code`, `code`, `text`, `text_mixed`, `data`.
+
+| Disk | Notable pattern |
+|------|-----------------|
+| **MM2-1** (boot) | T1 invalid links on **all** disks (not DOS files); T7 `code`; T15 `text`; T16 mostly `empty`; T19â€“22 `data` with **valid sector chains** + high entropy (~7.0 on T19) |
+| **MM2-2â€¦6** (data) | Same T18 IEC S1/S15 loader; T1 still invalid links; **no PRG chains >762 bytes**; payload in scattered `data` tracks |
+| **All** | T18S1 IEC code **byte-identical** (payload MD5 `a01c0d810d46c0aa53113ddfee40b60c`); no Amiga/PC gfx magic in raw scans |
+
+See `EXTRACTED/c64/analysis/track_map_summary.md` for per-track counts.
+
+**Correction:** MM2-2â€¦6 are **not** â€œnormal DOS data disksâ€ behind a crack loader on side A only. They use the **same custom layout**; only MM2-1 has the extended T18 chain (S16â†’S2) and large boot PRG at T19S0.
+
+## Sector chains (confirmed)
+
+`tools/c64_trace_chains.py` finds CBM-valid linked sectors (track 1â€“35).
+
+| Disk | Head | Sectors | Bytes | Notes |
+|------|------|---------|------:|-------|
+| MM2-1 | T19S0 | 19 | 4826 | **PRG** `$0801` header, load **`$080B`** â€” boot code (KERNAL `JSR $D2FF`, copy loops), **not gfx** |
+| MM2-1 | T22S9 | 15 | 3810 | PRG-like, mixed data |
+| MM2-1 | T18S0 | 4 | 1016 | BAM + loader chain (S0â†’S1â†’S16â†’S2) |
+| MM2-2â€¦6 | T18S0 | 3 | 762 | BAM + S1 + S16 only â€” **no further game chains** |
+| MM2-2â€¦6 | various | 2â€“3 | 508â€“762 | Small chains only; no `01 08` PRG headers at chain heads |
+
+Extracted: `EXTRACTED/c64/emulator/mm2-1_t19s0_chain.bin` + disasm @ `$0801`.
+
+**Gap:** no chain on data disks whose payload matches hires/multicolor size or decodes to recognizable art. Gfx likely lives in **unlinked / packed** `data` sectors addressed at runtime by the IEC loader.
+
+## Boot RELOCATION — NOT decompression (confirmed 2026-07-07, re-verified)
+
+**Correction:** the `$03B7` routine (copied from `$0845`) is a **block memmove**,
+**not** a decompressor. Proven byte-exact by `tools/c64_verify_relocation.py`
+(artifact `analysis/relocation_verify.txt`).
+
+The loop (loaded at `$03B7`, source bytes at `$084C` in the chain):
+
+```
+LDA $0893,X   ; src operand low=$93, high byte = $03C0 (self-modified)
+STA $0803,X   ; dst operand low=$03, high byte = $03C3 (self-modified)
+INX / BNE     ; inner: 256 bytes
+INC $03C0     ; src high++
+INC $03C3     ; dst high++
+LDA $03C0 / CMP #$FF / BNE   ; outer: until src high = $FF
+```
+
+| Property | Value |
+|----------|-------|
+| Passes (outer) | **247** (src high `$08`→`$FE`) |
+| Bytes per pass | 256 (`LDA abs,X`/`STA abs,X`, X=0..255) |
+| src base / dst base | `$0893` / `$0803` |
+| **src − dst delta** | **constant `$90` (144) for every pass** |
+| Direction | copy DOWN (dst < src) — forward copy is a correct downward memmove |
+| Passes touching real chain data | **19** (src `< $1AD9`); the other 228 read RAM above the chain (zero offline) |
+| Verification | every relocated byte `$0803..$1A49` == chain byte + `$90` (exact) |
+
+Because the src→dst offset is a **single constant** across all passes (no length
+tokens, no literal/copy control bytes, no variable back-references), this is
+definitively a **relocation** (`memmove` down 144 bytes), **not** RLE / LZ /
+nibble decompression. It slides the ~$90-byte-lower real payload so the loader
+stub lands at `$080B`, then `LDA #$37 / STA $01 / CLI / JMP $080B`.
+
+Artifacts: `EXTRACTED/c64/emulator/mm2-1_relocated.bin` (relocated `$0800-$1FFF`),
+`EXTRACTED/c64/asm/boot_relocated_stub_080b.asm`.
+
+### The real payload is PACKED — the codec is NOT in the boot chain (confirmed)
+
+After relocation, a flow trace from `$080B` (`tools/c64_disasm_full.py --trace`)
+reaches **only 10 instructions** — the loader stub:
+
+```
+$080B  LDY #$00 / SEI / BIT $E3BF / NOP / INC $01
+$0814  LDA $4546,Y / STA $00CB,Y / INY / BNE $0814   ; install 256-B table
+$081D  JMP $0100                                      ; -> runtime IEC driver
+```
+
+Everything after `$081F` is **high-entropy packed data** (256-byte-window
+entropy ~6.9–7.1; whole-region entropy **7.82**), with only tiny embedded code
+fragments (e.g. `$0825 LDA $32 / CMP #$08 / BNE / LDA $CB52,Y`, the post-`$0100`
+retry check). For comparison the T18 plaintext loader measures entropy **5.99**.
+
+`tools/c64_probe_packing.py` shows **no** trivial transform (XOR-constant,
+running-XOR, delta, nibble-swap, bit-reverse, xor-index) lowers the boot
+payload below ~7.8 → the packing is **genuine compression (LZ/arithmetic
+class)**, not simple encryption.
+
+**Therefore the graphics/unpack codec is not present in any static chain.** It
+lives in the runtime-loaded driver installed at `$0100` and the 256-byte table
+at `$4546` — both filled by the T18S16 `LOAD "NEW WORLD COMP."` fastloader path,
+never by the T19 relocation.
+
+### T18S16 loader → driver handoff (confirmed, precise)
+
+T18S16 payload **loads at `$02A5`** (so SETNAM name buffer `$02A9` = payload+4).
+Layout: `$02A7` vector word = **`$0906`**; `$02A9` = `"NEW WORLD COMP."` (15
+chars); code at `$02B8`:
+
+```
+$02B8  SEI
+       LDA $D011 / BPL *-3        ; wait for raster
+       LDA #$00 / STA $D011 / STA $D020   ; blank screen (border/DEN)
+       JSR $0334                  ; init/patch LOAD vector (runtime-filled)
+       LDA #$02 / LDX #$08 / LDY #$01 / JSR $FFBA   ; SETLFS 2,8,1
+       LDA #$0F / LDX #$A9 / LDY #$02 / JSR $FFBD   ; SETNAM 15,"NEW WORLD COMP."
+       LDA #$00 / JSR $FFD5       ; LOAD (custom vector via $0334)
+       JMP ($02A7)                ; -> JMP $0906  (loaded driver entry)
+```
+
+The codec is inside whatever `"NEW WORLD COMP."` loads (entered at `$0906`).
+That payload is fetched by the custom fastloader (drive code uploaded by
+`$0334`) and is **not** recoverable from the D64 statically (see blocker below).
+
+### Post-relocation @ `$080B` (older notes say "post-decomp" — same code)
+
+> Terminology: throughout the older notes below, "decomp"/"post-decomp" refer
+> to the `$03B7` step now proven to be a **relocation** (see section above).
+> The addresses and observations still hold; only the "decompression" label was
+> wrong.
+
+`EXTRACTED/c64/asm/boot_post_decomp_080b.asm`:
+
+| Step | Instruction | Notes |
+|------|-------------|-------|
+| 1 | `AND #$00` / `LDY #$00` / `SEI` | Clear A/Y; disable IRQ |
+| 2 | `BIT $E3BF` | **Confirmed:** reads **KERNAL ROM** at `$E3BF` (“Initialize BASIC RAM”, opcode `$A9`) when `$01=$37`. Not cartridge/expansion I/O. Only opcode hit on **MM2-1 T19S0** chain (not on MM2-2…6). |
+| 3 | `NOP` / `INC $01` | `$37`→`$38` — **CHAREN off** (charset ROM at `$D000`) |
+| 4 | Copy `$4546`→`$00CB` (256 B) | **Offline all `$00`** — not filled by T19 decomp |
+| 5 | `JMP $0100` | Low-page IEC driver (**gap** — not in prepared RAM) |
+| 6 | `$0827`… | **`LDA $32` / `CMP #$08` / `BNE $0813`** — retry loop after `$0100` returns; then **`LDA $CB52,Y`** uses installed table |
+
+**Correction (2026-07-07):** After decomp, **`$0400` holds a mirror of the `$080B` post-decomp fragment** (from packed bytes at `$086B`), **not** the T18S1 `$DD00` IEC routine. Real IEC bit-bang code is only on **disk T18S1** (`EXTRACTED/c64/asm/t18_loader_mm2-1.bin` @ org `$0400`).
+
+### `$4546` / `$00CB` block (confirmed partial)
+
+| Check | Result |
+|-------|--------|
+| After offline decomp | `$4546`–`$4645` = **all `$00`** (decomp pass 61 copies `$4593`→`$4503`; `$4593` is **outside** chain range ending `$1ADB`) |
+| Copy loop | `$0816`–`$081D`: `LDA $4546,Y` / `STA $00CB,Y` — installs 256-byte block at **`$00CB`–`$01CA`** |
+| Cross-ref D64 | **No** static 256-byte blob at a fixed disk offset matching `$4546` on any of six disks |
+| Interpretation | **Runtime fill required** before copy — likely IEC `$0100` path or post-`$0100` continuation at `$082D` |
+
+### `$0100` stub (confirmed partial)
+
+| Check | Result |
+|-------|--------|
+| Offline prepared RAM | `$0100` = **`$00`** → first opcode `BRK` |
+| Decomp write range | Dst pages **`$08`–`$FE` only** — page **`$01` never written** by `$03B7` |
+| VICE + prepared RAM | `goto $080B` → **`JMP $0100`** → **`BRK` path** lands **`$0190`**; **0 `$DD00` hits** |
+| VICE monitor @ `$0100` | PETSCII **`38911`/`0000`** — **confirmed** as **BASIC/KERNAL low-RAM pattern**, not game IEC code (`emulator/logs/prepared_run.log`) |
+| PRG `LOAD $0100` on disks | **None** on any sector of all six D64s |
+| Other `JMP $0100` in MM2-1 packed data | T21S4 / T22S4 (embedded in chains — not reached from `$081F` fall-through) |
+
+Disasm placeholders: `EXTRACTED/c64/asm/stub_0100.asm`.
+
+### T18S16 KERNAL stub — SETNAM (confirmed)
+
+Static disasm `mm2-1_t18_s16_stub.asm` / sector payload:
+
+```
+SETLFS 2, 8, 1
+SETNAM len=$0F, name=$02A9    ; 15 characters
+LOAD
+JMP ($02A7)
+```
+
+**Filename:** **`NEW WORLD COMP.`** (15 PETSCII chars — sector payload offset 4). Payload **word @ offset 0 = `$02A7`** (indirect vector slot). Six **`$02B8`** pointers in payload tail (filename table — **gap**, not decoded).
+
+**`JSR $3403`** at `$0421` before SETLFS — target **`$3403` is `$00` in prepared RAM** (not yet loaded at post-decomp stage).
+
+### IEC / `$DD00` dynamic trace (partial 2026-07-07)
+
+| Method | Result |
+|--------|--------|
+| `--skip-decomp` → `goto $03D4` | Lands **`$E5CF`** (KERNAL idle) — post-decomp `$080B` still packed |
+| Full decomp in VICE | Too slow for unattended trace |
+| **`c64_load_prepared_ram.py`** | Loads `mm2-1_prepared_0800.bin` + T18S1 IEC @ `$0400`; **`goto $080B`** — **0 `$DD00` hits** in 90 s; **`$0100`=`BRK`** → **`$0190`** |
+| Offline `c64_trace_post_decomp.py` | **11 steps** `$080B`→`0100`; `$4546`/`$00CB` remain zero |
+
+Logs: `EXTRACTED/c64/analysis/post_decomp_trace.json`, `emulator/logs/prepared_run.json`, **`analysis/blockers_scan.json`**.
+
+## Data-track gfx scan (confirmed 2026-07-07)
+
+`EXTRACTED/c64/gfx/tracks/` + `tools/c64_scan_tracks.py` → `analysis/track_gfx_scan.json`
+
+| Check | Result |
+|-------|--------|
+| PC LZW | **0** confirmed |
+| Amiga `.32` sigs | **None** |
+| Track entropy | **6.6–7.8** (packed) |
+| Hires 8000 B heuristic | **0** plausible windows |
+| Gfx filenames `CASTLE`/`TOWN`/`CAVE` in `gfx/tracks/` | **None** (only `SKY`/`IMAGE`/`NEW WORLD` credit substrings on MM2-1) |
+
+
+Many `01 08` byte pairs exist; most are **false positives** inside data (implausible load addresses).
+
+**One confirmed PRG chain:** MM2-1 T19S0 â†’ â€¦ â†’ T20S3 (4826 bytes, load `$080B`).
+
+**Not found:**
+
+- PC-style LZW prefix (`u32` size + bitstream)
+- Amiga `.32` frame header patterns
+- CBM-visible PRG/SEQ files named `CASTLE`, `TOWN`, etc.
+- Decodable 8000-byte hires bitmap at scanned offsets (see `tools/c64_bitmap_preview.py` trials on MM2-2 T8 â€” noise)
+
+`gfx_scan.json` u16 size-header hits (8000, 57125, â€¦) all have **high opcode or ASCII ratio** â€” treat as **coincidental**, not confirmed containers.
+
+---
+
+## Game text on disk (confirmed)
+
+- Event / copy-protection strings (e.g. CASTLE key riddle @ `$14BA7` on MM2-1).
+- Art credit: `FTRO:SKYLINE/IMAGE DESIGNS` â€” credit string, not a format marker.
+- Combat / event prose on MM2-4+ tracks (see `track_map.json` `ascii_sample` fields).
+
+---
+
+## Graphics format hypotheses
+
+| Hypothesis | Status |
+|------------|--------|
+| 320Ã—200 hires or multicolor | **Expected** for era â€” **not confirmed** in isolated blobs |
+| Reuses Amiga `.32` layout | **Gap** â€” no matching headers |
+| Reuses PC LZW | **Not observed** |
+| Custom packing on `data` tracks | **Confirmed packed** — genuine compression (see below) |
+| Simple XOR / nibble / bit-reverse cipher | **Ruled out** (`c64_probe_packing.py`): no trivial transform lowers entropy |
+
+### Packing characterization (confirmed 2026-07-07)
+
+`tools/c64_probe_packing.py` over the boot payload and data tracks:
+
+| Blob | Entropy | Best trivial transform | Verdict |
+|------|--------:|------------------------|---------|
+| Boot packed payload `$0820-$18FF` | **7.82** | none < 7.8 | genuine compression |
+| MM2-1 T08 (gfx-class) | **7.63** | none significant | genuine compression |
+| MM2-2 T07 (data-class) | 5.35 | delta→2.7 (zero runs) | lightly/un-packed table/text |
+| T18 loader (known code, ref) | 5.99 | — | plaintext 6502 |
+
+Packing is **heterogeneous**: graphics-class tracks are strongly compressed
+(entropy ~7.6–7.8, no simple cipher recovers them); some data/text tracks are
+near-plaintext. The compressed graphics can only be decoded with the codec from
+the runtime `"NEW WORLD COMP."` driver (entry `$0906`) — not statically present.
+
+### Blocker (honest statement, 2026-07-07)
+
+The C64 graphics packing format **remains undetermined**, blocked as follows:
+
+1. The unpack codec is provably **not** in any static chain — it is in the
+   runtime driver installed via `$0100` / `$0906` (`"NEW WORLD COMP."`).
+2. That driver is **not** in plaintext on any of the six D64s
+   (`c64_hunt_driver.py`: no low-entropy blob references `$0100`/`$4546`/`$DD00`
+   as code besides the T18 IEC loader itself).
+3. Dynamic capture is blocked at the source: the D64s have **no bootable CBM
+   catalog** (BAM dir pointer invalid on all six), so `LOAD "*"` fails
+   (`I/O ERROR`, already documented); and injecting the T19 PRG cannot fill
+   `$0100`/`$4546` because the stub does `JMP $0100` *before* any disk I/O
+   (circular — the same reason `--prepared` can't work). Reaching the custom
+   fastloader requires the drive-side code uploaded by `$0334`, which itself is
+   only present after a successful boot.
+
+**To break the blocker one of these is required (none available in the current
+D64-only artifact set):**
+
+- A nibble-level dump (`.G64`/`.NIB`) that preserves the custom disk format so
+  the original fastloader boots in VICE, letting the `$0906` driver be captured
+  and its codec reversed; **or**
+- Reversing the drive-uploaded fastloader (`$0334` target) to learn the track
+  map for `"NEW WORLD COMP."`, locate its sectors, and lift the driver; **or**
+- Real-hardware capture of RAM after boot (`$0100`, `$4546`, `$0906` region); **or**
+- A **scene crack** whose custom loader is stripped, so the disk boots via the
+  stock KERNAL and the codec / decoded gfx are reachable dynamically.
+
+### CONFIRMED — C64 runtime graphics format (2026-07-07)
+
+Captured live from the running crack in the MIDDLEGATE 3-D view (`D1A_dungeon_full.bin`):
+
+| Property | Value |
+|----------|-------|
+| Mode | **Hires bitmap (320×200, 1 bpp)** — *not* multicolor (clean hires text/edges) |
+| Bitmap RAM | **`$2000`** (8000 B) — VIC bank 0, `$D018` bitmap bit set |
+| Colour | **Screen matrix `$0400`** — per 8×8 cell, hi-nibble = fg (bit 1), lo-nibble = bg (bit 0) |
+| Status panel | Lower strip uses a **raster split** with separate colour data (renders garbled if the whole frame is drawn with one screen matrix) |
+| CPU config | `$01 = $34` — RAM banked over `$D000-$DFFF` during main loop (I/O paged in on IRQ); read VIC via VICE monitor `bank io` |
+
+Renders (proof): `EXTRACTED/c64/crazy_crack/run/hires_0x2000.png` (mono),
+`dungeon_color.png` (screen-RAM colour). Both show the MM2 outdoor view (blue sky,
+green forest) + party roster (Mugger, Merchant, Mitch's Cat, Neophyte Thief…),
+`LIGHT/MAGIC/FORCES`.
+
+**Tools:** `c64_bitmap_preview.py` (mono hires), `c64_hires_color.py` (screen-RAM
+colour), `c64_crack_gfx.py` (live screenshot + true VIC regs via `bank io`).
+
+**Implication:** the on-disk packed gfx decodes to a **`$2000` hires bitmap**. Decoded
+frames can now be lifted straight from RAM while the crack runs — the retail
+`$0906`/`$4546` codec is no longer required to recover the C64 art.
+
+### BREAKTHROUGH — crack boots into the game (2026-07-07)
+
+The **Crazy (1989) crack** (`EXTRACTED/c64/crazy_crack/Might&Magic2_D1A.d64` … `D3B`,
+downloaded from CSDb #206773) **boots to playable MM2 in VICE** — the first image in
+this project to execute past the KERNAL. Unlike the retail D64s (custom fastloader →
+`I/O ERROR`), the crack autostarts with the stock KERNAL.
+
+| Stage | Evidence |
+|-------|----------|
+| Crack intro | Screen matrix `$0400`: `proudly present / might and magic 2 / …azy '89`; PC `$0B08` |
+| In-game | After ~40 s warp, PC `$ABC2`; screen = **MIDDLEGATE party screen** — town list, character roster (`RANDALF sorc`, `TERWIN pal`, `SUREVALLA arc`, …), `'a'-'x' to view`, `'space' for hirelings`, `press f1 to exit game` |
+
+**Full RAM snapshots:** `EXTRACTED/c64/crazy_crack/run/D1A_intro_full.bin`,
+`D1A_t40_full.bin` (65,538 B = 64 KB + VICE 2-byte PRG header).
+
+**Working recipe (single run, no poll loop):**
+
+```powershell
+$vice = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\VICE-Team.VICE.GTK3_*\GTK3VICE-3.10-win64\bin\x64sc.exe"
+Start-Process $vice -ArgumentList @(
+  '-autostart','"...\crazy_crack\Might&Magic2_D1A.d64"',
+  '-warp','-remotemonitor','-remotemonitoraddress','127.0.0.1:6510'
+) -WorkingDirectory (Split-Path $vice)
+# wait ~14 s, then:
+python tools\c64_crack_dump.py <tag>      # one-shot full RAM $0000-$FFFF (leaves VICE running)
+python tools\c64_crack_drive.py <tag> [keys]  # inject keys, resample screen, re-dump
+```
+
+**Note:** the crack is a *separate loader* from retail (still 0 CBM catalog files),
+but its **graphics data is the same art**; a running instance lets the on-disk gfx
+codec and decoded bitmap be observed directly. The `$0906`/`$4546` retail blocker is
+now sidestepped for gfx-format discovery.
+
+**Next:** navigate into the 3-D view / combat, dump VIC bitmap RAM (`$D018`/`$D011`/
+`$D016`), confirm hires vs multicolor, then locate the on-disk packed gfx and its
+decoder in the running image.
+
+### Bootable-image sources (identified 2026-07-07)
+
+| Source | Format | Why it helps |
+|--------|--------|--------------|
+| **CSDb #206773** — *Might & Magic 2* by **Crazy (1989)**, file `Might&Magic2_Crazy.zip` (`csdb.dk/release/?id=206773`) | Cracked `.d64` | Fastloader/protection stripped → **boots in VICE normally**; codec + gfx reachable dynamically or as standard files. **Fastest path.** |
+| **C64 Preservation Project** disk database (`c64preservation.com/dp.php?pg=home`) | Verified `.g64` | Preserves original custom GCR → original fastloader boots; lets the real `$0906` driver be captured 1:1 with retail. |
+| Pokefinder.org / Lemon64 (game id 1676) | `.d64` / `.g64` | Mirror pointers from CSDb / Lemon64. |
+
+**Recommended:** drop `Might&Magic2_Crazy.d64` (or a `.g64` of the originals) into
+`EXTRACTED/c64/` and re-run `tools/extract_c64_d64.py` + a single VICE autostart —
+a cracked image should either expose plain gfx files or boot to a clean RAM dump
+containing the `$0906` codec.
+
+Once the codec is recovered, `tools/c64_scan_gfx_routines.py` already locates the
+VIC/bitmap setup candidates to validate output against C64 hires/multicolor
+(8000 B bitmap + 1000 B screen + 1000 B colour).
+
+---
+
+## Cross-platform size reference (Amiga originals in repo root)
+
+| Amiga file | Bytes |
+|------------|------:|
+| `castle.32` | 57,098 |
+| `town.32` | 57,125 |
+| `throw.32` | 14,639 |
+| `sky.32` | 6,535 |
+
+No exact-size isolated C64 blob confirmed at these lengths.
+
+---
+
+## Tools
+
+| Tool | Purpose |
+|------|---------|
+| `tools/analyze_c64_disk.py` | BAM metadata, string/stem scan â†’ `disk_analysis.json` |
+| `tools/c64_track_map.py` | Per-sector classification â†’ `track_map.json` |
+| `tools/c64_loader_chain.py` | T18 BAM chain + KERNAL hit scan |
+| `tools/c64_trace_chains.py` | Valid sector-chain discovery |
+| `tools/c64_gfx_scan.py` | Size-signature + data-track scan |
+| `tools/c64_dump_sector.py` | Sector dump + optional disasm |
+| `tools/c64_extract_blob.py` | Extract chain / track / T18 loader |
+| `tools/c64_bitmap_preview.py` | Best-effort hires PNG preview (RE only) |
+| `tools/disasm_6502.py` | Static 6502 disassembly |
+| `tools/extract_c64_d64.py` | CBM DOS extract (**blocked** â€” zero files on all six disks) |
+| `tools/c64_prepare_memory.py` | Offline boot: init + decomp → `emulator/ram/mm2-1_prepared_0800.bin` |
+| `tools/c64_decomp.py` | **[label corrected]** the 247-pass loop — actually the `$03B7` **relocation** memmove, not decompression |
+| `tools/c64_verify_relocation.py` | Proves `$03B7` = byte-exact memmove down `$90`; emits `mm2-1_relocated.bin` + pass map |
+| `tools/c64_disasm_full.py` | Complete NMOS 6502 disassembler + recursive flow trace (code-vs-data) |
+| `tools/c64_scan_gfx_routines.py` | Scans blobs for VIC/bitmap/colour/CIA refs (gfx-path candidates) |
+| `tools/c64_hunt_driver.py` | Hunts all six disks for the runtime driver in plaintext (none found) |
+| `tools/c64_probe_packing.py` | Rules out trivial ciphers; confirms genuine compression |
+| `tools/c64_scan_tracks.py` | Entropy + gfx heuristics on `gfx/tracks/` |
+| `tools/c64_6502_min.py` | Minimal 6502 core (decomp + post-decomp trace) |
+| `tools/c64_trace_post_decomp.py` | Offline `$080B` path → `post_decomp_trace.json` |
+| `tools/c64_load_prepared_ram.py` | VICE: inject prepared RAM + T18 IEC @ `$0400`; saves `$0000–$07FF` + `$0800–$FFFF` |
+| `tools/c64_scan_blockers.py` | Scan `$E3BF`/`$4546`/`$0100`/`$02A7` → `analysis/blockers_scan.json` |
+| **`c64_vice_full_boot.py`** | Full boot: breaks on `$FFD5`/`$DD00`/`$0100`/`$E3BF`; saves `$0000–$FFFF`; `--prepared`, `--t18`, `--stage` |
+| **`c64_analyze_ram_dump.py`** | Summarize `$4546`/`$00CB`/`$0100`/`$02A7` regions from VICE dumps |
+
+
+---
+
+## Dynamic emulation (VICE, confirmed 2026-07-07)
+
+### Boot entry correction (confirmed)
+
+| Address | Bytes | Role |
+|---------|-------|------|
+| **`$081D`** | `A9 93` | **Correct init entry** — `LDA #$93` (screen/petscii setup) |
+| **`$081E`** | `93` | Immediate operand for `$081D` — **not an entry point** |
+| **`$081F`** | `20 D2 FF` | `JSR $FFD2` (CHROUT) |
+
+VICE with `-jamaction 1`: **`goto 081E` → JAM**, PC frozen. Use **`goto 081D`**.
+
+### Full boot automation (`c64_vice_full_boot.py`)
+
+| Run | Entry | Result |
+|-----|-------|--------|
+| `--entry 0x081E` | Wrong | PC **`$081E`** 180 s — JAM |
+| `--entry 0x081D` | Correct init | PC **`$0840`** 300 s — init/copy loops; **decomp did not finish** in-window; **0 `$DD00` / 0 `$FFD5`** |
+| `--prepared` + **`$080D`** | Post-decomp (PRG +2 shift) | Break at **`$0100`** (`BRK`); **`$4546` still zero**; **0 `$DD00`** |
+| `--t18` | `$0421` + prepared | PC **`$0430–$0433`** (SETLFS/SETNAM); **no `$FFD5` hit** — `$02A9` name buffer not populated |
+
+Logs: `emulator/logs/full_boot_chain081d.json`, `full_boot_prepared080d.json`, `full_boot_t18.json`  
+RAM: `emulator/ram/mm2-1_fullboot_*_{low,hi}.bin`
+
+**PRG inject quirk:** loading prepared image as PRG @ `$0800` shifts bytes **+2** vs offline image; post-decomp **`AND #$00` lands at `$080D`**, not `$080B`.
+
+### `$0100` on disk (confirmed static)
+
+| Location | Notes |
+|----------|-------|
+| T19S0 @ chain+$AE | Same **`JMP $0100`** as post-decomp `$081F` |
+| T21S4, T22S4 | Embedded in chains — **not reached** from `$081D` init |
+| T22S18 | **`JSR $0100`** |
+
+No **`STA $0100`** / **`STA $4546`** on any disk — only **`LDA $4546` / `STA $00CB`** in T19S0 (the copy loop itself).
+
+### T18S16 `$02B8` tail (confirmed partial)
+
+Sector payload after **`NEW WORLD COMP.`** contains **six LE words `$02B8`** (bytes `B8 02` × 6 @ payload+0x5B…0x66). Same value repeated — **filename pointer slot**, not decoded to filenames without runtime **`$02A9`** fill.
+
+| Item | Result |
+|------|--------|
+| Emulator | **VICE 3.10** (`x64sc.exe`), installed via winget; path in `EXTRACTED/c64/emulator/README.md` |
+| MM2-1 autostart | **Does not boot** — KERNAL `LOAD "*"` returns **`I/O ERROR`** (custom non-CBM disk; no catalog) |
+| RAM after 90–120 s warp | Dump `$0800–$FFFF` → `EXTRACTED/c64/emulator/ram/mm2-1_boot_warp.bin` (63490 bytes); PC ≈ **`$E5D4`** when sampled |
+| Screen text in dump | PETSCII **`I/O ERROR` / `SEARCHING FOR` / tape prompts** — not game UI |
+| `-drive8truedrive` | Same failure (no change) |
+| Amiga size hunt in RAM | **No** confirmed `57098` / `57125` LE size headers; one BE u16 `57098` hit only |
+| Hires preview on RAM entropy windows | PNGs under `EXTRACTED/c64/emulator/ram/previews/` — **no** recognizable gfx |
+| c1541 `-dir` / `-bread` | **Fails** BAM read (disk type 10) on all sides — use static `tools/c64_*.py` |
+| `$DD00` IEC break | **Not captured** unattended — use `c64_load_prepared_ram.py` + interactive monitor |
+| Prepared RAM in VICE | Use entry **`$080D`** after PRG load; **`goto 080D`** hits **`$0100`/`BRK`**; **0 `$DD00`** |
+| `$4546` table | **Zero** after offline decomp — **blocker** for IEC filename capture |
+| `$0100` stub | **Not** in prepared image — **`BRK`** at `$0100`; PETSCII **`38911`** only if BASIC touched page first |
+| T18S16 SETNAM | **Confirmed** 15-char name **`NEW WORLD COMP.`** in sector; **`JSR $0334`** @ `$0421`; post-LOAD **`JMP ($02A7)`** |
+| T18S16 in VICE | **`goto 0421`** reaches SETNAM **`$0433`**; **`$FFD5` not reached** — init/`$02A9` gap |
+| Staged decomp entry | **`$03B7`** (`run_stage.mon`, `c64_vice_iec_trace.py --stage`) — was wrongly `$03DB` |
+| Skip decomp in VICE | **`goto 03D4`** (post-decomp exit) |
+| T19 chain loader | `tools/c64_vice_run_loader.py` — load **`$0801`**, entry **`$081D`** |
+| T18S16 post-LOAD | **`JMP ($02A7)`** (corrected — not `$A702`) |
+
+Scripts: `tools/c64_vice_boot.ps1`, `tools/c64_vice_dump.ps1`, **`tools/c64_vice_run_loader.py`**, `emulator/scripts/run_loader.mon`.
+---
+
+## Recommended next steps
+
+1. **Interactive VICE — full boot:** `c64_vice_full_boot.py --entry 0x081D --seconds 600 --tag chain` with MM2-1.D64 (`-drive8truedrive`); confirm decomp completes to **`$080D`**, break **`$0100`** / **`$DD00`**.
+2. **Interactive — post-decomp:** `c64_vice_full_boot.py --prepared --seconds 120` (entry **`$080D`**); watch **`$32`→`$08`** loop at `$0827` after `$0100`.
+3. **T18S16 path:** after `$0334` init confirmed, break **`$FFD5`** on **`LOAD`**; capture **`($02A7)`** destination and **`$02A9`** buffer.
+4. **Track/sector tables:** inspect `blockers_scan.json` **`track_sector_heuristic`** — structured pairs, **not yet confirmed** as `$4546` source.
+5. Extract gfx from **MM2-2…6 data tracks** once IEC file table is known.
+
+### Interactive monitor recipe (when automation stalls)
+
+```powershell
+python tools\c64_vice_full_boot.py --entry 0x081D --seconds 30 --tag manual
+# Or GUI:
+Push-Location $env:LOCALAPPDATA\...\GTK3VICE-3.10-win64\bin
+.\x64sc.exe -8 "...\MM2-1.D64" -drive8truedrive -warp -remotemonitor -remotemonitoraddress 127.0.0.1:6510
+```
+
+In monitor after loading `mm2-1_loader.prg`:
+
+```
+break dd00
+break ffd5
+break 0100
+goto 081D
+# After decomp (slow): goto 080D
+m 4546
+m 0100
+m 02a7
+m 02a9
+save "C:/path/full_low.bin" 0 $0000 $0800
+save "C:/path/full_hi.bin" 0 $0800 $ffff
+```
+
+---
+
+## Regenerate artifacts
+
+```powershell
+python tools\analyze_c64_disk.py EXTRACTED\c64 --out EXTRACTED\c64\analysis
+python tools\c64_track_map.py EXTRACTED\c64 --out EXTRACTED\c64\analysis
+python tools\c64_loader_chain.py EXTRACTED\c64 --all
+python tools\c64_trace_chains.py EXTRACTED\c64 --all --min-sectors 3
+python tools\c64_gfx_scan.py EXTRACTED\c64 --out EXTRACTED\c64\analysis
+python tools\c64_extract_blob.py EXTRACTED\c64\MM2-1.D64 --t18-loader -o EXTRACTED\c64\asm\t18_loader_mm2-1.bin
+python tools\disasm_6502.py EXTRACTED\c64\asm\t18_loader_mm2-1.bin --org 0x400 -o EXTRACTED\c64\asm\t18_loader_mm2-1.asm
+```
+
+Standard D64 extract (still blocked):
+
+```powershell
+python tools\extract_c64_d64.py EXTRACTED\c64\MM2-1.D64 -o EXTRACTED\c64\extracted\mm2-1
+```
