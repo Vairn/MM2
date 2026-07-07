@@ -233,36 +233,23 @@ statically** — grayscale renders are the coherence proof; color renders in
 `catalog_color/` are best-effort. Emulator CGRAM/VRAM capture is still the way to
 lock exact colors.
 
-#### Monsters / combat portraits — **FOUND (2026-07-07)**
+#### Monsters / combat portraits — **PARTIAL (2026-07-07)**
 
-Combat sprites and party portraits are **not** in the static DMA table. They load
-through the **monster metadata table** and WRAM staging path:
+Combat sprites are **not** in the static DMA table. They use table `$14:8060`
+→ metadata records → animation scripts → `$00F62E` WRAM staging → `$00F23C`
+multi-layer VRAM placement. Palette per record @ metadata+4 (same bank).
 
-| Piece | Address | Role |
-|-------|---------|------|
-| Index table | `$14:8060` | 3 bytes/entry → metadata record (stride `index*3` @ `$00D80C`) |
-| Loader | `$00D803` | monster id → metadata; palette via `$00E289`; portrait via `$00F23C` |
-| CHR staging | `$00F62E` | animation script → WRAM `$7E:4000+`; DMA to VRAM `$00F8D0` |
-| Party template | `$0C:FE3D` | 136-byte record copied to `$7F:BE00` / `$7F:E000` combat slots |
+**What works:** tracing the table (128 entries), per-record palette + tile
+tokens, recognizable *parts* in previews (e.g. index 4 green knight + orange
+monster face, index 10 hooded figures).
 
-**Metadata record layout** (confirmed on index 10 / `$16:8000`):
+**What does NOT work yet:** full sprite assembly. Tiles are scattered 8×8 pieces
+at arbitrary ROM offsets; the game stitches them with row strides from `$D421`/
+`$D439`, optional 8bpp bitmask via `$F148`, and four VRAM quadrants via `$F23C`.
+Our flat grid preview is a triage aid only — expect fragments and artifacts.
 
-| Offset | Field |
-|--------|-------|
-| `+0` | bank byte (shared by palette + CHR + anim pointers) |
-| `+2` | flags (`bit7` ⇒ 8bpp per `$00D82F`) |
-| `+4` | palette addr (16-bit LE, same bank) → BGR555, 16 words to CGRAM sub `$A0` |
-| `+6` | CHR tile blob addr (16-bit LE, same bank) |
-| `+8` | animation script addr (16-bit LE, same bank) |
-
-**Scene figures (first-person distant sprites):** `$12:F420` — small humanoid
-silhouettes composited into the exploration view (palette `$19:8060`).
-
-**Boot OAM DMA:** NMI path `@ $008C05` uploads 544 B from `$03:0000` (OAM table).
-
-Catalog: `EXTRACTED/snes/analysis/monsters.json` (128 entries, 78 rendered) and
-`EXTRACTED/snes/gfx/monsters/*.png`. Examples: index 4 (green knight + orange
-monster faces), index 10 (mechanical creature parts).
+Outputs: `EXTRACTED/snes/gfx/monsters_assembled/*_preview.png` (frame 0 only).
+Tool: `tools/trace_snes_monsters.py`.
 
 **Repro:**
 python tools\extract_snes_dma.py "EXTRACTED\SNES\Might and Magic II (Europe).sfc" -o EXTRACTED\snes\analysis\dma_table.json
