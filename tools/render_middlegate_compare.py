@@ -15,7 +15,11 @@ if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
 from attrib_codec import AttribFile  # noqa: E402
-from decode_pc_gfx import parse_wall_sheet, render_wall_frame_rgba  # noqa: E402
+from decode_pc_gfx import (  # noqa: E402
+    parse_wall_sheet,
+    render_wall_frame_rgba,
+    resample_amiga_rgba,
+)
 from render_view_refs import (  # noqa: E402
     FLOOR_Y,
     ORIGIN_X,
@@ -24,6 +28,7 @@ from render_view_refs import (  # noqa: E402
     VIEW_W,
     amiga_frame_mask,
     blit,
+    load_frame,
 )
 from view3d_indoor import StitchedVisual, build_scene, load_map  # noqa: E402
 
@@ -77,13 +82,21 @@ def load_pc_frame(variant: str, stem: str, frame: int) -> Image.Image:
     if frame >= len(frames):
         raise FileNotFoundError(f"{variant}/{stem} frame {frame}")
     fr = frames[frame]
+    mask = _amiga_mask(stem, frame)
+    amiga_rgba = None
+    sheet32 = _AMIGA_MASK_SHEET.get(stem)
+    if mask is not None and sheet32 and (ROOT / sheet32).is_file():
+        amiga_rgba = resample_amiga_rgba(
+            load_frame(sheet32, frame, ROOT), fr.width, fr.height
+        )
     rgba = render_wall_frame_rgba(
         fr.width,
         fr.height,
         fr.pixels,
         sheet["bpp"],
         cga_palette=1,
-        amiga_mask=_amiga_mask(stem, frame),
+        amiga_mask=mask,
+        amiga_rgba=amiga_rgba,
         frame=frame,
     )
     im = Image.new("RGBA", (fr.width, fr.height))

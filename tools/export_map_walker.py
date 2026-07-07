@@ -388,8 +388,13 @@ def _render_pc_walker_frame(
     amiga_sheet: str,
     data_dir: Path,
 ):
-    from decode_pc_gfx import render_overlay_frame_rgba, render_wall_frame_rgba, row_bytes  # noqa: E402
-    from render_view_refs import amiga_frame_mask  # noqa: E402
+    from decode_pc_gfx import (  # noqa: E402
+        render_overlay_frame_rgba,
+        render_wall_frame_rgba,
+        resample_amiga_rgba,
+        row_bytes,
+    )
+    from render_view_refs import amiga_frame_mask, load_frame  # noqa: E402
     from PIL import Image  # noqa: E402
 
     sheet = _load_pc_sheet_info(variant, stem, pc_path)
@@ -415,8 +420,11 @@ def _render_pc_walker_frame(
         rgba = render_overlay_frame_rgba(w, h, pix, bpp, cga_silhouette=cga_sil)
     else:
         mask = None
+        amiga_rgba = None
         if resolve_asset(data_dir, amiga_sheet):
+            ami = load_frame(amiga_sheet, frame, data_dir)
             mask = amiga_frame_mask(amiga_sheet, frame, data_dir)
+            amiga_rgba = resample_amiga_rgba(ami, w, h)
         rgba = render_wall_frame_rgba(
             w,
             h,
@@ -424,6 +432,7 @@ def _render_pc_walker_frame(
             bpp,
             cga_palette=1,
             amiga_mask=mask,
+            amiga_rgba=amiga_rgba,
             frame=frame,
         )
     img = Image.new("RGBA", (w, h))

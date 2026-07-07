@@ -455,6 +455,21 @@ def resample_amiga_mask(
     return out
 
 
+def resample_amiga_rgba(
+    img, width: int, height: int
+) -> list[tuple[int, int, int, int]]:
+    """Nearest-neighbour resample of a decoded ``.32`` RGBA frame to PC dimensions."""
+    src_w, src_h = img.size
+    px = img.load()
+    out: list[tuple[int, int, int, int]] = []
+    for y in range(height):
+        sy = min(src_h - 1, (y * src_h) // height) if height else 0
+        for x in range(width):
+            sx = min(src_w - 1, (x * src_w) // width) if width else 0
+            out.append(px[sx, sy])
+    return out
+
+
 def wall_transparent_indices(bpp: int, frame: int | None = None) -> tuple[int, ...]:
     """Colour-key indices for PC wall blits when no Amiga mask is available.
 
@@ -510,6 +525,7 @@ def render_wall_frame_rgba(
     cga_palette: int = 1,
     transparent_indices: tuple[int, ...] | None = None,
     amiga_mask: list[list[bool]] | None = None,
+    amiga_rgba: list[tuple[int, int, int, int]] | None = None,
     frame: int | None = None,
 ) -> list[tuple[int, int, int, int]]:
     """Decode wall frame to RGBA with PC driver-style transparency.
@@ -519,6 +535,11 @@ def render_wall_frame_rgba(
     differ. Side-wall void pens (frames 4..11) are also keyed when the mask
     misses driver void colour. Otherwise use ``transparent_indices`` or
     ``wall_transparent_indices``.
+
+    When ``amiga_rgba`` is supplied, PC palette index **0** inside the opaque
+    silhouette is replaced with the resampled Amiga pixel — side-wall cones
+    (frames 4..11) use EGA pen 8 / CGA pen 1 for void but still encode real
+    wall detail as index 0 on PC where Amiga uses non-zero pens.
     """
     pal = _palette_for_bpp(bpp, cga_palette)
     idxs = decode_wall_frame_indices(width, height, pixels, bpp)
@@ -542,6 +563,10 @@ def render_wall_frame_rgba(
                     key = True
             else:
                 key = idx in transparent_indices  # type: ignore[operator]
+            if not key and idx == 0 and amiga_rgba is not None:
+                ar, ag, ab, aa = amiga_rgba[i]
+                if aa > 0:
+                    r, g, b = ar, ag, ab
             out.append((r, g, b, 0 if key else 255))
     return out
 

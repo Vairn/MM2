@@ -319,7 +319,7 @@ Packed-u32 wall sheets (`CASTLE`, `CAVE`, `TOWN`, `MASTER`, outdoor biomes, `*B`
 
 Grouped-u16 sheets (`CASTLET`, `CAVET`, `TOWNT` on some builds) share the same `[start, end]` interleaving; tools pick grouped u16 or packed u32 by score. Every frame the decoder extracts still re-encodes pixel-perfectly.
 
-**Maze walker export** (`tools/export_map_walker.py`) uses `parse_wall_sheet` for PC `.4`/`.16` PNGs under `wiki/maze-walker/pc/` (386 frames per CGA/EGA variant on GOG). The browser lazy-loads those trees; bump `PC_GFX_BUILD_ID` in `wiki/maze-walker/version.js` after re-export.
+**Maze walker export** (`tools/export_map_walker.py`) uses `parse_wall_sheet` for PC `.4`/`.16` PNGs under `wiki/maze-walker/pc/` (386 frames per CGA/EGA variant on GOG). Side-wall cones (frames 4..11) key EGA pen 8 / CGA pen 1 for void; where PC still stores palette **0** inside the Amiga silhouette, export fills colour from the resampled matching `.32` frame (PC index 0 is not always pen-0 void on those frames). Bump `PC_GFX_BUILD_ID` in `wiki/maze-walker/version.js` after re-export.
 
 ---
 
