@@ -416,6 +416,7 @@ export function sheetSuffix(gfxMode = "amiga") {
 export function remapSheetKey(key32, gfxMode = "amiga") {
   if (!key32 || gfxMode === "amiga") return key32;
   if (key32.endsWith("_32")) return `${key32.slice(0, -3)}${sheetSuffix(gfxMode)}`;
+  if (key32.endsWith("_anm")) return `${key32.slice(0, -4)}${sheetSuffix(gfxMode)}`;
   return key32;
 }
 

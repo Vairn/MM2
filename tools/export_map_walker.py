@@ -517,6 +517,72 @@ def _render_pc_walker_frame(
     return img
 
 
+    img.putdata(rgba)
+    return img
+
+
+def _export_pc_walker_monsters(
+    variant_dir: Path,
+    variant: str,
+    gog: Path,
+    data_dir: Path,
+) -> dict:
+    """Export MONSTERS.4 / MONSTERS.16 combat sprites keyed by requested picture id."""
+    from export_monster_variants import resolve_pc_picture  # noqa: E402
+    from decode_pc_gfx import (  # noqa: E402
+        COMBAT_CANVAS_H,
+        COMBAT_CANVAS_W,
+        composite_pc_combat_frame,
+        parse_monster_picture_blob,
+    )
+    from PIL import Image  # noqa: E402
+
+    ext = ".4" if variant == "cga" else ".16"
+    raw_path = _resolve_pc_blob("monsters", variant, gog, data_dir)
+    if raw_path is None:
+        return {}
+    raw = raw_path.read_bytes()
+    anm_meta: dict[str, dict] = {}
+    frame_total = 0
+    for picture_id in range(1, 75):
+        resolved = resolve_pc_picture(raw, picture_id)
+        if resolved is None:
+            continue
+        used_id, file_off = resolved
+        blob = parse_monster_picture_blob(raw, file_off, used_id, ext)
+        if blob is None or not blob.frames:
+            continue
+        key = f"{picture_id:02d}_{variant}"
+        frames_meta: dict[str, dict] = {}
+        by_idx = {fr.frame_index: fr for fr in blob.frames}
+        for fidx in sorted(by_idx):
+            rgba = composite_pc_combat_frame(by_idx, fidx)
+            img = Image.new("RGBA", (COMBAT_CANVAS_W, COMBAT_CANVAS_H))
+            img.putdata(rgba)
+            rel = f"sprites/{key}/{fidx}.png"
+            out_png = variant_dir / rel
+            out_png.parent.mkdir(parents=True, exist_ok=True)
+            img.save(out_png, format="PNG")
+            frames_meta[str(fidx)] = {
+                "w": COMBAT_CANVAS_W,
+                "h": COMBAT_CANVAS_H,
+                "path": rel,
+            }
+            frame_total += 1
+        anm_meta[key] = {
+            "file": raw_path.name,
+            "pictureId": picture_id,
+            "pcPictureId": used_id,
+            "frames": frames_meta,
+            "flipbookDelay": 5,
+        }
+    if anm_meta:
+        print(
+            f"  pc/{variant} monsters: {len(anm_meta)} pictures, {frame_total} frames"
+        )
+    return anm_meta
+
+
 def export_pc_walker_gfx(out_dir: Path, data_dir: Path, gog_dir: Path | None) -> None:
     """Write wiki/maze-walker/pc/{cga,ega}/sprites + manifest.json (lazy-loaded in browser)."""
     gog = gog_dir or (DEFAULT_GOG if DEFAULT_GOG.is_dir() else ROOT)
@@ -551,6 +617,7 @@ def export_pc_walker_gfx(out_dir: Path, data_dir: Path, gog_dir: Path | None) ->
                 total += 1
             if frames_meta:
                 sheets_meta[key] = {"file": pc_path.name, "frames": frames_meta}
+        anm_meta = _export_pc_walker_monsters(variant_dir, variant, gog, data_dir)
         manifest = {
             "view": {
                 "w": VIEW_W,
@@ -561,11 +628,13 @@ def export_pc_walker_gfx(out_dir: Path, data_dir: Path, gog_dir: Path | None) ->
             },
             "variant": variant,
             "sheets": sheets_meta,
+            "anm": anm_meta,
         }
         (variant_dir / "manifest.json").write_text(
             json.dumps(manifest, separators=(",", ":")), encoding="utf-8"
         )
-        print(f"  pc/{variant}: {len(sheets_meta)} sheets, {sum(len(s['frames']) for s in sheets_meta.values())} frames")
+        wall_frames = sum(len(s["frames"]) for s in sheets_meta.values())
+        print(f"  pc/{variant}: {len(sheets_meta)} sheets, {wall_frames} wall frames")
     if total == 0:
         print("  pc: skipped (no GOG .4/.16 blobs found — pass --pc-gog)")
 

@@ -227,6 +227,9 @@ async function ensurePcGfx(mode) {
   const prefix = `pc/${mode}/`;
   const pcMan = await loadJson(`${prefix}manifest.json?v=${PC_GFX_BUILD_ID}`);
   await loadSpritesFromPaths(prefix, pcMan.sheets, PC_GFX_BUILD_ID);
+  if (pcMan.anm) {
+    await loadSpritesFromPaths(prefix, pcMan.anm, PC_GFX_BUILD_ID);
+  }
   pcGfxLoaded[mode] = true;
   if (!manifest.pc) manifest.pc = {};
   manifest.pc[mode] = pcMan;
@@ -279,7 +282,17 @@ async function loadData() {
 }
 
 function spriteImg(sheetKey, frame) {
-  return images.get(`${sheetKey}:${frame}`);
+  const key = remapSheetKey(sheetKey, gfxMode);
+  return images.get(`${key}:${frame}`);
+}
+
+function anmManifestFor(sheetKey) {
+  const key = remapSheetKey(sheetKey, gfxMode);
+  if (gfxMode !== "amiga") {
+    const entry = manifest?.pc?.[gfxMode]?.anm?.[key];
+    if (entry) return entry;
+  }
+  return manifest?.anm?.[sheetKey] ?? null;
 }
 
 function blit(ctx, sheetKey, frame, x, y) {
@@ -299,7 +312,7 @@ function torchPhase() {
 }
 
 function anmFrameCount(sheetKey) {
-  const entry = manifest?.anm?.[sheetKey];
+  const entry = anmManifestFor(sheetKey);
   if (!entry?.frames) return 0;
   return Object.keys(entry.frames).length;
 }
@@ -535,7 +548,8 @@ function animNeedsRedraw() {
   const tp = torchPhase();
   if (!sc.outdoor && tp !== lastAnimTorchPhase) return true;
   if (uiState?.sprite) {
-    const key = `${uiState.sprite.sheet}:${resolveAnmFrame(uiState.sprite.sheet, Number(uiState.sprite.frame) || 0)}`;
+    const remapped = remapSheetKey(uiState.sprite.sheet, gfxMode);
+    const key = `${remapped}:${resolveAnmFrame(uiState.sprite.sheet, Number(uiState.sprite.frame) || 0)}`;
     if (key !== lastAnimSpriteKey) return true;
   }
   return false;
@@ -546,7 +560,8 @@ function syncAnimCache() {
   const sc = maps.screens[state.screen];
   lastAnimTorchPhase = sc.outdoor ? -1 : torchPhase();
   if (uiState?.sprite) {
-    lastAnimSpriteKey = `${uiState.sprite.sheet}:${resolveAnmFrame(
+    const remapped = remapSheetKey(uiState.sprite.sheet, gfxMode);
+    lastAnimSpriteKey = `${remapped}:${resolveAnmFrame(
       uiState.sprite.sheet,
       Number(uiState.sprite.frame) || 0
     )}`;
