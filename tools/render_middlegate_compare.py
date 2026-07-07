@@ -60,12 +60,17 @@ def load_pc_frame(variant: str, stem: str, frame: int) -> Image.Image:
         raise FileNotFoundError(f"{variant}/{stem} frame {frame}")
     fr = frames[frame]
     cga_sil = None
+    ega_sil = None
     if variant == "ega":
         try:
-            cga_sheet = _load_sheet_info("cga", stem)
-            cga_sil = cga_sheet["frames"][frame].pixels
+            cga_sil = _load_sheet_info("cga", stem)["frames"][frame].pixels
         except (FileNotFoundError, IndexError):
-            cga_sil = None
+            pass
+    else:
+        try:
+            ega_sil = _load_sheet_info("ega", stem)["frames"][frame].pixels
+        except (FileNotFoundError, IndexError):
+            pass
     rgba = render_pc_wall_frame_rgba(
         fr.width,
         fr.height,
@@ -73,6 +78,7 @@ def load_pc_frame(variant: str, stem: str, frame: int) -> Image.Image:
         sheet["bpp"],
         frame=frame,
         cga_silhouette=cga_sil,
+        ega_silhouette=ega_sil,
     )
     im = Image.new("RGBA", (fr.width, fr.height))
     im.putdata(rgba)

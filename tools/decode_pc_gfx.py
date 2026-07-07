@@ -530,28 +530,56 @@ def render_pc_wall_frame_rgba(
     frame: int | None = None,
     outdoor: bool = False,
     cga_silhouette: bytes | None = None,
+    ega_silhouette: bytes | None = None,
     cga_palette: int = 1,
 ) -> list[tuple[int, int, int, int]]:
     """Decode PC wall/door frames for the maze walker.
 
-    The paired ``.4`` blob is the void mask (same layout as EGA ``.16``):
-    - Side-wall cones (frames 4..11 and door +0x10): key CGA pens 0/1; on EGA,
-      use the CGA pixel at each location so door grilles stay solid.
-    - Indoor front walls/doors (frames 0..3, 16..19): fully opaque.
-    - Outdoor front panels: overlay path (CGA pens 0/1 void).
+    Indoor front walls/doors (frames 0..3, 16..19): fully opaque.
+    Indoor side walls/doors (frames 4..11, 20..27): void only where the paired
+    CGA grid is pen 0/1 **and** EGA is pen 8 (CGA pen 1 when decoding ``.4``).
+    Outdoor biome decor: simple index key (front=0, side=8/1).
     """
     base = frame & 0x0F if frame is not None else None
     is_side = base is not None and 4 <= base <= 11
 
-    if is_side or outdoor:
-        return render_overlay_frame_rgba(
-            width,
-            height,
-            pixels,
-            bpp,
-            cga_palette=cga_palette,
-            cga_silhouette=cga_silhouette if bpp == 4 else None,
+    if outdoor:
+        return render_wall_frame_rgba(
+            width, height, pixels, bpp, frame=frame, outdoor=True
         )
+
+    if is_side:
+        void_pen = 8 if bpp == 4 else 1
+        pal = _palette_for_bpp(bpp, cga_palette)
+        idxs = decode_wall_frame_indices(width, height, pixels, bpp)
+        out: list[tuple[int, int, int, int]] = []
+        if bpp == 4:
+            cidx = (
+                decode_wall_frame_indices(width, height, cga_silhouette, 2)
+                if cga_silhouette is not None
+                else None
+            )
+            for i, idx in enumerate(idxs):
+                r, g, b = pal[idx]
+                if cidx is not None:
+                    key = idx == void_pen and cidx[i] < 2
+                else:
+                    key = idx == void_pen
+                out.append((r, g, b, 0 if key else 255))
+        else:
+            eidx = (
+                decode_wall_frame_indices(width, height, ega_silhouette, 4)
+                if ega_silhouette is not None
+                else None
+            )
+            for i, idx in enumerate(idxs):
+                r, g, b = pal[idx]
+                if eidx is not None:
+                    key = eidx[i] == 8 and idx < 2
+                else:
+                    key = idx == void_pen
+                out.append((r, g, b, 0 if key else 255))
+        return out
 
     pal = _palette_for_bpp(bpp, cga_palette)
     idxs = decode_wall_frame_indices(width, height, pixels, bpp)

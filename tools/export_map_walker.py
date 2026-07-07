@@ -417,6 +417,25 @@ def _cga_silhouette_for_frame(
     return cga_frames[frame].pixels
 
 
+def _ega_silhouette_for_frame(
+    variant: str,
+    stem: str,
+    frame: int,
+    pc_path: Path,
+    data_dir: Path,
+) -> bytes | None:
+    if variant != "cga":
+        return None
+    ega_path = _resolve_pc_blob(stem, "ega", pc_path.parent, data_dir)
+    if ega_path is None:
+        return None
+    ega_sheet = _load_pc_sheet_info("ega", stem, ega_path)
+    ega_frames = ega_sheet["frames"]
+    if frame >= len(ega_frames):
+        return None
+    return ega_frames[frame].pixels
+
+
 def _render_pc_walker_frame(
     variant: str,
     stem: str,
@@ -443,6 +462,7 @@ def _render_pc_walker_frame(
         raise ValueError(f"{variant}/{stem} frame {frame}: short pixel run")
 
     cga_sil = _cga_silhouette_for_frame(variant, stem, frame, pc_path, data_dir)
+    ega_sil = _ega_silhouette_for_frame(variant, stem, frame, pc_path, data_dir)
 
     if amiga_sheet in _PC_OVERLAY_SHEETS:
         rgba = render_overlay_frame_rgba(w, h, pix, bpp, cga_silhouette=cga_sil)
@@ -456,6 +476,7 @@ def _render_pc_walker_frame(
             frame=frame,
             outdoor=outdoor,
             cga_silhouette=cga_sil,
+            ega_silhouette=ega_sil,
         )
     img = Image.new("RGBA", (w, h))
     img.putdata(rgba)
