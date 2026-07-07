@@ -398,6 +398,25 @@ def _load_pc_sheet_info(variant: str, stem: str, path: Path) -> dict:
     return _PC_SHEET_CACHE[key]
 
 
+def _cga_silhouette_for_frame(
+    variant: str,
+    stem: str,
+    frame: int,
+    pc_path: Path,
+    data_dir: Path,
+) -> bytes | None:
+    if variant != "ega":
+        return None
+    cga_path = _resolve_pc_blob(stem, "cga", pc_path.parent, data_dir)
+    if cga_path is None:
+        return None
+    cga_sheet = _load_pc_sheet_info("cga", stem, cga_path)
+    cga_frames = cga_sheet["frames"]
+    if frame >= len(cga_frames):
+        return None
+    return cga_frames[frame].pixels
+
+
 def _render_pc_walker_frame(
     variant: str,
     stem: str,
@@ -408,7 +427,7 @@ def _render_pc_walker_frame(
 ):
     from decode_pc_gfx import (  # noqa: E402
         render_overlay_frame_rgba,
-        render_wall_frame_rgba,
+        render_pc_wall_frame_rgba,
         row_bytes,
     )
     from PIL import Image  # noqa: E402
@@ -423,23 +442,21 @@ def _render_pc_walker_frame(
     if len(pix) < rb * h:
         raise ValueError(f"{variant}/{stem} frame {frame}: short pixel run")
 
+    cga_sil = _cga_silhouette_for_frame(variant, stem, frame, pc_path, data_dir)
+
     if amiga_sheet in _PC_OVERLAY_SHEETS:
-        cga_sil = None
-        if variant == "ega":
-            cga_path = _resolve_pc_blob(stem, "cga", pc_path.parent, data_dir)
-            if cga_path is not None:
-                cga_sheet = _load_pc_sheet_info("cga", stem, cga_path)
-                cga_frames = cga_sheet["frames"]
-                if frame < len(cga_frames):
-                    cfr = cga_frames[frame]
-                    cga_sil = cfr.pixels
         rgba = render_overlay_frame_rgba(w, h, pix, bpp, cga_silhouette=cga_sil)
-    elif amiga_sheet in _PC_OUTDOOR_WALL_SHEETS:
-        rgba = render_wall_frame_rgba(
-            w, h, pix, bpp, cga_palette=1, frame=frame, outdoor=True
-        )
     else:
-        rgba = render_wall_frame_rgba(w, h, pix, bpp, cga_palette=1, frame=frame)
+        outdoor = amiga_sheet in _PC_OUTDOOR_WALL_SHEETS
+        rgba = render_pc_wall_frame_rgba(
+            w,
+            h,
+            pix,
+            bpp,
+            frame=frame,
+            outdoor=outdoor,
+            cga_silhouette=cga_sil,
+        )
     img = Image.new("RGBA", (w, h))
     img.putdata(rgba)
     return img

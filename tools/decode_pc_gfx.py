@@ -521,6 +521,43 @@ def render_overlay_frame_rgba(
     return out
 
 
+def render_pc_wall_frame_rgba(
+    width: int,
+    height: int,
+    pixels: bytes,
+    bpp: int,
+    *,
+    frame: int | None = None,
+    outdoor: bool = False,
+    cga_silhouette: bytes | None = None,
+    cga_palette: int = 1,
+) -> list[tuple[int, int, int, int]]:
+    """Decode PC wall/door frames for the maze walker.
+
+    The paired ``.4`` blob is the void mask (same layout as EGA ``.16``):
+    - Side-wall cones (frames 4..11 and door +0x10): key CGA pens 0/1; on EGA,
+      use the CGA pixel at each location so door grilles stay solid.
+    - Indoor front walls/doors (frames 0..3, 16..19): fully opaque.
+    - Outdoor front panels: overlay path (CGA pens 0/1 void).
+    """
+    base = frame & 0x0F if frame is not None else None
+    is_side = base is not None and 4 <= base <= 11
+
+    if is_side or outdoor:
+        return render_overlay_frame_rgba(
+            width,
+            height,
+            pixels,
+            bpp,
+            cga_palette=cga_palette,
+            cga_silhouette=cga_silhouette if bpp == 4 else None,
+        )
+
+    pal = _palette_for_bpp(bpp, cga_palette)
+    idxs = decode_wall_frame_indices(width, height, pixels, bpp)
+    return [(pal[idx][0], pal[idx][1], pal[idx][2], 255) for idx in idxs]
+
+
 def render_wall_frame_rgba(
     width: int,
     height: int,

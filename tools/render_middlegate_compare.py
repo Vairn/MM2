@@ -17,7 +17,7 @@ if str(_TOOLS) not in sys.path:
 from attrib_codec import AttribFile  # noqa: E402
 from decode_pc_gfx import (  # noqa: E402
     parse_wall_sheet,
-    render_wall_frame_rgba,
+    render_pc_wall_frame_rgba,
 )
 from render_view_refs import (  # noqa: E402
     FLOOR_Y,
@@ -53,14 +53,26 @@ def _load_sheet_info(variant: str, stem: str) -> dict:
 
 
 def load_pc_frame(variant: str, stem: str, frame: int) -> Image.Image:
-    """Decode one wall/floor/sky frame using native PC driver transparency."""
+    """Decode one wall/floor/sky frame using PC CGA-mask rules."""
     sheet = _load_sheet_info(variant, stem)
     frames = sheet["frames"]
     if frame >= len(frames):
         raise FileNotFoundError(f"{variant}/{stem} frame {frame}")
     fr = frames[frame]
-    rgba = render_wall_frame_rgba(
-        fr.width, fr.height, fr.pixels, sheet["bpp"], cga_palette=1, frame=frame
+    cga_sil = None
+    if variant == "ega":
+        try:
+            cga_sheet = _load_sheet_info("cga", stem)
+            cga_sil = cga_sheet["frames"][frame].pixels
+        except (FileNotFoundError, IndexError):
+            cga_sil = None
+    rgba = render_pc_wall_frame_rgba(
+        fr.width,
+        fr.height,
+        fr.pixels,
+        sheet["bpp"],
+        frame=frame,
+        cga_silhouette=cga_sil,
     )
     im = Image.new("RGBA", (fr.width, fr.height))
     im.putdata(rgba)
