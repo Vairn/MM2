@@ -18,7 +18,6 @@ from attrib_codec import AttribFile  # noqa: E402
 from decode_pc_gfx import (  # noqa: E402
     parse_wall_sheet,
     render_wall_frame_rgba,
-    resample_amiga_rgba,
 )
 from render_view_refs import (  # noqa: E402
     FLOOR_Y,
@@ -26,9 +25,7 @@ from render_view_refs import (  # noqa: E402
     SKY_Y,
     VIEW_H,
     VIEW_W,
-    amiga_frame_mask,
     blit,
-    load_frame,
 )
 from view3d_indoor import StitchedVisual, build_scene, load_map  # noqa: E402
 
@@ -40,17 +37,7 @@ GOG = Path(r"C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 2")
 # Middlegate inn spawn — matches view3d_middlegate_check / game default.
 SCREEN, X, Y, FACING = 0, 7, 3, 0
 
-# PC wall stems → Amiga mask source (same frame indices as ``view3d_indoor``).
-_AMIGA_MASK_SHEET = {
-    "town": "town.32",
-    "townf": "townf.32",
-    "sky": "sky.32",
-    "cave": "cave.32",
-    "castle": "castle.32",
-}
-
 _SHEET_CACHE: dict[tuple[str, str], dict] = {}
-_MASK_CACHE: dict[tuple[str, int], list[list[bool]]] = {}
 
 
 def _load_sheet_info(variant: str, stem: str) -> dict:
@@ -65,39 +52,15 @@ def _load_sheet_info(variant: str, stem: str) -> dict:
     return _SHEET_CACHE[key]
 
 
-def _amiga_mask(stem: str, frame: int) -> list[list[bool]] | None:
-    sheet = _AMIGA_MASK_SHEET.get(stem)
-    if sheet is None or not (ROOT / sheet).is_file():
-        return None
-    key = (sheet, frame)
-    if key not in _MASK_CACHE:
-        _MASK_CACHE[key] = amiga_frame_mask(sheet, frame, ROOT)
-    return _MASK_CACHE[key]
-
-
 def load_pc_frame(variant: str, stem: str, frame: int) -> Image.Image:
-    """Decode one wall/floor/sky frame with PC driver-style masking."""
+    """Decode one wall/floor/sky frame using native PC driver transparency."""
     sheet = _load_sheet_info(variant, stem)
     frames = sheet["frames"]
     if frame >= len(frames):
         raise FileNotFoundError(f"{variant}/{stem} frame {frame}")
     fr = frames[frame]
-    mask = _amiga_mask(stem, frame)
-    amiga_rgba = None
-    sheet32 = _AMIGA_MASK_SHEET.get(stem)
-    if mask is not None and sheet32 and (ROOT / sheet32).is_file():
-        amiga_rgba = resample_amiga_rgba(
-            load_frame(sheet32, frame, ROOT), fr.width, fr.height
-        )
     rgba = render_wall_frame_rgba(
-        fr.width,
-        fr.height,
-        fr.pixels,
-        sheet["bpp"],
-        cga_palette=1,
-        amiga_mask=mask,
-        amiga_rgba=amiga_rgba,
-        frame=frame,
+        fr.width, fr.height, fr.pixels, sheet["bpp"], cga_palette=1, frame=frame
     )
     im = Image.new("RGBA", (fr.width, fr.height))
     im.putdata(rgba)

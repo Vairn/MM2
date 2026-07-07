@@ -317,7 +317,7 @@ function renderIndoorView(ctx, sc, scene, phase) {
   const sheets = selectIndoorSheets(sc.env, gfxMode, wallsetOverride);
   const skyFrame = skyFrameFor(sc, state.x, state.y);
   blitTransparent(ctx, sheets.floor, "0", ORIGIN_X, FLOOR_Y);
-  blitTransparent(ctx, sheets.sky, String(skyFrame), ORIGIN_X, SKY_Y);
+  blit(ctx, sheets.sky, String(skyFrame), ORIGIN_X, SKY_Y);
   for (const b of scene.blits) {
     blitTransparent(ctx, sheets.walls, String(b.frame), b.x, b.y);
   }

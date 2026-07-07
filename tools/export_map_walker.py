@@ -325,7 +325,7 @@ def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
             exported += 1
         if frames_meta:
             manifest["sheets"][key] = {"file": sheet, "frames": frames_meta}
-            
+
     for anm_idx in range(1, 75):
         sheet = f"{anm_idx:02d}.anm"
         p = resolve_asset(data_dir, sheet)
@@ -391,10 +391,8 @@ def _render_pc_walker_frame(
     from decode_pc_gfx import (  # noqa: E402
         render_overlay_frame_rgba,
         render_wall_frame_rgba,
-        resample_amiga_rgba,
         row_bytes,
     )
-    from render_view_refs import amiga_frame_mask, load_frame  # noqa: E402
     from PIL import Image  # noqa: E402
 
     sheet = _load_pc_sheet_info(variant, stem, pc_path)
@@ -419,22 +417,7 @@ def _render_pc_walker_frame(
                     cga_sil = cfr.pixels
         rgba = render_overlay_frame_rgba(w, h, pix, bpp, cga_silhouette=cga_sil)
     else:
-        mask = None
-        amiga_rgba = None
-        if resolve_asset(data_dir, amiga_sheet):
-            ami = load_frame(amiga_sheet, frame, data_dir)
-            mask = amiga_frame_mask(amiga_sheet, frame, data_dir)
-            amiga_rgba = resample_amiga_rgba(ami, w, h)
-        rgba = render_wall_frame_rgba(
-            w,
-            h,
-            pix,
-            bpp,
-            cga_palette=1,
-            amiga_mask=mask,
-            amiga_rgba=amiga_rgba,
-            frame=frame,
-        )
+        rgba = render_wall_frame_rgba(w, h, pix, bpp, cga_palette=1, frame=frame)
     img = Image.new("RGBA", (w, h))
     img.putdata(rgba)
     return img

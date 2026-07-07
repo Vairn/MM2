@@ -524,50 +524,26 @@ def render_wall_frame_rgba(
     *,
     cga_palette: int = 1,
     transparent_indices: tuple[int, ...] | None = None,
-    amiga_mask: list[list[bool]] | None = None,
-    amiga_rgba: list[tuple[int, int, int, int]] | None = None,
     frame: int | None = None,
 ) -> list[tuple[int, int, int, int]]:
-    """Decode wall frame to RGBA with PC driver-style transparency.
+    """Decode wall frame to RGBA with native PC driver-style transparency.
 
-    Prefer ``amiga_mask`` (pen 0 from the matching ``.32`` frame) when available —
-    that is the authoritative silhouette, resampled when PC ``width``/``height``
-    differ. Side-wall void pens (frames 4..11) are also keyed when the mask
-    misses driver void colour. Otherwise use ``transparent_indices`` or
-    ``wall_transparent_indices``.
+    Uses ``wall_transparent_indices`` per-frame rules when no explicit
+    ``transparent_indices`` are given:
+    - Front walls (frames 0-3): index 0 (black) is void/transparent.
+    - Side-wall cones (frames 4-11): index 8 EGA / index 1 CGA is void.
 
-    When ``amiga_rgba`` is supplied, PC palette index **0** inside the opaque
-    silhouette is replaced with the resampled Amiga pixel — side-wall cones
-    (frames 4..11) use EGA pen 8 / CGA pen 1 for void but still encode real
-    wall detail as index 0 on PC where Amiga uses non-zero pens.
+    Never consults Amiga data — PC .4/.16 carry their own colour-key convention.
     """
     pal = _palette_for_bpp(bpp, cga_palette)
     idxs = decode_wall_frame_indices(width, height, pixels, bpp)
-    void_idxs = wall_transparent_indices(bpp, frame)
-    if transparent_indices is None and amiga_mask is None:
-        transparent_indices = void_idxs
-    if amiga_mask is not None:
-        src_h = len(amiga_mask)
-        src_w = len(amiga_mask[0]) if src_h else 0
-        if src_w != width or src_h != height:
-            amiga_mask = resample_amiga_mask(amiga_mask, width, height)
+    if transparent_indices is None:
+        transparent_indices = wall_transparent_indices(bpp, frame)
     out: list[tuple[int, int, int, int]] = []
-    for y in range(height):
-        for x in range(width):
-            i = y * width + x
-            idx = idxs[i]
-            r, g, b = pal[idx]
-            if amiga_mask is not None:
-                key = amiga_mask[y][x]
-                if not key and idx in void_idxs:
-                    key = True
-            else:
-                key = idx in transparent_indices  # type: ignore[operator]
-            if not key and idx == 0 and amiga_rgba is not None:
-                ar, ag, ab, aa = amiga_rgba[i]
-                if aa > 0:
-                    r, g, b = ar, ag, ab
-            out.append((r, g, b, 0 if key else 255))
+    for idx in idxs:
+        r, g, b = pal[idx]
+        key = idx in transparent_indices
+        out.append((r, g, b, 0 if key else 255))
     return out
 
 
