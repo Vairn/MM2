@@ -473,11 +473,13 @@ def resample_amiga_rgba(
 def wall_transparent_indices(bpp: int, frame: int | None = None) -> tuple[int, ...]:
     """Colour-key indices for PC wall blits.
 
-    Front walls (frames 0-3) are fully opaque rectangles — no mask.
-    Side-wall cones (frames 4-11) have void areas keyed by EGA pen 8 / CGA pen 1.
+    Front panels (frames 0-3, door +0x10 → 16-19): fully opaque — no colour key.
+    Side-wall cones (frames 4-11, door +0x10 → 20-27): void keyed on EGA pen 8 / CGA pen 1.
     """
-    if frame is not None and 4 <= frame <= 11:
-        return (1,) if bpp == 2 else (8,)
+    if frame is not None:
+        base = frame & 0x0F
+        if 4 <= base <= 11:
+            return (1,) if bpp == 2 else (8,)
     return ()
 
 
