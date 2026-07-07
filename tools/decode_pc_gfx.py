@@ -470,16 +470,21 @@ def resample_amiga_rgba(
     return out
 
 
-def wall_transparent_indices(bpp: int, frame: int | None = None) -> tuple[int, ...]:
+def wall_transparent_indices(
+    bpp: int, frame: int | None = None, *, outdoor: bool = False
+) -> tuple[int, ...]:
     """Colour-key indices for PC wall blits.
 
-    Front panels (frames 0-3, door +0x10 → 16-19): fully opaque — no colour key.
-    Side-wall cones (frames 4-11, door +0x10 → 20-27): void keyed on EGA pen 8 / CGA pen 1.
+    Indoor front panels (frames 0-3, door +0x10): fully opaque.
+    Outdoor front panels: key=0 (void/sky shows through).
+    Side-wall cones (frames 4-11, door +0x10): void keyed on EGA pen 8 / CGA pen 1.
     """
     if frame is not None:
         base = frame & 0x0F
         if 4 <= base <= 11:
             return (1,) if bpp == 2 else (8,)
+        if outdoor:
+            return (0,)
     return ()
 
 
@@ -525,20 +530,17 @@ def render_wall_frame_rgba(
     cga_palette: int = 1,
     transparent_indices: tuple[int, ...] | None = None,
     frame: int | None = None,
+    outdoor: bool = False,
 ) -> list[tuple[int, int, int, int]]:
     """Decode wall frame to RGBA with native PC driver-style transparency.
 
-    Uses ``wall_transparent_indices`` per-frame rules when no explicit
-    ``transparent_indices`` are given:
-    - Front walls (frames 0-3): index 0 (black) is void/transparent.
-    - Side-wall cones (frames 4-11): index 8 EGA / index 1 CGA is void.
-
-    Never consults Amiga data — PC .4/.16 carry their own colour-key convention.
+    Indoor front walls (0-3): opaque. Outdoor front walls: key index 0.
+    Side walls (4-11): key index 8 EGA / index 1 CGA. Door frames use frame & 0xF.
     """
     pal = _palette_for_bpp(bpp, cga_palette)
     idxs = decode_wall_frame_indices(width, height, pixels, bpp)
     if transparent_indices is None:
-        transparent_indices = wall_transparent_indices(bpp, frame)
+        transparent_indices = wall_transparent_indices(bpp, frame, outdoor=outdoor)
     out: list[tuple[int, int, int, int]] = []
     for idx in idxs:
         r, g, b = pal[idx]

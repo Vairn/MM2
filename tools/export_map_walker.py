@@ -358,8 +358,26 @@ def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
 
 _PC_SHEET_CACHE: dict[tuple[str, str], dict] = {}
 
-# Ceiling/torch overlay sheets: no Amiga pen-0 void — use overlay colour-key path.
-_PC_OVERLAY_SHEETS = frozenset({"townt.32", "cavet.32", "castlet.32"})
+# Ceiling/torch + outdoor horizon/floor/sky: CGA silhouette colour-key path.
+_PC_OVERLAY_SHEETS = frozenset({
+    "townt.32",
+    "cavet.32",
+    "castlet.32",
+    "outdoor1.32",
+    "outdoor2.32",
+    "outdoor3.32",
+    "outf.32",
+    "sky.32",
+})
+
+# Biome decor + minimap border sheets (wall layout, outdoor front key=0).
+_PC_OUTDOOR_WALL_SHEETS = frozenset({
+    "desert.32",
+    "ocean.32",
+    "tundra.32",
+    "swamp.32",
+    "outb.32",
+})
 
 
 def _resolve_pc_blob(stem: str, variant: str, gog_dir: Path, data_dir: Path) -> Path | None:
@@ -416,6 +434,10 @@ def _render_pc_walker_frame(
                     cfr = cga_frames[frame]
                     cga_sil = cfr.pixels
         rgba = render_overlay_frame_rgba(w, h, pix, bpp, cga_silhouette=cga_sil)
+    elif amiga_sheet in _PC_OUTDOOR_WALL_SHEETS:
+        rgba = render_wall_frame_rgba(
+            w, h, pix, bpp, cga_palette=1, frame=frame, outdoor=True
+        )
     else:
         rgba = render_wall_frame_rgba(w, h, pix, bpp, cga_palette=1, frame=frame)
     img = Image.new("RGBA", (w, h))
