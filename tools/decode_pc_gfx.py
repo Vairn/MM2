@@ -1693,6 +1693,22 @@ def main(argv: list[str] | None = None) -> int:
         default=1,
         help="CGA BIOS palette for .4 preview (1=cyan/magenta/white, MM2 default per CGA.DRV; 0=green/red/brown)",
     )
+    ap.add_argument(
+        "--dump-rgba",
+        action="store_true",
+        help="Write raw RGBA8 for --frame to stdout (header: OK W H bytes\\n)",
+    )
+    ap.add_argument(
+        "--dump-rgba-file",
+        type=Path,
+        help="Write raw RGBA8 for --frame to a binary file (same header line + body)",
+    )
+    ap.add_argument(
+        "--role",
+        choices=("wall", "sky", "torch", "floor", "outdoor", "biome"),
+        default="wall",
+        help="Void-mask role for --dump-rgba (default wall)",
+    )
     ap.add_argument("--index", type=int, default=-1, help="Anim index NN (matches NN.anm)")
     args = ap.parse_args(argv)
 
@@ -1765,6 +1781,48 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Frame {args.frame} out of range (0..{len(info['frames']) - 1})", file=sys.stderr)
             return 1
         fr = info["frames"][args.frame]
+        if args.dump_rgba or args.dump_rgba_file:
+            role = args.role
+            outdoor = role in ("outdoor", "biome")
+            if role == "sky":
+                rgba = render_sky_frame_rgba(
+                    fr.width, fr.height, fr.pixels, info["bpp"], cga_palette=args.cga_palette
+                )
+            elif role == "torch":
+                rgba = render_overlay_frame_rgba(
+                    fr.width, fr.height, fr.pixels, info["bpp"], cga_palette=args.cga_palette
+                )
+            elif role in ("outdoor", "biome"):
+                fn = render_outdoor_wall_frame_rgba if role == "biome" else render_outdoor_frame_rgba
+                rgba = fn(
+                    fr.width,
+                    fr.height,
+                    fr.pixels,
+                    info["bpp"],
+                    frame=fr.index,
+                    cga_palette=args.cga_palette,
+                )
+            else:
+                rgba = render_pc_wall_frame_rgba(
+                    fr.width,
+                    fr.height,
+                    fr.pixels,
+                    info["bpp"],
+                    frame=fr.index,
+                    outdoor=outdoor,
+                    cga_palette=args.cga_palette,
+                )
+            raw = bytearray()
+            for r, g, b, a in rgba:
+                raw.extend((r, g, b, a))
+            header = f"OK {fr.width} {fr.height} {len(raw)}\n".encode("ascii")
+            if args.dump_rgba_file:
+                args.dump_rgba_file.write_bytes(header + raw)
+                print(f"Wrote {args.dump_rgba_file.resolve()} ({fr.width}x{fr.height})")
+                return 0
+            sys.stdout.buffer.write(header)
+            sys.stdout.buffer.write(raw)
+            return 0
         rgb = decode_wall_frame_rgb(
             fr.width, fr.height, fr.pixels, info["bpp"], cga_palette=args.cga_palette
         )

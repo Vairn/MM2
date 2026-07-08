@@ -31,6 +31,22 @@ from pathlib import Path
 
 RECORD_SIZE = 130
 NUM_SLOTS = 64
+CHAR_SECTION_SIZE = 48 * RECORD_SIZE  # 0x1860
+GLOBAL_USED_SIZE = 0x804
+PC_FILE_SIZE = CHAR_SECTION_SIZE + GLOBAL_USED_SIZE  # 8292
+AMIGA_FILE_SIZE = NUM_SLOTS * RECORD_SIZE  # 8320
+
+
+def load_roster_bytes(path: Path) -> bytes:
+    """Load roster.dat / ROSTER.DAT; accept Amiga (8320) or PC (8292) images."""
+    data = path.read_bytes()
+    if len(data) == AMIGA_FILE_SIZE:
+        return data
+    if len(data) == PC_FILE_SIZE:
+        return data + bytes(AMIGA_FILE_SIZE - PC_FILE_SIZE)
+    raise ValueError(
+        f"Expected {AMIGA_FILE_SIZE} (Amiga) or {PC_FILE_SIZE} (PC) bytes, got {len(data)}"
+    )
 
 CLASSES = [
     "Knight", "Paladin", "Archer", "Cleric",
@@ -208,11 +224,11 @@ def format_items(items):
 
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1] / "EXTRACTED" / "roster.dat"
-    data = path.read_bytes()
-    assert len(data) == RECORD_SIZE * NUM_SLOTS, f"Expected {RECORD_SIZE*NUM_SLOTS} bytes, got {len(data)}"
+    data = load_roster_bytes(path)
 
     print(f"{'='*72}")
-    print(f"  MM2 Amiga roster.dat — {NUM_SLOTS} slots × {RECORD_SIZE} bytes = {len(data)} bytes")
+    print(f"  MM2 roster.dat — {NUM_SLOTS} slots × {RECORD_SIZE} bytes = {AMIGA_FILE_SIZE} bytes"
+          f"{' (PC image padded)' if path.stat().st_size == PC_FILE_SIZE else ''}")
     print(f"{'='*72}\n")
 
     for slot in range(NUM_SLOTS):

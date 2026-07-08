@@ -3,11 +3,12 @@
 // In-game character sheet + Quick Ref overlays (doc 43 §6, §6.3; doc 39 §4).
 //
 // Entry: exploration digits 1–8 or Q (via 0x907A). Text-only sheet (doc 39 §4 title path);
-// book.32 composite @ $39B4 is combat spell-book (V) only — not wired here yet.
+// book.32 composite @ LAB_4252 / $39B4 — in-game + combat character sheet backdrop.
 
 #include "mm2/gfx/ScreenCompositor.h"
 
 #include "mm2_image32_codec.h"
+#include "mm2_gfx_sheet.h"
 #include "mm2_items_codec.h"
 #include "mm2_party_launch.h"
 
@@ -67,7 +68,8 @@ public:
     bool loadAssets(const char *data_dir);
 
     void renderSheet(gfx::ScreenCompositor &c, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
-                     int party_slot, const Mm2ItemsFile *items, const SheetSession *session) const;
+                     int party_slot, const Mm2ItemsFile *items, const SheetSession *session,
+                     bool combat_mode = false) const;
 
     void renderQuickRef(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
                         const Mm2PartyLaunch &launch) const;
@@ -79,11 +81,13 @@ public:
 
     /** Sheet sub-menu @ $8EA6 (C/D/E/G/R/S/T/U). Mutates roster on equip/remove/drop. */
     SheetKeyOutcome handleKey(char key, SheetSession &session, Mm2RosterFile &roster,
-                              const Mm2PartyLaunch &launch, const Mm2ItemsFile *items);
+                              const Mm2PartyLaunch &launch, const Mm2ItemsFile *items, bool combat_mode = false);
 
 private:
     mm2_image32_file book_{};
+    mm2_gfx_sheet book_pc_{};
     bool has_book_ = false;
+    bool book_pc_mode_ = false;
 };
 
 }  // namespace mm2::gameplay

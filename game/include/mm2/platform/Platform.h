@@ -56,7 +56,7 @@ uint32_t nowTicks();
 
 const char *hostName();
 
-/** Probe intro.32 under hint, ".", "..", "../.."; writes resolved dir into out. */
+/** Probe map.dat under hint (or ".", "..", "../.." when hint is default); writes resolved dir into out. */
 bool resolveDataDir(const char *hint, char *out, size_t out_cap);
 
 }  // namespace mm2::platform

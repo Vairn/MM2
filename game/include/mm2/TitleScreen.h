@@ -1,10 +1,13 @@
 #pragma once
 #include "mm2/CppStdCompat.h"
+#include "mm2/gfx/GfxBackend.h"
 #include "mm2/gfx/ScreenCompositor.h"
 #include "mm2/platform/Platform.h"
 #include "mm2/ui/CharacterUiKind.h"
 #include "mm2_party_launch.h"
 #include "mm2_image32_codec.h"
+#include "mm2_gfx_sheet.h"
+#include "mm2_pc_gfx_codec.h"
 #include "mm2_roster_codec.h"
 
 namespace mm2 {
@@ -110,6 +113,13 @@ private:
     };
 
     bool loadImage(const char *name, mm2_image32_file *out);
+    bool loadPcTitleSheet(const char *amiga_name, mm2_gfx_sheet_role role, mm2_gfx_sheet *out);
+    bool loadPcMasterSheet(mm2_gfx_sheet *out);
+    void freePcTitleSheets();
+    void blitPcTitleFrame(const mm2_gfx_sheet &sheet, int frame, int x, int y, uint8_t alpha = 255);
+    /** MASTER.16 frame 14 — full title backdrop (top branding + bottom pegasus). */
+    void blitPcTitleBackground();
+    void drawTitleMenuOverlay();
     void drawLogoSplash();
     void drawIntroPegasus(bool animate_overlays);
     void drawAttract();
@@ -154,7 +164,13 @@ private:
     mm2_image32_file introclips_{};
     mm2_image32_file nwcp_{};
     mm2_image32_file book_{};
+    mm2_gfx_sheet nwcp_pc_{};
+    mm2_gfx_sheet book_pc_{};
+    mm2_gfx_sheet master_pc_{};
     Mm2RosterFile roster_{};
+
+    bool pc_title_mode_ = false;
+    bool has_master_title_ = false;
 
     bool has_intro_ = false;
     bool has_introclips_ = false;

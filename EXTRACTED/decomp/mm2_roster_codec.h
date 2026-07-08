@@ -13,7 +13,15 @@ enum {
     MM2_ROSTER_RECORD_COUNT = 64,
     MM2_ROSTER_NAME_SIZE = 11,
     MM2_ROSTER_ITEM_SLOTS = 6,
-    MM2_ROSTER_SPELL_BYTES = 12
+    MM2_ROSTER_SPELL_BYTES = 12,
+    /* 48 playable slots; same split on Amiga and PC (MM2.EXE @0x2F72). */
+    MM2_ROSTER_CHAR_SECTION_SIZE = 0x1860,
+    /* Global stream from save_game_state @0x823C; last byte @0x803. */
+    MM2_ROSTER_GLOBAL_USED_SIZE = 0x804,
+    /* GOG ROSTER.DAT: char section + global stream, no slot-63 tail padding. */
+    MM2_ROSTER_PC_FILE_SIZE =
+        MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_GLOBAL_USED_SIZE,
+    MM2_ROSTER_FILE_SIZE = MM2_ROSTER_RECORD_SIZE * MM2_ROSTER_RECORD_COUNT
 };
 
 /* A single equipped/backpack item, as a convenience aggregate. The ON-DISK and

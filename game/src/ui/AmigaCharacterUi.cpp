@@ -9,11 +9,14 @@
 #include "mm2/Mm2Dbg.h"
 #include "mm2/platform/Platform.h"
 #include "mm2/runtime/PathScratch.h"
+#include "mm2/gfx/GfxBackend.h"
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/mm2_amiga_file.h"
 #endif
 #include "mm2_create_character.h"
+#include "mm2_gfx_sheet.h"
 #include "mm2_image32_codec.h"
+#include "mm2_pc_gfx_codec.h"
 #include "mm2_party_launch.h"
 
 namespace mm2::ui {
@@ -670,6 +673,42 @@ private:
             return;
         }
         char *const path = mm2_path_scratch_a();
+        gfx::resolveGfxBackend(data_dir_);
+        const gfx::GfxBackend backend = gfx::gfxSettings().resolved;
+        if (backend == gfx::GfxBackend::Cga || backend == gfx::GfxBackend::Ega) {
+            const char *filename = gfx::resolveGfxFilename(backend, "throw.32");
+            mm2_gfx_sheet sheet{};
+            auto tryLoad = [&](const char *dir) -> bool {
+                if (!dir || !joinDataPath(path, MM2_PATH_SCRATCH_CAP, dir, filename)) {
+                    return false;
+                }
+                mm2_gfx_sheet_free(&sheet);
+                mm2_pc_gfx_set_cga_palette(gfx::gfxSettings().cga_palette);
+                if (mm2_pc_wall_sheet_load(path, MM2_GFX_ROLE_TITLE, NULL, &sheet) != MM2_IMAGE32_OK ||
+                    sheet.img.frame_count == 0) {
+                    mm2_gfx_sheet_free(&sheet);
+                    return false;
+                }
+#if MM2_HOST_AMIGA
+                if (!sheet.img.frames[0].bitmap) {
+                    mm2_gfx_sheet_free(&sheet);
+                    return false;
+                }
+#else
+                if (!sheet.img.frames[0].rgba) {
+                    mm2_gfx_sheet_free(&sheet);
+                    return false;
+                }
+#endif
+                return true;
+            };
+            if (tryLoad(data_dir_) || (gfx::gfxSettings().pc_gfx_dir[0] && tryLoad(gfx::gfxSettings().pc_gfx_dir))) {
+                throw_ = sheet.img;
+                memset(&sheet, 0, sizeof(sheet));
+                has_throw_ = true;
+                return;
+            }
+        }
         if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "throw.32")) {
             MM2_DBG("MM2 DBG: Loading throw.32 FAIL (path)\n");
             return;

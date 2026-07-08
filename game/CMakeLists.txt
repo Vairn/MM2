@@ -82,6 +82,9 @@ endif()
 # ---------------------------------------------------------------------------
 set(MM2_CODEC_SOURCES
   ${MM2_DECOMP}/mm2_image32_codec.c
+  ${MM2_DECOMP}/mm2_gfx_sheet.c
+  ${MM2_DECOMP}/mm2_pc_gfx_codec.c
+  ${MM2_DECOMP}/mm2_pc_monsters_codec.c
   ${MM2_DECOMP}/mm2_anm_codec.c
   ${MM2_DECOMP}/mm2_anm_preview.c
   ${MM2_DECOMP}/mm2_roster_codec.c
@@ -95,6 +98,8 @@ set(MM2_CODEC_SOURCES
   ${MM2_DECOMP}/mm2_found_items.c
   ${MM2_DECOMP}/mm2_town_tables.c
   ${MM2_DECOMP}/mm2_encounter.c
+  ${MM2_DECOMP}/mm2_copyprot_codec.c
+  ${MM2_DECOMP}/mm2_globe_blob.c
 )
 
 if(NOT AMIGA)
@@ -112,6 +117,18 @@ set(MM2_AUTOMAP_SOURCES
 if(NOT AMIGA)
   add_executable(image32_golden tests/image32_golden.c)
   target_link_libraries(image32_golden PRIVATE mm2_codecs)
+
+  add_executable(pc_gfx_rgba_dump tests/pc_gfx_rgba_dump.c)
+  target_link_libraries(pc_gfx_rgba_dump PRIVATE mm2_codecs)
+
+  add_executable(pc_monsters_rgba_dump tests/pc_monsters_rgba_dump.c)
+  target_link_libraries(pc_monsters_rgba_dump PRIVATE mm2_codecs)
+
+  add_executable(pc_gfx_pixels_dump tests/pc_gfx_pixels_dump.c)
+  target_link_libraries(pc_gfx_pixels_dump PRIVATE mm2_codecs)
+
+  add_executable(pc_lzw_dump tests/pc_lzw_dump.c)
+  target_link_libraries(pc_lzw_dump PRIVATE mm2_codecs)
 
   add_executable(font_golden tests/font_golden.cpp src/gfx/ScreenCompositor.cpp src/gfx/mm2_font8x8.c)
   target_include_directories(font_golden PRIVATE include)
@@ -193,6 +210,7 @@ if(NOT AMIGA)
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
     src/gfx/EnvAssets.cpp
+    src/gfx/GfxBackend.cpp
     src/gfx/OutdoorView3D.cpp
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
@@ -204,6 +222,7 @@ if(NOT AMIGA)
     src/gameplay/InGameCharacterSheet.cpp
     src/gameplay/RosterSkills.cpp
     src/ui/RosterSkillDisplay.cpp
+    src/gfx/GfxBackend.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/PlayScreenChrome.cpp
     src/gfx/PartyStatusFormat.cpp
@@ -237,6 +256,7 @@ if(NOT AMIGA)
     src/gameplay/RosterSkills.cpp
     src/ui/PlayTownServiceUi.cpp
     src/gfx/ViewportAnmOverlay.cpp
+    src/gfx/GfxBackend.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/PlayScreenChrome.cpp
     src/gfx/CombatPanel.cpp
@@ -266,6 +286,7 @@ if(NOT AMIGA)
     src/gameplay/ExploreActions.cpp
     src/gameplay/RosterSkills.cpp
     src/gfx/ViewportAnmOverlay.cpp
+    src/gfx/GfxBackend.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/PlayScreenChrome.cpp
     src/gfx/PartyStatusFormat.cpp
@@ -282,14 +303,16 @@ if(NOT AMIGA)
     src/events/ServiceSignResolver.cpp
     src/events/ScriptedSceneEngine.cpp
     src/gfx/ViewportAnmOverlay.cpp
+    src/gfx/GfxBackend.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
     src/gfx/View3D.cpp
     src/gfx/OutdoorView3D.cpp
     src/gfx/PlayScreenChrome.cpp
     src/gfx/PartyStatusFormat.cpp
-    src/gfx/EnvAssets.cpp
-    src/world/MapWorld.cpp
+  src/gfx/EnvAssets.cpp
+  src/gfx/GfxBackend.cpp
+  src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(event_op_demo PRIVATE include)
   target_link_libraries(event_op_demo PRIVATE mm2_codecs)
@@ -312,8 +335,9 @@ if(NOT AMIGA)
     src/gfx/PlayScreenChrome.cpp
     src/gfx/CombatPanel.cpp
     src/gfx/PartyStatusFormat.cpp
-    src/gfx/EnvAssets.cpp
-    src/world/MapWorld.cpp
+  src/gfx/EnvAssets.cpp
+  src/gfx/GfxBackend.cpp
+  src/world/MapWorld.cpp
     src/events/EventRuntime.cpp
     src/events/EventVmHelpers.cpp
     src/events/EventPartyEffects.cpp
@@ -374,6 +398,7 @@ set(MM2_GAME_SOURCES
   src/gfx/CombatPanel.cpp
   src/gfx/PartyStatusFormat.cpp
   src/gfx/EnvAssets.cpp
+  src/gfx/GfxBackend.cpp
   ${MM2_AUTOMAP_SOURCES}
   src/world/MapWorld.cpp
   src/combat/EncounterPicker.cpp

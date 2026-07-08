@@ -447,7 +447,9 @@ def _parse_slot_list(spec: Optional[str]) -> list[int]:
 
 
 def load_party_from_roster(path: Path, items: list[Item], slot_spec: Optional[str] = None) -> list[Character]:
-    data = path.read_bytes()
+    from decode_roster import load_roster_bytes
+
+    data = load_roster_bytes(path)
     party: list[Character] = []
     explicit_slots = _parse_slot_list(slot_spec)
     if explicit_slots:

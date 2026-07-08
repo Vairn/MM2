@@ -20,6 +20,7 @@
 #include "mm2/events/TownServiceMenu.h"
 #include "mm2/events/TownServiceTransactions.h"
 #include "mm2/gfx/ScreenCompositor.h"
+#include "mm2/gfx/GfxBackend.h"
 #include "mm2/gfx/ViewportAnmOverlay.h"
 #include "mm2/platform/Platform.h"
 #include "mm2/ui/PlayTownServiceUi.h"
@@ -47,11 +48,11 @@ bool expectTableIdLoadsAnm(const char *data_dir, int table_id, int &fails)
 {
     mm2::gfx::ViewportAnmOverlay overlay;
     char tag[96];
-    std::snprintf(tag, sizeof(tag), "OP_0B table id %d loads %02d.anm", table_id, table_id);
+    std::snprintf(tag, sizeof(tag), "OP_0B table id %d loads MONSTERS picture", table_id);
     if (!expect(overlay.loadFromId(data_dir, table_id), tag, fails)) {
         return false;
     }
-    return expect(overlay.loaded(), tag, fails);
+    return expect(overlay.loaded() && overlay.width() > 0 && overlay.height() > 0, tag, fails);
 }
 
 struct DoorCase {
@@ -1103,6 +1104,9 @@ int main(int argc, char **argv)
 {
     const char *data_dir = (argc > 1) ? argv[1] : "../..";
     int fails = 0;
+
+    mm2::gfx::initPcGfxFallbackDir(data_dir, nullptr);
+    mm2::gfx::resolveGfxBackend(data_dir);
 
     Mm2ItemsFile items{};
     char items_path[512];

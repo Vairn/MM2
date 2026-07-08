@@ -198,19 +198,27 @@ def load_default_party(data_dir: Path) -> dict | None:
     """First six roster slots (0..5) — default Goto-Town party in roster.dat."""
     import struct
 
-    from decode_roster import RECORD_SIZE, decode_record
+    from decode_roster import decode_record, load_roster_bytes
 
-    for candidate in (data_dir / "roster.dat", ROOT / "roster.dat", ROOT / "EXTRACTED" / "roster.dat"):
+    for candidate in (
+        data_dir / "roster.dat",
+        data_dir / "ROSTER.DAT",
+        ROOT / "roster.dat",
+        ROOT / "EXTRACTED" / "roster.dat",
+    ):
         if not candidate.is_file():
             continue
-        data = candidate.read_bytes()
+        try:
+            data = load_roster_bytes(candidate)
+        except ValueError:
+            continue
         members = []
         roster_slots = []
         for slot in range(6):
             rec = decode_record(data, slot)
             if rec is None:
                 break
-            off = slot * RECORD_SIZE
+            off = slot * 130
             hp_aux = struct.unpack_from("<H", data, off + 0x60)[0]
             sb = rec["stats_base"]
             members.append(

@@ -2,9 +2,19 @@
 
 #include "mm2_codec_platform.h"
 
-enum {
-    MM2_ROSTER_FILE_SIZE = MM2_ROSTER_RECORD_SIZE * MM2_ROSTER_RECORD_COUNT
-};
+#include <string.h>
+
+static Mm2RosterError normalize_roster_disk_image(uint8_t *buf, size_t got)
+{
+    if (got == (size_t)MM2_ROSTER_FILE_SIZE) {
+        return MM2_ROSTER_OK;
+    }
+    if (got == (size_t)MM2_ROSTER_PC_FILE_SIZE) {
+        memset(buf + got, 0, (size_t)MM2_ROSTER_FILE_SIZE - got);
+        return MM2_ROSTER_OK;
+    }
+    return MM2_ROSTER_ERR_BAD_SIZE;
+}
 
 static uint16_t read_le16(const uint8_t *p)
 {
@@ -200,6 +210,7 @@ Mm2RosterError mm2_roster_load_file(const char *path, Mm2RosterFile *out)
 {
     FILE *fp;
     uint8_t *buf;
+    long sz;
     size_t got;
     Mm2RosterError err;
 
@@ -218,6 +229,29 @@ Mm2RosterError mm2_roster_load_file(const char *path, Mm2RosterFile *out)
         return MM2_ROSTER_ERR_IO;
     }
 
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
+        return MM2_ROSTER_ERR_IO;
+    }
+    sz = ftell(fp);
+    if (sz < 0) {
+        fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
+        return MM2_ROSTER_ERR_IO;
+    }
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        fclose(fp);
+#if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
+        systemUnuse();
+#endif
+        return MM2_ROSTER_ERR_IO;
+    }
+
     buf = (uint8_t *)malloc(MM2_ROSTER_FILE_SIZE);
     if (!buf) {
         fclose(fp);
@@ -226,15 +260,16 @@ Mm2RosterError mm2_roster_load_file(const char *path, Mm2RosterFile *out)
 #endif
         return MM2_ROSTER_ERR_IO;
     }
+    memset(buf, 0, MM2_ROSTER_FILE_SIZE);
 
-    got = fread(buf, 1, MM2_ROSTER_FILE_SIZE, fp);
-    if (got != MM2_ROSTER_FILE_SIZE) {
+    got = fread(buf, 1, (size_t)sz, fp);
+    if (got != (size_t)sz) {
         free(buf);
         fclose(fp);
 #if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
         systemUnuse();
 #endif
-        return MM2_ROSTER_ERR_BAD_SIZE;
+        return MM2_ROSTER_ERR_IO;
     }
 
     if (fgetc(fp) != EOF) {
@@ -250,6 +285,13 @@ Mm2RosterError mm2_roster_load_file(const char *path, Mm2RosterFile *out)
 #if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
     systemUnuse();
 #endif
+
+    err = normalize_roster_disk_image(buf, got);
+    if (err != MM2_ROSTER_OK) {
+        free(buf);
+        return err;
+    }
+
     err = mm2_roster_decode(buf, MM2_ROSTER_FILE_SIZE, out);
     free(buf);
     return err;

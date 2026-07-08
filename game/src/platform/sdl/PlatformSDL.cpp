@@ -288,26 +288,41 @@ bool resolveDataDir(const char *hint, char *out, size_t out_cap)
     }
 
     char *const probe = mm2_path_scratch_a();
-    static const char *const kCandidates[] = {hint, ".", "..", "../..", "../../.."};
 
-    for (const char *dir : kCandidates) {
+    auto probeMapDat = [&](const char *dir) -> bool {
         if (!dir || dir[0] == '\0') {
-            continue;
+            return false;
         }
-        if (!joinDataPath(probe, MM2_PATH_SCRATCH_CAP, dir, "intro.32")) {
-            continue;
+        if (!joinDataPath(probe, MM2_PATH_SCRATCH_CAP, dir, "map.dat")) {
+            return false;
         }
         SDL_RWops *rw = SDL_RWFromFile(probe, "rb");
         if (!rw) {
-            continue;
+            return false;
         }
         SDL_RWclose(rw);
-        if (dir[0] == '.' && dir[1] == '\0') {
-            out[0] = '\0';
-        } else {
-            std::snprintf(out, out_cap, "%s", dir);
-        }
         return true;
+    };
+
+    auto writeResolved = [&](const char *dir) {
+        std::snprintf(out, out_cap, "%s", (dir && dir[0]) ? dir : ".");
+    };
+
+    /* Explicit CLI path: validate only that directory (matches playscreen_golden). */
+    if (hint && hint[0] && !(hint[0] == '.' && hint[1] == '\0')) {
+        if (probeMapDat(hint)) {
+            writeResolved(hint);
+            return true;
+        }
+        return false;
+    }
+
+    static const char *const kCandidates[] = {hint, ".", "..", "../..", "../../.."};
+    for (const char *dir : kCandidates) {
+        if (probeMapDat(dir)) {
+            writeResolved(dir);
+            return true;
+        }
     }
 
     return false;

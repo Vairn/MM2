@@ -1,5 +1,7 @@
 #pragma once
 // roster.dat - layout confirmed (64 records * 130 bytes (0x82) = 8320 bytes).
+// GOG ROSTER.DAT is 8292 bytes (same 48 char records + 2052-byte global stream;
+// Amiga pads 28 zero bytes at EOF to fill roster slot 63). load() accepts both.
 //   Multibyte fields are little-endian on disk.
 //   See EXTRACTED/docs/06-roster-format.md and decomp/mm2_roster_codec.h.
 //
@@ -20,7 +22,13 @@ constexpr int kRosterGlobalCount = kRosterCount - kRosterGlobalStart;
 constexpr int kRosterRecordSize = 0x82;
 constexpr int kRosterNameSize = 11;
 constexpr int kRosterFileSize = kRosterCount * kRosterRecordSize;
+constexpr int kRosterCharSectionSize = kRosterCharacterCount * kRosterRecordSize;  // 0x1860
+constexpr int kRosterGlobalUsedSize = 0x804;  // save_game_state stream; ends @0x803
+constexpr int kRosterPcFileSize = kRosterCharSectionSize + kRosterGlobalUsedSize;  // 8292
 constexpr int kRosterItemSlots = 6;
+
+// Normalize Amiga (8320) or PC (8292) on-disk images to kRosterFileSize bytes.
+bool normalizeRosterDiskImage(Bytes& bytes);
 
 // One logical equipped/backpack item. NOTE: on disk these are stored as
 // Structure-of-Arrays (6 ids, 6 charges, 6 flags per group), not interleaved

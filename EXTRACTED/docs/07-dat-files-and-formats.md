@@ -32,7 +32,7 @@ into `AttribFile`/`MonstersFile`/`StrFile`/`MapFile`/`EventFile`'s `load()`.
 | `MAP.DAT` | table: `u16 LE[60]` offset table (one 512-byte screen blob per entry, each `u32 LE size` + LZW) | reassembled 60 screens **byte-identical** to `map.dat` |
 | `EVENTSI.DAT` + `EVENTSO.DAT` | table: `u32 LE[71]` offset table each (indoor / outdoor halves of the 71 `event.dat` locations; mutually exclusive per slot) | merged (71x6-byte BE header + concatenated blobs) reproduces `event.dat` to within **18/95687 bytes** — all single-byte platform content differences (same offsets/lengths; verified `0x02` Amiga vs `0x01` PC at each diff), not decode errors |
 | `ITEMS.DAT` | plain (not compressed) | **byte-identical** to `items.dat` |
-| `ROSTER.DAT` / `SPELLS.DAT` / `DEFAULT.DAT` | plain (not compressed) | different **size** from the Amiga file (e.g. `SPELLS.DAT` 192 bytes vs `spells.dat` 256) — a structural/record-layout difference between platforms, out of scope here |
+| `ROSTER.DAT` / `SPELLS.DAT` / `DEFAULT.DAT` | plain (not compressed) | **ROSTER.DAT**: same 130-byte records and 2052-byte global stream as Amiga; **8292** bytes vs Amiga **8320** (28 zero pad bytes at EOF on Amiga only). Editor/`mm2_roster_codec` accept both. `SPELLS.DAT` still differs in record count (192 vs 256 bytes) — not handled here. |
 
 Both table containers reuse the `MONSTERS.4`/`.16` combat-atlas convention:
 `entry[0] == table_byte_size` (also slot 0's blob offset) for `MAP.DAT`

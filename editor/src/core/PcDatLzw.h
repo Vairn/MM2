@@ -23,10 +23,10 @@
 //                exclusive per slot); merging reproduces event.dat to
 //                within 18 bytes out of 95687 (genuine platform content
 //                differences, not decode errors).
-//   plain -- ITEMS.DAT is already byte-identical to items.dat. ROSTER.DAT /
-//            SPELLS.DAT / DEFAULT.DAT are plain but PC-specific sizes
-//            (structural differences, not a compression concern) -- not
-//            handled here.
+//   plain -- ITEMS.DAT is already byte-identical to items.dat. ROSTER.DAT is also
+//            plain: 8292 bytes (Amiga 8320 minus 28 zero pad bytes at EOF).
+//            Same 130-byte records + 2052-byte global stream; see RosterFile.h.
+//            SPELLS.DAT / DEFAULT.DAT remain PC-specific sizes — not handled here.
 
 #include <string>
 

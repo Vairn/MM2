@@ -45,8 +45,18 @@ bool RosterRecord::isEmpty() const {
     return true;
 }
 
+bool normalizeRosterDiskImage(Bytes& bytes) {
+    const size_t n = bytes.size();
+    if (n == static_cast<size_t>(kRosterFileSize)) return true;
+    if (n == static_cast<size_t>(kRosterPcFileSize)) {
+        bytes.resize(static_cast<size_t>(kRosterFileSize), 0);
+        return true;
+    }
+    return false;
+}
+
 bool RosterFile::decode(const Bytes& bytes) {
-    if (bytes.size() < static_cast<size_t>(kRosterFileSize)) return false;
+    if (bytes.size() != static_cast<size_t>(kRosterFileSize)) return false;
     for (int i = 0; i < kRosterCount; ++i) {
         std::memcpy(records[i].raw.data(), bytes.data() + i * kRosterRecordSize, kRosterRecordSize);
     }
@@ -64,6 +74,7 @@ Bytes RosterFile::encode() const {
 bool RosterFile::load(const std::string& path) {
     Bytes b;
     if (!readFile(path, b)) return false;
+    if (!normalizeRosterDiskImage(b)) return false;
     return decode(b);
 }
 

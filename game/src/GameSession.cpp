@@ -13,6 +13,7 @@
 #include "mm2/runtime/PathScratch.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/AutomapView.h"
+#include "mm2/gfx/GfxBackend.h"
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/gfx/CombatPanel.h"
 
@@ -36,9 +37,10 @@ void drawSpellEyeOverlayIfActive(gfx::ScreenCompositor &c, const gfx::EnvAssets 
     }
 }
 
-void blitImageFrame(gfx::ScreenCompositor &c, const mm2_image32_file &img, int frame, int dst_x, int dst_y,
+void blitImageFrame(gfx::ScreenCompositor &c, const mm2_gfx_sheet &sheet, int frame, int dst_x, int dst_y,
                     int opaque = 0)
 {
+    const mm2_image32_file &img = sheet.img;
     if (frame < 0 || frame >= img.frame_count) {
         return;
     }
@@ -327,8 +329,16 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
 
 #if !MM2_NO_STL
     if (!assets_ok_) {
-        std::fprintf(stderr, "mm2: play view missing assets in %s (world=%d env=%d sky=%d)\n", data_dir_,
-                     has_world, has_env, has_sky);
+        const char *dir_label = (data_dir_ && data_dir_[0]) ? data_dir_ : ".";
+        const gfx::GfxBackend gfx = gfx::gfxSettings().resolved;
+        std::fprintf(stderr, "mm2: play view missing assets in %s (world=%d env=%d sky=%d gfx=%s)\n",
+                     dir_label, has_world, has_env, has_sky, gfx::gfxBackendLabel(gfx));
+        if ((gfx == gfx::GfxBackend::Cga || gfx == gfx::GfxBackend::Ega) && (!has_env || !has_sky)) {
+            std::fprintf(stderr,
+                         "mm2: --gfx=%s needs SKY/TOWN .4 or .16 in the data dir "
+                         "(try: game\\build\\pc_gfx_test_data)\n",
+                         gfx::gfxBackendLabel(gfx));
+        }
     }
     if (!has_monsters_) {
         std::fprintf(stderr,
@@ -566,6 +576,10 @@ void GameSession::finishCombat()
 {
     combat_sprite_.unload();
     combat_sprite_disk_ = -1;
+    combat_character_sheet_ = false;
+    if (overlay_ == PlayOverlay::CharacterSheet) {
+        overlay_ = PlayOverlay::None;
+    }
 #if MM2_HOST_AMIGA
     combat_backdrop_cached_ = false;
     mm2_amiga_viewport_cache_invalidate();
@@ -1141,6 +1155,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                 sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
                 sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
                 sheet_session_.status_line[0] = '\0';
+                combat_character_sheet_ = false;
                 overlay_ = PlayOverlay::CharacterSheet;
                 markDirty();
             }
@@ -1161,10 +1176,11 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
             sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
             sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
             sheet_session_.status_line[0] = '\0';
+            combat_character_sheet_ = false;
             markDirty();
             return;
         }
-        if (keys.key_q && !keys.ctrl) {
+        if (keys.key_q && !keys.ctrl && !combat_character_sheet_) {
             overlay_ = PlayOverlay::QuickRef;
             markDirty();
             return;
@@ -1194,13 +1210,55 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
 
         const Mm2ItemsFile *items_ptr = has_items_ ? &items_ : nullptr;
         const gameplay::SheetKeyOutcome outcome =
-            ingame_sheet_.handleKey(ch, sheet_session_, roster_, launch_, items_ptr);
+            ingame_sheet_.handleKey(ch, sheet_session_, roster_, launch_, items_ptr, combat_character_sheet_);
         if (outcome == gameplay::SheetKeyOutcome::Close) {
             overlay_ = PlayOverlay::None;
+            combat_character_sheet_ = false;
         }
         markDirty();
         return;
     }
+}
+
+void GameSession::tickCombatCharacterSheetInput(const platform::KeyState &keys)
+{
+    if (keys.escape) {
+        if (gameplay::sheetSubModeBlocksCharacterSwitch(sheet_session_.sub_mode)) {
+            sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+            sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+            sheet_session_.status_line[0] = '\0';
+            return;
+        }
+        overlay_ = PlayOverlay::None;
+        combat_character_sheet_ = false;
+        sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+        sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+        sheet_session_.status_line[0] = '\0';
+        return;
+    }
+
+    const bool pending = gameplay::sheetSubModeBlocksCharacterSwitch(sheet_session_.sub_mode);
+    if (!pending) {
+        int party_slot = -1;
+        gameplay::PlaySessionAction action = gameplay::PlaySessionAction::None;
+        if (gameplay::pollPlaySessionAction(keys, launch_.party_count, &action, &party_slot)) {
+            if (action == gameplay::PlaySessionAction::ViewCharacter) {
+                sheet_session_.party_slot = party_slot;
+                sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+                sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+                sheet_session_.status_line[0] = '\0';
+                return;
+            }
+        }
+    }
+
+    const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+    if (ch == 0) {
+        return;
+    }
+
+    const Mm2ItemsFile *items_ptr = has_items_ ? &items_ : nullptr;
+    ingame_sheet_.handleKey(ch, sheet_session_, roster_, launch_, items_ptr, true);
 }
 
 void GameSession::tickPlayInput(const platform::KeyState &keys)
@@ -1231,6 +1289,7 @@ void GameSession::tickPlayInput(const platform::KeyState &keys)
         sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
         sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
         sheet_session_.status_line[0] = '\0';
+        combat_character_sheet_ = false;
         overlay_ = PlayOverlay::CharacterSheet;
         markDirty();
         break;
@@ -1338,6 +1397,23 @@ void GameSession::tick(const platform::KeyState &keys)
     tickTorchAnimation();
 
     if (combat_.active()) {
+        if (overlay_ == PlayOverlay::CharacterSheet) {
+            tickCombatCharacterSheetInput(keys);
+            markDirty();
+            return;
+        }
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (ch == 'V') {
+            const int slot = combat_.activePartySlot();
+            sheet_session_.party_slot = (slot >= 0 && slot < launch_.party_count) ? slot : 0;
+            sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+            sheet_session_.trade_kind = gameplay::SheetTradeKind::None;
+            sheet_session_.status_line[0] = '\0';
+            combat_character_sheet_ = true;
+            overlay_ = PlayOverlay::CharacterSheet;
+            markDirty();
+            return;
+        }
         const bool ended = combat_.tick(gs_, world_, keys);
         markDirty();
         if (ended) {
@@ -1498,7 +1574,7 @@ void GameSession::renderIndoorView3D()
     for (int i = 0; i < scene.num_torch_blits; ++i) {
         const View3DBlit &b = scene.torch_blits[static_cast<size_t>(i)];
         View3DTorchBlit tb{};
-        if (view3dTorchBlitFor(b, torch_phase_, &tb) && env_.torches().frame_count > 0) {
+        if (view3dTorchBlitFor(b, torch_phase_, &tb) && env_.torches().img.frame_count > 0) {
             blitImageFrame(compositor_, env_.torches(), tb.frame, tb.x, tb.y, 0);
         }
     }
@@ -1524,7 +1600,7 @@ void GameSession::renderOutdoorView()
     if (subday < static_cast<uint16_t>(kOutdoorNightSubdayThreshold)) {
         blitImageFrame(compositor_, env_.sky(), 0, kView3DOriginX, kView3DSkyY, 1);
     } else {
-        const mm2_image32_file &sky = env_.sky();
+        const mm2_image32_file &sky = env_.sky().img;
         auto penRgb = [&sky](uint8_t pen, uint8_t &r, uint8_t &g, uint8_t &b) {
             const uint8_t *c = sky.palette_rgba[pen & (MM2_IMAGE32_PALETTE_COLORS - 1)];
             r = c[0];
@@ -1580,7 +1656,7 @@ void GameSession::renderCombatBackdrop()
         if (subday < static_cast<uint16_t>(kOutdoorNightSubdayThreshold)) {
             blitImageFrame(compositor_, env_.sky(), 0, kView3DOriginX, kView3DSkyY, 1);
         } else {
-            const mm2_image32_file &sky = env_.sky();
+            const mm2_image32_file &sky = env_.sky().img;
             auto penRgb = [&sky](uint8_t pen, uint8_t &r, uint8_t &g, uint8_t &b) {
                 const uint8_t *c = sky.palette_rgba[pen & (MM2_IMAGE32_PALETTE_COLORS - 1)];
                 r = c[0];
@@ -1671,7 +1747,7 @@ void GameSession::renderOverlays()
         break;
     case PlayOverlay::CharacterSheet:
         ingame_sheet_.renderSheet(compositor_, roster_, launch_, sheet_session_.party_slot,
-                                  has_items_ ? &items_ : nullptr, &sheet_session_);
+                                  has_items_ ? &items_ : nullptr, &sheet_session_, combat_character_sheet_);
         break;
     case PlayOverlay::Controls:
         controls_screen_.render(compositor_, gs_);

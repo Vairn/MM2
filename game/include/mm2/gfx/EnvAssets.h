@@ -14,9 +14,10 @@
 
 #include "mm2/CppStdCompat.h"
 
+#include "mm2/gfx/GfxBackend.h"
 #include "mm2/gfx/OutdoorView3D.h"
 #include "mm2_attrib_codec.h"
-#include "mm2_image32_codec.h"
+#include "mm2_gfx_sheet.h"
 
 namespace mm2::gfx {
 
@@ -54,40 +55,42 @@ public:
 
     bool ready() const { return env_ok_ && sky_ok_; }
     EnvKind kind() const { return kind_; }
+    GfxBackend backend() const { return backend_; }
 
-    const mm2_image32_file &walls() const { return walls_; }
-    const mm2_image32_file &floor() const { return floor_; }
+    const mm2_gfx_sheet &walls() const { return walls_; }
+    const mm2_gfx_sheet &floor() const { return floor_; }
     /** Per-env torch sheet (townt/cavet/castlet.32) — blit source A4-$7A1E @ key_read_3d. */
-    const mm2_image32_file &torches() const { return torches_; }
-    const mm2_image32_file &sky() const { return sky_; }
-    const mm2_image32_file &automap() const { return automap_; }
+    const mm2_gfx_sheet &torches() const { return torches_; }
+    const mm2_gfx_sheet &sky() const { return sky_; }
+    const mm2_gfx_sheet &automap() const { return automap_; }
 
     bool automapReady() const { return automap_ok_; }
 
-    const mm2_image32_file &horizonSheet(OutdoorHorizonSheet sheet) const;
-    const mm2_image32_file &biomeSheet(OutdoorBiome biome);
+    const mm2_gfx_sheet &horizonSheet(OutdoorHorizonSheet sheet) const;
+    const mm2_gfx_sheet &biomeSheet(OutdoorBiome biome);
 
     /** Amiga: load pens 0-31 from the active env sheet (once per loadEnv). */
     void applyWorldPalette() const;
 
 private:
-    static bool loadImage(const char *data_dir, const char *name, mm2_image32_file *out);
+    bool loadSheet(const char *data_dir, const char *amiga_name, mm2_gfx_sheet_role role, mm2_gfx_sheet *out);
 
     EnvKind kind_ = EnvKind::Town;
+    GfxBackend backend_ = GfxBackend::Amiga;
     bool env_ok_ = false;
     bool sky_ok_ = false;
     const char *data_dir_ = nullptr;
 
-    mm2_image32_file walls_{};
-    mm2_image32_file floor_{};
-    mm2_image32_file torches_{};
-    mm2_image32_file automap_{};
-    mm2_image32_file sky_{};
+    mm2_gfx_sheet walls_{};
+    mm2_gfx_sheet floor_{};
+    mm2_gfx_sheet torches_{};
+    mm2_gfx_sheet automap_{};
+    mm2_gfx_sheet sky_{};
     bool automap_ok_ = false;
-    mm2_image32_file outdoor1_{};
-    mm2_image32_file outdoor2_{};
-    mm2_image32_file outdoor3_{};
-    mm2_image32_file biomes_[4]{};
+    mm2_gfx_sheet outdoor1_{};
+    mm2_gfx_sheet outdoor2_{};
+    mm2_gfx_sheet outdoor3_{};
+    mm2_gfx_sheet biomes_[4]{};
     bool biome_loaded_[4]{};
 };
 

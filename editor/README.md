@@ -42,7 +42,7 @@ editor/
       ByteIO.{h,cpp}      Endian read/write helpers + file IO
       ItemsFile.{h,cpp}   items.dat   (256 * 20)  — fully decoded
       MonstersFile.{h,cpp}monsters.dat(256 * 26)  — geometry + partial fields
-      RosterFile.{h,cpp}  roster.dat  (64 * 130)  — confirmed layout (LE)
+      RosterFile.{h,cpp}  roster.dat / ROSTER.DAT  (8320 Amiga or 8292 PC)
       MapFile.{h,cpp}     map.dat     (60 * 512)  — visual + collision pages
       AttribFile.{h,cpp}  attrib.dat  (60 * 64)   — partial (env + roof bits)
       StrFile.{h,cpp}     str.dat     (text pool) — (byte+0x1C)&0xFF transform

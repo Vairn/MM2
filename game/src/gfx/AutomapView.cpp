@@ -15,18 +15,19 @@ namespace {
 constexpr int kTileW = 14;
 constexpr int kTileH = 11;
 
-void blitCartoFrame(ScreenCompositor &c, const mm2_image32_file &sheet, int frame, int dst_x, int dst_y)
+void blitCartoFrame(ScreenCompositor &c, const mm2_gfx_sheet &sheet, int frame, int dst_x, int dst_y)
 {
-    if (frame < 0 || frame >= sheet.frame_count) {
+    const mm2_image32_file &img = sheet.img;
+    if (frame < 0 || frame >= img.frame_count) {
         return;
     }
-    const mm2_image32_frame &f = sheet.frames[frame];
+    const mm2_image32_frame &f = img.frames[frame];
 #if MM2_HOST_AMIGA
     (void)c;
     if (!f.bitmap) {
         return;
     }
-    platform::blitImage32(&sheet, frame, dst_x, dst_y, 0);
+    platform::blitImage32(&img, frame, dst_x, dst_y, 0);
 #else
     if (!f.rgba) {
         return;
@@ -68,7 +69,7 @@ void renderAutomap(ScreenCompositor &c, const EnvAssets &env, const world::MapWo
 
     const int screen = world.currentScreen();
     const bool outdoor = world::cartoUsesOutb(screen, world.isOutdoor());
-    const mm2_image32_file &sheet = env.automap();
+    const mm2_gfx_sheet &sheet = env.automap();
     const uint8_t *visual = world.visualPage();
 
     for (int cy = 0; cy < MM2_MAP_GRID_DIM; ++cy) {
@@ -120,7 +121,7 @@ void renderSpellEyeOverlay(ScreenCompositor &c, const EnvAssets &env, const worl
 
     using namespace play_layout;
 
-    const mm2_image32_file &sheet = env.automap();
+    const mm2_gfx_sheet &sheet = env.automap();
     const int px = static_cast<int>(gs.coordX());
     const int py = static_cast<int>(gs.coordY());
 

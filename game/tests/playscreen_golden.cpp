@@ -2,15 +2,50 @@
 // party found in roster.dat, dumped as build/playscreen_middlegate.ppm for
 // visual comparison against the original Amiga play screen.
 //
-// Usage: playscreen_golden <data_dir>
+// Usage: playscreen_golden [--gfx=auto|amiga|cga|ega] [--cga-palette=0|1] <data_dir>
 
 #include "mm2/GameSession.h"
+#include "mm2/gfx/GfxBackend.h"
+#include "mm2_pc_gfx_codec.h"
 
 #include <cstdio>
+#include <cstring>
+
+namespace {
+
+const char *parseDataDir(int argc, char **argv)
+{
+    for (int i = 1; i < argc; ++i) {
+        const char *arg = argv[i];
+        if (std::strncmp(arg, "--gfx=", 6) == 0 || std::strncmp(arg, "--cga-palette=", 14) == 0) {
+            continue;
+        }
+        return arg;
+    }
+    return "../..";
+}
+
+void parseGfxOptions(int argc, char **argv)
+{
+    auto &settings = mm2::gfx::gfxSettings();
+    for (int i = 1; i < argc; ++i) {
+        const char *arg = argv[i];
+        if (std::strncmp(arg, "--gfx=", 6) == 0) {
+            settings.backend = mm2::gfx::gfxBackendFromString(arg + 6);
+        } else if (std::strncmp(arg, "--cga-palette=", 14) == 0) {
+            settings.cga_palette = mm2::gfx::cgaPaletteFromString(arg + 14);
+        }
+    }
+    mm2_pc_gfx_set_cga_palette(settings.cga_palette);
+}
+
+}  // namespace
 
 int main(int argc, char **argv)
 {
-    const char *data_dir = (argc > 1) ? argv[1] : "../..";
+    parseGfxOptions(argc, argv);
+    const char *data_dir = parseDataDir(argc, argv);
+    mm2::gfx::initPcGfxFallbackDir(data_dir, nullptr);
 
     char path[512];
     std::snprintf(path, sizeof(path), "%s/roster.dat", data_dir);
@@ -20,8 +55,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Party = first up to 6 Middlegate (town 1) roster records, matching the
-     * title Goto Town filter (roster $0B low 7 bits). */
     int members[MM2_PARTY_LAUNCH_SLOTS];
     int count = 0;
     for (int i = 0; i < MM2_ROSTER_RECORD_COUNT && count < 6; ++i) {
@@ -67,6 +100,7 @@ int main(int argc, char **argv)
     std::fclose(f);
     session.shutdown();
 
-    std::printf("OK: playscreen_golden.ppm written (party=%d)\n", count);
+    std::printf("OK: playscreen_golden.ppm written (party=%d gfx=%d cga_pal=%d)\n", count,
+                static_cast<int>(mm2::gfx::gfxSettings().resolved), mm2::gfx::gfxSettings().cga_palette);
     return 0;
 }

@@ -7,15 +7,17 @@
 //   ../src/core/ByteIO.cpp ../src/core/AttribFile.cpp ../src/core/MonstersFile.cpp \
 //   ../src/core/MapFile.cpp ../src/core/StrFile.cpp ../src/core/EventFile.cpp \
 //   ../src/core/ItemsFile.cpp ../src/core/PcDatLzw.cpp ../src/core/PcGfx.cpp \
-//   ../src/core/EventOps.cpp -o pc_dat_check
+//   ../src/core/RosterFile.cpp -o pc_dat_check
 #include <cstdio>
 #include <string>
+#include <algorithm>
 
 #include "core/AttribFile.h"
 #include "core/EventFile.h"
 #include "core/ItemsFile.h"
 #include "core/MapFile.h"
 #include "core/MonstersFile.h"
+#include "core/RosterFile.h"
 #include "core/StrFile.h"
 
 using namespace mm2;
@@ -51,6 +53,8 @@ int main(int argc, char** argv) {
         expectTrue(e.raw.size() == 95687, "  event.dat size == 95687 (amiga)");
         ItemsFile it;
         expectTrue(it.load(amigaDir + "/items.dat"), "ItemsFile::load(items.dat)");
+        RosterFile r;
+        expectTrue(r.load(amigaDir + "/roster.dat"), "RosterFile::load(roster.dat)");
     }
 
     printf("\n== GOG/PC files (%s) ==\n", gogDir.c_str());
@@ -90,6 +94,23 @@ int main(int argc, char** argv) {
     expectTrue(it.load(gogDir + "/items.dat"), "ItemsFile::load(GOG ITEMS.DAT)");
     itAmiga.load(amigaDir + "/items.dat");
     expectTrue(it.encode() == itAmiga.encode(), "  ITEMS.DAT already byte-identical to items.dat");
+
+    RosterFile r, rAmiga;
+    expectTrue(r.load(gogDir + "/roster.dat"), "RosterFile::load(GOG ROSTER.DAT)");
+    rAmiga.load(amigaDir + "/roster.dat");
+    {
+        Bytes enc = r.encode();
+        expectTrue(enc.size() == static_cast<size_t>(kRosterFileSize), "  ROSTER.DAT encodes to 8320 bytes");
+        bool padZero = true;
+        for (size_t i = static_cast<size_t>(kRosterPcFileSize); i < enc.size(); ++i)
+            if (enc[i] != 0) padZero = false;
+        expectTrue(padZero, "  ROSTER.DAT pad bytes 8292..8319 are zero");
+        Bytes amEnc = rAmiga.encode();
+        expectTrue(std::equal(enc.begin() + kRosterCharSectionSize,
+                              enc.begin() + kRosterPcFileSize,
+                              amEnc.begin() + kRosterCharSectionSize),
+                   "  ROSTER.DAT global stream matches Amiga roster.dat");
+    }
 
     printf("\n%s (%d failure%s)\n", gFail == 0 ? "ALL PASS" : "SOME FAILED", gFail, gFail == 1 ? "" : "s");
     return gFail == 0 ? 0 : 1;

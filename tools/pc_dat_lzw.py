@@ -38,11 +38,9 @@ shapes, all confirmed against a real GOG install (see
 
   plain (not compressed)
     **ITEMS.DAT** is already byte-identical to the Amiga `items.dat` — no
-    decompression needed. `ROSTER.DAT`/`SPELLS.DAT`/`DEFAULT.DAT` are also
-    plain, uncompressed, but sized differently from their Amiga counterparts
-    (PC-specific record layout, e.g. 192-byte `SPELLS.DAT` vs Amiga's
-    256-byte `spells.dat`) — that is a *structural* difference, not a
-    compression concern, and is out of scope here.
+    decompression needed. `ROSTER.DAT` is plain with the same layout as Amiga
+    (8292 bytes vs 8320 — 28 zero pad bytes at EOF on Amiga only).
+    `SPELLS.DAT`/`DEFAULT.DAT` are also plain but sized differently from Amiga.
 
 Usage:
   python tools/pc_dat_lzw.py --auto "<GOG dir>" -o EXTRACTED/pc_dat

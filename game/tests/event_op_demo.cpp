@@ -18,7 +18,7 @@
 #include "mm2/world/MapWorld.h"
 
 #include "mm2_gamestate.h"
-#include "mm2_image32_codec.h"
+#include "mm2_gfx_sheet.h"
 #include "mm2_party_launch.h"
 #include "mm2_roster_codec.h"
 
@@ -52,8 +52,9 @@ struct DemoCase {
     events::ScriptedSceneId scripted_id = events::ScriptedSceneId::None;
 };
 
-void blitImageFrame(ScreenCompositor &c, const mm2_image32_file &img, int frame, int dst_x, int dst_y)
+void blitImageFrame(ScreenCompositor &c, const mm2_gfx_sheet &sheet, int frame, int dst_x, int dst_y)
 {
+    const mm2_image32_file &img = sheet.img;
     if (frame < 0 || frame >= img.frame_count) {
         return;
     }

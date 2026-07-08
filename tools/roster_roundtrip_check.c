@@ -63,20 +63,16 @@ int main(int argc, char **argv)
     s = mm2_roster_backpack(r, 5);
     check(s.item_id == 35 && s.charges == 45 && s.flags == 55, "backpack slot accessor");
 
-    /* 2. Full byte-exact round-trip of the real roster.dat, if provided. */
+    /* 2. Load real roster.dat / ROSTER.DAT (Amiga 8320 or PC 8292), if provided. */
     if (argc > 1) {
-        FILE *fp = fopen(argv[1], "rb");
-        if (!fp) { printf("FAIL: open %s\n", argv[1]); return 1; }
-        static uint8_t orig[MM2_ROSTER_RECORD_SIZE * MM2_ROSTER_RECORD_COUNT];
-        size_t got = fread(orig, 1, sizeof(orig), fp);
-        fclose(fp);
-        check(got == sizeof(orig), "roster.dat size");
-
-        Mm2RosterFile rr;
-        check(mm2_roster_decode(orig, sizeof(orig), &rr) == MM2_ROSTER_OK, "real decode ok");
-        static uint8_t rt[MM2_ROSTER_RECORD_SIZE * MM2_ROSTER_RECORD_COUNT];
+        Mm2RosterFile rr, rr2;
+        check(mm2_roster_load_file(argv[1], &rr) == MM2_ROSTER_OK, "load_file ok");
+        static uint8_t rt[MM2_ROSTER_FILE_SIZE];
         check(mm2_roster_encode(&rr, rt, sizeof(rt)) == MM2_ROSTER_OK, "real encode ok");
-        check(memcmp(orig, rt, sizeof(orig)) == 0, "real roster.dat byte-exact round-trip");
+        check(mm2_roster_decode(rt, sizeof(rt), &rr2) == MM2_ROSTER_OK, "real re-decode ok");
+        static uint8_t rt2[MM2_ROSTER_FILE_SIZE];
+        check(mm2_roster_encode(&rr2, rt2, sizeof(rt2)) == MM2_ROSTER_OK, "real re-encode ok");
+        check(memcmp(rt, rt2, sizeof(rt)) == 0, "real roster encode/decode stable");
     }
 
     if (fails == 0) { printf("OK: roster_roundtrip_check (all checks passed)\n"); return 0; }

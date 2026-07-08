@@ -98,7 +98,9 @@ private:
     void refreshCombatSprite();
     void renderOverlays();
     void refreshWorldAfterMove(const gameplay::MoveResult &move);
+    void tickCombatCharacterSheetInput(const platform::KeyState &keys);
     void tickOverlayInput(const platform::KeyState &keys);
+    bool combat_character_sheet_ = false;
     void tickPlayInput(const platform::KeyState &keys);
     void handleExploreCommand(gameplay::PlaySessionAction action);
     /* Bash door @ 0x9B48 / Unlock door @ 0x20CA2 — detect the wall field ahead

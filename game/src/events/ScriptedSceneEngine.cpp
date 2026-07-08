@@ -299,8 +299,6 @@ void ScriptedSceneEngine::drawViewportSpriteOverlays(gfx::ScreenCompositor &c) c
         }
     } else if (has_ghost_sprite_ && ghost_sprite_.loaded()) {
         ghost_sprite_.blitCentered(c, 0);
-    } else {
-        drawGhostPlaceholder(c);
     }
 
     if (has_pegasus_sign_) {

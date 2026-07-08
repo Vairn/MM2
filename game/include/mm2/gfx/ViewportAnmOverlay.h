@@ -12,6 +12,8 @@
 
 #include "mm2_anm_preview.h"
 
+#include "mm2_pc_monsters_codec.h"
+
 
 
 namespace mm2::gfx {
@@ -73,7 +75,7 @@ public:
 
 
 
-    bool loaded() const { return anm_loaded_; }
+    bool loaded() const { return anm_loaded_ || pc_mode_; }
 
     bool animating() const { return animating_; }
 
@@ -103,6 +105,14 @@ private:
 
     bool loadFromPath(const char *path, AnmLoopMode loop, bool apply_hw_palette);
 
+    bool loadFromPcPictureId(const char *data_dir, int picture_id, AnmLoopMode loop);
+
+    bool ensurePcAtlas(const char *data_dir);
+
+    bool setPcComposedFrame(int frame_idx);
+
+    void freePcState();
+
     bool setComposedFrame(int frame_idx);
 
     void resetPlayback(AnmLoopMode loop);
@@ -116,6 +126,8 @@ private:
     /* Per-cel chip cache: compose each frame once, then index-only playback. */
     mm2_anm_planar_cache cache_{};
 
+    mm2_image32_frame pc_frame_{};
+
     mutable bool hw_palette_live_ = false;
 
 #else
@@ -123,6 +135,16 @@ private:
     uint8_t *rgba_ = nullptr;
 
 #endif
+
+    bool pc_mode_ = false;
+
+    mm2_pc_monsters_atlas pc_atlas_{};
+
+    mm2_pc_monster_picture pc_pic_{};
+
+    char pc_atlas_path_[512] = {};
+
+    int pc_seq_index_ = -1;
 
     mm2_anm_file anm_{};
 

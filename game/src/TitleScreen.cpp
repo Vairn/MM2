@@ -2,8 +2,14 @@
 #include "mm2/CppStdCompat.h"
 #include "mm2/DataPath.h"
 #include "mm2/Mm2Dbg.h"
+#include "mm2/gfx/GfxBackend.h"
 #include "mm2/platform/Platform.h"
 #include "mm2/runtime/PathScratch.h"
+
+#include "mm2_gfx_sheet.h"
+#include "mm2_pc_gfx_codec.h"
+
+#include <cstdio>
 
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
@@ -20,6 +26,7 @@ namespace {
 
 constexpr int kIntroBgX = 3;
 constexpr int kIntroBgY = 0;
+constexpr int kMasterTitleFrame = 14;
 constexpr int kScreenW = gfx::ScreenCompositor::kWidth;   // 320
 // Center nwcp splash on the 320px field using visible (non-transparent) pixels so
 // trailing transparent padding in the 300×90 frame does not skew the logo left.
@@ -142,9 +149,16 @@ bool TitleScreen::bootPrepare(const char *data_dir, ui::CharacterUiKind ui_kind)
     ui_kind_ = ui_kind;
     boot_step_ = BootStep::UiCache;
     quit_ = false;
+    pc_title_mode_ = false;
+    has_master_title_ = false;
+    freePcTitleSheets();
     mm2_image32_set_preview_opaque(0);
+    gfx::resolveGfxBackend(data_dir);
+    const gfx::GfxBackend resolved = gfx::gfxSettings().resolved;
+    pc_title_mode_ = (resolved == gfx::GfxBackend::Cga || resolved == gfx::GfxBackend::Ega);
 #if defined(ACE_DEBUG)
-    MM2_DBG("MM2 DBG: TitleScreen bootPrepare (data_dir='%s')\n", data_dir ? data_dir : "");
+    MM2_DBG("MM2 DBG: TitleScreen bootPrepare (data_dir='%s' pc_title=%d)\n", data_dir ? data_dir : "",
+            pc_title_mode_ ? 1 : 0);
 #endif
     return true;
 }
@@ -161,25 +175,46 @@ TitleScreen::BootOutcome TitleScreen::bootAdvance()
         return BootOutcome::Working;
     case BootStep::Nwcp:
         mm2_image32_set_preview_opaque(0);
-        has_nwcp_ = loadImage("nwcp.32", &nwcp_);
-        if (has_nwcp_) {
-            logo_splash_x_ = logoSplashCenterX(nwcp_.frames[0]);
-            logo_phase_ = LogoPhase::Static;
-            logo_alpha_ = 255;
+        if (pc_title_mode_) {
+            has_nwcp_ = loadPcTitleSheet("nwcp.32", MM2_GFX_ROLE_TITLE, &nwcp_pc_);
+            if (has_nwcp_) {
+                const mm2_gfx_frame *f = mm2_gfx_sheet_frame(&nwcp_pc_, 0);
+                logo_splash_x_ = f ? (kScreenW - static_cast<int>(f->width)) / 2 : 10;
+                logo_phase_ = LogoPhase::Static;
+                logo_alpha_ = 255;
+            }
+        } else {
+            has_nwcp_ = loadImage("nwcp.32", &nwcp_);
+            if (has_nwcp_) {
+                logo_splash_x_ = logoSplashCenterX(nwcp_.frames[0]);
+                logo_phase_ = LogoPhase::Static;
+                logo_alpha_ = 255;
+            }
         }
         boot_step_ = BootStep::Intro;
         return BootOutcome::Working;
     case BootStep::Intro:
-        has_intro_ = loadImage("intro.32", &intro_);
+        if (pc_title_mode_) {
+            has_master_title_ = loadPcMasterSheet(&master_pc_);
+            has_intro_ = has_master_title_;
+        } else {
+            has_intro_ = loadImage("intro.32", &intro_);
+        }
         boot_step_ = BootStep::IntroClips;
         return BootOutcome::Working;
     case BootStep::IntroClips:
-        has_introclips_ = loadImage("introclips.32", &introclips_);
+        if (!pc_title_mode_) {
+            has_introclips_ = loadImage("introclips.32", &introclips_);
+        }
         boot_step_ = BootStep::Book;
         return BootOutcome::Working;
     case BootStep::Book:
         mm2_image32_set_preview_opaque(0);
-        has_book_ = loadImage("book.32", &book_);
+        if (pc_title_mode_) {
+            has_book_ = loadPcTitleSheet("book.32", MM2_GFX_ROLE_TITLE, &book_pc_);
+        } else {
+            has_book_ = loadImage("book.32", &book_);
+        }
         boot_step_ = BootStep::Roster;
         return BootOutcome::Working;
     case BootStep::Roster: {
@@ -221,25 +256,46 @@ TitleScreen::BootOutcome TitleScreen::bootAdvance()
         return BootOutcome::Working;
     case BootStep::Nwcp:
         mm2_image32_set_preview_opaque(0);
-        has_nwcp_ = loadImage("nwcp.32", &nwcp_);
-        if (has_nwcp_) {
-            logo_splash_x_ = logoSplashCenterX(nwcp_.frames[0]);
-            logo_phase_ = LogoPhase::Static;
-            logo_alpha_ = 255;
+        if (pc_title_mode_) {
+            has_nwcp_ = loadPcTitleSheet("nwcp.32", MM2_GFX_ROLE_TITLE, &nwcp_pc_);
+            if (has_nwcp_) {
+                const mm2_gfx_frame *f = mm2_gfx_sheet_frame(&nwcp_pc_, 0);
+                logo_splash_x_ = f ? (kScreenW - static_cast<int>(f->width)) / 2 : 10;
+                logo_phase_ = LogoPhase::Static;
+                logo_alpha_ = 255;
+            }
+        } else {
+            has_nwcp_ = loadImage("nwcp.32", &nwcp_);
+            if (has_nwcp_) {
+                logo_splash_x_ = logoSplashCenterX(nwcp_.frames[0]);
+                logo_phase_ = LogoPhase::Static;
+                logo_alpha_ = 255;
+            }
         }
         boot_step_ = BootStep::Intro;
         return BootOutcome::Working;
     case BootStep::Intro:
-        has_intro_ = loadImage("intro.32", &intro_);
+        if (pc_title_mode_) {
+            has_master_title_ = loadPcMasterSheet(&master_pc_);
+            has_intro_ = has_master_title_;
+        } else {
+            has_intro_ = loadImage("intro.32", &intro_);
+        }
         boot_step_ = BootStep::IntroClips;
         return BootOutcome::Working;
     case BootStep::IntroClips:
-        has_introclips_ = loadImage("introclips.32", &introclips_);
+        if (!pc_title_mode_) {
+            has_introclips_ = loadImage("introclips.32", &introclips_);
+        }
         boot_step_ = BootStep::Book;
         return BootOutcome::Working;
     case BootStep::Book:
         mm2_image32_set_preview_opaque(0);
-        has_book_ = loadImage("book.32", &book_);
+        if (pc_title_mode_) {
+            has_book_ = loadPcTitleSheet("book.32", MM2_GFX_ROLE_TITLE, &book_pc_);
+        } else {
+            has_book_ = loadImage("book.32", &book_);
+        }
         boot_step_ = BootStep::Roster;
         return BootOutcome::Working;
     case BootStep::Roster: {
@@ -257,9 +313,16 @@ TitleScreen::BootOutcome TitleScreen::bootAdvance()
     }
 #endif
     if (!has_intro_ && !has_nwcp_) {
+        if (has_roster_) {
+            peeker_rng_ = 1;
+            return BootOutcome::ReadyAttract;
+        }
         return BootOutcome::Failed;
     }
     peeker_rng_ = 1;
+    if (pc_title_mode_ && !has_nwcp_ && has_master_title_) {
+        return BootOutcome::ReadyAttract;
+    }
     return has_nwcp_ ? BootOutcome::ReadyFade : BootOutcome::ReadyAttract;
 }
 
@@ -348,6 +411,101 @@ bool TitleScreen::loadImage(const char *name, mm2_image32_file *out)
     return false;
 }
 
+void TitleScreen::freePcTitleSheets()
+{
+    mm2_gfx_sheet_free(&nwcp_pc_);
+    mm2_gfx_sheet_free(&book_pc_);
+    mm2_gfx_sheet_free(&master_pc_);
+}
+
+bool TitleScreen::loadPcTitleSheet(const char *amiga_name, mm2_gfx_sheet_role role, mm2_gfx_sheet *out)
+{
+    char *const path = mm2_path_scratch_a();
+    const gfx::GfxBackend backend = gfx::gfxSettings().resolved;
+    const char *filename = gfx::resolveGfxFilename(backend, amiga_name);
+
+    auto tryLoad = [&](const char *dir) -> bool {
+        if (!dir || !joinDataPath(path, MM2_PATH_SCRATCH_CAP, dir, filename)) {
+            return false;
+        }
+        mm2_gfx_sheet_free(out);
+        mm2_pc_gfx_set_cga_palette(gfx::gfxSettings().cga_palette);
+        if (mm2_pc_wall_sheet_load(path, role, NULL, out) != MM2_IMAGE32_OK || out->img.frame_count == 0) {
+            mm2_gfx_sheet_free(out);
+            return false;
+        }
+#if MM2_HOST_AMIGA
+        return out->img.frames[0].bitmap != NULL;
+#else
+        return out->img.frames[0].rgba != NULL;
+#endif
+    };
+
+    if (tryLoad(data_dir_)) {
+        return true;
+    }
+    const char *fallback = gfx::gfxSettings().pc_gfx_dir;
+    if (fallback[0] && tryLoad(fallback)) {
+        return true;
+    }
+    return false;
+}
+
+bool TitleScreen::loadPcMasterSheet(mm2_gfx_sheet *out)
+{
+    char *const path = mm2_path_scratch_a();
+    const gfx::GfxBackend backend = gfx::gfxSettings().resolved;
+    const char *filename = (backend == gfx::GfxBackend::Cga) ? "MASTER.4" : "MASTER.16";
+
+    auto tryLoad = [&](const char *dir) -> bool {
+        if (!dir || !joinDataPath(path, MM2_PATH_SCRATCH_CAP, dir, filename)) {
+            return false;
+        }
+        mm2_gfx_sheet_free(out);
+        mm2_pc_gfx_set_cga_palette(gfx::gfxSettings().cga_palette);
+        if (mm2_pc_wall_sheet_load(path, MM2_GFX_ROLE_TITLE, NULL, out) != MM2_IMAGE32_OK ||
+            out->img.frame_count <= kMasterTitleFrame) {
+            mm2_gfx_sheet_free(out);
+            return false;
+        }
+        const mm2_gfx_frame *title = mm2_gfx_sheet_frame(out, kMasterTitleFrame);
+#if MM2_HOST_AMIGA
+        return title && title->bitmap;
+#else
+        return title && title->rgba;
+#endif
+    };
+
+    if (tryLoad(data_dir_)) {
+        return true;
+    }
+    const char *fallback = gfx::gfxSettings().pc_gfx_dir;
+    if (fallback[0] && tryLoad(fallback)) {
+        return true;
+    }
+    return false;
+}
+
+void TitleScreen::blitPcTitleFrame(const mm2_gfx_sheet &sheet, int frame, int x, int y, uint8_t alpha)
+{
+    const mm2_gfx_frame *f = mm2_gfx_sheet_frame(&sheet, frame);
+    if (!f) {
+        return;
+    }
+#if MM2_HOST_AMIGA
+    (void)alpha;
+    if (!f->bitmap) {
+        return;
+    }
+    platform::blitImage32(&sheet.img, static_cast<uint16_t>(frame), static_cast<UWORD>(x), static_cast<UWORD>(y), 0);
+#else
+    if (!f->rgba) {
+        return;
+    }
+    compositor_.blitRgba(f->rgba, f->width, f->height, x, y, true, alpha);
+#endif
+}
+
 #if MM2_HOST_AMIGA
 bool TitleScreen::consumeItemsDat(uint8_t **out, std::size_t *out_size)
 {
@@ -413,6 +571,7 @@ void TitleScreen::shutdown()
 {
     releaseAttractAssets();
     mm2_image32_free(&book_);
+    freePcTitleSheets();
 #if MM2_HOST_AMIGA
     releaseItemsDat();
     mm2_amiga_ui_cache_destroy();
@@ -427,19 +586,23 @@ void TitleScreen::releaseIntroClips()
 
 void TitleScreen::releaseLogoAsset()
 {
-    if (!has_nwcp_) {
-        return;
+    if (pc_title_mode_) {
+        mm2_gfx_sheet_free(&nwcp_pc_);
+    } else if (has_nwcp_) {
+        mm2_image32_free(&nwcp_);
     }
-    mm2_image32_free(&nwcp_);
     has_nwcp_ = false;
 }
 
 void TitleScreen::releaseAttractAssets()
 {
-    if (has_intro_) {
+    if (pc_title_mode_) {
+        mm2_gfx_sheet_free(&master_pc_);
+        has_master_title_ = false;
+    } else if (has_intro_) {
         mm2_image32_free(&intro_);
-        has_intro_ = false;
     }
+    has_intro_ = false;
     releaseIntroClips();
     releaseLogoAsset();
 #if MM2_HOST_AMIGA
@@ -646,7 +809,12 @@ void TitleScreen::attractDraw() { drawAttract(); }
 
 void TitleScreen::menuEnter()
 {
-    releaseAttractAssets();
+    if (pc_title_mode_) {
+        releaseLogoAsset();
+        releaseIntroClips();
+    } else {
+        releaseAttractAssets();
+    }
 #if MM2_HOST_AMIGA
     invalidateTitleMenuPaint();
 #endif
@@ -794,6 +962,83 @@ void TitleScreen::returnToMenu()
 #endif
 }
 
+void TitleScreen::blitPcTitleBackground()
+{
+    if (!pc_title_mode_ || !has_master_title_) {
+        return;
+    }
+    const mm2_gfx_frame *title = mm2_gfx_sheet_frame(&master_pc_, kMasterTitleFrame);
+    if (!title) {
+        return;
+    }
+    const int y = (gfx::ScreenCompositor::kHeight - static_cast<int>(title->height)) / 2;
+    blitPcTitleFrame(master_pc_, kMasterTitleFrame, 0, y);
+}
+
+void TitleScreen::drawTitleMenuOverlay()
+{
+    drawRedFrame(compositor_, kTopBoxX, kTopBoxY, kTopBoxW, kTopBoxH);
+    int book_w = 89;
+    int book_right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
+    if (pc_title_mode_ && has_book_) {
+        blitTitleMenuBooks();
+        const mm2_gfx_frame *bk = mm2_gfx_sheet_frame(&book_pc_, 0);
+        if (bk) {
+            book_w = static_cast<int>(bk->width);
+            book_right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
+        }
+    } else if (has_book_ && book_.frame_count > 0 && book_.frames) {
+        const int fi = (book_frame_ < book_.frame_count) ? book_frame_ : 0;
+        const mm2_image32_frame &bk = book_.frames[fi];
+        if (bk.rgba) {
+            book_w = bk.width;
+            const int left_x = kBookLeftX;
+            const int right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
+            compositor_.blitRgba(bk.rgba, bk.width, bk.height, left_x, kBookY);
+            compositor_.blitRgba(bk.rgba, bk.width, bk.height, right_x, kBookY);
+            book_right_x = right_x;
+        }
+    }
+
+    const int gap_x0 = kBookLeftX + book_w;
+    const int gap_w = book_right_x - gap_x0;
+    int ty = kBookY + 4;
+    for (const char *line : kTitleLines) {
+        compositor_.drawTextShadow(centerX(line, gap_x0, gap_w), ty, line, 255, 220, 90);
+        ty += 12;
+    }
+    compositor_.drawTextShadow(centerX(kTitleTagline, kTopBoxX, kTopBoxW), kTopBoxY + kTopBoxH - 15, kTitleTagline,
+                               255, 220, 90);
+
+    drawRedFrame(compositor_, kBotBoxX, kBotBoxY, kBotBoxW, kBotBoxH);
+    struct MenuItem {
+        const char *text;
+        bool enabled;
+    };
+    const MenuItem items[] = {
+        {"C - Create Character", has_roster_},
+        {"V - View Party", has_roster_},
+        {"G - Goto Town", has_roster_},
+        {"M - Controls", true},
+        {"O - Options", true},
+        {"Q - Quit", true},
+    };
+
+    int my = kBotBoxY + 8;
+    for (const MenuItem &it : items) {
+        if (it.enabled) {
+            compositor_.drawTextShadow(centerX(it.text), my, it.text, 230, 230, 230);
+        } else {
+            compositor_.drawText(centerX(it.text), my, it.text, 110, 110, 110, 255);
+        }
+        my += 12;
+    }
+    if (!has_roster_) {
+        const char *warn = "(roster.dat not loaded)";
+        compositor_.drawText(centerX(warn), my + 1, warn, 255, 128, 128, 255);
+    }
+}
+
 void TitleScreen::blitIntroClipFrame(int frame_index, int x, int y)
 {
     if (!has_introclips_ || frame_index < 0 || frame_index >= introclips_.frame_count) {
@@ -834,12 +1079,14 @@ void TitleScreen::drawIntroPegasus(bool animate_overlays)
     }
 #else
     compositor_.clear(0, 0, 0, 255);
-    if (has_intro_ && intro_.frames[0].rgba) {
+    if (pc_title_mode_) {
+        blitPcTitleBackground();
+    } else if (has_intro_ && intro_.frames[0].rgba) {
         compositor_.blitRgba(intro_.frames[0].rgba, intro_.frames[0].width, intro_.frames[0].height, kIntroBgX,
                              kIntroBgY);
     }
 #endif
-    if (!has_introclips_) {
+    if (pc_title_mode_ || !has_introclips_) {
         return;
     }
 
@@ -920,7 +1167,14 @@ void TitleScreen::drawLogoSplash()
     }
 #else
     compositor_.clear(0, 0, 0, 255);
-    if (has_nwcp_ && nwcp_.frames[0].rgba) {
+    if (pc_title_mode_ && has_nwcp_) {
+        const int logo_h = static_cast<int>(nwcp_pc_.img.frames[0].height);
+        const int logo_y = (gfx::ScreenCompositor::kHeight - logo_h) / 2;
+        const uint8_t alpha = (logo_phase_ == LogoPhase::Static) ? 255 : logo_alpha_;
+        if (alpha > 0) {
+            blitPcTitleFrame(nwcp_pc_, 0, logo_splash_x_, logo_y, alpha);
+        }
+    } else if (has_nwcp_ && nwcp_.frames[0].rgba) {
         const int logo_h = nwcp_.frames[0].height;
         const int logo_y = (gfx::ScreenCompositor::kHeight - logo_h) / 2;
         const uint8_t alpha = (logo_phase_ == LogoPhase::Static) ? 255 : logo_alpha_;
@@ -990,6 +1244,22 @@ void TitleScreen::drawOptions()
 
 void TitleScreen::blitTitleMenuBooks()
 {
+    if (pc_title_mode_) {
+        if (!has_book_ || book_pc_.img.frame_count <= 0) {
+            return;
+        }
+        const int fi = (book_frame_ < static_cast<int>(book_pc_.img.frame_count)) ? book_frame_ : 0;
+        const mm2_gfx_frame *bk = mm2_gfx_sheet_frame(&book_pc_, fi);
+        if (!bk) {
+            return;
+        }
+        const int book_w = static_cast<int>(bk->width);
+        const int left_x = kBookLeftX;
+        const int right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
+        blitPcTitleFrame(book_pc_, fi, left_x, kBookY);
+        blitPcTitleFrame(book_pc_, fi, right_x, kBookY);
+        return;
+    }
     if (!has_book_ || book_.frame_count <= 0 || !book_.frames) {
         return;
     }
@@ -1045,7 +1315,13 @@ void TitleScreen::buildTitleMenuCache()
 
     int book_w = 89;
     int book_right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
-    if (has_book_ && book_.frame_count > 0 && book_.frames && book_.frames[0].width) {
+    if (pc_title_mode_ && has_book_ && book_pc_.img.frame_count > 0) {
+        const mm2_gfx_frame *bk = mm2_gfx_sheet_frame(&book_pc_, 0);
+        if (bk) {
+            book_w = static_cast<int>(bk->width);
+            book_right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
+        }
+    } else if (has_book_ && book_.frame_count > 0 && book_.frames && book_.frames[0].width) {
         book_w = static_cast<int>(book_.frames[0].width);
         book_right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
     }
@@ -1101,71 +1377,26 @@ void TitleScreen::drawTitleMenu()
 #endif
 
     compositor_.clear(0, 0, 0, 255);
-
-    drawRedFrame(compositor_, kTopBoxX, kTopBoxY, kTopBoxW, kTopBoxH);
-    int book_w = 89;
-    int book_right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
-    if (has_book_ && book_.frame_count > 0 && book_.frames) {
-        const int fi = (book_frame_ < book_.frame_count) ? book_frame_ : 0;
-        const mm2_image32_frame &bk = book_.frames[fi];
-        if (bk.rgba) {
-            book_w = bk.width;
-            const int left_x = kBookLeftX;
-            const int right_x = kTopBoxX + kTopBoxW - kBookLeftX - book_w;
-            compositor_.blitRgba(bk.rgba, bk.width, bk.height, left_x, kBookY);
-            compositor_.blitRgba(bk.rgba, bk.width, bk.height, right_x, kBookY);
-            book_right_x = right_x;
-        }
+    /* TitleMenu is black + book/menu chrome (Amiga @ 0x1062; PC CGA/EGA same layout).
+     * Attract uses MASTER.16 frame 14 / intro.32 — not under the menu boxes. */
+    if (!pc_title_mode_ && has_intro_ && intro_.frames[0].rgba) {
+        compositor_.blitRgba(intro_.frames[0].rgba, intro_.frames[0].width, intro_.frames[0].height, kIntroBgX,
+                             kIntroBgY);
     }
 
-    const int gap_x0 = kBookLeftX + book_w;
-    const int gap_w = book_right_x - gap_x0;
-    int ty = kBookY + 4;
-    for (const char *line : kTitleLines) {
-        compositor_.drawTextShadow(centerX(line, gap_x0, gap_w), ty, line, 255, 220, 90);
-        ty += 12;
-    }
-    // Wide tagline beneath the books, centered on the whole top box.
-    compositor_.drawTextShadow(centerX(kTitleTagline, kTopBoxX, kTopBoxW), kTopBoxY + kTopBoxH - 15, kTitleTagline,
-                               255, 220, 90);
-    // --- Bottom box: selectable menu options -----------------------------
-    drawRedFrame(compositor_, kBotBoxX, kBotBoxY, kBotBoxW, kBotBoxH);
-    struct MenuItem {
-        const char *text;
-        bool enabled;
-    };
-    const MenuItem items[] = {
-        {"C - Create Character", has_roster_},
-        {"V - View Party", has_roster_},
-        {"G - Goto Town", has_roster_},
-        {"M - Controls", true},
-        {"O - Options", true},
-        {"Q - Quit", true},
-    };
-
-    int my = kBotBoxY + 8;
-    for (const MenuItem &it : items) {
-        if (it.enabled) {
-            compositor_.drawTextShadow(centerX(it.text), my, it.text, 230, 230, 230);
-        } else {
-            compositor_.drawText(centerX(it.text), my, it.text, 110, 110, 110, 255);
-        }
-        my += 12;
-    }
-    if (!has_roster_) {
-        const char *warn = "(roster.dat not loaded)";
-        compositor_.drawText(centerX(warn), my + 1, warn, 255, 128, 128, 255);
-    }
+    drawTitleMenuOverlay();
 }
 
 void TitleScreen::tickBookAnimation()
 {
-    if (!has_book_ || book_.frame_count <= 1) {
+    const int frame_count =
+        pc_title_mode_ ? static_cast<int>(book_pc_.img.frame_count) : static_cast<int>(book_.frame_count);
+    if (!has_book_ || frame_count <= 1) {
         return;
     }
     const uint32_t now = platform::nowTicks();
     if (tickReached(now, book_until_)) {
-        book_frame_ = (book_frame_ + 1) % book_.frame_count;
+        book_frame_ = (book_frame_ + 1) % frame_count;
         book_until_ = now + static_cast<uint32_t>(kBookStepTicks);
     }
 }

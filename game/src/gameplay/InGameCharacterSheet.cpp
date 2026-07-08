@@ -15,9 +15,21 @@
 
 #include "mm2_image32_codec.h"
 
+#include "mm2_gfx_sheet.h"
+
+#include "mm2/platform/Platform.h"
+
 namespace mm2::gameplay {
 
 namespace {
+
+constexpr int kMinBookFramesForSheet = 12; /* LAB_4252 @ 0x422A blits book.32 frame index 11. */
+
+/** PC ``BOOK.16`` is title-menu ornament only (doc 54); sheet composite needs Amiga ``book.32``. */
+bool sheetBookCompositeReady(bool has_book, const mm2_image32_file *book)
+{
+    return has_book && book && book->frame_count >= kMinBookFramesForSheet;
+}
 
 using namespace mm2::ui::amiga_layout;
 using namespace mm2::gfx::play_layout;
@@ -167,6 +179,69 @@ void blitBookFrame(gfx::ScreenCompositor &c, const mm2_image32_file &book, int f
     c.blitRgba(f.rgba, f.width, f.height, dst_x, dst_y);
 }
 
+void blitBookFramePc(gfx::ScreenCompositor &c, const mm2_gfx_sheet &book, int frame, int dst_x, int dst_y)
+{
+    const mm2_gfx_frame *f = mm2_gfx_sheet_frame(&book, frame);
+    if (!f) {
+        return;
+    }
+#if MM2_HOST_AMIGA
+    if (!f->bitmap) {
+        return;
+    }
+    platform::blitImage32(&book.img, static_cast<uint16_t>(frame), static_cast<UWORD>(dst_x), static_cast<UWORD>(dst_y),
+                          0);
+#else
+    if (!f->rgba) {
+        return;
+    }
+    c.blitRgba(f->rgba, f->width, f->height, dst_x, dst_y, true, 255);
+#endif
+}
+
+/** LAB_4252 @ 0x4252: composite book.32 frames 11,11,5,5,4,3,2,1 @ kPartyPanelBlit*. */
+void blitCharacterSheetBook(gfx::ScreenCompositor &c, bool pc_mode, const mm2_gfx_sheet *book_pc,
+                            const mm2_image32_file *book)
+{
+    static const int kFrames[] = {11, 11, 5, 5, 4, 3, 2, 1};
+    int x = kPartyPanelBlitX;
+    const int y = kPartyPanelBlitY;
+
+    for (int i = 0; i < 8; ++i) {
+        int fi = kFrames[i];
+        int fw = 96;
+        int fh = 60;
+        if (pc_mode && book_pc) {
+            const mm2_gfx_frame *f = mm2_gfx_sheet_frame(book_pc, fi);
+            if (!f && book_pc->img.frame_count > 0) {
+                fi = fi % static_cast<int>(book_pc->img.frame_count);
+                f = mm2_gfx_sheet_frame(book_pc, fi);
+            }
+            if (!f) {
+                continue;
+            }
+            fw = static_cast<int>(f->width);
+            fh = static_cast<int>(f->height);
+            blitBookFramePc(c, *book_pc, fi, x, y);
+        } else if (book && book->frame_count > 0) {
+            if (fi >= book->frame_count) {
+                fi = fi % book->frame_count;
+            }
+            const mm2_image32_frame &f = book->frames[fi];
+            fw = static_cast<int>(f.width);
+            fh = static_cast<int>(f.height);
+            blitBookFrame(c, *book, fi, x, y);
+        } else {
+            continue;
+        }
+        x -= fw;
+        if (x < 0) {
+            x = kPartyPanelBlitX;
+        }
+        (void)fh;
+    }
+}
+
 int rosterIndexForPartySlot(const Mm2PartyLaunch &launch, int party_slot)
 {
     if (party_slot < 0 || party_slot >= launch.party_count || party_slot >= MM2_PARTY_LAUNCH_SLOTS) {
@@ -260,15 +335,18 @@ bool InGameCharacterSheet::loadAssets(const char *data_dir)
     }
 
     mm2_image32_set_preview_opaque(0);
-    if (mm2_image32_load_file(path, &book_) == MM2_IMAGE32_OK && book_.frame_count > 0) {
+    book_pc_mode_ = false;
+    if (mm2_image32_load_file(path, &book_) == MM2_IMAGE32_OK && sheetBookCompositeReady(true, &book_)) {
         has_book_ = true;
+    } else {
+        mm2_image32_free(&book_);
     }
     return has_book_;
 }
 
 void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
                                        const Mm2PartyLaunch &launch, int party_slot, const Mm2ItemsFile *items,
-                                       const SheetSession *session) const
+                                       const SheetSession *session, bool combat_mode) const
 {
     const int roster_idx = rosterIndexForPartySlot(launch, party_slot);
     if (roster_idx < 0 || roster_idx >= MM2_ROSTER_RECORD_COUNT) {
@@ -282,6 +360,10 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
     const int hireling_index = hireling ? (roster_idx - kRosterHirelingPageOffset) : -1;
 
     gfx::drawPlayModalBackdrop(c);
+
+    if (sheetBookCompositeReady(has_book_, &book_)) {
+        blitCharacterSheetBook(c, false, nullptr, &book_);
+    }
 
     char name[16];
     mm2_roster_name_to_cstr(&rec, name, sizeof(name));
@@ -375,9 +457,13 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
     /* book.32 @ row 18 can overlap footer rows from stale viewport — clear before commands. */
     gfx::fillCellRect(c, kSheetFooterCol, kSheetFooterRow1 - 1, kPlayOverlayBorderW - 2, 4);
 
-    drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "'Q' Quick Ref  'C' Cast    'D' Drop", 180, 180, 180);
-    drawCellText(c, kSheetFooterRow2, kSheetFooterCol, "'E' Equip      'G' Gather  'R' Remove", 180, 180, 180);
-    drawCellText(c, kSheetFooterCmdRow3, kSheetFooterCol, "'S' Share  'T' Trade  'U' Use", 180, 180, 180);
+    if (combat_mode) {
+        drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "'V' View spell book", 180, 180, 180);
+    } else {
+        drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "'Q' Quick Ref  'C' Cast    'D' Drop", 180, 180, 180);
+        drawCellText(c, kSheetFooterRow2, kSheetFooterCol, "'E' Equip      'G' Gather  'R' Remove", 180, 180, 180);
+        drawCellText(c, kSheetFooterCmdRow3, kSheetFooterCol, "'S' Share  'T' Trade  'U' Use", 180, 180, 180);
+    }
 
     if (session && session->status_line[0]) {
         drawCellText(c, kSheetFooterRow1 - 1, kSheetFooterCol, session->status_line, 255, 255, 128);
@@ -494,7 +580,8 @@ void InGameCharacterSheet::renderSpellBook(gfx::ScreenCompositor &c, const Mm2Ro
 }
 
 SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session, Mm2RosterFile &roster,
-                                                const Mm2PartyLaunch &launch, const Mm2ItemsFile *items)
+                                                const Mm2PartyLaunch &launch, const Mm2ItemsFile *items,
+                                                bool combat_mode)
 {
     Mm2RosterRecord *rec = rosterMut(roster, launch, session.party_slot);
     if (!rec) {
@@ -745,7 +832,21 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
     }
 
     switch (key) {
+    case 'V':
+        if (combat_mode) {
+            const SpellSchool school = spellSchoolForClass(rec->class_id);
+            if (school == SpellSchool::None) {
+                setStatus(session, "No spell book.");
+            } else {
+                session.sub_mode = SheetSubMode::SpellBook;
+                setStatus(session, "");
+            }
+        }
+        break;
     case 'C': {
+        if (combat_mode) {
+            break;
+        }
         /* 'C' (Cast) opens the spell-book grid (cast picker @ 0x65fa). Only caster
            classes have a spell book; non-casters get the empty case. School and
            known spells are derived from the roster record ($51..$56 bitfield). */
@@ -759,32 +860,53 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         break;
     }
     case 'D':
+        if (combat_mode) {
+            break;
+        }
         session.sub_mode = SheetSubMode::DropPickSlot;
         setStatus(session, "Drop equip 1-6 or pack A-F:");
         break;
     case 'E':
+        if (combat_mode) {
+            break;
+        }
         session.sub_mode = SheetSubMode::EquipPickBackpack;
         setStatus(session, "Equip which? (A-F)");
         break;
     case 'G':
+        if (combat_mode) {
+            break;
+        }
         session.sub_mode = SheetSubMode::GatherPick;
         setStatus(session, "Gather: 1) Gold  2) Gems");
         break;
     case 'R':
+        if (combat_mode) {
+            break;
+        }
         session.sub_mode = SheetSubMode::RemovePickEquip;
         setStatus(session, "Remove which? (1-6)");
         break;
     case 'S':
+        if (combat_mode) {
+            break;
+        }
         /* GAP: share via $7DCC / 0x6ACE. */
         setStatus(session, "Share not yet wired ($7DCC).");
         break;
     case 'T':
+        if (combat_mode) {
+            break;
+        }
         session.sub_mode = SheetSubMode::TradePickType;
         session.trade_kind = SheetTradeKind::None;
         session.trade_target_slot = -1;
         setStatus(session, "Trade: 1)Gold 2)Gems 3)Food 4)Item");
         break;
     case 'U':
+        if (combat_mode) {
+            break;
+        }
         /* GAP: item use via $E94A / combat_use_item_handler 0x133EC. */
         setStatus(session, "Use not yet wired ($E94A).");
         break;
