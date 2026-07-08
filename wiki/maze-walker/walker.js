@@ -336,7 +336,7 @@ function renderIndoorView(ctx, sc, scene, phase) {
   }
   for (const b of scene.torchBlits ?? []) {
     if (b.code !== 3) continue;
-    const tb = torchBlitFor(b, phase);
+    const tb = torchBlitFor(b, phase, gfxMode);
     if (tb) blitTransparent(ctx, sheets.torch, String(tb.frame), tb.x, tb.y);
   }
 }

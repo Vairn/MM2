@@ -475,7 +475,9 @@ def _render_pc_walker_frame(
     ega_sil = _ega_silhouette_for_frame(variant, stem, frame, pc_path, data_dir)
 
     if amiga_sheet in _PC_OVERLAY_SHEETS:
-        rgba = render_overlay_frame_rgba(w, h, pix, bpp, cga_silhouette=cga_sil)
+        rgba = render_overlay_frame_rgba(
+            w, h, pix, bpp, cga_silhouette=cga_sil if cga_sil is not None else pix
+        )
     elif amiga_sheet == "sky.32":
         rgba = render_sky_frame_rgba(
             w, h, pix, bpp, cga_silhouette=cga_sil, ega_silhouette=ega_sil
@@ -513,10 +515,6 @@ def _render_pc_walker_frame(
             ega_silhouette=ega_sil,
         )
     img = Image.new("RGBA", (w, h))
-    img.putdata(rgba)
-    return img
-
-
     img.putdata(rgba)
     return img
 

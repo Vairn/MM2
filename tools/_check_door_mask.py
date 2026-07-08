@@ -22,7 +22,7 @@ for stem in ['TOWN', 'CASTLE']:
         cidx = decode_wall_frame_indices(cfr.width, cfr.height, cfr.pixels, 2)
         wall = render_wall_frame_rgba(efr.width, efr.height, efr.pixels, 4, frame=fi)
         ov = render_overlay_frame_rgba(
-            efr.width, efr.height, efr.pixels, 4, cga_silhouette=cfr.pixels
+            efr.width, efr.height, efr.pixels, 4
         )
         wt = sum(1 for p in wall if p[3] == 0)
         ot = sum(1 for p in ov if p[3] == 0)

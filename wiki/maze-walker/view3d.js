@@ -185,15 +185,18 @@ export function collectBlits(slots) {
   /** Populated at paint time for field===3 only (ASM -$4F62/-$4F76/-$4F8A). */
   const torchBlits = [];
 
-  function paint(kind, paintDepth, code) {
+  function paint(latX, paintDepth, code) {
     if (code === 0) return;
     const depth = (paintDepth & 0x7f) - 1;
     if (depth < 0 || depth >= 4) return;
-    const mirror = paintDepth >= 0x80;
+    const kind = latX === 0 ? "front" : latX < 0 ? "left" : "right";
+    const mirror = latX === -2 || latX === 2;
     const isDoor = code === 2;
     let entry;
-    if (kind === "front") {
+    if (latX === 0) {
       entry = {
+        latX,
+        latRow: -depth,
         kind,
         depth,
         frame: depth + (isDoor ? 0x10 : 0),
@@ -201,46 +204,52 @@ export function collectBlits(slots) {
         y: frontY[depth] + (depth === 0 ? 1 : 0),
         code,
       };
-    } else if (kind === "left") {
-      if (mirror) {
-        entry = {
-          kind,
-          depth,
-          mirror: true,
-          frame: leftBase[depth] + (isDoor ? 0x10 : 0),
-          x: leftX2[depth],
-          y: leftY2[depth],
-          code,
-        };
-      } else {
-        entry = {
-          kind,
-          depth,
-          mirror: false,
-          frame: depth + 4 + (isDoor ? 0x10 : 0),
-          x: leftX1[depth],
-          y: leftY1[depth],
-          code,
-        };
-      }
-    } else if (mirror) {
+    } else if (latX === -2) {
       entry = {
+        latX,
+        latRow: -depth,
         kind,
         depth,
         mirror: true,
-        frame: rightBase[depth] + (isDoor ? 0x10 : 0),
-        x: rightX2[depth],
-        y: rightY2[depth],
+        frame: leftBase[depth] + (isDoor ? 0x10 : 0),
+        x: leftX2[depth],
+        y: leftY2[depth],
         code,
       };
-    } else {
+    } else if (latX === -1) {
       entry = {
+        latX,
+        latRow: -depth,
+        kind,
+        depth,
+        mirror: false,
+        frame: depth + 4 + (isDoor ? 0x10 : 0),
+        x: leftX1[depth],
+        y: leftY1[depth],
+        code,
+      };
+    } else if (latX === 1) {
+      entry = {
+        latX,
+        latRow: -depth,
         kind,
         depth,
         mirror: false,
         frame: depth + 8 + (isDoor ? 0x10 : 0),
         x: rightX1[depth],
         y: rightY1[depth],
+        code,
+      };
+    } else {
+      entry = {
+        latX,
+        latRow: -depth,
+        kind,
+        depth,
+        mirror: true,
+        frame: rightBase[depth] + (isDoor ? 0x10 : 0),
+        x: rightX2[depth],
+        y: rightY2[depth],
         code,
       };
     }
@@ -251,26 +260,26 @@ export function collectBlits(slots) {
   }
 
   const s = slots;
-  paint("left", 4, s[S_F1D]);
-  paint("left", 0x84, s[S_F11]);
-  paint("right", 4, s[S_F19]);
-  paint("right", 0x84, s[S_F0D]);
-  paint("front", 4, s[S_F15]);
-  paint("left", 3, s[S_F1E]);
-  paint("left", 0x83, s[S_F12]);
-  paint("right", 3, s[S_F1A]);
-  paint("right", 0x83, s[S_F0E]);
-  paint("front", 3, s[S_F16]);
-  paint("left", 2, s[S_F1F]);
-  paint("left", 0x82, s[S_F13]);
-  paint("right", 2, s[S_F1B]);
-  paint("right", 0x82, s[S_F0F]);
-  paint("front", 2, s[S_F17]);
-  paint("left", 1, s[S_F20]);
-  paint("left", 0x81, s[S_F14]);
-  paint("right", 1, s[S_F1C]);
-  paint("right", 0x81, s[S_F10]);
-  paint("front", 1, s[S_F18]);
+  paint(-1, 4, s[S_F1D]);
+  paint(-2, 0x84, s[S_F11]);
+  paint(1, 4, s[S_F19]);
+  paint(2, 0x84, s[S_F0D]);
+  paint(0, 4, s[S_F15]);
+  paint(-1, 3, s[S_F1E]);
+  paint(-2, 0x83, s[S_F12]);
+  paint(1, 3, s[S_F1A]);
+  paint(2, 0x83, s[S_F0E]);
+  paint(0, 3, s[S_F16]);
+  paint(-1, 2, s[S_F1F]);
+  paint(-2, 0x82, s[S_F13]);
+  paint(1, 2, s[S_F1B]);
+  paint(2, 0x82, s[S_F0F]);
+  paint(0, 2, s[S_F17]);
+  paint(-1, 1, s[S_F20]);
+  paint(-2, 0x81, s[S_F14]);
+  paint(1, 1, s[S_F1C]);
+  paint(2, 0x81, s[S_F10]);
+  paint(0, 1, s[S_F18]);
   return { blits, torchBlits };
 }
 
@@ -446,51 +455,94 @@ export function tileLabel(x, y) {
 /** key_read_3d @0x1E9CE: torch frame += phase from A4-$667A (0..2, wraps at 3). */
 export const TORCH_PHASE_COUNT = 3;
 
-const LEFT_FAR_FRAMES = [12, 14, 2, 3];
-const RIGHT_FAR_FRAMES = [13, 15, 2, 3];
+/**
+ * PC TOWNT/CAVET/CASTLET (.4/.16) lay out 12-frame side blocks (left 0–11,
+ * right 12–23, front/far 24–35). Amiga townt.32 uses 9-frame blocks
+ * (0–8, 9–17, 18–26) with the same logical index math from -$4F62 tables.
+ */
+export function remapTorchOverlayFrame(frame, gfxMode = "amiga") {
+  if (gfxMode === "amiga") return frame;
+  if (frame > 26) return frame;
+  return Math.floor(frame / 9) * 12 + (frame % 9);
+}
 
-export function torchBlitFor(wb, phase = 0) {
+function inferLatX(wb) {
+  if (wb.latX != null) return wb.latX;
+  if (wb.kind === "front") return 0;
+  if (wb.kind === "left") return wb.mirror ? -2 : -1;
+  return wb.mirror ? 2 : 1;
+}
+
+/** Mirrors game/src/gfx/View3D.cpp view3dTorchBlitFor (+ PC frame remap). */
+export function torchBlitFor(wb, phase = 0, gfxMode = "amiga") {
   /* map.dat page-0 field 3 = wall+torch overlay slot (NEVER door=2). Caller passes torchBlits[] (code===3) only. */
   if (wb.code !== 3 || wb.depth > 2) return null;
   const flicker = ((phase % TORCH_PHASE_COUNT) + TORCH_PHASE_COUNT) % TORCH_PHASE_COUNT;
   const baseFrame = wb.frame;
-  
-  if (wb.kind === "front") {
+  const latX = inferLatX(wb);
+  const mapFrame = (frame) => remapTorchOverlayFrame(frame, gfxMode);
+
+  if (latX === 0) {
     return {
-      frame: 0x12 + wb.depth * 3 + flicker,
+      frame: mapFrame(0x12 + wb.depth * 3 + flicker),
       x: [105, 108, 107][wb.depth],
       y: [44, 52, 60][wb.depth],
     };
   }
-  
-  if (wb.kind === "left") {
-    if (wb.mirror || LEFT_FAR_FRAMES.includes(baseFrame)) {
+  if (latX === -1) {
+    if (
+      baseFrame === 12 ||
+      baseFrame === 14 ||
+      baseFrame === 2 ||
+      baseFrame === 3
+    ) {
       if (wb.depth === 0) return null;
       return {
-        frame: 0x12 + wb.depth * 3 + flicker,
+        frame: mapFrame(0x12 + wb.depth * 3 + flicker),
         x: [8, 16, 64][wb.depth],
         y: [44, 52, 60][wb.depth],
       };
     }
     return {
-      frame: wb.depth * 3 + flicker,
+      frame: mapFrame(wb.depth * 3 + flicker),
       x: [8, 43, 73][wb.depth],
       y: [49, 55, 59][wb.depth],
     };
   }
-  if (wb.kind === "right") {
-    if (wb.mirror || RIGHT_FAR_FRAMES.includes(baseFrame)) {
+  if (latX === -2) {
+    if (wb.depth === 0) return null;
+    return {
+      frame: mapFrame(0x12 + wb.depth * 3 + flicker),
+      x: [8, 16, 64][wb.depth],
+      y: [44, 52, 60][wb.depth],
+    };
+  }
+  if (latX === 1) {
+    if (
+      baseFrame === 13 ||
+      baseFrame === 15 ||
+      baseFrame === 2 ||
+      baseFrame === 3
+    ) {
       if (wb.depth === 0) return null;
       return {
-        frame: 0x12 + wb.depth * 3 + flicker,
+        frame: mapFrame(0x12 + wb.depth * 3 + flicker),
         x: [202, 199, 152][wb.depth],
         y: [44, 52, 60][wb.depth],
       };
     }
     return {
-      frame: 9 + wb.depth * 3 + flicker,
+      frame: mapFrame(9 + wb.depth * 3 + flicker),
       x: [196, 166, 142][wb.depth],
       y: [49, 55, 59][wb.depth],
+    };
+  }
+  if (latX === 2) {
+    if (wb.depth === 0) return null;
+    return {
+      frame: mapFrame(0x12 + wb.depth * 3 + flicker),
+      x: [202, 199, 152][wb.depth],
+      y: [44, 52, 60][wb.depth],
     };
   }
   return null;

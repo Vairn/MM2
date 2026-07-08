@@ -50,7 +50,9 @@ Source of truth: `EXTRACTED/docs/`, `EXTRACTED/mm2-ANALYSIS.md`, `tools/`, `edit
 |-----|-------------|
 | [`07-dat-files-and-formats.md`](07-dat-files-and-formats.md) | Inventory hub — all MM2 data files |
 | [`06-gfx-loading.md`](06-gfx-loading.md) | `.32` filename table and loader call path |
+| [`55-graphics-formats-reference.md`](55-graphics-formats-reference.md) | **Unified format reference** — `.32`, `.anm`, `.4`, `.16` layouts and codecs |
 | [`07-anm-tv-format.md`](07-anm-tv-format.md) | `.anm` TV prelude + planar image chunk |
+| [`54-pc-dos-graphics-formats.md`](54-pc-dos-graphics-formats.md) | PC DOS `.4`/`.16` inventory, tooling, round-trip status |
 | [`06-roster-format.md`](06-roster-format.md) | `roster.dat` — 64 × 130-byte party records |
 | [`12-attrib-dat-format.md`](12-attrib-dat-format.md) | `attrib.dat` — per-screen env and neighbours |
 | [`18-items-dat-format.md`](18-items-dat-format.md) | `items.dat` — 256 × 20-byte items |

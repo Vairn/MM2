@@ -657,6 +657,11 @@ def wall_transparent_indices(
     return ()
 
 
+_OVERLAY_EGA_VOID_PENS = (0, 1, 8, 9, 10, 11)
+# CGA grid silhouette: pens 0/1 = void; pen 2 = flame; pen 3 = sconce/bracket (opaque).
+_OVERLAY_CGA_VOID_PENS = (0, 1)
+
+
 def render_overlay_frame_rgba(
     width: int,
     height: int,
@@ -666,27 +671,34 @@ def render_overlay_frame_rgba(
     cga_palette: int = 1,
     cga_silhouette: bytes | None = None,
 ) -> list[tuple[int, int, int, int]]:
-    """Decode townt/cavet/castlet overlay frames for the walker.
+    """Decode townt/cavet/castlet overlay frames for the maze walker.
 
-    These Amiga sheets have no pen-0 void (full 32-colour art), so the Amiga
-    mask path cannot key them. CGA uses pens 0/1 as void; EGA reuses the CGA
-    pixel grid at each location (same frame geometry) for the alpha silhouette.
+    Colour-key from the paired CGA pixel grid when available: pens 0/1 are void,
+    pen 2 is the flame, pen 3 is the sconce (keep opaque). On EGA this keeps
+    sconce pixels that map to pens like 5/14 while still voiding green bleed
+    (EGA pen 2 on CGA pen 1).
     """
     pal = _palette_for_bpp(bpp, cga_palette)
     idxs = decode_wall_frame_indices(width, height, pixels, bpp)
-    cga_idxs: list[int] | None = None
-    if bpp == 4 and cga_silhouette is not None:
+    if cga_silhouette is not None:
         cga_idxs = decode_wall_frame_indices(width, height, cga_silhouette, 2)
+    elif bpp == 2:
+        cga_idxs = idxs
+    else:
+        cga_idxs = None
     out: list[tuple[int, int, int, int]] = []
     for i, idx in enumerate(idxs):
-        r, g, b = pal[idx]
-        if bpp == 2:
-            key = idx in (0, 1)
-        elif cga_idxs is not None:
-            key = cga_idxs[i] < 2
+        if cga_idxs is not None:
+            key = cga_idxs[i] in _OVERLAY_CGA_VOID_PENS
+        elif bpp == 2:
+            key = idx in _OVERLAY_CGA_VOID_PENS
         else:
-            key = idx in (0, 1, 9, 10, 11)
-        out.append((r, g, b, 0 if key else 255))
+            key = idx in _OVERLAY_EGA_VOID_PENS
+        if key:
+            out.append((0, 0, 0, 0))
+        else:
+            r, g, b = pal[idx]
+            out.append((r, g, b, 255))
     return out
 
 
