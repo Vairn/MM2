@@ -17,8 +17,8 @@
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/gfx/CombatPanel.h"
 
-#if MM2_HOST_AMIGA
 #include "mm2/platform/Platform.h"
+#if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
 #endif
 
@@ -58,6 +58,13 @@ void blitImageFrame(gfx::ScreenCompositor &c, const mm2_gfx_sheet &sheet, int fr
     }
     c.blitRgba(f.rgba, f.width, f.height, dst_x, dst_y);
 #endif
+}
+
+void maskCombatBackdropBleed(gfx::ScreenCompositor &c)
+{
+    using namespace gfx::play_layout;
+    const int mask_x = gfx::kView3DOriginX + kCombatView3DViewportW;
+    c.fillRect(mask_x, kCombatView3DSkyY, kScreenW - mask_x, kCombatView3DViewportH, 0, 0, 0);
 }
 
 }  // namespace
@@ -246,6 +253,34 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     start_flags_ = start_flags;
     roster_ = roster;
     launch_ = launch;
+
+    /* Stock roster.dat keeps inn-stored starters at hp_current=0 with condition
+     * bit6 (0x40 unconscious). The party strip draws +$5E (hp_max), so they look
+     * healthy, but encounter_xp_budget_init @ 0x11E58 sums +$74 and the combat
+     * alive check uses the same field — budget 0 → empty random fights, and
+     * partySlotAlive() treats everyone as dead. Wake them on leave-inn / play
+     * start the same way Rest does (0x19BFC: restore current from max/aux). */
+    for (int i = 0; i < launch_.party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch_.roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        Mm2RosterRecord &rec = roster_.records[idx];
+        if (rec.condition >= 0x80) {
+            continue; /* dead/stoned stay down */
+        }
+        if (rec.hp_current == 0) {
+            const uint16_t restore = rec.hp_aux != 0 ? rec.hp_aux : rec.hp_max;
+            if (restore != 0) {
+                rec.hp_current = restore;
+                if (rec.hp_max == 0) {
+                    rec.hp_max = restore;
+                }
+            }
+        }
+        rec.condition = static_cast<uint8_t>(rec.condition & static_cast<uint8_t>(~0x40u));
+    }
+
     quit_ = false;
     back_to_title_ = false;
     back_to_goto_town_ = false;
@@ -258,6 +293,10 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     status_message_[0] = '\0';
     has_items_ = false;
     has_monsters_ = false;
+    torch_phase_ = 0;
+    torch_tick_ = 0;
+    hood_has_torches_ = false;
+    hood_torch_cache_valid_ = false;
 
     right_panel_ = gfx::PlayRightPanel::Protect;
 
@@ -479,6 +518,7 @@ void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
 #else
     markDirty();
 #endif
+    hood_torch_cache_valid_ = false;
 
     if (move.acted && data_dir_) {
         if (move.screen_changed) {
@@ -569,19 +609,23 @@ void GameSession::refreshWorldAfterEventTransition()
          * the overland viewport after exiting town. */
         refreshEventsForScreen();
     }
+    /* Keep AnmPlanarPool chip cels across map changes - reloading NN.anm
+     * on every shop/town hop is the main Amiga hitch. Evict only when full. */
+    hood_torch_cache_valid_ = false;
     markDirty();
 }
 
 void GameSession::finishCombat()
 {
-    combat_sprite_.unload();
-    combat_sprite_disk_ = -1;
+    unloadCombatSprites();
+    /* Leave unreferenced combat .anm cels in AnmPlanarPool for the next fight. */
     combat_character_sheet_ = false;
     if (overlay_ == PlayOverlay::CharacterSheet) {
         overlay_ = PlayOverlay::None;
     }
 #if MM2_HOST_AMIGA
     combat_backdrop_cached_ = false;
+    mm2_amiga_viewport_cache_set_size(208, 120);
     mm2_amiga_viewport_cache_invalidate();
 #endif
     /* Combat's own -$7EDE call already ran synchronously inside the OP_12/13/
@@ -647,11 +691,13 @@ void GameSession::tickEventInput(const platform::KeyState &keys)
     }
     const bool blocking_before = events_.blocksMovement();
     const int layers_before = events_.textView().layerCount();
+    const int entry_rev_before = events_.textView().textEntryRevision();
     events_.continueInput(gs_, world_, keys);
     refreshWorldAfterEventTransition();
     maybeFinishInnRegistry();
     maybeOpenTownServiceMenu();
-    if (events_.blocksMovement() != blocking_before || events_.textView().layerCount() != layers_before) {
+    if (events_.blocksMovement() != blocking_before || events_.textView().layerCount() != layers_before ||
+        events_.textView().textEntryRevision() != entry_rev_before) {
         markDirty();
     }
 }
@@ -1330,6 +1376,11 @@ bool GameSession::awaitingContinuePrompt() const
     if (events_loaded_ && events_.blocksMovement()) {
         return true;
     }
+    /* Combat waits on edge-triggered ACE keys; include so AppHost can re-poll
+     * after a slow redraw the same way as SPACE continue prompts. */
+    if (combat_.active() && combat_.awaitingInput()) {
+        return true;
+    }
     return false;
 }
 
@@ -1339,20 +1390,47 @@ void GameSession::tickOverlayAnimations()
 #if MM2_HOST_AMIGA
         overlay_anim_dirty_ = false;
 #endif
+        /* Do not accumulate a catch-up debt while the viewport is covered. */
+        overlay_anim_clock_valid_ = false;
         return;
     }
 
+    /* Pace .anm delays off the VBlank clock, not main-loop iterations. Multi-sprite
+     * combat frames often take several vblanks; without catch-up the sprites crawl. */
+    const uint32_t now = platform::nowTicks();
+    int steps = 1;
+    if (overlay_anim_clock_valid_) {
+        steps = static_cast<int>(static_cast<int16_t>(static_cast<uint16_t>(now) -
+                                                      static_cast<uint16_t>(overlay_anim_clock_)));
+        if (steps <= 0) {
+            return;
+        }
+        /* Cap so a long hitch does not skip an entire clip in one frame. */
+        if (steps > 8) {
+            steps = 8;
+        }
+    }
+    overlay_anim_clock_ = now;
+    overlay_anim_clock_valid_ = true;
+
     bool changed = false;
-    if (combat_.active()) {
-        refreshCombatSprite();
-        changed |= combat_sprite_.tick();
-    }
-    if (scripted_loaded_ && scripted_scene_.active()) {
-        changed |= scripted_scene_.tickAnimation();
-    }
-    if (events_loaded_ &&
-        (events_.textView().hasServicePortrait() || events_.textView().hasPegasusIllustration())) {
-        changed |= events_.textView().tickAnimation();
+    for (int step = 0; step < steps; ++step) {
+        if (combat_.active()) {
+            if (step == 0) {
+                refreshCombatSprites();
+            }
+            for (int i = 0; i < combat_sprite_count_; ++i) {
+                changed |= combat_sprites_[i].tick();
+            }
+        }
+        if (scripted_loaded_ && scripted_scene_.active()) {
+            changed |= scripted_scene_.tickAnimation();
+        }
+        if (events_loaded_) {
+            if (events_.textView().hasServicePortrait() || events_.textView().hasPegasusIllustration()) {
+                changed |= events_.textView().tickAnimation();
+            }
+        }
     }
     if (changed) {
 #if MM2_HOST_AMIGA
@@ -1363,12 +1441,29 @@ void GameSession::tickOverlayAnimations()
     }
 }
 
+void GameSession::refreshHoodTorchCache()
+{
+    if (hood_torch_cache_valid_) {
+        return;
+    }
+    hood_has_torches_ = false;
+    if (assets_ok_ && !world_.isOutdoor() && gs_.valid()) {
+        gfx::View3DCamera camera{};
+        camera.x = gs_.coordX();
+        camera.y = gs_.coordY();
+        camera.facing = gs_.facing03();
+        const gfx::View3DScene scene = gfx::buildView3DScene(world_.buildView3DMapBuffers(), camera);
+        hood_has_torches_ = scene.num_torch_blits > 0;
+    }
+    hood_torch_cache_valid_ = true;
+}
+
 void GameSession::tickTorchAnimation()
 {
     if (!assets_ok_ || world_.isOutdoor() || viewportHiddenByOverlay()) {
         return;
     }
-    if (overlay_ == PlayOverlay::Automap) {
+    if (overlay_ == PlayOverlay::Automap || combat_.active()) {
         return;
     }
 
@@ -1380,8 +1475,16 @@ void GameSession::tickTorchAnimation()
     }
     torch_tick_ = 0;
     torch_phase_ = (torch_phase_ + 1) % gfx::kView3DTorchPhaseCount;
+
+    refreshHoodTorchCache();
+    if (!hood_has_torches_) {
+        return;
+    }
+
 #if MM2_HOST_AMIGA
-    markView3DDirty();
+    /* Torches live on top of the cached hood — do not invalidate the 3D rebuild
+     * or force a full-frame text replot while a SPACE prompt is up. */
+    markOverlayAnimDirty();
 #else
     markDirty();
 #endif
@@ -1403,7 +1506,7 @@ void GameSession::tick(const platform::KeyState &keys)
             return;
         }
         const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
-        if (ch == 'V') {
+        if (ch == 'V' && combat_.awaitingCommand()) {
             const int slot = combat_.activePartySlot();
             sheet_session_.party_slot = (slot >= 0 && slot < launch_.party_count) ? slot : 0;
             sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
@@ -1414,8 +1517,17 @@ void GameSession::tick(const platform::KeyState &keys)
             markDirty();
             return;
         }
+        /* Combat 'C' is handled inside CombatSession (0x11A90 → 0x79EE level/number
+         * on the message band). Spell grid is only via sheet 'V' → SpellBook. */
+        /* Do not markDirty on idle combat waits — a full Amiga redraw every
+         * frame makes ACE keyUse edges miss short taps (feels like laggy input). */
+        const combat::CombatState state_before = combat_.state();
+        char status_before[160];
+        std::snprintf(status_before, sizeof(status_before), "%s", combat_.statusLine());
         const bool ended = combat_.tick(gs_, world_, keys);
-        markDirty();
+        if (ended || combat_.state() != state_before || std::strcmp(status_before, combat_.statusLine()) != 0) {
+            markDirty();
+        }
         if (ended) {
             finishCombat();
         }
@@ -1550,7 +1662,7 @@ void GameSession::renderView3D()
     }
 }
 
-void GameSession::renderIndoorView3D()
+void GameSession::renderIndoorView3DBase()
 {
     using namespace gfx;
     using namespace gfx::play_layout;
@@ -1571,13 +1683,36 @@ void GameSession::renderIndoorView3D()
         const View3DBlit &b = scene.blits[static_cast<size_t>(i)];
         blitImageFrame(compositor_, env_.walls(), b.frame, b.x, b.y, 0);
     }
+}
+
+void GameSession::blitIndoorTorches()
+{
+    using namespace gfx;
+
+    if (!assets_ok_ || world_.isOutdoor() || env_.torches().img.frame_count <= 0) {
+        return;
+    }
+
+    View3DCamera camera{};
+    camera.x = gs_.coordX();
+    camera.y = gs_.coordY();
+    camera.facing = gs_.facing03();
+
+    const View3DMapBuffers bufs = world_.buildView3DMapBuffers();
+    const View3DScene scene = buildView3DScene(bufs, camera);
     for (int i = 0; i < scene.num_torch_blits; ++i) {
         const View3DBlit &b = scene.torch_blits[static_cast<size_t>(i)];
         View3DTorchBlit tb{};
-        if (view3dTorchBlitFor(b, torch_phase_, &tb) && env_.torches().img.frame_count > 0) {
+        if (view3dTorchBlitFor(b, torch_phase_, &tb)) {
             blitImageFrame(compositor_, env_.torches(), tb.frame, tb.x, tb.y, 0);
         }
     }
+}
+
+void GameSession::renderIndoorView3D()
+{
+    renderIndoorView3DBase();
+    blitIndoorTorches();
 }
 
 void GameSession::renderOutdoorView()
@@ -1650,11 +1785,11 @@ void GameSession::renderCombatBackdrop()
         camera.y = gs_.coordY();
         camera.facing = gs_.facing03();
 
-        blitImageFrame(compositor_, env_.floor(), 0, kView3DOriginX, kView3DFloorY, 1);
+        blitImageFrame(compositor_, env_.floor(), 0, kView3DOriginX, kCombatView3DFloorY, 1);
 
         const uint16_t subday = mm2_gs_u16(gs_.a4(), MM2_GS_TIME_SUBDAY);
         if (subday < static_cast<uint16_t>(kOutdoorNightSubdayThreshold)) {
-            blitImageFrame(compositor_, env_.sky(), 0, kView3DOriginX, kView3DSkyY, 1);
+            blitImageFrame(compositor_, env_.sky(), 0, kView3DOriginX, kCombatView3DSkyY, 1);
         } else {
             const mm2_image32_file &sky = env_.sky().img;
             auto penRgb = [&sky](uint8_t pen, uint8_t &r, uint8_t &g, uint8_t &b) {
@@ -1665,38 +1800,47 @@ void GameSession::renderCombatBackdrop()
             };
             uint8_t fr = 0, fg = 0, fb = 0;
             penRgb(kOutdoorSkyFillPen, fr, fg, fb);
-            compositor_.fillRect(kOutdoorSkyFillX, kOutdoorSkyFillY, kOutdoorSkyFillW, kOutdoorSkyFillH, fr, fg,
-                                 fb);
+            compositor_.fillRect(kOutdoorSkyFillX, kCombatView3DSkyY, kCombatView3DViewportW,
+                                 kCombatView3DViewportH / 2, fr, fg, fb);
 
             std::array<OutdoorStarBlit, kOutdoorStarCount> stars{};
             const int nstars = buildOutdoorStars(camera.facing, stars);
             for (int i = 0; i < nstars; ++i) {
+                const auto &s = stars[static_cast<size_t>(i)];
+                if (s.x >= kView3DOriginX + kCombatView3DViewportW || s.y >= kCombatView3DSkyY + kCombatView3DViewportH / 2) {
+                    continue;
+                }
                 uint8_t r = 0, g = 0, b = 0;
-                penRgb(stars[static_cast<size_t>(i)].pen, r, g, b);
-                compositor_.fillRect(stars[static_cast<size_t>(i)].x, stars[static_cast<size_t>(i)].y, 1, 1, r,
-                                     g, b);
+                penRgb(s.pen, r, g, b);
+                compositor_.fillRect(s.x, s.y, 1, 1, r, g, b);
             }
         }
 
         const OutdoorScene scene = buildOutdoorScene(world_, camera);
         for (int i = 0; i < scene.num_decor; ++i) {
             const OutdoorSpriteBlit &b = scene.decor[static_cast<size_t>(i)];
+            if (b.x >= kView3DOriginX + kCombatView3DViewportW) {
+                continue;
+            }
             blitImageFrame(compositor_, env_.biomeSheet(b.biome), b.frame, b.x, b.y, 0);
         }
         for (int i = 0; i < scene.num_horizon; ++i) {
             const OutdoorSpriteBlit &b = scene.horizon[static_cast<size_t>(i)];
+            if (b.x >= kView3DOriginX + kCombatView3DViewportW) {
+                continue;
+            }
             blitImageFrame(compositor_, env_.horizonSheet(b.horizon), b.frame, b.x, b.y, 0);
         }
+        maskCombatBackdropBleed(compositor_);
         return;
     }
 
-    View3DCamera camera{};
-    camera.x = gs_.coordX();
-    camera.y = gs_.coordY();
-    camera.facing = gs_.facing03();
-    const int sky_frame = world_.roofBitAt(camera.x, camera.y) ? 1 : 0;
-    blitImageFrame(compositor_, env_.floor(), 0, kView3DOriginX, kView3DFloorY, 1);
-    blitImageFrame(compositor_, env_.sky(), sky_frame, kView3DOriginX, kView3DSkyY, 1);
+    /* Retail encounter entry (0x51C2) ends in session_interaction_gate (0x53A0)
+     * → view_3d_master (0x2ECE): full indoor hood (floor/sky/walls/torches).
+     * Combat chrome then covers the right band; mask the wall bleed past the
+     * narrow combat viewport (cols 1..0x0E). */
+    renderIndoorView3D();
+    maskCombatBackdropBleed(compositor_);
 }
 
 void GameSession::renderPartyPanel()
@@ -1711,31 +1855,117 @@ void GameSession::renderPartyPanel()
         const Mm2RosterRecord &rec = roster_.records[slot];
         slots[i].present = true;
         mm2_roster_name_to_cstr(&rec, slots[i].name, sizeof(slots[i].name));
-        slots[i].hp = rec.hp_current;
+        /* draw_party_status_panel @ 0x624C: roster word +$5E (hp_max), not +$74. */
+        slots[i].hp = rec.hp_max;
         slots[i].bad_condition = rec.condition != 0;
+        if (combat_.active()) {
+            slots[i].in_combat = true;
+            /* Check glyph = front-rank cutoff A4-$5E4D (0x12892), not acted. */
+            slots[i].combat_front_rank = combat_.partySlotInFrontRank(i);
+        }
     }
 
     gfx::drawPlayPartyPanel(compositor_, slots);
 }
 
-void GameSession::refreshCombatSprite()
+void GameSession::unloadCombatSprites()
+{
+    for (int i = 0; i < gfx::kAgaCombatSpriteCap; ++i) {
+        combat_sprites_[i].unload();
+        combat_sprite_disks_[i] = -1;
+        combat_sprite_stacks_[i] = 0;
+    }
+    combat_sprite_count_ = 0;
+}
+
+void GameSession::refreshCombatSprites()
 {
     if (!combat_.active() || !data_dir_ || !has_monsters_) {
         return;
     }
     const gfx::CombatPanelView view = combat_.panelView();
-    if (view.sprite_disk_index < 0) {
+    if (view.sprite_slot_count <= 0) {
+        unloadCombatSprites();
         return;
     }
-    if (view.sprite_disk_index == combat_sprite_disk_ && combat_sprite_.loaded()) {
+
+    bool same = view.sprite_slot_count == combat_sprite_count_;
+    if (same) {
+        for (int i = 0; i < view.sprite_slot_count; ++i) {
+            if (view.sprite_slots[i].disk_index != combat_sprite_disks_[i] ||
+                !combat_sprites_[i].loaded()) {
+                same = false;
+                break;
+            }
+        }
+    }
+    if (same) {
+        for (int i = 0; i < combat_sprite_count_; ++i) {
+            combat_sprite_stacks_[i] = view.sprite_slots[i].stack_count;
+        }
         return;
     }
-    combat_sprite_.unload();
-    combat_sprite_disk_ = view.sprite_disk_index;
-    if (combat_sprite_.loadFromDiskIndex(data_dir_, combat_sprite_disk_, gfx::AnmLoopMode::Loop, false)) {
-        /* playback starts at frame 0 from loadFromDiskIndex */
-    } else {
-        combat_sprite_disk_ = -1;
+
+    /* Reload only slots whose disk index changed - keep AnmPlanarPool refs warm. */
+    const int want = view.sprite_slot_count < gfx::kAgaCombatSpriteCap ? view.sprite_slot_count
+                                                                       : gfx::kAgaCombatSpriteCap;
+    for (int i = want; i < gfx::kAgaCombatSpriteCap; ++i) {
+        combat_sprites_[i].unload();
+        combat_sprite_disks_[i] = -1;
+        combat_sprite_stacks_[i] = 0;
+    }
+    combat_sprite_count_ = 0;
+    for (int i = 0; i < want; ++i) {
+        const int disk = view.sprite_slots[i].disk_index;
+        if (disk < 0) {
+            combat_sprites_[i].unload();
+            combat_sprite_disks_[i] = -1;
+            combat_sprite_stacks_[i] = 0;
+            continue;
+        }
+        if (combat_sprite_disks_[i] != disk || !combat_sprites_[i].loaded()) {
+            if (!combat_sprites_[i].loadFromDiskIndex(data_dir_, disk, gfx::AnmLoopMode::Loop, false)) {
+                combat_sprite_disks_[i] = -1;
+                combat_sprite_stacks_[i] = 0;
+                continue;
+            }
+            combat_sprite_disks_[i] = disk;
+        }
+        combat_sprite_stacks_[i] = view.sprite_slots[i].stack_count;
+        combat_sprite_count_ = i + 1;
+    }
+}
+
+void GameSession::blitCombatSprites()
+{
+    if (combat_sprite_count_ <= 0) {
+        return;
+    }
+
+    const gfx::CombatPanelView view = combat_.panelView();
+    const bool round_layout = view.label_monster_slots;
+    const int slot_x = round_layout ? gfx::kView3DOriginX : gfx::play_layout::kViewOriginX;
+    const int slot_y = round_layout ? gfx::play_layout::kCombatView3DSkyY : gfx::play_layout::kViewOriginY;
+    const int slot_w =
+        round_layout ? gfx::play_layout::kCombatView3DViewportW : gfx::play_layout::kViewW;
+    const int slot_h =
+        round_layout ? gfx::play_layout::kCombatView3DViewportH : gfx::play_layout::kViewH;
+
+    for (int i = 0; i < combat_sprite_count_; ++i) {
+        if (!combat_sprites_[i].loaded()) {
+            continue;
+        }
+        /* Always clamp into the active hood — oversized .anm cels must not paint
+         * the roster band (cols 0x10+). Multi-BOB uses layout offsets as bias. */
+        if (combat_sprite_count_ == 1) {
+            combat_sprites_[i].blitCenteredInViewport(compositor_, 0, slot_x, slot_y, slot_w, slot_h);
+        } else {
+            const int layout_i = i % gfx::play_layout::kAgaCombatSpriteLayoutCount;
+            const gfx::play_layout::AgaCombatSpriteLayout &lay =
+                gfx::play_layout::kAgaCombatSpriteLayout[layout_i];
+            combat_sprites_[i].blitCenteredInViewport(compositor_, 0, slot_x + lay.x, slot_y + lay.y,
+                                                      slot_w - lay.x, slot_h - lay.y);
+        }
     }
 }
 
@@ -1761,15 +1991,20 @@ void GameSession::renderOverlays()
     case PlayOverlay::Automap:
         gfx::renderAutomap(compositor_, env_, world_, automap_, gs_);
         break;
-    case PlayOverlay::QuitConfirm:
+    case PlayOverlay::QuitConfirm: {
+        /* -$7EC0 status line — Y/N only, no spinner/cursor (doc 44 §3.7). */
+        static const char kQuitPrompt[] = "Quit without game save (y/n)?";
         gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
-        compositor_.drawText(8, 17 * 8, "Quit without game save (y/n)?", 255, 80, 80, 255);
+        compositor_.drawText(8, 17 * 8, kQuitPrompt, 255, 80, 80, 255);
         break;
-    case PlayOverlay::RestConfirm:
-        /* 0x19ECB inline string, drawn on the status row like the other prompts. */
+    }
+    case PlayOverlay::RestConfirm: {
+        /* 0x19ECB inline string — Y/N only, no spinner/cursor. */
+        static const char kRestPrompt[] = "Rest here? (Y/N)";
         gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
-        compositor_.drawText(8, 17 * 8, "Rest here? (Y/N)", 255, 255, 128, 255);
+        compositor_.drawText(8, 17 * 8, kRestPrompt, 255, 255, 128, 255);
         break;
+    }
     case PlayOverlay::TownService:
         town_service_ui_.render(compositor_);
         break;
@@ -1785,6 +2020,12 @@ void GameSession::renderFrame(bool overlay_anim_only)
 
     /* Chrome (red border + black fills) is cached in chip RAM and blitted each
      * frame so double-buffer swaps do not drop HUD glyphs outside the 3D cache. */
+    const gfx::CombatPanelView combat_view = combat_active ? combat_.panelView() : gfx::CombatPanelView{};
+    /* Pre-combat (encounter entry @ 0x12C6E) keeps the wide exploration hood +
+     * name box; the narrow hood/roster layout starts with the round loop
+     * (combat_display_refresh @ 0x135BE). */
+    const bool combat_round_layout = combat_active && combat_view.label_monster_slots;
+
 #if MM2_HOST_AMIGA
     if (!overlay_anim_only) {
         if (chrome_dirty_ || !mm2_amiga_play_chrome_cache_ready()) {
@@ -1796,6 +2037,9 @@ void GameSession::renderFrame(bool overlay_anim_only)
             mm2_amiga_play_chrome_cache_end();
         }
         mm2_amiga_play_chrome_cache_present();
+        if (combat_round_layout) {
+            gfx::drawCombatScreenChrome(compositor_);
+        }
     }
 #else
     (void)overlay_anim_only;
@@ -1805,22 +2049,43 @@ void GameSession::renderFrame(bool overlay_anim_only)
 
     if (combat_active) {
 #if MM2_HOST_AMIGA
-        if (!combat_backdrop_cached_) {
+        if (!combat_backdrop_cached_ || combat_backdrop_round_layout_ != combat_round_layout) {
             mm2_amiga_restore_play_world_palette();
-            renderCombatBackdrop();
+            if (combat_round_layout) {
+                /* Narrow hood only — a 208-wide restore would wipe the roster. */
+                mm2_amiga_viewport_cache_set_size(
+                    static_cast<UWORD>(gfx::play_layout::kCombatView3DViewportW),
+                    static_cast<UWORD>(gfx::play_layout::kCombatView3DViewportH));
+                renderCombatBackdrop();
+            } else {
+                mm2_amiga_viewport_cache_set_size(208, 120);
+                renderView3D();
+            }
             mm2_amiga_viewport_cache_save();
             combat_backdrop_cached_ = true;
+            combat_backdrop_round_layout_ = combat_round_layout;
         } else {
             mm2_amiga_viewport_cache_restore();
         }
 #else
-        renderCombatBackdrop();
-#endif
-        refreshCombatSprite();
-        if (combat_sprite_.loaded()) {
-            combat_sprite_.blitCentered(compositor_, 0);
+        if (combat_round_layout) {
+            renderCombatBackdrop();
+        } else {
+            renderView3D();
         }
-        gfx::drawPlayViewportDivider(compositor_);
+#endif
+        refreshCombatSprites();
+        if (combat_round_layout) {
+            gfx::drawCombatScreenLines(compositor_);
+            blitCombatSprites();
+            /* Sprites may paint past the narrow hood — re-mask before roster text. */
+            maskCombatBackdropBleed(compositor_);
+            gfx::drawCombatViewportFrame(compositor_);
+            gfx::drawCombatViewportDivider(compositor_);
+        } else {
+            blitCombatSprites();
+            gfx::drawPlayViewportDivider(compositor_);
+        }
     } else if (!scripted_active || !scripted_scene_.hidesView3D()) {
         if (overlay_ != PlayOverlay::Automap && !viewportHiddenByOverlay()) {
 #if MM2_HOST_AMIGA
@@ -1828,10 +2093,22 @@ void GameSession::renderFrame(bool overlay_anim_only)
                 /* Retail buf_copy_rect @ 0x171AC: restore the saved 3D viewport
                  * instead of rebuilding floor+sky+wall slices every ghost cel. */
                 mm2_amiga_viewport_cache_restore();
+                if (!world_.isOutdoor()) {
+                    blitIndoorTorches();
+                }
             } else {
-                renderView3D();
+                mm2_amiga_viewport_cache_set_size(208, 120);
+                /* Cache floor/sky/walls only — torch flicker reuses this snapshot. */
+                if (world_.isOutdoor()) {
+                    renderView3D();
+                } else {
+                    renderIndoorView3DBase();
+                }
                 drawSpellEyeOverlayIfActive(compositor_, env_, world_, gs_, assets_ok_);
                 mm2_amiga_viewport_cache_save();
+                if (!world_.isOutdoor()) {
+                    blitIndoorTorches();
+                }
             }
 #else
             renderView3D();
@@ -1856,8 +2133,7 @@ void GameSession::renderFrame(bool overlay_anim_only)
     renderPartyPanel();
 
     if (combat_active) {
-        const gfx::CombatPanelView combat_view = combat_.panelView();
-        gfx::drawCombatMonsterList(compositor_, combat_view);
+        gfx::drawCombatRightColumn(compositor_, combat_view);
         gfx::drawCombatOptionsBar(compositor_, combat_view);
     } else {
         gfx::PlayRightPanel panel = right_panel_;
@@ -1866,9 +2142,10 @@ void GameSession::renderFrame(bool overlay_anim_only)
         }
 
         if (overlay_ == PlayOverlay::None || overlay_ == PlayOverlay::StatusMessage ||
+            overlay_ == PlayOverlay::QuitConfirm || overlay_ == PlayOverlay::RestConfirm ||
             overlay_ == PlayOverlay::TownService) {
-            /* Town services render in the lower console band only (faithful, not a
-             * fullscreen modal) — keep the 3D view + right column on screen. */
+            /* Status-line prompts and town services draw in the lower console band
+             * only (faithful, not fullscreen modals) — keep 3D view + right column. */
             const bool protect_panel = panel == gfx::PlayRightPanel::Protect;
             const gfx::PlayProtectValues prot = protectValues();
             gfx::drawPlayRightColumn(compositor_, panel, protect_panel ? &prot : nullptr);
@@ -1901,7 +2178,6 @@ bool GameSession::viewportHiddenByOverlay() const
     case PlayOverlay::QuickRef:
     case PlayOverlay::CharacterSheet:
     case PlayOverlay::Controls:
-    case PlayOverlay::QuitConfirm:
     case PlayOverlay::Automap:
         return true;
     /* TownService is NOT here: its menu draws only in the lower console band, so
@@ -1936,6 +2212,9 @@ void GameSession::renderFrameOverlayAnimOnly()
 
     if (overlay_ != PlayOverlay::Automap) {
         mm2_amiga_viewport_cache_restore();
+        if (!world_.isOutdoor() && !combat_.active()) {
+            blitIndoorTorches();
+        }
         gfx::drawPlayViewportDivider(compositor_);
     }
 
@@ -1956,12 +2235,27 @@ void GameSession::renderFrameCombatAnimOnly()
         return;
     }
 
-    mm2_amiga_viewport_cache_restore();
-    refreshCombatSprite();
-    if (combat_sprite_.loaded()) {
-        combat_sprite_.blitCentered(compositor_, 0);
+    const gfx::CombatPanelView view = combat_.panelView();
+    const bool round_layout = view.label_monster_slots;
+    if (round_layout != combat_backdrop_round_layout_) {
+        /* Cached hood was rendered for the other layout — full repaint. */
+        renderFrame(false);
+        play_buffer_valid_ = true;
+        return;
     }
-    gfx::drawPlayViewportDivider(compositor_);
+
+    mm2_amiga_viewport_cache_restore();
+    refreshCombatSprites();
+    blitCombatSprites();
+    if (round_layout) {
+        maskCombatBackdropBleed(compositor_);
+        gfx::drawCombatViewportFrame(compositor_);
+        gfx::drawCombatViewportDivider(compositor_);
+        /* Belt-and-suspenders: roster lives outside the narrow hood cache. */
+        gfx::drawCombatRightColumn(compositor_, view);
+    } else {
+        gfx::drawPlayViewportDivider(compositor_);
+    }
 }
 
 void GameSession::renderFrameView3DOnly()
@@ -1973,9 +2267,17 @@ void GameSession::renderFrameView3DOnly()
     }
 
     if (overlay_ != PlayOverlay::Automap) {
-        renderView3D();
+        /* Cache floor/sky/walls; torch cels are phase-dependent and go on after. */
+        if (world_.isOutdoor()) {
+            renderView3D();
+        } else {
+            renderIndoorView3DBase();
+        }
         drawSpellEyeOverlayIfActive(compositor_, env_, world_, gs_, assets_ok_);
         mm2_amiga_viewport_cache_save();
+        if (!world_.isOutdoor()) {
+            blitIndoorTorches();
+        }
         gfx::drawPlayViewportDivider(compositor_);
     }
 
@@ -1983,14 +2285,56 @@ void GameSession::renderFrameView3DOnly()
         const bool protect_panel = right_panel_ == gfx::PlayRightPanel::Protect;
         gfx::drawPlayStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
                                gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
-    }
-
-    if (events_loaded_) {
+        /* Console message band (OP_01/02/03 + text-entry cursor). Partial 3D
+         * refresh previously skipped this and left torn/stale glyphs. */
+        if (events_loaded_ && !viewportHiddenByOverlay()) {
+            if (overlay_ == PlayOverlay::TownService) {
+                events_.textView().drawPersistentViewportOverlays(compositor_);
+                events_.textView().drawServiceSignOverlay(compositor_);
+                events_.textView().drawPegasusIllustration(compositor_);
+            } else {
+                events_.textView().draw(compositor_);
+            }
+        }
+        renderOverlays();
+    } else if (events_loaded_) {
         events_.textView().drawPersistentViewportOverlays(compositor_);
         events_.textView().drawServiceSignOverlay(compositor_);
         events_.textView().drawPegasusIllustration(compositor_);
     }
 }
+
+void GameSession::renderFrameTextOnly()
+{
+    /* Console / status-line text refresh without rebuilding the 3D hood. */
+    if (!mm2_amiga_copy_front_to_back()) {
+        renderFrame(false);
+        play_buffer_valid_ = true;
+        return;
+    }
+
+    const bool protect_panel = right_panel_ == gfx::PlayRightPanel::Protect;
+    gfx::drawPlayStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
+                           gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
+
+    /* Clear the lower console band before redraw so partial updates cannot leave
+     * stale spinner/cursor ink (cols 1..38, rows 17..22). */
+    gfx::fillCellRect(compositor_, 1, 0x11, 38, 6);
+
+    if (events_loaded_ && !combat_.active() &&
+        !(scripted_loaded_ && scripted_scene_.active()) && !viewportHiddenByOverlay()) {
+        if (overlay_ == PlayOverlay::TownService) {
+            events_.textView().drawPersistentViewportOverlays(compositor_);
+            events_.textView().drawServiceSignOverlay(compositor_);
+            events_.textView().drawPegasusIllustration(compositor_);
+        } else {
+            events_.textView().draw(compositor_);
+        }
+    }
+
+    renderOverlays();
+}
+
 #endif
 
 void GameSession::render()
@@ -2010,6 +2354,13 @@ void GameSession::render()
             play_buffer_valid_ = true;
             return;
         }
+    }
+
+    /* Status / console text only (facing, OP_2F entry echo, quit/rest prompts). */
+    if (text_dirty_ && !view3d_dirty_ && !chrome_dirty_ && !overlay_anim_dirty_) {
+        renderFrameTextOnly();
+        play_buffer_valid_ = true;
+        return;
     }
 
     if (canUsePartialView3DRefresh()) {

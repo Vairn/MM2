@@ -58,18 +58,19 @@ function consoleBox(ctx, col, row, w, h) {
 }
 
 export const PARTY_NAME_WIDTH = 11;
-const PARTY_PREFIX_LEN = 3;
+const PARTY_PREFIX_LEN = 4; /* " N) " @ 0x6150 */
 const PARTY_SLOT_ROW_BASE = 0x13;
 const PARTY_SLOT_COL_LEFT = 0x01;
 const PARTY_SLOT_COL_RIGHT = 0x14;
 const PARTY_SLOT_CLEAR_WIDTH = 0x13;
 
-/** @returns {string} format_party_status_line @ PartyStatusFormat.cpp */
+/** @returns {string} format_party_status_line @ PartyStatusFormat.cpp / 0x6150 */
 export function formatPartyStatusLine(slotIndex, name, hp) {
   const slotDigit = slotIndex >= 0 && slotIndex < 8 ? slotIndex + 1 : 1;
   const nameField = (name ?? "").slice(0, PARTY_NAME_WIDTH).padEnd(PARTY_NAME_WIDTH, " ");
-  const hpField = hp > 999 ? "+++" : String(hp).padStart(3, " ");
-  return ` ${slotDigit})${nameField} /${hpField}`;
+  /* 0x6266..0x629A: left-aligned 3-cell field (trailing spaces), not padStart. */
+  const hpField = hp > 999 ? "+++" : String(hp).padEnd(3, " ");
+  return ` ${slotDigit}) ${nameField} /${hpField}`;
 }
 
 /** @param {object} session */
@@ -81,7 +82,8 @@ export function buildPlayPartySlots(session) {
     slots[i] = {
       present: true,
       name: m.name ?? "",
-      hp: m.hpCurrent ?? 0,
+      /* draw_party_status_panel @ 0x624C: roster +$5E (hp_max), not +$74. */
+      hp: m.hpMax ?? 0,
       badCondition: (m.condition ?? 0) !== 0,
     };
   }
@@ -167,9 +169,13 @@ export function drawPlayPartyPanel(ctx, slots) {
   for (let i = 0; i < 8; i++) {
     const row = PARTY_SLOT_ROW_BASE + Math.floor(i / 2);
     const col = i & 1 ? PARTY_SLOT_COL_RIGHT : PARTY_SLOT_COL_LEFT;
-    fillCellRect(ctx, col, row, PARTY_SLOT_CLEAR_WIDTH, 1);
     const s = slots[i];
-    if (!s?.present) continue;
+    /* Empty only: -$7F62 @ 0x6178. Occupied overwrite in place (clear width
+     * 0x13 from col 1 would erase left slot's last HP cell at col 0x14). */
+    if (!s?.present) {
+      fillCellRect(ctx, col, row, PARTY_SLOT_CLEAR_WIDTH, 1);
+      continue;
+    }
 
     const line = formatPartyStatusLine(i, s.name, s.hp);
     const prefix = line.slice(0, PARTY_PREFIX_LEN);

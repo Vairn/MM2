@@ -394,3 +394,37 @@ void mm2_create_build_record(const Mm2PendingCharacter *pending, Mm2RosterRecord
     ac = mm2_create_speed_ac_bonus(pending->modified.speed);
     out->armor_class = (uint8_t)ac;
 }
+
+void mm2_roster_refresh_spell_points(Mm2RosterRecord *rec)
+{
+    Mm2CreateStats stats;
+    int per_level;
+    int total;
+
+    if (!rec || rec->spell_level == 0 || rec->sp_max != 0) {
+        return;
+    }
+
+    stats.might = rec->might_current;
+    stats.intelligence = rec->intelligence_current;
+    stats.personality = rec->personality_current;
+    stats.endurance = rec->endurance_current;
+    stats.speed = rec->speed_current;
+    stats.accuracy = rec->accuracy_current;
+    stats.luck = rec->luck_current;
+
+    per_level = mm2_create_primary_sp_per_level(rec->class_id, &stats);
+    if (per_level <= 0) {
+        return;
+    }
+
+    total = per_level * (int)rec->spell_level;
+    if (total <= 0) {
+        return;
+    }
+
+    rec->sp_max = (uint16_t)total;
+    if (rec->sp_current == 0) {
+        rec->sp_current = rec->sp_max;
+    }
+}

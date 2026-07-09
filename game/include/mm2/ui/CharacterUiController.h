@@ -48,6 +48,9 @@ public:
     /** Amiga: true when the off-screen cache needs a rebuild (present still runs every frame). */
     bool needsRedraw() const;
     void ackRedraw();
+    bool needsIncrementalRedraw() const;
+    void renderIncremental(gfx::ScreenCompositor &compositor);
+    bool takeIncrementalPresentRect(int *out_x, int *out_y, int *out_w, int *out_h);
 
     bool takePartyLaunch(Mm2PartyLaunch *out);
 

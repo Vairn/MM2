@@ -10,6 +10,7 @@
 
 #include "mm2/gfx/EnvAssets.h"
 #include "mm2/gfx/PlayScreenChrome.h"
+#include "mm2/gfx/CombatPanel.h"
 #include "mm2/world/AutomapState.h"
 #include "mm2/gfx/ScreenCompositor.h"
 #include "mm2/gfx/OutdoorView3D.h"
@@ -74,6 +75,10 @@ public:
 
     const gfx::ScreenCompositor &compositor() const { return compositor_; }
 
+    /** Read-only game-state view (offline golden dumps / debugging). */
+    const GameStateView &gameState() const { return gs_; }
+    const combat::CombatSession &combatSession() const { return combat_; }
+
     /** Current map screen label (town name, D2, Luxus Palace, …) — not home town. */
     const char *currentScreenLabel() const;
     int currentScreenId() const { return world_.currentScreen(); }
@@ -89,13 +94,20 @@ private:
     void renderFrameView3DOnly();
     void renderFrameOverlayAnimOnly();
     void renderFrameCombatAnimOnly();
+    void renderFrameTextOnly();
 #endif
     void renderView3D();
     void renderCombatBackdrop();
     void renderIndoorView3D();
+    /** Floor/sky/walls only — torch cels are blitted after viewport-cache save. */
+    void renderIndoorView3DBase();
+    void blitIndoorTorches();
+    void refreshHoodTorchCache();
     void renderOutdoorView();
     void renderPartyPanel();
-    void refreshCombatSprite();
+    void refreshCombatSprites();
+    void blitCombatSprites();
+    void unloadCombatSprites();
     void renderOverlays();
     void refreshWorldAfterMove(const gameplay::MoveResult &move);
     void tickCombatCharacterSheetInput(const platform::KeyState &keys);
@@ -154,10 +166,13 @@ private:
     Mm2MonstersFile monsters_{};
     bool has_monsters_ = false;
     combat::CombatSession combat_;
-    gfx::ViewportAnmOverlay combat_sprite_{};
-    int combat_sprite_disk_ = -1;
+    gfx::ViewportAnmOverlay combat_sprites_[gfx::kAgaCombatSpriteCap]{};
+    int combat_sprite_disks_[gfx::kAgaCombatSpriteCap] = {-1, -1, -1, -1};
+    int combat_sprite_stacks_[gfx::kAgaCombatSpriteCap]{};
+    int combat_sprite_count_ = 0;
 #if MM2_HOST_AMIGA
     bool combat_backdrop_cached_ = false;
+    bool combat_backdrop_round_layout_ = false; /* layout the cache was rendered with */
 #endif
 
     world::MapWorld world_;
@@ -194,6 +209,13 @@ private:
     /** Torch flicker phase (A4-$667A) — advanced each indoor viewport tick. */
     int torch_phase_ = 0;
     int torch_tick_ = 0;
+    /** Cached from last move/turn: skip torch redraw when the hood has no torch walls. */
+    bool hood_has_torches_ = false;
+    bool hood_torch_cache_valid_ = false;
+
+    /** Last platform::nowTicks() sample for .anm overlay pacing (VBlank clock). */
+    uint32_t overlay_anim_clock_ = 0;
+    bool overlay_anim_clock_valid_ = false;
 
 #if MM2_HOST_AMIGA
     bool view3d_dirty_ = false;

@@ -1,8 +1,6 @@
 #include "mm2_copyprot_codec.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "mm2_codec_platform.h"
 
 static uint16_t read_be16(const uint8_t *p) {
     return (uint16_t)((((uint16_t)p[0]) << 8) | ((uint16_t)p[1]));

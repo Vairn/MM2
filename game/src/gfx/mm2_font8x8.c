@@ -24,6 +24,14 @@ void mm2_amiga_font_init(void)
     }
 }
 
+void mm2_amiga_font_shutdown(void)
+{
+    if (s_font_chip) {
+        memFree(s_font_chip, (ULONG)(MM2_FONT8X8_GLYPHS * MM2_FONT8X8_ROWS));
+        s_font_chip = NULL;
+    }
+}
+
 const uint8_t *mm2_font8x8_live(void)
 {
     return s_font_chip ? s_font_chip : (const uint8_t *)mm2_font8x8;

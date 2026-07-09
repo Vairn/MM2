@@ -1,8 +1,6 @@
 #include "mm2_globe_blob.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "mm2_codec_platform.h"
 
 static const uint32_t k_table_counts[MM2_GLOBE_TABLE_COUNT] = {14, 18, 7, 15, 17, 10, 23};
 

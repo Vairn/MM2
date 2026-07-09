@@ -84,6 +84,7 @@ bool beginDisplay()
 
     mm2AmigaDisplayActivate();
     mm2_amiga_font_init();
+    (void)mm2_amiga_font_atlas_create();
     g_display_ready = true;
     MM2_DBG("MM2 DBG: Display active AGA %ux%u %ubpp\n", MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT,
             MM2_AGA_SCREEN_BPP);
@@ -93,6 +94,8 @@ bool beginDisplay()
 void shutdown()
 {
     if (g_display_ready) {
+        mm2_amiga_font_atlas_shutdown();
+        mm2_amiga_font_shutdown();
         mm2AmigaDisplayDispose();
         g_display_ready = false;
     }

@@ -24,6 +24,8 @@ enum class EventVmWait : uint8_t {
     Space,
     YesNo,
     MemberSelect,
+    /** OP_2F @ 0x16FEA: -$7F92 fills A4-$5C50 (10 chars, space-padded). */
+    Answer,
 };
 
 struct EventPortalOffer {
@@ -56,6 +58,8 @@ public:
 
     EventTextView &textView() { return text_; }
     const EventTextView &textView() const { return text_; }
+
+    EventVmWait waitKind() const { return wait_; }
 
     /** Optional party roster for gold/item checks (OP_24/OP_28). */
     void bindParty(Mm2RosterFile *roster, const Mm2PartyLaunch *launch);
@@ -135,6 +139,8 @@ private:
     void initParsed(GameStateView &gs);
     int poolSeek(uint8_t event_id) const;
     int poolSeekIn(const Mm2EventLocation *loc, uint8_t event_id) const;
+    /** ASM pool_seek from work_buf parse_pos: skip `event_id` FF-delimited records. */
+    int poolSeekWorkBuf(int start_pos, uint8_t event_id) const;
     uint8_t contextMask(const GameStateView &gs) const;
     bool eraGateOpen(const GameStateView &gs, const world::MapWorld &world) const;
 
@@ -149,6 +155,12 @@ private:
     void abortScript(GameStateView &gs);
     void applyMapTransition(GameStateView &gs, world::MapWorld &world, uint8_t dest_screen,
                             uint8_t dest_tile);
+    /** Queued dispatch @ 0x176B6: seek queued id in current work_buf and run VM. */
+    bool runQueuedDispatch(GameStateView &gs, world::MapWorld &world);
+    /** OP_0C @ 0x15E12 bit6 / >=$80 dest remaps before map load. */
+    void remapOp0cDest(uint8_t &dest_screen, uint8_t &dest_tile);
+    /** Restore home location after OP_0E overlay swap when idle. */
+    void restoreOverlayIfIdle(GameStateView &gs);
     bool finishPendingPortal(GameStateView &gs, world::MapWorld &world, bool accepted);
     bool finishPendingTownMenu(GameStateView &gs, bool accepted);
 
@@ -183,6 +195,12 @@ private:
     int saved_location_id_ = -1;
     const Mm2EventLocation *saved_loc_ = nullptr;
     uint8_t saved_work_buf_[MM2_GS_EVENT_WORK_SIZE]{};
+    /** Runtime copy of A4-$7954 (event_script_anchor) for text resolve @ 0x15884. */
+    uint16_t string_anchor_ = 0;
+
+    /** OP_2F answer entry: chars typed so far (max 10), space-padded on commit. */
+    int answer_len_ = 0;
+    char answer_buf_[11]{};
 };
 
 }  // namespace mm2::events

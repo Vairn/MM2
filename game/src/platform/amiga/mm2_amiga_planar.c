@@ -1,6 +1,6 @@
 /**
  * Present .32 assets on the ACE playfield — planar blit only (no RGBA / chunky).
- * Rect fills use ACE blitRect; 8×8 text uses fast byte-row planar glyph plot.
+ * Rect fills use ACE blitRect; 8×8 text uses a 1bpp chip glyph atlas + masked ink stamp.
  */
 
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
@@ -43,10 +43,29 @@ static tBitMap *s_play_chrome_bm;
 static UBYTE s_rev_byte[256];
 static UBYTE s_rev_byte_ready;
 
+/* 128 glyphs in a 16×8 cell grid → 128×64 1bpp mask atlas (chip). */
+#define MM2_FONT_ATLAS_COLS 16u
+#define MM2_FONT_ATLAS_ROWS 8u
+#define MM2_FONT_ATLAS_W (MM2_FONT_ATLAS_COLS * 8u)
+#define MM2_FONT_ATLAS_H (MM2_FONT_ATLAS_ROWS * 8u)
+#define MM2_FONT_GLYPH_W 8u
+#define MM2_FONT_GLYPH_H 8u
+
+static tBitMap *s_font_mask_atlas; /* 128×64 × 1bpp */
+static tBitMap *s_font_ink;        /* 8×8 × playfield depth — solid pen stamp */
+static tBitMap *s_font_glyph_mask; /* 8×8 × 1bpp — one glyph extracted from atlas */
+static UBYTE s_font_ink_pen = 0xFFu;
+static UBYTE s_font_atlas_ready;
+/* Dense UI text: CPU plot wins. Set 1 to use 2-blit atlas path (batched strings later). */
+static UBYTE s_font_use_atlas_blit = 0;
+
 #define MM2_VIEWPORT_CACHE_X 8u
 #define MM2_VIEWPORT_CACHE_Y 8u
-#define MM2_VIEWPORT_CACHE_W 208u
-#define MM2_VIEWPORT_CACHE_H 120u
+#define MM2_VIEWPORT_CACHE_W_MAX 208u
+#define MM2_VIEWPORT_CACHE_H_MAX 120u
+/* Live save/restore size — exploration uses full hood; combat round uses narrow. */
+static UWORD s_viewport_cache_w = MM2_VIEWPORT_CACHE_W_MAX;
+static UWORD s_viewport_cache_h = MM2_VIEWPORT_CACHE_H_MAX;
 
 void mm2_amiga_push_palette(void);
 
@@ -209,6 +228,98 @@ static void mm2_amiga_plot_glyph_row(UWORD uwX, UWORD uwY, UBYTE glyph_bits, UBY
     }
 }
 
+static void mm2_amiga_font_atlas_destroy(void)
+{
+    if (s_font_mask_atlas) {
+        bitmapDestroy(s_font_mask_atlas);
+        s_font_mask_atlas = NULL;
+    }
+    if (s_font_ink) {
+        bitmapDestroy(s_font_ink);
+        s_font_ink = NULL;
+    }
+    if (s_font_glyph_mask) {
+        bitmapDestroy(s_font_glyph_mask);
+        s_font_glyph_mask = NULL;
+    }
+    s_font_ink_pen = 0xFFu;
+    s_font_atlas_ready = 0;
+}
+
+/** Build 1bpp atlas + reusable 8×8 ink stamp (called from mm2_amiga_font_init). */
+UBYTE mm2_amiga_font_atlas_create(void)
+{
+    const uint8_t *table;
+    UWORD cp;
+    UBYTE row;
+
+    if (s_font_atlas_ready) {
+        return 1;
+    }
+    mm2_amiga_ensure_rev_byte();
+
+    s_font_mask_atlas = bitmapCreate((UWORD)MM2_FONT_ATLAS_W, (UWORD)MM2_FONT_ATLAS_H, 1, BMF_CLEAR);
+    s_font_ink = bitmapCreate((UWORD)MM2_FONT_GLYPH_W, (UWORD)MM2_FONT_GLYPH_H, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
+    s_font_glyph_mask = bitmapCreate((UWORD)MM2_FONT_GLYPH_W, (UWORD)MM2_FONT_GLYPH_H, 1, BMF_CLEAR);
+    if (!s_font_mask_atlas || !s_font_ink || !s_font_glyph_mask || !bitmapIsChip(s_font_mask_atlas) ||
+        !bitmapIsChip(s_font_ink) || !bitmapIsChip(s_font_glyph_mask)) {
+        mm2_amiga_font_atlas_destroy();
+        return 0;
+    }
+
+    table = mm2_font8x8_live();
+    for (cp = 0; cp < MM2_FONT8X8_GLYPHS; ++cp) {
+        const UWORD gx = (UWORD)((cp % MM2_FONT_ATLAS_COLS) * MM2_FONT_GLYPH_W);
+        const UWORD gy = (UWORD)((cp / MM2_FONT_ATLAS_COLS) * MM2_FONT_GLYPH_H);
+        const uint8_t *glyph = table + (ULONG)cp * (ULONG)MM2_FONT8X8_ROWS;
+        for (row = 0; row < MM2_FONT8X8_ROWS; ++row) {
+            /* Stamp into 1bpp atlas with pen 1 (ink bits). */
+            mm2_amiga_plot_glyph_row(gx, gy + (UWORD)row, glyph[row], 1u, s_font_mask_atlas);
+        }
+    }
+
+    s_font_atlas_ready = 1;
+    return 1;
+}
+
+void mm2_amiga_font_atlas_shutdown(void)
+{
+    mm2_amiga_font_atlas_destroy();
+}
+
+static void mm2_amiga_font_prepare_ink(UBYTE pen)
+{
+    if (!s_font_ink || pen == s_font_ink_pen) {
+        return;
+    }
+    blitRect(s_font_ink, 0, 0, (WORD)MM2_FONT_GLYPH_W, (WORD)MM2_FONT_GLYPH_H, pen);
+    s_font_ink_pen = pen;
+}
+
+static UBYTE mm2_amiga_blit_glyph_atlas(UWORD uwX, UWORD uwY, UBYTE ubCodepoint, UBYTE pen, tBitMap *pDst)
+{
+    UWORD gx;
+    UWORD gy;
+
+    if (!s_font_atlas_ready || !s_font_mask_atlas || !s_font_ink || !s_font_glyph_mask || !pDst) {
+        return 0;
+    }
+    if (!bitmapIsChip(pDst) || !bitmapIsChip(s_font_ink) || !bitmapIsChip(s_font_mask_atlas)) {
+        return 0;
+    }
+
+    gx = (UWORD)((ubCodepoint % MM2_FONT_ATLAS_COLS) * MM2_FONT_GLYPH_W);
+    gy = (UWORD)((ubCodepoint / MM2_FONT_ATLAS_COLS) * MM2_FONT_GLYPH_H);
+
+    /* Extract one 8×8 mask cell (aligned) then cookie-cut the solid-pen stamp. */
+    blitCopy(s_font_mask_atlas, (WORD)gx, (WORD)gy, s_font_glyph_mask, 0, 0, (WORD)MM2_FONT_GLYPH_W,
+             (WORD)MM2_FONT_GLYPH_H, MINTERM_COPY);
+    mm2_amiga_font_prepare_ink(pen);
+    blitCopyMask(s_font_ink, 0, 0, pDst, (WORD)uwX, (WORD)uwY, (WORD)MM2_FONT_GLYPH_W,
+                 (WORD)MM2_FONT_GLYPH_H, s_font_glyph_mask->Planes[0]);
+    return 1;
+}
+
 void mm2_amiga_draw_glyph8_pen(UWORD uwX, UWORD uwY, UBYTE ubCodepoint, UBYTE pen, UBYTE ubA)
 {
     const uint8_t *table;
@@ -219,11 +330,19 @@ void mm2_amiga_draw_glyph8_pen(UWORD uwX, UWORD uwY, UBYTE ubCodepoint, UBYTE pe
     if (ubA == 0 || ubCodepoint >= MM2_FONT8X8_GLYPHS) {
         return;
     }
-    mm2_amiga_ensure_rev_byte();
     pDst = mm2_amiga_pixel_dest();
     if (!pDst || uwX >= MM2_AGA_SCREEN_WIDTH || uwY + 8u > MM2_AGA_SCREEN_HEIGHT) {
         return;
     }
+    /*
+     * Dense UI (party chooser, chrome, console boxes) draws hundreds of glyphs
+     * per frame. Two 8×8 blitter jobs per glyph is slower than CPU planar plot;
+     * atlas blit stays available via s_font_use_atlas_blit for a batched path.
+     */
+    if (s_font_use_atlas_blit && mm2_amiga_blit_glyph_atlas(uwX, uwY, ubCodepoint, pen, pDst)) {
+        return;
+    }
+    mm2_amiga_ensure_rev_byte();
     table = mm2_font8x8_live();
     glyph = table + (ULONG)ubCodepoint * (ULONG)MM2_FONT8X8_ROWS;
     for (row = 0; row < MM2_FONT8X8_ROWS; ++row) {
@@ -315,6 +434,14 @@ void mm2_amiga_ui_cache_begin(void)
     mm2_amiga_brect(s_ui_cache_bm, 0, 0, MM2_AGA_SCREEN_WIDTH, MM2_AGA_SCREEN_HEIGHT, 0);
 }
 
+void mm2_amiga_ui_cache_begin_keep(void)
+{
+    if (!s_ui_cache_bm) {
+        return;
+    }
+    s_pixel_target = s_ui_cache_bm;
+}
+
 void mm2_amiga_ui_cache_end(void)
 {
     s_pixel_target = NULL;
@@ -322,10 +449,17 @@ void mm2_amiga_ui_cache_end(void)
 
 void mm2_amiga_ui_cache_present(void)
 {
+    mm2_amiga_ui_cache_present_rect(0, 0, (UWORD)MM2_AGA_SCREEN_WIDTH, (UWORD)MM2_AGA_SCREEN_HEIGHT);
+}
+
+void mm2_amiga_ui_cache_present_rect(UWORD uwX, UWORD uwY, UWORD uwW, UWORD uwH)
+{
     tSimpleBufferManager *pBfr;
     tBitMap *pDst;
+    UWORD x;
+    UWORD w;
 
-    if (!s_ui_cache_bm) {
+    if (!s_ui_cache_bm || uwW == 0 || uwH == 0) {
         return;
     }
     pBfr = mm2AmigaDisplayGetBuffer();
@@ -336,8 +470,24 @@ void mm2_amiga_ui_cache_present(void)
     if (!bitmapIsChip(s_ui_cache_bm) || !bitmapIsChip(pDst)) {
         return;
     }
-    blitCopy(s_ui_cache_bm, 0, 0, pDst, 0, 0, (WORD)MM2_AGA_SCREEN_WIDTH, (WORD)MM2_AGA_SCREEN_HEIGHT,
-             MINTERM_COPY);
+    /* Blitter copy width must be a multiple of 16. */
+    x = (UWORD)(uwX & ~15U);
+    w = (UWORD)(((ULONG)uwX + (ULONG)uwW + 15UL) & ~15UL);
+    if (w > x) {
+        w = (UWORD)(w - x);
+    } else {
+        return;
+    }
+    if ((ULONG)x + (ULONG)w > (ULONG)MM2_AGA_SCREEN_WIDTH) {
+        w = (UWORD)(MM2_AGA_SCREEN_WIDTH - x);
+    }
+    if ((ULONG)uwY + (ULONG)uwH > (ULONG)MM2_AGA_SCREEN_HEIGHT) {
+        uwH = (UWORD)(MM2_AGA_SCREEN_HEIGHT - uwY);
+    }
+    if (w == 0 || uwH == 0) {
+        return;
+    }
+    blitCopy(s_ui_cache_bm, (WORD)x, (WORD)uwY, pDst, (WORD)x, (WORD)uwY, (WORD)w, (WORD)uwH, MINTERM_COPY);
 }
 
 void mm2_amiga_ui_cache_invalidate(void)
@@ -426,9 +576,21 @@ UBYTE mm2_amiga_viewport_cache_create(void)
     if (s_viewport_cache_bm) {
         return 1;
     }
-    s_viewport_cache_bm =
-        bitmapCreate(MM2_VIEWPORT_CACHE_W + 16, MM2_VIEWPORT_CACHE_H, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
+    s_viewport_cache_bm = bitmapCreate(MM2_VIEWPORT_CACHE_W_MAX + 16, MM2_VIEWPORT_CACHE_H_MAX,
+                                       MM2_AGA_SCREEN_BPP, BMF_CLEAR);
     return s_viewport_cache_bm != NULL;
+}
+
+void mm2_amiga_viewport_cache_set_size(UWORD uwW, UWORD uwH)
+{
+    if (uwW == 0 || uwH == 0 || uwW > MM2_VIEWPORT_CACHE_W_MAX || uwH > MM2_VIEWPORT_CACHE_H_MAX) {
+        return;
+    }
+    if (uwW != s_viewport_cache_w || uwH != s_viewport_cache_h) {
+        s_viewport_cache_w = uwW;
+        s_viewport_cache_h = uwH;
+        s_viewport_cache_valid = 0;
+    }
 }
 
 void mm2_amiga_viewport_cache_save(void)
@@ -443,7 +605,7 @@ void mm2_amiga_viewport_cache_save(void)
         return;
     }
     blitCopy(pSrc, (WORD)MM2_VIEWPORT_CACHE_X, (WORD)MM2_VIEWPORT_CACHE_Y, s_viewport_cache_bm, 0, 0,
-             (WORD)MM2_VIEWPORT_CACHE_W, (WORD)MM2_VIEWPORT_CACHE_H, MINTERM_COPY);
+             (WORD)s_viewport_cache_w, (WORD)s_viewport_cache_h, MINTERM_COPY);
     s_viewport_cache_valid = 1;
 }
 
@@ -459,7 +621,7 @@ void mm2_amiga_viewport_cache_restore(void)
         return;
     }
     blitCopy(s_viewport_cache_bm, 0, 0, pDst, (WORD)MM2_VIEWPORT_CACHE_X, (WORD)MM2_VIEWPORT_CACHE_Y,
-             (WORD)MM2_VIEWPORT_CACHE_W, (WORD)MM2_VIEWPORT_CACHE_H, MINTERM_COPY);
+             (WORD)s_viewport_cache_w, (WORD)s_viewport_cache_h, MINTERM_COPY);
 }
 
 void mm2_amiga_viewport_cache_invalidate(void)

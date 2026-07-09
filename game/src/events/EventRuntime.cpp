@@ -1,5 +1,6 @@
 #include "mm2/events/EventRuntime.h"
 
+#include "mm2/CppStdCompat.h"
 #include "mm2/DataPath.h"
 #include "mm2/events/EventCombatEncounter.h"
 #include "mm2/events/EventPartyEffects.h"
@@ -121,6 +122,7 @@ bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world
     ::memcpy(gs.a4() + MM2_GS_EVENT_WORK_BUF, work_buf_, MM2_GS_EVENT_WORK_SIZE);
 
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR, 0xFFFF);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID, 0xFF);
     initContextMaskTable(gs.a4());
     mm2_gs_set_u8(gs.a4(), MM2_GS_ERA_LOW, static_cast<uint8_t>(gs.era() & 0xFF));
     initParsed(gs);
@@ -134,24 +136,50 @@ bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world
 
 void EventRuntime::initParsed(GameStateView &gs)
 {
+    /* event_system_init @ 0x1754A: walk triplets until 00 00 00.
+     * Castle blobs (locs 63/65/68) have no terminator — leave anchor $FFFF
+     * so the scanner skips normal init and uses queued dispatch only. */
+    if (loc_ && loc_->kind == MM2_EVENT_KIND_CASTLE_BLOB) {
+        string_anchor_ = 0xFFFF;
+        mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR, 0xFFFF);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_START, 0);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, 0);
+        return;
+    }
+
     int pos = 0;
+    bool found_term = false;
     while (pos + 2 < MM2_GS_EVENT_WORK_SIZE) {
         const uint8_t a = work_buf_[pos];
         const uint8_t b = work_buf_[pos + 1];
         const uint8_t c = work_buf_[pos + 2];
         pos += 3;
         if (a == 0 && b == 0 && c == 0) {
+            found_term = true;
             break;
         }
     }
 
+    if (!found_term) {
+        string_anchor_ = 0xFFFF;
+        mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR, 0xFFFF);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_START, 0);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, 0);
+        return;
+    }
+
+    /* After terminator: LE u16 string-relative offset; ASM adds it to the
+     * terminator index to form the string-table anchor (-$7954). */
     uint16_t anchor = static_cast<uint16_t>(pos);
     if (pos + 1 < MM2_GS_EVENT_WORK_SIZE) {
         const uint16_t str_rel = static_cast<uint16_t>(work_buf_[pos] | (work_buf_[pos + 1] << 8));
         anchor = static_cast<uint16_t>(pos + str_rel);
     }
 
+    /* script_start = terminator_index + 5 in ASM (pos already past the three
+     * zero bytes, then +2 for the LE word → pos+2 == terminator+5). */
     const uint16_t script_start = static_cast<uint16_t>(pos + 2);
+    string_anchor_ = anchor;
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR, anchor);
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_START, script_start);
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, script_start);
@@ -203,32 +231,70 @@ int EventRuntime::poolSeek(uint8_t event_id) const
     return poolSeekIn(loc_, event_id);
 }
 
+int EventRuntime::poolSeekWorkBuf(int start_pos, uint8_t event_id) const
+{
+    /* event_handler_pool_seek @ 0x17262: from parse_pos, skip event_id
+     * FF-delimited records (count 0..id-1), then return the next byte offset. */
+    if (start_pos < 0 || start_pos >= MM2_GS_EVENT_WORK_SIZE) {
+        return -1;
+    }
+    int pos = start_pos;
+    uint8_t count = 0;
+    while (count < event_id) {
+        if (pos >= MM2_GS_EVENT_WORK_SIZE) {
+            return -1;
+        }
+        while (pos < MM2_GS_EVENT_WORK_SIZE && work_buf_[pos] != 0xFF) {
+            ++pos;
+        }
+        if (pos >= MM2_GS_EVENT_WORK_SIZE) {
+            return -1;
+        }
+        ++pos; /* consume FF */
+        ++count;
+    }
+    if (pos >= MM2_GS_EVENT_WORK_SIZE) {
+        return -1;
+    }
+    return pos;
+}
+
 const char *EventRuntime::resolveString(int idx, char *buf, size_t buf_cap) const
 {
-    if (!loc_ || buf_cap == 0) {
-        if (buf_cap > 0) {
-            buf[0] = '\0';
-        }
+    if (buf_cap == 0) {
         return buf;
     }
 
     buf[0] = '\0';
-    if (idx < 0 || loc_->string_table_offset < 0 ||
-        static_cast<size_t>(loc_->string_table_offset) >= loc_->raw_len) {
+    if (idx < 0) {
         return buf;
     }
 
+    /* ASM event_text_resolve_u8 @ 0x15884 walks from A4-$7954 (runtime
+     * string anchor), not the codec's load-time string_table_offset. Queued
+     * overlays rebuild that anchor from work_buf[0..1] (LE) — using the codec
+     * offset here mis-indexes loc-60/61 string banks (Corak vs goblet). */
+    size_t pos = string_anchor_;
+    const size_t limit = MM2_GS_EVENT_WORK_SIZE;
+    if (pos >= limit) {
+        if (loc_ && loc_->string_table_offset >= 0 &&
+            static_cast<size_t>(loc_->string_table_offset) < loc_->raw_len) {
+            pos = static_cast<size_t>(loc_->string_table_offset);
+        } else {
+            return buf;
+        }
+    }
+
     int cur = 0;
-    size_t pos = static_cast<size_t>(loc_->string_table_offset);
-    while (pos < loc_->raw_len) {
+    while (pos < limit) {
         size_t end = pos;
-        while (end < loc_->raw_len && loc_->raw[end] != 0xFF) {
+        while (end < limit && work_buf_[end] != 0xFF) {
             ++end;
         }
         if (cur == idx) {
             size_t j = 0;
             for (size_t i = pos; i < end && j + 1 < buf_cap; ++i) {
-                buf[j++] = static_cast<char>(loc_->raw[i]);
+                buf[j++] = static_cast<char>(work_buf_[i]);
             }
             buf[j] = '\0';
             normalizeAtToNewline(buf);
@@ -274,9 +340,39 @@ void EventRuntime::skipTokens(GameStateView &gs, int count)
     }
 }
 
+void EventRuntime::remapOp0cDest(uint8_t &dest_screen, uint8_t &dest_tile)
+{
+    /* event_op0c_map_transition @ 0x15E12:
+     *   if dest bit6 set: dest = rng(1,20)+5; if dest>=0x11 then dest+=0x10; set bit7
+     *   if dest >= 0x80:  dest_tile = rng(1,255)
+     *   dest &= 0x3F before map load
+     * rng via A4-$7BB4 (same contract as gameplay::Rng). */
+    if ((dest_screen & 0x40) != 0) {
+        int roll = 1;
+        if (rng_) {
+            roll = rng_->range(1, 20);
+        }
+        uint8_t d = static_cast<uint8_t>(roll + 5);
+        if (d >= 0x11) {
+            d = static_cast<uint8_t>(d + 0x10);
+        }
+        d = static_cast<uint8_t>(d | 0x80);
+        dest_screen = d;
+    }
+    if (dest_screen >= 0x80) {
+        int tile_roll = 1;
+        if (rng_) {
+            tile_roll = rng_->range(1, 255);
+        }
+        dest_tile = static_cast<uint8_t>(tile_roll);
+    }
+    dest_screen = static_cast<uint8_t>(dest_screen & 0x3F);
+}
+
 void EventRuntime::applyMapTransition(GameStateView &gs, world::MapWorld &world, uint8_t dest_screen,
                                       uint8_t dest_tile)
 {
+    remapOp0cDest(dest_screen, dest_tile);
     world.enterScreen(dest_screen);
     gs.setScreenId(dest_screen);
     gs.setCoordX(static_cast<uint8_t>(dest_tile & 0x0F));
@@ -284,6 +380,9 @@ void EventRuntime::applyMapTransition(GameStateView &gs, world::MapWorld &world,
     mm2_gs_set_u8(gs.a4(), MM2_GS_ERA_LOW, static_cast<uint8_t>(gs.era() & 0xFF));
     ServiceSignResolver::syncSignEnvId(gs.a4(), static_cast<int>(dest_screen), &world.attrib());
     enterLocation(static_cast<int>(dest_screen), gs, world);
+    /* ASM @ 0x15EB6: end script then set pending_event_latch so the new tile
+     * is scanned on the next scheduler tick. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
     screen_changed_ = true;
 }
 
@@ -354,6 +453,31 @@ bool EventRuntime::finishPendingTownMenu(GameStateView &gs, bool accepted)
     return true;
 }
 
+void EventRuntime::restoreOverlayIfIdle(GameStateView &gs)
+{
+    if (saved_loc_ == nullptr) {
+        return;
+    }
+    if (wait_ != EventVmWait::None || script_active_) {
+        return;
+    }
+    /* OP_0E default-range leaves QUEUED_EVENT_ID set for the scanner epilogue;
+     * do not restore the home work_buf until that queued script has run. */
+    if (mm2_gs_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID) != 0xFF) {
+        return;
+    }
+    if (combat_ && combat_->active()) {
+        return;
+    }
+    location_id_ = saved_location_id_;
+    loc_ = saved_loc_;
+    ::memcpy(work_buf_, saved_work_buf_, sizeof(work_buf_));
+    ::memcpy(gs.a4() + MM2_GS_EVENT_WORK_BUF, work_buf_, MM2_GS_EVENT_WORK_SIZE);
+    saved_location_id_ = -1;
+    saved_loc_ = nullptr;
+    initParsed(gs);
+}
+
 void EventRuntime::endScript(GameStateView &gs)
 {
     bool redraw_status = false;
@@ -367,6 +491,7 @@ void EventRuntime::endScript(GameStateView &gs)
     mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
     script_active_ = false;
     wait_ = EventVmWait::None;
+    restoreOverlayIfIdle(gs);
 }
 
 void EventRuntime::abortScript(GameStateView &gs)
@@ -375,6 +500,7 @@ void EventRuntime::abortScript(GameStateView &gs)
     mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
     script_active_ = false;
     wait_ = EventVmWait::None;
+    restoreOverlayIfIdle(gs);
 }
 
 void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t op)
@@ -431,6 +557,7 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         break;
     case 0x09:
     case 0x0A:
+        /* OP_09 @ 0x15D3C: clears cond, polls Y/N — draws nothing (doc 44 §3.7). */
         mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
         wait_ = EventVmWait::YesNo;
         break;
@@ -464,6 +591,8 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
         break;
     case 0x0C: {
+        /* event_op0c_map_transition @ 0x15E12 — bit6/high remaps inside
+         * applyMapTransition; then OP_0F cleanup via endScript. */
         const uint8_t dest_screen = readU8(gs);
         const uint8_t dest_tile = readU8(gs);
         applyMapTransition(gs, world, dest_screen, dest_tile);
@@ -471,6 +600,10 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         break;
     }
     case 0x0E: {
+        /* event_op0e_selector_dispatch @ 0x160C2: SCRIPT_ABORT=1 at entry so
+         * the current script ends after the selector returns; default-range
+         * bins set QUEUED_EVENT_ID for the scanner epilogue @ 0x176B6. */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
         const uint8_t sel = readU8(gs);
         eventExecTownSelector(*this, gs, world, sel, roster_, launch_, items_, text_, wait_,
                               location_id_, service_title_, rng_);
@@ -847,9 +980,18 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         break;
     }
     case 0x2F:
+        /* event_op2f @ 0x16FEA: NOT a silent clear — calls -$7F92 which reads
+         * up to 10 characters into A4-$5C50, then space-pads the remainder and
+         * clears the trailing NUL at -$5C46. Port: arm Answer wait; continueInput
+         * fills the buffer then resumes so OP_30 can compare. */
+        answer_len_ = 0;
+        ::memset(answer_buf_, 0, sizeof(answer_buf_));
         for (int i = 0; i < 16; ++i) {
             mm2_gs_set_u8(gs.a4(), MM2_GS_INPUT_BUF + i, 0);
         }
+        text_.showOp02("?", 19);
+        text_.setTextEntry(answer_buf_, answer_len_);
+        wait_ = EventVmWait::Answer;
         break;
     case 0x30: {
         uint8_t expected[10];
@@ -939,6 +1081,14 @@ bool EventRuntime::runVmLoop(GameStateView &gs, world::MapWorld &world)
     const int script_end =
         inline_script_end_ >= 0 ? inline_script_end_ : loc_->string_table_offset;
     while (wait_ == EventVmWait::None && script_active_) {
+        /* OP_0E sets SCRIPT_ABORT at entry; after an async wait resumes, end
+         * without fetching further opcodes from the same script (ASM fetch
+         * loop exits on abort). */
+        if (mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT)) {
+            abortScript(gs);
+            break;
+        }
+
         const int pos = mm2_gs_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS);
         if (script_end >= 0 && pos >= script_end) {
             endScript(gs);
@@ -957,11 +1107,15 @@ bool EventRuntime::runVmLoop(GameStateView &gs, world::MapWorld &world)
         }
 
         dispatchOp(gs, world, op);
-        if (mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT)) {
-            abortScript(gs);
+        /* Waits (Y/N, Answer, SPACE) must win over SCRIPT_ABORT. OP_0E @ 0x160C2
+         * sets abort at entry so the script ends after the selector returns; in
+         * the remake selectors are async, so abort is deferred until the wait
+         * completes and runVmLoop resumes. */
+        if (wait_ != EventVmWait::None || !script_active_) {
             break;
         }
-        if (wait_ != EventVmWait::None || !script_active_) {
+        if (mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT)) {
+            abortScript(gs);
             break;
         }
     }
@@ -972,33 +1126,29 @@ bool EventRuntime::runVmLoop(GameStateView &gs, world::MapWorld &world)
 bool EventRuntime::runDefaultRangeOverlay(GameStateView &gs, world::MapWorld &world,
                                           uint8_t category, uint8_t index)
 {
+    /* OP_0E default-range @ 0x15EDC / 0x160A2:
+     *   save screen_mode_id; screen_mode_id = category;
+     *   -$7DFA event_dat_loader (overlay → work_buf);
+     *   restore screen_mode_id; queued_event_id = index; rts
+     * The scanner epilogue @ 0x176B6 then pool_seeks and runs the queued id.
+     * Do NOT run the overlay VM here — defer to runQueuedDispatch.
+     * Do NOT pre-validate via codec string slots: ASM always loads the overlay
+     * and queues the index; pool_seek from parse_pos=2 decides what runs. */
+    (void)world;
     if (!loaded_ || !gs.valid() || category >= MM2_EVENT_LOCATION_COUNT) {
         return false;
     }
 
     const Mm2EventLocation *overlay = &file_.locations[category];
-    const uint8_t *script = nullptr;
-    size_t script_len = 0;
-    int script_off = -1;
-
-    if (overlay->script_length > 0) {
-        script_off = poolSeekIn(overlay, index);
-        if (script_off < 0 || script_off >= overlay->string_table_offset) {
-            return false;
-        }
-        script = overlay->raw + script_off;
-        script_len = static_cast<size_t>(overlay->string_table_offset - script_off);
-    } else {
-        if (!eventVmLocationStringRaw(overlay, index, &script, &script_len) ||
-            !eventVmStringLooksLikeBytecode(script, script_len)) {
-            return false;
-        }
-        script_off = static_cast<int>(script - overlay->raw);
+    if (!overlay->raw || overlay->raw_len == 0) {
+        return false;
     }
 
-    saved_location_id_ = location_id_;
-    saved_loc_ = loc_;
-    ::memcpy(saved_work_buf_, work_buf_, sizeof(saved_work_buf_));
+    if (saved_loc_ == nullptr) {
+        saved_location_id_ = location_id_;
+        saved_loc_ = loc_;
+        ::memcpy(saved_work_buf_, work_buf_, sizeof(saved_work_buf_));
+    }
 
     const size_t copy_len =
         overlay->raw_len < MM2_GS_EVENT_WORK_SIZE ? overlay->raw_len : MM2_GS_EVENT_WORK_SIZE;
@@ -1010,28 +1160,73 @@ bool EventRuntime::runDefaultRangeOverlay(GameStateView &gs, world::MapWorld &wo
 
     location_id_ = category;
     loc_ = overlay;
-    inline_script_end_ = static_cast<int>(script_off + script_len);
     mm2_gs_set_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID, index);
-    mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, static_cast<uint16_t>(script_off));
+    return true;
+}
+
+bool EventRuntime::runQueuedDispatch(GameStateView &gs, world::MapWorld &world)
+{
+    /* event_queued_dispatch @ 0x176B6 (after triplet scan):
+     *   if queued_event_id == $FF → skip
+     *   rebuild string anchor from work_buf[0..1] as LE u16
+     *     (ASM: d0 = work_buf[1]<<8 | work_buf[0] @ 0x176C2–0x176D2)
+     *   parse_pos = 2
+     *   pool_seek(queued_id) → interpreter
+     *   then -$7DFA (event_dat_loader) + re-init
+     *
+     * Loc 60 starts FF 00 … so LE anchor = 0x00FF, which points at the Corak
+     * text bank. A prior BE read (0xFF00) + codec-string bytecode fallback made
+     * selector 0x09 (Corak ghost) run the Nordon goblet quest script instead. */
+    const uint8_t qid = mm2_gs_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID);
+    if (qid == 0xFF) {
+        return false;
+    }
+
+    const uint16_t le_anchor =
+        static_cast<uint16_t>((static_cast<uint16_t>(work_buf_[1]) << 8) | work_buf_[0]);
+    string_anchor_ = le_anchor;
+    mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR, le_anchor);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, 2);
     mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
+
+    const int script_off = poolSeekWorkBuf(2, qid);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID, 0xFF);
+
+    if (script_off < 0) {
+        inline_script_end_ = -1;
+        if (saved_loc_ != nullptr) {
+            location_id_ = saved_location_id_;
+            loc_ = saved_loc_;
+            ::memcpy(work_buf_, saved_work_buf_, sizeof(work_buf_));
+            ::memcpy(gs.a4() + MM2_GS_EVENT_WORK_BUF, work_buf_, MM2_GS_EVENT_WORK_SIZE);
+            saved_location_id_ = -1;
+            saved_loc_ = nullptr;
+            initParsed(gs);
+        }
+        return false;
+    }
+
+    /* Bound the inline segment at the next FF (ASM stops on 0xFF fetch). */
+    int seg_end = script_off;
+    while (seg_end < MM2_GS_EVENT_WORK_SIZE && work_buf_[seg_end] != 0xFF) {
+        ++seg_end;
+    }
+    inline_script_end_ = seg_end;
+
+    mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, static_cast<uint16_t>(script_off));
     script_active_ = true;
     wait_ = EventVmWait::None;
-
     runVmLoop(gs, world);
-
-    const bool combat_started = combat_ != nullptr && combat_->active();
-    const bool overlay_waiting = wait_ != EventVmWait::None;
-
     inline_script_end_ = -1;
-    mm2_gs_set_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID, 0xFF);
-    location_id_ = saved_location_id_;
-    loc_ = saved_loc_;
-    ::memcpy(work_buf_, saved_work_buf_, sizeof(work_buf_));
-    ::memcpy(gs.a4() + MM2_GS_EVENT_WORK_BUF, work_buf_, MM2_GS_EVENT_WORK_SIZE);
-    saved_location_id_ = -1;
-    saved_loc_ = nullptr;
 
-    return combat_started || overlay_waiting;
+    /* ASM @ 0x176EA: reload home location via event_dat_loader + init.
+     * Overlay swap is restored when the overlay script goes idle. */
+    if (saved_loc_ == nullptr && loc_ && loc_->kind != MM2_EVENT_KIND_CASTLE_BLOB) {
+        initParsed(gs);
+    } else {
+        restoreOverlayIfIdle(gs);
+    }
+    return true;
 }
 
 bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
@@ -1041,8 +1236,19 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
         return false;
     }
 
+    /* ASM @ 0x175EE–0x175F2: clear saved_cond and reset queued id to $FF at
+     * scanner entry. Queued id set during a prior OP_0E default-range path must
+     * survive until *after* that script's scanner epilogue — so we only clear
+     * here when not mid-overlay. runDefaultRangeOverlay sets the queue and
+     * runs the VM itself; the post-scan path below handles deferred queues. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SAVED_COND_FLAG, 0);
+
     if (mm2_gs_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR) == 0xFFFF) {
-        initParsed(gs);
+        if (loc_->kind == MM2_EVENT_KIND_CASTLE_BLOB) {
+            /* No triplet table — fall through to queued path only. */
+        } else {
+            initParsed(gs);
+        }
     }
 
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, mm2_gs_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_START));
@@ -1053,52 +1259,57 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
         static_cast<uint8_t>(((gs.coordY() & 0x0F) << 4) | (gs.coordX() & 0x0F));
     const uint8_t ctx = contextMask(gs);
     bool fired = false;
+    bool matched_tile = false;
 
-    /* Every move/turn re-scan: drop ambient door/sign layers from the previous
-     * facing, then re-run the first triplet whose cond matches the current ctx.
-     * OP_04/0B are re-applied only when the scanner fires again (ALWAYS, ENTER,
-     * or the matching DIR_* bit); stale labels from facing E must not survive N. */
     if (!script_active_ && wait_ == EventVmWait::None) {
         text_.clearPersistentOverlays();
     }
 
-    int pos = 0;
-    while (pos + 2 < MM2_GS_EVENT_WORK_SIZE) {
-        uint8_t a = work_buf_[pos];
-        uint8_t b = work_buf_[pos + 1];
-        uint8_t c = work_buf_[pos + 2];
-        if (a == 0 && b == 0 && c == 0) {
-            break;
-        }
+    /* Castle blobs have no 00 00 00 terminator — skip the triplet walk. */
+    if (loc_->kind != MM2_EVENT_KIND_CASTLE_BLOB &&
+        mm2_gs_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR) != 0xFFFF) {
+        int pos = 0;
+        while (pos + 2 < MM2_GS_EVENT_WORK_SIZE) {
+            uint8_t a = work_buf_[pos];
+            uint8_t b = work_buf_[pos + 1];
+            uint8_t c = work_buf_[pos + 2];
+            if (a == 0 && b == 0 && c == 0) {
+                break;
+            }
 
-        if (a == party_tile && eventCondMatches(c, ctx)) {
-            const int script_off = poolSeek(b);
-            /* event_handler_pool_seek @ 0x17262: seek to record N, then read its
-             * first opcode. The screen era gate (attrib byte $560B == era_low,
-             * @ 0x172BC) is applied ONLY when that opcode is NOT OP_22 — records
-             * starting with OP_22 range-check the era themselves and must run
-             * regardless of the screen gate. Applying the gate to every event
-             * (the previous behaviour) wrongly suppressed era/time-travel events. */
-            if (script_off >= 0 && script_off < loc_->string_table_offset) {
-                const uint8_t first_op = work_buf_[script_off];
-                if (first_op == 0x22 || eraGateOpen(gs, world)) {
-                    mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, static_cast<uint16_t>(script_off));
-                    script_active_ = true;
-                    wait_ = EventVmWait::None;
-                    runVmLoop(gs, world);
-                    fired = true;
-                    /* ASM @ 0x17698 clears stack temporaries only — work_buf triplets
-                     * stay intact so ALWAYS/ENTER events re-fire on next latch. */
-                    break;
+            if (a == party_tile) {
+                matched_tile = true;
+                if (eventCondMatches(c, ctx)) {
+                    const int script_off = poolSeek(b);
+                    if (script_off >= 0 && script_off < loc_->string_table_offset) {
+                        const uint8_t first_op = work_buf_[script_off];
+                        if (first_op == 0x22 || eraGateOpen(gs, world)) {
+                            mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS,
+                                           static_cast<uint16_t>(script_off));
+                            script_active_ = true;
+                            wait_ = EventVmWait::None;
+                            runVmLoop(gs, world);
+                            fired = true;
+                            break;
+                        }
+                    }
                 }
             }
+            pos += 3;
         }
-        pos += 3;
+    }
+
+    /* Queued dispatch @ 0x176B6 — after triplet loop, before ambient combat.
+     * Only when the triplet script is fully done (no wait); queue is set during
+     * the same scan's OP_0E default-range path and consumed here (ASM clears
+     * queue at the *next* scanner entry). */
+    if (wait_ == EventVmWait::None && runQueuedDispatch(gs, world)) {
+        fired = true;
     }
 
     /* event_tile_scanner @ 0x176F2: no triplet matched on a collision-flagged
      * tile → random-picker combat (-$7EDE), then clear the map event bit. */
-    if (!fired) {
+    if (!fired && !matched_tile) {
         const int x = static_cast<int>(gs.coordX());
         const int y = static_cast<int>(gs.coordY());
         if (x >= 0 && y >= 0 && x < MM2_MAP_GRID_DIM && y < MM2_MAP_GRID_DIM &&
@@ -1194,6 +1405,52 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
                 runVmLoop(gs, world);
             }
             return script_active_ || wait_ != EventVmWait::None;
+        }
+        return true;
+    }
+
+    if (wait_ == EventVmWait::Answer) {
+        /* OP_2F @ 0x16FEA → -$7F92: collect up to 10 chars, Enter commits,
+         * space-pad remainder, clear trailing byte at buf+10 (-$5C46). */
+        if (keys.escape) {
+            answer_len_ = 0;
+            ::memset(answer_buf_, 0, sizeof(answer_buf_));
+            for (int i = 0; i < 11; ++i) {
+                mm2_gs_set_u8(gs.a4(), MM2_GS_INPUT_BUF + i, i < 10 ? ' ' : 0);
+            }
+            text_.clearTextEntry();
+            wait_ = EventVmWait::None;
+            if (script_active_) {
+                runVmLoop(gs, world);
+            }
+            return script_active_ || wait_ != EventVmWait::None;
+        }
+        if (keys.backspace) {
+            if (answer_len_ > 0) {
+                answer_buf_[--answer_len_] = '\0';
+                text_.setTextEntry(answer_buf_, answer_len_);
+            }
+            return true;
+        }
+        if (keys.enter || keys.space) {
+            for (int i = 0; i < 10; ++i) {
+                const char c = (i < answer_len_) ? answer_buf_[i] : ' ';
+                mm2_gs_set_u8(gs.a4(), MM2_GS_INPUT_BUF + i,
+                              static_cast<uint8_t>(std::toupper(static_cast<unsigned char>(c))));
+            }
+            mm2_gs_set_u8(gs.a4(), MM2_GS_INPUT_BUF + 10, 0);
+            text_.clearTextEntry();
+            wait_ = EventVmWait::None;
+            if (script_active_) {
+                runVmLoop(gs, world);
+            }
+            return script_active_ || wait_ != EventVmWait::None;
+        }
+        const char ch = keys.last_ascii;
+        if (ch >= 32 && ch < 127 && answer_len_ < 10) {
+            answer_buf_[answer_len_++] = ch;
+            answer_buf_[answer_len_] = '\0';
+            text_.setTextEntry(answer_buf_, answer_len_);
         }
         return true;
     }

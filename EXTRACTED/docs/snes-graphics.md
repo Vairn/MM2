@@ -201,9 +201,9 @@ instead of `$06:BA5C`). `extract_snes_dma.py` now resolves it correctly.
 | `$13:D084` | `0x9D084` | 4096 | 4 | `$6000` | **UI / automap icons** (arrows, towers, buildings) | ✔ |
 | `$13:E084` | `0x9E084` | 4096 | 4 | scene | UI frames / box tiles | — |
 | `$15:FBE3` | `0xAFBE3` | 1024 | 4 | `$6600` | **UI arrows** (up/right/down/left) | ✔ |
-| `$08:CB00` | `0x44B00` | 13566 | 8? | `$0000` | boot/intro full-screen art (format/palette open) | — |
-| `$1C:8000` | `0xE0000` | 32768 | 8? | `$0000` | boot/intro full-screen art (format/palette open) | — |
-| `$1F:A5D7` | `0xFA5D7` | 11010 | n/a | `$4000` | striped in 4bpp **and** 8bpp → **tilemap / packed**, not CHR | — |
+| `$08:CB00` | `0x44B00` | `$34FE` | 8 | `$4000` | **boot title CHR part 2** | ✔ |
+| `$1C:8000` | `0xE0000` | 32768 | 8 | `$0000` | **boot title CHR part 1** | ✔ |
+| `$1F:A5D7` | `0xFA5D7` | `$2B02` | 8 | `$5A7F` | **boot title CHR part 3** (was misread as tilemap) | ✔ |
 | `$10:FF76` | `0x87F76` | 16 | 4 | `$6600` | 16-byte VRAM patch (not a sheet) | — |
 
 **Wall/dungeon tiles: FOUND** — `$0D:BFE0` (stone/brick) and `$0D:D160`
@@ -233,31 +233,160 @@ statically** — grayscale renders are the coherence proof; color renders in
 `catalog_color/` are best-effort. Emulator CGRAM/VRAM capture is still the way to
 lock exact colors.
 
-#### Monsters / combat portraits — **PARTIAL (2026-07-07)**
+#### Monsters / combat portraits — **ASSEMBLED + LAYERED (2026-07-09)**
 
-Combat sprites are **not** in the static DMA table. They use table `$14:8060`
-→ metadata records → animation scripts → `$00F62E` WRAM staging → `$00F23C`
-multi-layer VRAM placement. Palette per record @ metadata+4 (same bank).
+Combat sprites use table `$14:8060` → metadata → `$00F62E` WRAM staging
+(16-tile-wide sheet) with multi-layer compositing from `$00F23C`.
 
-**What works:** tracing the table (128 entries), per-record palette + tile
-tokens, recognizable *parts* in previews (e.g. index 4 green knight + orange
-monster face, index 10 hooded figures).
+**Assembly (confirmed from ASM):**
+1. Script header: `F8`=width, `FA`=height; tokens are **bytes** (tile indices)
+2. Token `N` → `bank:F4 + (N-1)*32`; staged into WRAM as **16-column** sheet
+3. Layer 0 (`FE=0`): overwrite blit (`$F0E7`)
+4. Overlay layers (`FE=1`): opacity mask (`$F200`) → AND-clear (`$F148`) →
+   OR-blit (`$F066`)
+5. Anim selector bytes are **byte offsets** into F4/EB/dims word tables
+   (`TXY; LDA [$F1],Y`) — not word indices. Value `1` = skip layer; `$FF` = end
+6. Up to 4 layer groups; terminators at meta `+0E/+17/+20` (bit7)
 
-**What does NOT work yet:** full sprite assembly. Tiles are scattered 8×8 pieces
-at arbitrary ROM offsets; the game stitches them with row strides from `$D421`/
-`$D439`, optional 8bpp bitmask via `$F148`, and four VRAM quadrants via `$F23C`.
-Our flat grid preview is a triage aid only — expect fragments and artifacts.
+**Results:** 77 coherent sprites with anim frame sheets in
+`EXTRACTED/snes/gfx/monsters_assembled/` (e.g. pig knight with shield+halberd,
+beast warrior with sword, T-rex, treasure chest).
 
-Outputs: `EXTRACTED/snes/gfx/monsters_assembled/*_preview.png` (frame 0 only).
-Tool: `tools/trace_snes_monsters.py`.
+Tool: `tools/trace_snes_monsters.py`
+
+#### Title / credits screen — **COMPOSED (2026-07-09)**
+
+`$069DDD` builds the text title/credits screen:
+
+| Piece | Address | Notes |
+|-------|---------|-------|
+| CHR | `$06:BA5C` → VRAM `$4000` | 32 KiB DMA; tilemaps live in the tail |
+| Palette | `$06:9FBC` | 64 colors (4 BG subpals) via `$00E648` |
+| BGMODE | `$F1` | Mode 1 + **16×16** tiles on BG1/BG2 |
+| BG1 map | `$06:EA5C` → VRAM `$7C00` | logo / credits text (80 nonzero entries) |
+| BG2 map | `$06:EC5C` → VRAM `$7800` | stone backdrop (full 16×16) |
+| Uploader | `$069F50` | X=cols, Y=rows; writes words with VRAM row stride `+$20` |
+
+**Output:** `EXTRACTED/snes/gfx/scenes/title_screen.png`.
+
+#### Boot illustrated title — **COMPOSED (2026-07-09)**
+
+`$00FE80` loads the painted “might & magic II” cave scene (**8bpp**):
+
+| Piece | Address | Size | VRAM |
+|-------|---------|------|------|
+| CHR part 1 | `$1C:8000` | 32 KiB | `$0000` |
+| CHR part 2 | `$08:CB00` | `$34FE` | `$4000` |
+| CHR part 3 | `$1F:A5D7` | `$2B02` | `$5A7F` |
+| Palette | `$10:FD76` | 255 words | CGRAM via `$00E289` X=0 Y=`$FF` |
+| Tilemap | `$07:F626` | 32×28 identity | `$00E4F1` → WRAM `$7F:0000` |
+
+896 contiguous 8bpp tiles = full 256×224 screen.
+**Output:** `EXTRACTED/snes/gfx/scenes/boot_title_screen.png`.
+
+#### Walls / sky — **SHEETS + MAPS (2026-07-09)**
+
+Wall/sky CHR are **pre-rendered first-person sheets**, not Mode-7. `$00E4F1`
+tilemaps are mostly identity layouts of those sheets:
+
+| Asset | CHR | Sheet | Map | Palette (visual lock) |
+|-------|-----|-------|-----|------------------------|
+| Wall A | `$0D:BFE0` (140 tiles) | **20×7** | `$0D:E424` / `$0D:E2E0` | `$13:8000` stone browns |
+| Wall B | `$0D:D160` (140 tiles) | **20×7** | `$0D:E540` | `$13:8000` |
+| Sky | `$0D:8000` (134 tiles) | **11×11** | `$10:8000` | `$1B:8000` day / `$1D:806A` dusk |
+
+Map attrs: sky `attr=$04` (BG subpal 1), walls `attr=$08` (BG subpal 2).
+`$A2` 0/1 → wall A; 2/5 → wall B. Scene stack preview:
+`EXTRACTED/snes/gfx/scenes/explore_A2_{0,2}.png`.
+
+**Scene class `$0C4B` from `$0095DF` (location id → A):**
+
+| A | Map-ids | Env | Face table | Wall CHR |
+|---|--------|-----|------------|----------|
+| 0 | 0–4 | **town** | `$11:FD6C` | `$0D:BFE0` |
+| 1 | 17–32 | **cavern** | `$11:FD6C` (same) | `$0D:BFE0` |
+| 2 | 55–59 | **castle B** (surface) | `$11:FCB8` | `$0D:D160` |
+| 5 | 45–54 | **castle A** (dungeons) | `$11:FCB8` (same) | `$0D:D160` |
+| 3,6 | 5–16, 33–40 | **outdoor** | `$11:FE20` + `$EE8D` | sky `$0D:8000` |
+| 4 | 41–44 | elemental planes | outdoor path | sky |
+| 7 | 60–70 | overlays | `$11:FE20` | varies |
+
+Unlike Amiga (`town.32` / `cave.32` / `castle.32`), SNES **shares** face
+tables: town≡cavern, castle A≡castle B. Differentiation is CHR sheet + palette,
+not separate panel banks. A∈{3,4,6} sets `$C4=1` (outdoor blit).
+
+**Wall codes** (map cell → face table offset `+(code-1)*$3C` into `$009659` base):
+
+| Code | Town/cavern | Castle | Notes |
+|------|-------------|--------|-------|
+| 1 | `$11:FD6C` wall | `$11:FCB8` | plain wall |
+| 2 | `$11:FDA8` **door** | `$11:FCF4` **door** | grated / barred door panels |
+| 3 | ≡ `$FD6C` | ≡ `$FCB8` | same bytes as code 1 |
+| 4 | lands on `$FE20` | — | special / outdoor-base overlap |
+
+**Floors:** indoor floor is the **20×7 wall CHR sheet** (`$0D:BFE0` / `$0D:D160`),
+not a separate bank. Outdoor floors are `$11:FED4` strips (terrain 5–12) via `$00EF16`.
+
+**Palette (`$008E7A`):** A=0 and A=1 take the **same** day branch → `$13:8000`→CGRAM
+`$30` (warm dirt) **and** `$13:8034`→`$40` (**masonry + wood**). Castle day →
+`$15:8138`→`$30` (warm wood/torch) **and** `$13:8014`→`$40` (**grey masonry**).
+Town/cavern night → `$1D:806A`→`$30` **and** `$1D:808A`→`$40`. Castle night →
+`$1D:804A`→`$30` **and** `$15:8000`→`$40`. There is **no** town-vs-cavern palette
+split. Wall tilemaps use `attr=$08` → BG subpal 2 → **CGRAM `$40`**, so indoor
+walls/doors/floors render from the `$40` tables (`$13:8034` / `$13:8014`).
+`$30` tables stay loaded for Mode-2 tiles that select that subpal. Outdoor day
+(`$008F7A`): `$13:8054`→`$40` (trees/floors). Mountains use grey `$13:8034`.
+Castle floor sheets remap `$13:8014` torch indices 13–15 → greys (same CHR as
+walls; torch colors are wall accents only).
+
+**Outdoor terrain faces — COMPOSED (2026-07-09):** when `$C4==1`, `$00EDF3`
+branches to `$00EE8D` (15 panels, stride `$2D` from base `$11:FE20`). Terrain id
+`& $1F` selects the set (1-based → table index):
+
+| Terrain | Table | Palette | Output |
+|---------|-------|---------|--------|
+| 1/2 | `$11:FE20` / `$FE4D` | `$13:8034` grey | `walls/outdoor_mountains.png` |
+| 3 | `$11:FE7A` | `$13:8054` | `walls/outdoor_trees_A.png` |
+| 4 | `$11:FEA7` | `$13:8054` | `walls/outdoor_trees_B.png` |
+| 5–12 | `$11:FED4+(t-5)*$24` | `$13:8054` | `walls/outdoor_floor_terr{5..12}.png` |
+
+**Dynamic wall faces — COMPOSED (2026-07-09):** `$00EDF3` blits facing-dependent
+panels into a **20-tile-wide** WRAM sheet (`$00D403` row stride = 640) via
+`$00EF9D`. Face tables from `$009659` (input = `$0C4B`):
+
+| A | Table | Output |
+|---|-------|--------|
+| 0/1 | `$11:FD6C` / `$FDA8` | `town_cavern_wall.png` / `town_cavern_door.png` |
+| 2/5 | `$11:FCB8` / `$FCF4` | `castle_wall.png` / `castle_door.png` |
+| other | `$11:FE20` | `wall_faces_A2_other.png` (outdoor mountains / fallback) |
+
+Atlases: `atlas_env_faces.png`, `atlas_doors_floors.png`, `atlas_outdoor_faces.png`.
+Clean export: `tools/export_snes_gfx.py` → `gfx/export/`.
+
+Tool: `tools/compose_snes_scenes.py`
+
+| Asset | ROM | Palette | PNG |
+|-------|-----|---------|-----|
+| Title composed | `$06:BA5C`+maps | `$06:9FBC` | `scenes/title_screen.png` |
+| Title/credits CHR sheet | `$06:BA5C` | `$06:9FBC` sub2 | `title_credits_chr_06BA5C.png` |
+| Title logo | `$06:8000` | same | `catalog_color/title_logo_068000.png` |
+| Title candle | `$06:8CC4` | same | `catalog_color/title_candle_068CC4.png` |
+| Wall set A | `$0D:BFE0` | `$13:8034` ($40) | `scenes/walls/wallA_20x7.png` |
+| Wall set B | `$0D:D160` | `$13:8014` ($40) | `scenes/walls/wallB_20x7.png` |
+| Outdoor sky | `$0D:8000` | `$1B:8000` | `scenes/walls/sky_11x11_day.png` |
+| Font | `$0D:90C0` | — | `catalog_color/font_0D90C0.png` |
+| Scene figures | `$12:F420` | — | `catalog_color/figures_12F420.png` |
+| UI/map icons | `$13:D084` | — | `catalog_color/ui_map_13D084.png` |
 
 **Repro:**
 python tools\extract_snes_dma.py "EXTRACTED\SNES\Might and Magic II (Europe).sfc" -o EXTRACTED\snes\analysis\dma_table.json
 python tools\snes_dma_summary.py EXTRACTED\snes\analysis\dma_table.json
 python tools\snes_chr_catalog.py "EXTRACTED\SNES\Might and Magic II (Europe).sfc" --table EXTRACTED\snes\analysis\dma_table.json --outdir EXTRACTED\snes\gfx\catalog --cols 16 --scale 2
 python tools\snes_chr_catalog.py "EXTRACTED\SNES\Might and Magic II (Europe).sfc" --table EXTRACTED\snes\analysis\dma_table.json --outdir EXTRACTED\snes\gfx\catalog8 --cols 16 --scale 2 --bpp 8
-python tools\trace_snes_monsters.py EXTRACTED\SNES\"Might and Magic II (Europe).sfc" -o EXTRACTED\snes\analysis\monsters.json --render-dir EXTRACTED\snes\gfx\monsters
-# confirmed title render:
+python tools\trace_snes_monsters.py EXTRACTED\SNES\"Might and Magic II (Europe).sfc" -o EXTRACTED\snes\analysis\monsters.json --render-dir EXTRACTED\snes\gfx\monsters_assembled
+python tools\compose_snes_scenes.py EXTRACTED\SNES\"Might and Magic II (Europe).sfc" --outdir EXTRACTED\snes\gfx\scenes --scale 3
+python tools\disasm_snes_65816.py "EXTRACTED\SNES\Might and Magic II (Europe).sfc" --offset 0x69a0 --bytes 0x380
+# raw title CHR sheet (pre-compose):
 python tools\snes_decompress.py render "EXTRACTED\SNES\Might and Magic II (Europe).sfc" `
   --chr-offset 0x33A5C --size 0x7000 --palette-offset 0x31FBC --sub 2 --cols 16 --scale 3 `
   -o EXTRACTED\snes\gfx\title_credits_chr_06BA5C.png
@@ -326,21 +455,30 @@ python tools\preview_snes_tiles.py EXTRACTED\SNES\"Might and Magic II (Europe).s
 | `snes_zst_extract.py` | `.vram.bin`, `.cgram.bin`, `.wram7e.bin` | ZSNES save-state memory extract |
 | `snes_zsnes_dump.ps1` | launches ZSNES | Manual F2 save-state capture helper |
 | `snes_decompress.py` | `.png` / stdout | **Validated** raw-CHR + BGR555 palette renderer; re-implements `$00E289` copy / `$00E354` fade (`selftest`) |
-| `trace_snes_monsters.py` | `monsters.json`, `gfx/monsters/` | Monster metadata table `$14:8060` + CHR/palette render |
+| `trace_snes_monsters.py` | `monsters.json`, `gfx/monsters_assembled/` | **`$00F62E` assembler** — byte tokens → 16-wide WRAM sheet → coherent sprites |
+| `compose_snes_scenes.py` | `gfx/scenes/` | Title 16×16 compose + wall/sky sheets + explore stack |
+| `make_snes_atlases.py` | `gfx/atlases/` | Labeled contact-sheet atlases (titles/walls/monsters) |
+| `export_snes_gfx.py` | `gfx/export/` | **Rewrite export** — native (8 px/tile) + ×2 sheets, cropped panels, `manifest.json` for PC/Amiga/JS |
 
 ---
 
 ## Recommended next steps
 
-1. **Map monster index → `monsters.dat` id** and stitch animation frames via
-   `$00F62E` script semantics (current renders dump the raw CHR blob only).
-2. **Resolve `$08:CB00` / `$1C:8000`** boot art: 8bpp format + palette.
-3. **Decode `$1F:A5D7`** as a tilemap (via `$00E4F1` header semantics).
-4. **Lock per-scene sub-palettes** via emulator CGRAM capture.
+1. **Map table index → `monsters.dat` id** for naming.
+2. **Wire wall faces + sky/floor sheets** into one explore viewport (depth from
+   `$0C37` / `$EE79` shuffle; only visible panels for a given facing).
+3. **Emulator CGRAM dump** to confirm wall/sky palette slot wiring vs `$13:8000` /
+   `$1B:8000` / `$1D:806A`.
+
+*(Done 2026-07-09: multi-layer `$F62E`/`$F23C` assembler — byte-offset
+selectors + mask-OR overlays; **77 complete monster sprites + anim sheets**;
+**title/credits composed** (16×16 BGMODE `$F1`); **boot illustrated title**
+(8bpp `$1C`/`$08`/`$1F` + `$10:FD76`); **wall/sky sheets** + **dynamic
+first-person wall faces** from `$11:FD6C`/`$FCB8`.)*
 
 *(Done 2026-07-07: fixed DMA source-bank bug; mapped channel-0 CHR; exploration
-compositor BG Mode 2; walls/font/backdrops/UI; **monster table `$14:8060` +
-78 combat sprite sheets**; scene figures `$12:F420`.)*
+compositor BG Mode 2; walls/font/backdrops/UI; monster table `$14:8060`;
+scene figures `$12:F420`.)*
 
 ---
 

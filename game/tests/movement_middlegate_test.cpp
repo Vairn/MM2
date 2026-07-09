@@ -72,13 +72,16 @@ int main(int argc, char **argv)
     const mm2::gameplay::MoveResult w_block = mm2::gameplay::step(world, gs, true);
     expect(w_block.blocked && gs.coordX() == 7 && gs.coordY() == 4, "step W from (7,4) blocked", fails);
 
-    /* asm 0x574E: victory latch clears on successful step before tile events run. */
+    /* asm 0x574E/0x5748 tail: after a successful step the game loop runs the
+     * encounter check and then latchExploreEventsAfterMove, which clears the
+     * victory latch before tile events scan (doc 43 loop order). */
     gs.setFacingKey('N');
     mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 1);
     const mm2::gameplay::MoveResult s_n2 = mm2::gameplay::step(world, gs, true);
     expect(s_n2.moved && gs.coordY() == 5, "step N from (7,4) for latch clear", fails);
+    mm2::gameplay::latchExploreEventsAfterMove(gs);
     expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 0,
-           "COMBAT_VICTORY_LATCH cleared on successful step", fails);
+           "COMBAT_VICTORY_LATCH cleared by post-move latch", fails);
 
     /* Screen 2 (dungeon): cell (1,0)=0x66 has S-dark in E-facing bundle 0x30.
      * 0x9424 AND #$55 must not treat darkness as a wall; step E -> (2,0). */

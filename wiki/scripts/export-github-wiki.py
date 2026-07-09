@@ -35,6 +35,7 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("EXTRACTED/docs/06-roster-format.md", "roster-dat-Format"),
     ("EXTRACTED/docs/07-anm-tv-format.md", "ANM-TV-Format"),
     ("EXTRACTED/docs/54-pc-dos-graphics-formats.md", "PC-DOS-Graphics-Formats"),
+    ("EXTRACTED/docs/snes-graphics.md", "SNES-Graphics"),
     ("EXTRACTED/docs/07-dat-files-and-formats.md", "dat-Files-and-Formats"),
     ("EXTRACTED/docs/07-event-script-opcodes.md", "Event-Script-Opcodes"),
     ("EXTRACTED/docs/42-event-dsl-format.md", "Event-Script-DSL"),
@@ -178,6 +179,12 @@ def build_link_map() -> dict[str, str]:
         m[title] = title
     m["Map-Walker"] = "Map-Walker"
     m["MM1-Map-Walker"] = "MM1-Map-Walker"
+    m["SNES-Gallery"] = "SNES-Gallery"
+    m["SNES-Atlases"] = "SNES-Atlases"
+    m["SNES-Walls"] = "SNES-Walls"
+    m["SNES-Monsters"] = "SNES-Monsters"
+    m["SNES-Titles"] = "SNES-Titles"
+    m["SNES-Explore"] = "SNES-Explore"
     m["Monster-Variants"] = "Monster-Variants"
     m["Platform-Graphics-Index"] = "Platform-Graphics-Index"
     m["Platform-Monsters-01-74"] = "Platform-Monsters-01-74"
@@ -507,6 +514,8 @@ def write_sidebar() -> None:
 #### Graphics
 - [GFX Loading](GFX-Loading)
 - [ANM TV Format](ANM-TV-Format)
+- [PC DOS graphics](PC-DOS-Graphics-Formats)
+- [SNES graphics](SNES-Graphics)
 - [3D View and Game Screen](3D-View-and-Game-Screen)
 - [Amiga 3D Render Process](Amiga-3D-Render-Process)
 - [Scripted Scene Graphics](Scripted-Scene-Graphics)
@@ -588,6 +597,9 @@ def write_sidebar() -> None:
 - [Map cartography](Map-Cartography)
 - [3D view graphics](3D-View-Graphics)
 - [map.dat reference](Map-dat-Grids)
+- [SNES gallery](SNES-Gallery)
+- [SNES wall faces](SNES-Walls)
+- [SNES monsters](SNES-Monsters)
 - [Map walker ↗](Map-Walker)
 
 #### Tools
@@ -716,6 +728,7 @@ def export_gallery(*, skip_gallery: bool) -> None:
             "<li><a href=\"Tilesets\">Tilesets</a> — planar <code>.32</code> sheets</li>\n"
             "<li><a href=\"Map-Cartography\">Auto-map cartography</a></li>\n"
             "<li><a href=\"3D-View-Graphics\">3D view compositing</a></li>\n"
+            "<li><a href=\"SNES-Gallery\">SNES gallery</a> — CHR walls &amp; monsters</li>\n"
             "</ul>\n\n"
             "</td>\n"
             "</tr>\n"
@@ -828,6 +841,26 @@ def export_mm1_maze_walker(out_root: Path) -> None:
     print(f"  wiki page MM1-Map-Walker.md -> {pages_url}")
 
 
+def export_snes_gallery_wiki(out_root: Path) -> None:
+    """SNES CHR exports under images/gallery/snes/."""
+    from snes_gfx_export import GITHUB_WIKI_LINKS, GITHUB_WIKI_PAGES, export_all as export_snes  # noqa: E402
+
+    img_out = out_root / "images" / "gallery"
+    print("Exporting SNES gallery…")
+    export_snes(
+        img_out,
+        out_root,
+        image_prefix="images/gallery/snes",
+        skip_extract=True,
+        links=GITHUB_WIKI_LINKS,
+        use_frontmatter=False,
+        page_names=GITHUB_WIKI_PAGES,
+    )
+    for name in GITHUB_WIKI_PAGES.values():
+        if (out_root / name).is_file():
+            print(f"  SNES gallery page {name}")
+
+
 def export_mm1_gallery_wiki(out_root: Path) -> None:
     """MM1 2D maps + WALLPIX PNGs under images/gallery/mm1/."""
     if not DEFAULT_MM1_MAZEDATA.is_file():
@@ -841,18 +874,27 @@ def export_mm1_gallery_wiki(out_root: Path) -> None:
         mazedata=DEFAULT_MM1_MAZEDATA,
         docs_out=out_root,
         image_prefix="images/gallery/mm1",
+        links={
+            "mm1_overview": "MM1-Overview",
+            "mazedata_format": "MM1-MAZEDATA-Format",
+            "maps": "Map-Cartography",
+            "map_walker": "MM1-Map-Walker",
+            "mm1_outdoor": "MM1-to-MM2-Outdoor",
+        },
+        use_frontmatter=False,
     )
     renames = {
-        "mm1-index.md": "MM1-Gallery.md",
-        "mm1-maps.md": "MM1-Maps-Gallery.md",
-        "mm1-walls.md": "MM1-Walls-Gallery.md",
+        "mm1-index.md": "MM1-Gallery",
+        "mm1-maps.md": "MM1-Maps-Gallery",
+        "mm1-walls.md": "MM1-Walls-Gallery",
     }
     for src_name, title in renames.items():
         src = out_root / src_name
         if src.is_file():
-            (out_root / f"{title}.md").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+            body = rewrite_links(strip_frontmatter(src.read_text(encoding="utf-8")))
+            (out_root / f"{title}.md").write_text(body, encoding="utf-8")
             src.unlink()
-            print(f"  MM1 gallery page {title}")
+            print(f"  MM1 gallery page {title}.md")
 
 
 def export_maze_walker(out_root: Path) -> None:
@@ -913,6 +955,7 @@ def export_github_wiki(*, skip_gallery: bool = False) -> Path:
     print("Exporting event locations…")
     export_event_locations()
     export_gallery(skip_gallery=skip_gallery or not has_game_assets())
+    export_snes_gallery_wiki(OUT)
     export_mm1_gallery_wiki(OUT)
     export_book_logo(OUT / "images" / "book-f00.png")
     export_maze_walker(OUT)

@@ -8,31 +8,60 @@ namespace mm2::gfx {
 struct CombatMonsterLine {
     char letter = 0;       /* 'A'..'J' when label_monster_slots */
     char name[16]{};
-    bool show_checkmark = false; /* glyph 0x7E — combat_monster_line @ 0x1374A */
-    char status_suffix[16]{};    /* e.g. "Hurt" from A4-$7026 table (0x1374A) */
+    /* Glyph 0x17 (check) when slot < A4-$524 melee-range count — combat_monster_list_line
+     * @ 0x12742. NOT an acted flag: -$524 is rolled per fight by 0x11D0C. */
+    bool show_checkmark = false;
+    char status_suffix[16]{};    /* 4-char abbrev from A4-$6FBC via -$519[slot] (0x127FE) */
 };
+
+/** AGA multi-monster viewport slot (presentation upgrade — see 41-aga-port-plan §8). */
+struct CombatSpriteSlot {
+    int disk_index = -1;   /* monsters.dat picture & 0x7F → NN.anm */
+    int stack_count = 0;   /* alive slots sharing this picture id */
+    int battle_slot = -1;  /* first alive battle slot with this picture */
+};
+
+/** Cap distinct on-screen combat BOBs (Chip RAM); raise after hardware measure. */
+constexpr int kAgaCombatSpriteCap = 4;
 
 /** Snapshot for drawing the retail combat HUD (panel mode A4-$79B2 == 2). */
 struct CombatPanelView {
-    char message[160]{};       /* status / surprise text on row 0x11 */
+    char message[160]{};       /* status / surprise text, message band row 0x0F */
     char options_for[16]{};    /* active character name when awaiting a command */
-    bool show_command_options = false; /* draw per-character A/B/R bar */
+    bool show_command_options = false; /* draw per-character command grid (0x11866) */
     bool show_party_options = false;   /* draw party-level A/B/H/R bar (0x13222) */
+    bool show_cast_level = false;      /* 0x79EE " Spell Level: " (combat cast, no grid) */
+    bool show_cast_number = false;     /* 0x79EE "Number: " after level digit */
+    int cast_level = 0;                /* echoed after level accepted */
     bool label_monster_slots = false;  /* A–J prefixes (round loop only) */
+    /* Command capability flags for the active character (0x11866):
+     *   melee  A4-$5E36: slot < front-rank cutoff -$5E4D
+     *   shoot  A4-$5E35: (class == 2 or back rank) and bow byte +$4E
+     *   cast   A4-$5E34: not silenced (+$26 bit1), caster (+$72), SP (+$58) */
+    bool opt_melee = false;
+    bool opt_shoot = false;
+    bool opt_cast = false;
     int monster_line_count = 0;
     CombatMonsterLine monster_lines[10]{};
-    int overflow_more = 0; /* "+N more" tail when live count > 10 */
+    int overflow_more = 0; /* live count - 10 when > 10 (0x12692 / 0x12E22) */
     char overflow_name[16]{};
-    int sprite_disk_index = -1; /* monsters.dat picture & 0x7F → NN.anm */
+    /** First alive picture (retail single-sprite path / legacy callers). */
+    int sprite_disk_index = -1;
+    /** Distinct picture ids for AGA multi-BOB gallery (back-to-front = low→high). */
+    int sprite_slot_count = 0;
+    CombatSpriteSlot sprite_slots[kAgaCombatSpriteCap]{};
 };
 
 /** Black viewport interior (replaces exploration 3D hood during combat). */
 void drawCombatViewport(ScreenCompositor &c);
 
-/** Monster name list in the right column (yellow-bordered box). */
-void drawCombatMonsterList(ScreenCompositor &c, const CombatPanelView &view);
+/** Yellow console_box around the narrow combat hood (combat_display_refresh @ 0x136AA). */
+void drawCombatViewportFrame(ScreenCompositor &c);
 
-/** Options / message strip on row 0x11. */
+/** Message / options band rows 0x0F..0x11 (cleared+printed by 0x1119E / 0x11866). */
 void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view);
+
+/** Right column during combat: round roster (0x129CC) or pre-combat name box (0x12DA2). */
+void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view);
 
 }  // namespace mm2::gfx

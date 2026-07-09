@@ -1,10 +1,12 @@
 #include "mm2/gfx/GfxBackend.h"
 
+#include "mm2/CppStdCompat.h"
 #include "mm2/DataPath.h"
 #include "mm2/runtime/PathScratch.h"
 
+#if !MM2_HOST_AMIGA
 #include <cstdio>
-#include <cstring>
+#endif
 
 namespace mm2::gfx {
 
@@ -170,7 +172,9 @@ void initPcGfxFallbackDir(const char *data_dir, const char *exe_base_dir)
             return false;
         }
         std::snprintf(g_settings.pc_gfx_dir, sizeof(g_settings.pc_gfx_dir), "%s", dir);
+#if !MM2_HOST_AMIGA
         std::fprintf(stderr, "mm2: PC gfx sheets from %s\n", g_settings.pc_gfx_dir);
+#endif
         return true;
     };
 
@@ -180,13 +184,19 @@ void initPcGfxFallbackDir(const char *data_dir, const char *exe_base_dir)
         }
         if (g_settings.pc_gfx_dir[0] == '\0') {
             std::snprintf(g_settings.pc_gfx_dir, sizeof(g_settings.pc_gfx_dir), "%s", dir);
+#if !MM2_HOST_AMIGA
             std::fprintf(stderr, "mm2: MONSTERS atlas from %s\n", g_settings.pc_gfx_dir);
+#endif
         }
         return true;
     };
 
+    if (backend != GfxBackend::Cga && backend != GfxBackend::Ega) {
+        return;
+    }
+
 #if !MM2_HOST_AMIGA
-    /* Viewport sprites (OP_0B signs, combat, Corak ghost) always come from MONSTERS.* on PC. */
+    /* CGA/EGA viewport sprites (combat, OP_0B signs) come from MONSTERS.* — not Amiga .anm. */
     if (!monstersAtlasPresent(data_dir)) {
         if (exe_base_dir && exe_base_dir[0]) {
             char exe_gfx[512];
@@ -209,9 +219,6 @@ void initPcGfxFallbackDir(const char *data_dir, const char *exe_base_dir)
     }
 #endif
 
-    if (backend != GfxBackend::Cga && backend != GfxBackend::Ega) {
-        return;
-    }
     if (pcGfxAssetsPresent(data_dir, backend)) {
         return;
     }
@@ -239,11 +246,10 @@ void initPcGfxFallbackDir(const char *data_dir, const char *exe_base_dir)
 
 GfxBackend detectGfxBackend(const char *data_dir)
 {
-    if (fileExists(data_dir, "TOWN.16") || fileExists(data_dir, "SKY.16") ||
-        fileExists(data_dir, "MONSTERS.16")) {
+    if (fileExists(data_dir, "TOWN.16") || fileExists(data_dir, "SKY.16")) {
         return GfxBackend::Ega;
     }
-    if (fileExists(data_dir, "TOWN.4") || fileExists(data_dir, "SKY.4") || fileExists(data_dir, "MONSTERS.4")) {
+    if (fileExists(data_dir, "TOWN.4") || fileExists(data_dir, "SKY.4")) {
         return GfxBackend::Cga;
     }
     if (fileExists(data_dir, "town.32") || fileExists(data_dir, "sky.32")) {

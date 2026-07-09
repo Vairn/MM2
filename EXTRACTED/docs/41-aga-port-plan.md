@@ -150,16 +150,17 @@ ACE viewport; no SDL RGBA upload.
 
 Retail uses Amiga **TextFont** strike `EXTRACTED/fonts/mm2/8`. ACE does **not** load that.
 
-**Pipeline (already partially in repo):**
+**Pipeline:**
 
 | Step | Tool / file |
 |------|-------------|
 | Extract / atlas | `tools/export_mm2_bitmap_font.py` → `editor/assets/fonts/mm2_8.png` + `mm2_8.json` |
 | SDL embed | `tools/embed_mm2_font_8.py` → `game/src/gfx/Mm2Font8x8.inc` |
-| AGA (planned) | Build-time: PNG → **6-plane glyph atlas** in Chip RAM; ACE blit per glyph |
+| AGA (done) | Runtime: 1bpp chip glyph mask atlas (128×64) + 8×8 ink stamp; `blitCopyMask` per glyph in `mm2_amiga_planar.c` |
 
 - Include codepoints **0–127** (UI chrome **0x0E–0x15** box glyphs — see `Mm2FontGlyphs.h`).
 - On AGA, text draws with **remapped UI pens** (32–63), not RGBA `drawText`.
+- CPU planar plot remains as fallback if atlas alloc fails.
 
 ACE doc: [font_conv](https://github.com/AmigaPorts/ACE/blob/master/docs/tools/font_conv.md).
 
@@ -181,19 +182,20 @@ ACE doc: [font_conv](https://github.com/AmigaPorts/ACE/blob/master/docs/tools/fo
 - Combat view effectively centres on **one** monster graphic (`monsters.dat` byte **0x15**
   `picture & 0x7F` → `NN.anm`) for the fight.
 
-### 8.3 AGA target behaviour
+### 8.3 AGA target behaviour (implemented — cap 4)
 
-For each **alive** slot with a distinct `picture` id:
+For each **alive** slot with a distinct `picture` id (first **4** distinct ids):
 
-1. Load **`NN.anm`** (ACE BOB / bitmap, chip RAM pooled).
-2. Place via **`kAgaCombatSpriteLayout[slot]`** (new table — x, y, depth, optional scale).
-3. Blit back-to-front in a shared **64-pen fight palette**.
-4. **Duplicate `picture` id** → one BOB + optional stack count text.
-5. Respect **bit 7** of `picture` (large / placement flag in [`16-monster-ability-format.md`](16-monster-ability-format.md)).
+1. Load **`NN.anm`** via shared `AnmPlanarPool` (chip cel reuse across fights).
+2. Place via **`kAgaCombatSpriteLayout[slot]`** in [`AmigaPlayScreenLayout.h`](../../game/include/mm2/gfx/AmigaPlayScreenLayout.h).
+3. Blit back-to-front; duplicate `picture` id → one BOB + `xN` stack text.
+4. Respect **bit 7** of `picture` (large / placement flag) for disk index (`& 0x7F` only).
 
-**Cap:** up to 11 distinct sprites, or lower if Chip RAM limited (document final cap after hardware test).
+**Cap:** **4** distinct sprites (`kAgaCombatSpriteCap`). Raise after Chip RAM measure on hardware.
 
-**Chip RAM risk:** many animated 6-plane BOBs — reuse handles, unload between fights, or reduce on-screen count.
+**Chip RAM:** unreferenced cels stay warm across combat/map hops (avoids reload hitch);
+`AnmPlanarPool::acquire()` evicts refcount-0 entries when the 16-slot pool is full.
+`purge()` / `clear()` remain for explicit teardown.
 
 ---
 
@@ -272,7 +274,7 @@ Ship as e.g. `data/classic/` + `data/ext/` or one directory with **`content_mani
 |--------|---------------|-----------|
 | Frame buffer | RGBA `ScreenCompositor` | 6-plane `tBitMap` |
 | Asset decode | → `frame.rgba` | → planes + palette |
-| Font | `Mm2Font8x8.inc` | 6bp atlas from `mm2_8.png` |
+| Font | `Mm2Font8x8.inc` | 1bpp chip atlas + blitter glyph draw |
 | UI | `AmigaClassic` / Stub | Classic optional; **new UI later** |
 | Combat sprites | RGBA blits (can preview multi-sprite early) | Planar BOBs, multi-slot |
 | Classic fidelity | RE reference | Logic yes; presentation per this doc |
@@ -285,9 +287,9 @@ Ship as e.g. `data/classic/` + `data/ext/` or one directory with **`content_mani
 1. **Doc + constants** — palette zones, classic vs extended counts (this file + headers).
 2. **Codec** — retain planes in `mm2_image32_frame`; rasterize only on `MM2_HOST_SDL`.
 3. **ACE bootstrap** — init, file read, 6bp screen, one test `.32` blit.
-4. **Font** — 6bp atlas build from `mm2_8.png`.
+4. **Font** — 1bpp chip glyph atlas + blitter cookie-cut (done).
 5. **Palette remap** — load table; apply on blit.
-6. **Combat composer** — multi-`NN.anm` layout (AGA); optional SDL RGBA preview.
+6. **Combat composer** — multi-`NN.anm` layout (AGA, cap 4; done) + `AnmPlanarPool`.
 7. **3D viewport** — planar hood on AGA (ASM tables from [`15-3d-view-and-game-screen.md`](15-3d-view-and-game-screen.md)).
 8. **Extension loader** — manifest, `map_ext` / `event_ext` when first dungeon is designed.
 9. **New UI backend** — after ingame loop stable; uses pens 32–63.
@@ -299,8 +301,8 @@ Ship as e.g. `data/classic/` + `data/ext/` or one directory with **`content_mani
 | Topic | Decision |
 |-------|----------|
 | Exact extension area / event id base | TBD |
-| Max combat BOBs on screen | TBD (Chip RAM measure) |
-| Per-fight palette merge strategy | TBD (union remap vs per-monster subset) |
+| Max combat BOBs on screen | **4** (`kAgaCombatSpriteCap`) — raise after Chip measure |
+| Per-fight palette merge strategy | Shared pens 3–17 via `AnmPlanarPool` (first overlay wins HW push) |
 | `map_ext.dat` / `event_ext.dat` file format version | TBD |
 | New UI backend name and ship target | TBD |
 

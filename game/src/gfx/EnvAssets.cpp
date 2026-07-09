@@ -1,9 +1,8 @@
 #include "mm2/gfx/EnvAssets.h"
 
+#include "mm2/CppStdCompat.h"
 #include "mm2/DataPath.h"
 #include "mm2/runtime/PathScratch.h"
-
-#include <cstdio>
 
 #include "mm2_image32_codec.h"
 #include "mm2_pc_gfx_codec.h"

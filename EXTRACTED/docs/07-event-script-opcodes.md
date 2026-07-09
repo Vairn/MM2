@@ -880,7 +880,7 @@ incomplete; **Unknown** = behaviour not traced.
 | `09` | Verified | Y/N prompt → `cond_flag` |
 | `0A` | Partial | Y/N variant (mode `0xFD` wrapper) |
 | `0B` | Partial | Service/title window (`-$7FBC`/`-$7FC2`); arg2 position byte semantics |
-| `0C` | Partial | Map transition (dest screen + packed entry coord); bit6 remap path |
+| `0C` | Verified | Map transition @ `0x15E12`: bit6 → `rng(1,20)+5` (+0x10 if ≥0x11) \| bit7; dest≥0x80 → `rng(1,255)` tile; dest&=0x3F; then `-$7FDA` map load; sets pending latch. Ported |
 | `0D` | Verified | `0x06FB8` canned on-screen sequence player (idx 0..9; idx 0 gated by `-$79AF`, 1..9 by `-$79B0`). Presentation-only, no GS writes → port stubs it logic-faithfully |
 | `0E` | Partial | Dispatch + default-range bins **Verified** byte-exact. **Ported with UI backend:** temple/training/smith/guild/tavern menus; pub/temple intro y/n → menu; smith direct shop (doc 28 §1.4.3). **Partial:** tavern food/drink RNG, inn rest, store `0xA62C`, default-range `-$7DFA` reinvoke, **arena `0x08` victory rewards**, **Feldecarb farthing transaction `0x0A`**, guild enroll `0x0D` — **arena tickets and farthings are separate mechanics** |
 | `0F` | Verified | End script / cleanup `0x171AC` |
@@ -912,8 +912,8 @@ incomplete; **Unknown** = behaviour not traced.
 | `2C` | Partial | Add to global counter `-$79B8`; sets redraw exit flag |
 | `2D` | Verified | Match party class/sex/race nibble (any/all mode); 2-value variant when arg1 has no high bits |
 | `2E` | Verified | OR arg2 into member `+(arg1-0x6E)+0x51` for two specific classes ({4,2}/{3,1}) |
-| `2F` | Verified | Clear input buffer `-$5C50` |
-| `30` | Verified | 10-byte encoded password check |
+| `2F` | Verified | **Not a silent clear** — `0x16FEA` calls `-$7F92` to read up to 10 chars into `-$5C50`, space-pads remainder, clears `-$5C46`. Port: `EventVmWait::Answer` fills the buffer then resumes |
+| `30` | Verified | 10-byte compare: `toupper(input[i])` vs `(0x11A - expected[i])` for i=0..9; cond=1 iff all match. Port byte-exact |
 | `31` | Partial | Sets `EXIT_FLAGS` bit1 (ported), then per resolved member runs engine op `(*A4-$7F08)(rec,value,&out×3)` and `(*A4-$7F14)` (script-abort gate). `-$7F08`/`-$7F14` are **runtime A4 pointers** (combat/spell field op). Port replicates only the `EXIT_FLAGS` side effect + argc=3. **Deferred: per-member engine op** |
 | `32` | Verified | cond = party class-nibble count (`0x04614`/`0x45C4`, not a var load) |
 

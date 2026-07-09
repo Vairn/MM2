@@ -10,6 +10,8 @@ namespace mm2::gfx {
 struct PlayPartySlot {
     bool present = false;
     bool bad_condition = false;   /* roster byte +$26 != 0 (0x622C) */
+    bool in_combat = false;       /* use the combat strip format (0x12848) */
+    bool combat_front_rank = false; /* glyph 0x17 when slot < A4-$5E4D (0x12892) */
     int hp = 0;                   /* roster word +$5E (0x6274) */
     char name[16] = {0};
 };
@@ -37,6 +39,15 @@ void drawPlayScreenChrome(ScreenCompositor &c);
 
 /** Red v-line col 0x1B rows 0..0x10 — repaint after 3D hood (walls overwrite x=216). */
 void drawPlayViewportDivider(ScreenCompositor &c);
+
+/** Combat round chrome: clear cols 1..0x26 rows 1..0x11 + rules (0x135BE). */
+void drawCombatScreenChrome(ScreenCompositor &c);
+
+/** Combat rules/patches only (repaint after the backdrop/sprite blits). */
+void drawCombatScreenLines(ScreenCompositor &c);
+
+/** Combat hood divider col 0x0F rows 0..0x0E — repaint after monster sprite blit. */
+void drawCombatViewportDivider(ScreenCompositor &c);
 
 void drawPlayStatusBar(ScreenCompositor &c, int day, int year, char facing_key, bool new_game);
 void drawPlayPartyPanel(ScreenCompositor &c, const PlayPartySlot slots[8]);

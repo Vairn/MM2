@@ -180,6 +180,8 @@ private:
     uint8_t pending_choose_town_filter_ = 1;
     /** Set when inTownDraw rebuilt the playfield this frame (Amiga DB swap gate). */
     bool in_town_redrew_ = false;
+    /** Set when charDraw composited the UI cache this frame (Amiga idle skip). */
+    bool char_ui_redrew_ = false;
     int play_title_screen_ = -1;
 
     TitleScreen::BootOutcome boot_outcome_ = TitleScreen::BootOutcome::Working;

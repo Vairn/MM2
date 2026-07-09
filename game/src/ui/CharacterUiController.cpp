@@ -163,6 +163,23 @@ void CharacterUiController::ackRedraw()
     }
 }
 
+bool CharacterUiController::needsIncrementalRedraw() const
+{
+    return ui_ && ui_->needsIncrementalRedraw();
+}
+
+void CharacterUiController::renderIncremental(gfx::ScreenCompositor &compositor)
+{
+    if (ui_) {
+        ui_->renderIncremental(compositor);
+    }
+}
+
+bool CharacterUiController::takeIncrementalPresentRect(int *out_x, int *out_y, int *out_w, int *out_h)
+{
+    return ui_ && ui_->takeIncrementalPresentRect(out_x, out_y, out_w, out_h);
+}
+
 bool CharacterUiController::takePartyLaunch(Mm2PartyLaunch *out)
 {
     if (!party_launch_ready_ || !out) {

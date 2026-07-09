@@ -224,13 +224,15 @@ int main()
                "Cleric 47 = Uncurse Item (L9)", fails);
     }
 
-    // Opening the spell-book sub-mode via 'C'.
+    // Opening the spell-book sub-mode via 'C' (exploration cast @ 0x6E30).
     {
         Mm2RosterFile sroster{};
         Mm2PartyLaunch slaunch{};
         mm2_roster_clear_record(&sroster.records[0]);
         mm2_roster_set_name(&sroster.records[0], "Mage");
         sroster.records[0].class_id = 4;  // Sorcerer
+        sroster.records[0].spell_level = 3;
+        mm2::gameplay::spellLearnInBook(sroster.records[0], 0); // L1/1 Awaken
         slaunch.party_count = 1;
         slaunch.roster_slots[0] = 0;
 
@@ -238,10 +240,27 @@ int main()
         mm2::gameplay::SheetSession ssession{};
         ssession.party_slot = 0;
         ssheet.handleKey('C', ssession, sroster, slaunch, nullptr);
-        expect(ssession.sub_mode == mm2::gameplay::SheetSubMode::SpellBook, "caster 'C' opens spell book", fails);
+        expect(ssession.sub_mode == mm2::gameplay::SheetSubMode::CastPicker, "caster 'C' opens cast picker", fails);
+        expect(ssession.cast_phase == mm2::gameplay::CastPromptPhase::Level, "cast starts at level prompt", fails);
 
-        // While viewing, other keys are swallowed (stay in the book).
-        ssheet.handleKey('D', ssession, sroster, slaunch, nullptr);
+        ssheet.handleKey('1', ssession, sroster, slaunch, nullptr);
+        expect(ssession.cast_phase == mm2::gameplay::CastPromptPhase::Number, "digit advances to number", fails);
+        expect(ssession.cast_level == 1, "cast level stored", fails);
+
+        ssheet.handleKey('1', ssession, sroster, slaunch, nullptr);
+        expect(ssession.sub_mode == mm2::gameplay::SheetSubMode::Normal, "valid spell exits picker", fails);
+        expect(ssession.cast_spell_flat == 0, "flat index 0 for L1/1", fails);
+
+        // Combat sheet 'C' must not open cast UI (combat command path owns it).
+        ssession = {};
+        ssession.party_slot = 0;
+        ssheet.handleKey('C', ssession, sroster, slaunch, nullptr, true);
+        expect(ssession.sub_mode == mm2::gameplay::SheetSubMode::Normal, "combat sheet 'C' ignored", fails);
+
+        // Combat sheet 'V' opens view-only SpellBook.
+        ssheet.handleKey('V', ssession, sroster, slaunch, nullptr, true);
+        expect(ssession.sub_mode == mm2::gameplay::SheetSubMode::SpellBook, "combat 'V' opens spell book", fails);
+        ssheet.handleKey('D', ssession, sroster, slaunch, nullptr, true);
         expect(ssession.sub_mode == mm2::gameplay::SheetSubMode::SpellBook, "spell book swallows other keys",
                fails);
 
@@ -254,7 +273,7 @@ int main()
     }
 
     if (fails == 0) {
-        std::printf("OK: character_sheet_input_test (54 checks)\n");
+        std::printf("OK: character_sheet_input_test (58 checks)\n");
         return 0;
     }
     return 1;

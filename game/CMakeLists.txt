@@ -356,6 +356,46 @@ if(NOT AMIGA)
     src/runtime/PathScratch.cpp)
   target_include_directories(playscreen_golden PRIVATE include)
   target_link_libraries(playscreen_golden PRIVATE mm2_codecs)
+
+  add_executable(combat_golden
+    tests/combat_golden.cpp
+    src/GameSession.cpp
+    ${MM2_AUTOMAP_SOURCES}
+    src/events/ScriptedSceneEngine.cpp
+    src/gameplay/Movement.cpp
+    src/gameplay/PlaySessionInput.cpp
+    src/gameplay/ExploreActions.cpp
+    src/gameplay/InGameCharacterSheet.cpp
+    src/ui/RosterSkillDisplay.cpp
+    src/gameplay/InGameControlsScreen.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/mm2_font8x8.c
+    src/gfx/View3D.cpp
+    src/gfx/OutdoorView3D.cpp
+    src/gfx/PlayScreenChrome.cpp
+    src/gfx/CombatPanel.cpp
+    src/gfx/PartyStatusFormat.cpp
+    src/gfx/EnvAssets.cpp
+    src/gfx/GfxBackend.cpp
+    src/world/MapWorld.cpp
+    src/events/EventRuntime.cpp
+    src/events/EventVmHelpers.cpp
+    src/events/EventPartyEffects.cpp
+    src/events/EventTownServices.cpp
+    src/events/EventSkillBuy.cpp
+    src/events/TownServiceTransactions.cpp
+    src/events/TownServiceMenu.cpp
+    src/events/EventCombatEncounter.cpp
+    src/events/EventTextView.cpp
+    src/events/ServiceSignResolver.cpp
+    src/combat/EncounterPicker.cpp
+    src/combat/CombatSession.cpp
+    src/ui/PlayTownServiceUi.cpp
+    src/gfx/ViewportAnmOverlay.cpp
+    src/runtime/Mm2Alloc.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(combat_golden PRIVATE include)
+  target_link_libraries(combat_golden PRIVATE mm2_codecs)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -435,6 +475,7 @@ if(AMIGA)
     src/platform/amiga/mm2_amiga_planar.c
     src/platform/amiga/mm2_amiga_file.c
     src/platform/amiga/mm2_fade.c
+    src/gfx/AnmPlanarPool.cpp
   )
 endif()
 

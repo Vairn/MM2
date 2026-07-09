@@ -215,20 +215,30 @@ resource pool" framing of the whole `0x30000+` range.
 
 ### Palettes (confirmed)
 
-| Table | Bytes | Palettes | Notes |
-|-------|-------|----------|-------|
-| `0x9389E` | 128 | 4×16 | browns/orange + grey ramps — reads as stone/earth |
-| `0x94F40` | 128 | 4×16 | greens/blues + grey ramps |
-| `0xB12` (boot) | 386 | multiple | boot/title CRAM (outside scan range) |
+| Source | Bytes | Notes |
+|--------|-------|-------|
+| **`0x6FBEA`** (raw CRAM) | 4×`$20` | **Env / first-person view palette bank** — ASM @ `0x8140` |
+| `0x6D03C` (raw CRAM) | `$20` | UI / alternate line — loaded when `-$4C4(A5)≠1` @ `0x81A8` |
+| `0x6F858` (raw CRAM) | `$20` | sits immediately before tilemap `0x6F878` |
+| `0x9389E` / `0x94F40` (LZ) | 128 | trailing group — **not** the live env CRAM path |
+| `0xB12` (boot LZ) | 386 | boot/title CRAM |
 
-Swatches: `gfx/catalog/pal_09389E.png`, `pal_094F40.png`.
+**Env CRAM bank (ASM-exact):** `MOVE.L #$6FBEA,(A7)` then
+`ADD.L #line*$20` + `JSR $72(A5)` @ `0x8140`, selected by `-$4C6(A5)` /
+`-$4C4(A5)`:
 
-**Palette-pairing method:** (1) structural CRAM validity to *find* palette
-tables; (2) **ROM adjacency** — the decisive signal is the trailing group
-`0x9389E · 0x940C2 · 0x943B8 · 0x94C4A · 0x94F40` = *palette · tilemap · CHR ·
-tilemap · palette*, a fully self-contained screen. Elsewhere palettes are sparse,
-so CHR banks are rendered against the nearest palette table **and** boot pal 0
-(stacked in each `gfx/catalog/<off>.png`) so the fit can be eyeballed.
+| Line | Addr | `-$4C6` | Theme (strip pool) |
+|------|------|---------|---------------------|
+| L0 | `0x6FBEA` | 2 or 5 | **castle** grey brick (`0x6FFAE`–`0x776F4`) |
+| L1 | `0x6FC0A` | 0 | **town** rough stone (`0x7780A`–`0x803A8`) |
+| L2 | `0x6FC2A` | 1 | **cavern** — **same strips as town**, recolour |
+| L3 | `0x6FC4A` | (outdoor via `-$4C4==1`) | **outdoor** greens (`0x9E846`–`0xA5896`) |
+
+Loc-id → theme mapper @ `0xFB86`; strip fill jump table @ `0xFC56`
+(themes 0/1 share town art; 2/5 castle; 3/4/6 outdoor). **No separate cavern
+strip pool** on Genesis (unlike Amiga `cave.32`).
+
+Swatch: `gfx/catalog/env/atlases/palettes_L0_L1_L2_L3.png`.
 
 ### CHR graphics banks (24) — `gfx/catalog/chr/*.png`
 
@@ -247,30 +257,107 @@ tile grids** and are honest — exact on-screen images still need tilemap assemb
 | `0x6A032`, `0x62788`, `0x4AE9A`, `0x41042`, `0x5E0BE`, `0x61A0C`, `0x4365C`, `0x57326`, `0x4CDB0`, `0x42ABE`, `0x5BF3C`, `0x4D8E8`, `0x5FA74`, `0x4865A`, `0x66642`, `0x5D808`, `0x6F2E0` | 53–189 | environment / sprite / UI tile banks — **unconfirmed** |
 | `0x6E9A2` | 256 | **font / charset** — digits + letters clearly visible (confirmed by eye) |
 
-### Tilemaps (48) and the wall/first-person view
+### Tilemaps (48) — UI / secondary layouts (not the 3D walls)
 
-The 48 `tilemap` tables (`0x37C00`–`0x6D364`) are 16-bit tile-index arrays that
-lay CHR tiles into screens/views. Sizes cluster (484 / 726 / 968 / 1452 words),
-consistent with fixed view layouts. **Blind assembly did not resolve** to a
-recognizable image: interpreting words as standard VDP nametable entries
-(`P CC V H + 11-bit index`) against adjacent CHR banks produces speckle
-(`gfx/catalog/screens/*.png`). This means the exact reconstruction needs the
-**3D/screen renderer's parameters** — plane width, tile-base offset, and whether
-the "tilemap" is a plain nametable or a custom/RLE placement stream — which must
-come from an ASM trace of the view code or an emulator VRAM+nametable dump.
-`tools/assemble_genesis_screen.py` is ready to drive once those are known.
+The 48 `tilemap` tables (`0x37C00`–`0x6D364`) are 16-bit tile-index arrays.
+Gameplay loads confirmed via `MOVE.L #imm,(A7)` + `JSR $0C(A5)`:
 
-### Are the first-person WALL tiles found?
+| Table | Class | Use (ASM) |
+|-------|-------|-----------|
+| `0x6E9A2` | CHR (font) | → VRAM `$2000` @ `0x4374` |
+| `0x6F520` / `0x6F878` | tilemap | UI / overlay maps (read with row stride `$80` = 64 tiles @ `0x43DA`) |
+| `0x6D05C` | tilemap | DMA path @ `0x4686` |
+| `0x6F2E0` | CHR | paired with `0x6D05C` @ `0x46B6` |
 
-**Partly — honest answer.** The wall/dungeon *material* almost certainly lives in
-the CHR banks above: `0x943B8` (cave rock + embers) and `0x47090` (stone) read as
-first-person wall/environment surfaces with the game palettes, and `0x57DF0` reads
-as an outdoor stone/foliage scene. But **no CHR bank has been confirmed as a
-specific first-person wall block**, because MM2 composes the 3D view by scaling
-tile blocks via a tilemap we cannot yet assemble. The "weird coloured tile" the
-user saw in the boot render is most likely a **font/UI glyph** (`0x6E9A2` is the
-charset) or a palette-test cell — **not** a wall. Wall confirmation is blocked on
-the tilemap→view assembly (ASM trace / VRAM dump), noted in Next steps.
+Blind VDP-nametable assembly of these against CHR banks still speckles for the
+non-UI maps — they are **not** the first-person wall path.
+
+Trailing self-contained group `0x9389E · 0x940C2 · 0x943B8 · 0x94C4A · 0x94F40`
+(palette · tilemap · CHR · tilemap · palette) yields coherent **11×11** face
+blocks when the 1452-word maps are sliced at width 11
+(`gfx/catalog/walls/wall_faces_{A,B}_11x11.png`) — useful cave/rock material,
+but secondary to the strip pool below.
+
+### First-person walls — **found** (env strip pool)
+
+Genesis MM2 does **not** compose the 3D view from nametable tilemaps. Walls and
+doors are **pre-rendered 4bpp perspective strips**, loaded through the banked LZ
+entry `$66(A5)` = `0x29A22`.
+
+| Item | Detail | ASM anchor |
+|------|--------|------------|
+| Env table fill | writes ROM ptrs into `-$35D2(A5)` … | `0xFC40`–`0x102xx` |
+| Load | `MULU #$50,D0` + `MOVE.L d8(A4,D0),-(A7)` + `JSR $66(A5)` | `0x3E5C`… |
+| Banked write stride | `$68` bytes | `ADDA.W #$68,A4` @ `0x29A76` |
+| Resource prefix | `u16 chunk_bytes` @ `table-4`, `u16 row_count` @ `table-2` | read via `A3=table; SUBQ #4,A3; MOVE.W (A3),D1` |
+| Bitmap | linear 4bpp, `width = chunk_bytes*2`, `height = out_size/chunk_bytes` | — |
+
+**86 resources** in three strip pools (castle / town+cavern / outdoor).
+Catalog: `analysis/env_lz_catalog.json`.
+
+| Chunk (B/row) | Size (px) | Content |
+|---------------|-----------|---------|
+| 8 / 12 / 16 | 16–32 × 120 | Side-wall perspective strips |
+| 24 / 28 / 29 / 30 / 48 | 48–96 × 28–55 | Near-field wall / door / mountain faces |
+| 80 | 160 × 91–96 | Full door / outdoor panels |
+| 13 | 26 × 91 | Narrow filler / edge strips |
+
+Tools: `tools/rip_genesis_walls.py`, `tools/atlas_genesis_walls.py`.
+
+**Atlases** (`tools/atlas_genesis_walls.py` → `gfx/catalog/env/atlases/`):
+
+| Atlas | Theme / palette |
+|-------|-----------------|
+| `atlas_castle_*_L0.png` | Castle grey brick — **L0** (user-confirmed) |
+| `atlas_town_*_L1.png` | Town bluish stone — **L1** (user-confirmed) |
+| `atlas_cavern_*_L2.png` | Caverns — **same art as town**, **L2** (user-confirmed) |
+| `atlas_outdoor_*_L3.png` | Outdoor mountains/trees — **L3** (user-confirmed) |
+| `atlas_themes_doors.png` | One door/panel contact sheet across all four themes |
+| `palettes_L0_L1_L2_L3.png` | All four CRAM lines |
+
+Per-strip rips: `strip_*_L0.png` / `_L1_town.png` / `_L2_cavern.png` / `_L3.png`.
+
+### Monsters / combat graphics — **partial** (catalog `$11A`)
+
+Picture art lives in the **`$11A(A5)` = `0x33CF4`** resource catalog (base
+`0x33D4A`), not in the env-strip / event-VM / SFX paths ruled out earlier.
+
+| Piece | Detail | ASM |
+|-------|--------|-----|
+| Catalog walk | `u16 id` → CHR LZ + layout LZ + 16-colour CRAM | `$11A` @ `0x33CF4` |
+| Meta | `0x913B4` via `0x74CE` — `w2` / `w3` / extras | `0x74CE` |
+| Anim rows | `0x91738` via `0x7512` — keyed by meta `w3`; each word **hi=layout row, lo=duration** | `0x7512` |
+| Combat still | Row **0** pushed into blit `@0x7788` (`@0x7756`) | `@0x7756` |
+| Plane stride | `$F2` bytes = **121** tile words (linear upload stream) | blit `@0x7788` / `@0x7900` |
+| SAT mosaic | Hardcoded **9 sprites** (sizes sum to 121) for **every** `$11A` load | `@0x761A` |
+| Combat entry | `$240(A5)=0x7556` → same loader; base XY `$AE`/`$CC` | e.g. `@0x2676C` |
+
+**Per-entry layout:**
+1. CHR = Okumura LZ @ `entry+2` (standard 8-byte header).
+2. Layout = LZ words: **121 × N** (= animation frames). Each row is a **linear**
+   tile stream consumed in SAT sprite order (not a 2D nametable).
+3. Trailing **32 bytes** = CRAM line (per-picture palette).
+4. Meta.`w2` is **not** read for placement; `0x91738` (via `w3`) lists anim
+   **layout rows** (high byte of each u16); low byte = tick duration.
+5. Composer = fixed SAT mosaic `@0x761A` (VDP size bytes `$0F`/`$0E`/`$0B`/`$0A`):
+   **4×4 / 4×4 / 3×4 / 4×4 / 4×4 / 3×4 / 4×3 / 4×3 / 3×3** (W×H tiles).
+   Static combat/UI portrait = **layout row 0** via `@0x7788`.
+6. Blit simulator (`simulate_blit7788`) matches direct compose (pixel-identical);
+   place table does **not** encode SAT slot visibility.
+
+**69 catalog ids** (1–31, 33–49, 51, 53–63, 65–69, 72, 74, 75, 158). Missing
+from 1–60: **32, 50, 52**.
+
+Tool: `tools/rip_genesis_monsters.py` → `gfx/catalog/monsters/` +
+`atlases/atlas_monsters.png`. Catalog JSON:
+`analysis/monster_catalog.json`.
+
+**Caveat:** Visual fidelity of the universal mosaic for all 69 ids still needs
+emulator cross-check; some creatures may look fragmented if their art was
+authored for a different packing.
+
+**Still ruled out:** depth panels `0xA59B0+`, globe `$14A`, event VM `@0x2C18C`,
+combat SFX `$22E`.
 
 ---
 
@@ -335,7 +422,10 @@ python tools\genesis_vram_dump_stub.py --manual
 | `render_genesis_chr.py` | `gfx/catalog/chr/*.png` | Render the 24 CHR banks against all 8 detected palettes |
 | `genesis_lz_bitmap_probe.py` | `gfx/catalog/probe/*_widths.png` | Probe a blob as a linear 4bpp bitmap at candidate widths |
 | `genesis_lz_sprite_probe.py` | `gfx/catalog/probe/*_sprite.png` | Probe a blob as a column-major VDP sprite at candidate widths |
-| `assemble_genesis_screen.py` | `gfx/catalog/screens/*.png` | Assemble a tilemap + CHR bank + palette into a screen (needs correct tile-base/width) |
+| `assemble_genesis_screen.py` | `gfx/catalog/screens/*.png` | Assemble a tilemap + CHR bank + palette into a screen (UI maps; not 3D walls) |
+| `rip_genesis_walls.py` | `gfx/catalog/env/strip_*_L{0,3}.png` | Rip env strips with ASM CRAM `0x6FBEA` |
+| `atlas_genesis_walls.py` | `gfx/catalog/env/atlases/*.png` | Grouped dungeon/outdoor wall atlases |
+| `rip_genesis_monsters.py` | `gfx/catalog/monsters/`, `atlases/atlas_monsters.png` | `$11A` catalog CHR+layout → composed portraits |
 | `genesis_vram_dump_stub.py` | stdout | Fusion / raw VRAM compare vs boot LZ blobs |
 | `disasm_genesis_m68k.py` | `.asm` | Capstone 68000 listings |
 | `scan_console_gfx.py` | entropy / VDP refs | Region survey |
@@ -348,9 +438,11 @@ python tools\genesis_vram_dump_stub.py --manual
 1. ~~**Finish LZ Python port**~~ — **done**: `0x29954` bit-exact, round-trips, 4/4 boot tables validated (`analysis/lz_validation.json`).
 2. ~~**Catalog `0x30000+` tables**~~ — **done**: 169 tables catalogued (`analysis/lz_scan_30000.json`).
 3. ~~**Catalog / classify all tables**~~ — **done**: 2 palette / 24 chr / 48 tilemap / 90 text / 5 data (`analysis/tile_catalog.json`). Text pool decoded and confirmed.
-4. **Assemble tilemap → screen**: trace the view/screen renderer in ASM to recover plane width + tile-base offset (and confirm whether tilemaps are plain VDP nametables or a custom placement stream). Feed into `assemble_genesis_screen.py` to turn CHR banks into recognizable walls/scenes. **This is the blocker for confirming first-person wall blocks.**
-5. **Emulator VRAM+nametable dump** at a dungeon-view frame (fastest way to pin the exact wall CHR bank + layout).
-6. **Trace gameplay `$2DBA`** sites outside boot (environment transitions) via `gfx_static.json` call list.
+4. ~~**Find first-person walls**~~ — **done**: pre-rendered 4bpp strips in `0x717B6`–`0x7FC4E` via `$66(A5)` (`rip_genesis_walls.py`).
+5. **Map strip → view slot**: recover which `A3` field / `$50`-stride record selects which strip for each depth/side (table fill @ `0xFC40` has multiple themes).
+6. **Compose a full first-person frame** from the strip set (center door + L/R walls at depths) once slot mapping is known.
+7. **Decode combat monsters** — **partial**: `$11A` catalog @ `0x33D4A` (69 ids); CHR+palette+linear layout ripped. Remaining: combat SAT XY (meta.`w2` packing was wrong); trace combat `+$6F` → `$11A`.
+8. **Trace remaining `$0C` / `$2DBA` gameplay uploads** (outdoor / town CHR banks in the `0x37C00` pool).
 
 ---
 

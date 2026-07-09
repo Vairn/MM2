@@ -73,12 +73,14 @@ npm run dev
 | `wiki/scripts/publish-github-wiki.py` | Git push `gh-wiki/` → `MM2.wiki.git` |
 | `wiki/scripts/export-gfx-gallery.py` | VitePress MM2 gallery only |
 | `wiki/scripts/export-pc-gfx-gallery.py` | VitePress PC DOS `.4`/`.16` gallery |
+| `wiki/scripts/export-snes-gfx-gallery.py` | VitePress SNES CHR gallery |
 | `wiki/scripts/export-mm1-gallery.py` | VitePress MM1 WALLPIX gallery (lagdotcom exports) |
 | `wiki/scripts/export-wiki-diagrams.py` | PNG flowcharts → `gh-wiki/images/diagrams/` |
 | `wiki/wiki_enrichments.py` | Per-page nav, TOC, diagrams, See also footers |
 | `tools/mm2_gfx_export.py` | Core Amiga sprite decoder/exporter |
 | `tools/decode_pc_gfx.py` | PC DOS `.4`/`.16` decoder |
 | `tools/pc_gfx_export.py` | PC gallery sync for VitePress |
+| `tools/snes_gfx_export.py` | SNES gallery sync for VitePress |
 | `tools/export_map_walker.py` | Export `walker-bundle.js` for the HTML map walker |
 
 ---

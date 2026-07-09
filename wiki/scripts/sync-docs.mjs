@@ -122,6 +122,10 @@ spawnSync(py, [mm1GalleryScript], { stdio: 'inherit', cwd: repoRoot });
 const pcGalleryScript = path.join(wikiRoot, 'scripts', 'export-pc-gfx-gallery.py');
 spawnSync(py, [pcGalleryScript], { stdio: 'inherit', cwd: repoRoot });
 
+// SNES CHR gallery (EXTRACTED/SNES/gfx/export).
+const snesGalleryScript = path.join(wikiRoot, 'scripts', 'export-snes-gfx-gallery.py');
+spawnSync(py, [snesGalleryScript], { stdio: 'inherit', cwd: repoRoot });
+
 // Monster variants: Amiga / CGA / EGA side-by-side (monsters.dat index).
 const variantsScript = path.join(wikiRoot, 'scripts', 'export-monster-variants.py');
 spawnSync(py, [variantsScript], { stdio: 'inherit', cwd: repoRoot });

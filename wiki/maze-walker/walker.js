@@ -512,7 +512,7 @@ function renderMinimap(sc) {
   miniCtx.strokeRect(0, 0, w, h);
 }
 
-/** @type {{ type: 'text'|'prompt', layoutOp: number, vmOp: number | null, text: string, showSpace: boolean, resolve: Function, sprite?: object } | null} */
+/** @type {{ type: 'text'|'prompt'|'menu'|'answer', layoutOp: number, vmOp: number | null, text: string, showSpace: boolean, resolve: Function, sprite?: object, answerBuf?: string, validKeys?: string, combatPrompt?: boolean } | null} */
 let uiState = null;
 
 function drawUI() {
@@ -523,13 +523,17 @@ function drawUI() {
   }
   uiCanvas.style.pointerEvents = "auto";
 
-  if (uiState.type === "text" || uiState.type === "prompt" || uiState.type === "menu") {
+  if (uiState.type === "text" || uiState.type === "prompt" || uiState.type === "menu" ||
+      uiState.type === "answer") {
     /* Narrative modal — lower console band rows 17..23 (EventTextView / doc 44),
      * NOT centered on the 208×120 viewport. */
+    const panelText = uiState.type === "answer"
+      ? `${uiState.text}\n>${uiState.answerBuf ?? ""}`
+      : uiState.text;
     drawNarrativePanel(uiCtx, {
       op: uiState.layoutOp,
       vmOp: uiState.vmOp,
-      text: uiState.text,
+      text: panelText,
       showSpace: uiState.type === "text" && uiState.showSpace,
     });
   }
@@ -655,6 +659,28 @@ function promptYesNo(text, sprite = null, vmOp = null) {
   });
 }
 
+/**
+ * OP_2F @ 0x16FEA → -$7F92: collect up to 10 chars, Enter commits, space-pad.
+ * Returns a 10-char uppercase string (space-padded), matching A4-$5C50.
+ */
+function promptAnswer(text = "?", sprite = null, vmOp = 0x2f) {
+  const resolved = resolveEventText(text);
+  return new Promise((resolve) => {
+    uiState = {
+      type: "answer",
+      layoutOp: resolveNarrativeLayoutOp(resolved, vmOp),
+      vmOp,
+      text: resolved,
+      showSpace: false,
+      answerBuf: "",
+      resolve,
+      sprite,
+    };
+    draw();
+    updateUI();
+  });
+}
+
 /** Letter/digit menu — validKeys e.g. "abc0" (0/Esc = exit, returns null). */
 function promptMenuKey(text, validKeys, sprite = null, vmOp = null) {
   const resolved = resolveEventText(text);
@@ -749,6 +775,41 @@ function handleUIKey(ev) {
       uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
       resolve(k === "0" ? null : k);
       draw();
+      return true;
+    }
+    return true;
+  }
+  if (uiState.type === "answer") {
+    if (ev.key === "Escape") {
+      const resolve = uiState.resolve;
+      uiState = null;
+      uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      resolve("          ");
+      draw();
+      return true;
+    }
+    if (ev.key === "Backspace") {
+      uiState.answerBuf = (uiState.answerBuf ?? "").slice(0, -1);
+      draw();
+      updateUI();
+      return true;
+    }
+    if (ev.key === "Enter") {
+      const raw = (uiState.answerBuf ?? "").toUpperCase().slice(0, 10);
+      const padded = (raw + "          ").slice(0, 10);
+      const resolve = uiState.resolve;
+      uiState = null;
+      uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      resolve(padded);
+      draw();
+      return true;
+    }
+    if (ev.key.length === 1 && ev.key.charCodeAt(0) >= 32 && ev.key.charCodeAt(0) < 127) {
+      if ((uiState.answerBuf ?? "").length < 10) {
+        uiState.answerBuf = (uiState.answerBuf ?? "") + ev.key;
+        draw();
+        updateUI();
+      }
       return true;
     }
     return true;
@@ -1108,6 +1169,7 @@ function buildEventVmCtx() {
     resolveEventText,
     waitForSpace,
     promptYesNo,
+    promptAnswer,
     promptMenuKey,
     promptCombatResult,
     onDraw: () => draw(),

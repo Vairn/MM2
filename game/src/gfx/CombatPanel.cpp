@@ -4,6 +4,7 @@
 #include "mm2/CppStdCompat.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/PlayScreenChrome.h"
+#include "mm2/gfx/mm2_font8x8.h"
 
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
@@ -20,95 +21,211 @@ constexpr uint8_t kPenYellow = MM2_UI_PEN_WARN; /* A4-$7A50 combat/sign border p
 constexpr uint8_t kPenWhite = MM2_UI_PEN_WHITE;
 #endif
 
-/* console_box @ 0x7F68 (809E): font glyphs 0x0E..0x15; combat sets pen A4-$7A50. */
 constexpr uint8_t kCombatBoxR = 255;
 constexpr uint8_t kCombatBoxG = 204;
 constexpr uint8_t kCombatBoxB = 0;
 
+/* Message / options band cleared by 0x1119E: cols 1..0x26, rows 0x0F..0x11. */
+constexpr int kMessageRow = 0x0F;
+
+/* Check glyph before roster letters / party digits (0x12742 / 0x12898). */
+constexpr char kCheckGlyph = 0x17;
+
+/* Monster name field: dots pad to 14 before '/'+status (0x127C6..0x127E8). */
+constexpr int kMonsterNameField = 0x0E;
+
 void textAt(ScreenCompositor &c, int col, int row, const char *text, uint8_t r = 255, uint8_t g = 255,
             uint8_t b = 255)
 {
+    if (!text) {
+        return;
+    }
 #if MM2_HOST_AMIGA
-    if (r >= 200 && g >= 200 && b <= 80) {
-        c.drawTextPen(col * 8, row * 8, text, kPenYellow);
-    } else if (r >= 210 && g >= 210 && b >= 210) {
-        c.drawTextPen(col * 8, row * 8, text, kPenWhite);
-    } else {
-        c.drawText(col * 8, row * 8, text, r, g, b);
+    /* drawTextPen skips codepoints < 32; combat check glyph 0x17 needs drawGlyphPen. */
+    const uint8_t pen = (r >= 200 && g >= 200 && b <= 80) ? kPenYellow : kPenWhite;
+    int x = col * 8;
+    const int y = row * 8;
+    for (const char *p = text; *p; ++p) {
+        const unsigned uch = static_cast<unsigned char>(*p);
+        if (uch >= MM2_FONT8X8_GLYPHS) {
+            continue;
+        }
+        c.drawGlyphPen(x, y, static_cast<uint8_t>(uch), pen);
+        x += 8;
     }
 #else
-    c.drawText(col * 8, row * 8, text, r, g, b);
+    int x = col * 8;
+    const int y = row * 8;
+    for (const char *p = text; *p; ++p) {
+        const unsigned uch = static_cast<unsigned char>(*p);
+        if (uch >= MM2_FONT8X8_GLYPHS) {
+            continue;
+        }
+        c.drawGlyph(x, y, static_cast<uint8_t>(uch), r, g, b);
+        x += 8;
+    }
 #endif
+}
+
+/* "+N more" name pluralisation @ 0x12706/0x12E9C: append 's' unless the
+ * name already ends in 's' or exactly one extra monster. */
+void formatOverflowName(char *out, size_t cap, const char *name, int extra)
+{
+    const size_t len = std::strlen(name);
+    if (extra != 1 && len > 0 && name[len - 1] != 's') {
+        std::snprintf(out, cap, "%ss", name);
+    } else {
+        std::snprintf(out, cap, "%s", name);
+    }
 }
 
 }  // namespace
 
 void drawCombatViewport(ScreenCompositor &c)
 {
-    /* Viewport interior: cols 1..25 rows 1..15 (inside the red frame). */
-    fillCellRect(c, 1, 1, 25, 15);
+    fillCellRect(c, kCombatViewportCol, 1, kCombatViewportWidthCells, kCombatViewportHeightCells);
 }
 
-void drawCombatMonsterList(ScreenCompositor &c, const CombatPanelView &view)
+void drawCombatViewportFrame(ScreenCompositor &c)
 {
-    /* Right column monster roster — same band as the Protection panel (cols 0x1B..0x26). */
-    fillCellRect(c, 0x1B, 1, 12, 14);
+    /* console_box col0=1 row0=1 col1=0x0E rows=0x0D @ 0x136AA — yellow hood frame. */
+    c.drawConsoleBox(1, kCombatViewportCol, kCombatViewportWidthCells, kCombatViewportBoxHeightCells, kCombatBoxR,
+                     kCombatBoxG, kCombatBoxB);
+}
 
-    constexpr int kBoxCol0 = 0x1C;
-    constexpr int kBoxRow0 = 2;
-    constexpr int kBoxW = 0x0A;   /* cols 0x1C..0x25 inclusive (protection band width) */
-    constexpr int kBoxH = 0x0D;   /* rows 2..0x0E inclusive */
-    constexpr int kBoxRow1 = kBoxRow0 + kBoxH - 1;
-    c.drawConsoleBox(kBoxRow0, kBoxCol0, kBoxW, kBoxH, kCombatBoxR, kCombatBoxG, kCombatBoxB);
+void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view)
+{
+    if (!view.label_monster_slots) {
+        /* Pre-combat encounter list @ 0x12D80..0x12E7E: yellow console_box at
+         * cols 0x16..0x26 row 1, height = names + 2 (+3 when > 10), monster
+         * names at window col 1 (screen 0x17) rows 2.., overflow "+N more" at
+         * window (4, 0xC) and the pluralised name at window (1, 0xD). */
+        const bool overflow = view.overflow_more > 0;
+        const int box_rows = view.monster_line_count + 2 + (overflow ? 3 : 0);
+        c.drawConsoleBox(1, kCombatEncounterBoxCol, kCombatEncounterBoxWidthCells, box_rows, kCombatBoxR,
+                         kCombatBoxG, kCombatBoxB);
+        fillCellRect(c, kCombatEncounterBoxCol + 1, 2, kCombatEncounterBoxWidthCells - 2, box_rows - 2);
 
-    int row = kBoxRow0 + 1;
-    for (int i = 0; i < view.monster_line_count && row < kBoxRow1; ++i) {
-        const CombatMonsterLine &line = view.monster_lines[i];
-        char buf[40];
-        if (line.show_checkmark && line.letter != 0) {
-            std::snprintf(buf, sizeof(buf), "%c%c %s", static_cast<char>(0x7E), line.letter, line.name);
-        } else if (line.letter != 0) {
-            std::snprintf(buf, sizeof(buf), "%c %s", line.letter, line.name);
-        } else {
-            std::snprintf(buf, sizeof(buf), "%s", line.name);
+        for (int i = 0; i < view.monster_line_count; ++i) {
+            textAt(c, kCombatEncounterBoxCol + 1, 2 + i, view.monster_lines[i].name);
         }
-        if (line.status_suffix[0] != '\0') {
-            char tmp[48];
-            std::snprintf(tmp, sizeof(tmp), "%s %s", buf, line.status_suffix);
-            std::snprintf(buf, sizeof(buf), "%s", tmp);
+
+        if (overflow) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "+%d more", view.overflow_more);
+            textAt(c, kCombatEncounterBoxCol + 4, 0x0D, buf);
+            char plural[24];
+            formatOverflowName(plural, sizeof(plural), view.overflow_name, view.overflow_more);
+            textAt(c, kCombatEncounterBoxCol + 1, 0x0E, plural);
         }
-        textAt(c, kBoxCol0 + 1, row++, buf);
+        return;
     }
 
-    if (view.overflow_more > 0 && row < kBoxRow1) {
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "+%d more", view.overflow_more);
-        textAt(c, kBoxCol0 + 1, row++, buf);
-        if (view.overflow_name[0] != '\0' && row < kBoxRow1) {
-            textAt(c, kBoxCol0 + 1, row++, view.overflow_name);
+    /* Round roster @ 0x129CC / 0x1265E: header (0x10,1), slot i at row i+3,
+     * overflow line at row 0x0D. */
+    fillCellRect(c, kCombatRightCol, kCombatMonsterRow0, kCombatRightWidthCells,
+                 kCombatMonsterOverflowRow - kCombatMonsterRow0 + 1);
+
+    textAt(c, kCombatRightCol, 1, "D-Delay P-Prot Q-Quick");
+
+    for (int i = 0; i < view.monster_line_count && i < 10; ++i) {
+        const CombatMonsterLine &line = view.monster_lines[i];
+        const int row = kCombatMonsterRow0 + i;
+
+        char buf[48];
+        char field[24];
+        if (line.status_suffix[0] != '\0') {
+            /* name padded with '.' to 14, then '/' + 4-char abbrev (0x127B4). */
+            char dots[kMonsterNameField + 1];
+            const size_t nlen = std::strlen(line.name);
+            size_t pos = 0;
+            for (; pos < nlen && pos < kMonsterNameField; ++pos) {
+                dots[pos] = line.name[pos];
+            }
+            for (; pos < kMonsterNameField; ++pos) {
+                dots[pos] = '.';
+            }
+            dots[kMonsterNameField] = '\0';
+            std::snprintf(field, sizeof(field), "%s/%s", dots, line.status_suffix);
+        } else {
+            /* healthy: name + 5 trailing spaces (0x1279C / string @ 0x12842). */
+            std::snprintf(field, sizeof(field), "%s     ", line.name);
         }
+
+        std::snprintf(buf, sizeof(buf), "%c%c) %s", line.show_checkmark ? kCheckGlyph : ' ',
+                      line.letter ? line.letter : static_cast<char>('A' + i), field);
+        textAt(c, kCombatRightCol, row, buf);
+    }
+
+    if (view.overflow_more > 0) {
+        /* Single line "+96 Giant Lizards" @ 0x12692..0x12734 (row 0x0D). */
+        char plural[24];
+        formatOverflowName(plural, sizeof(plural), view.overflow_name, view.overflow_more);
+        char buf[40];
+        std::snprintf(buf, sizeof(buf), "+%d %s", view.overflow_more, plural);
+        textAt(c, kCombatRightCol, kCombatMonsterOverflowRow, buf);
     }
 }
 
 void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
 {
-    fillCellRect(c, 1, 0x11, 38, 1);
+    /* 0x1119E: clear cols 1..0x26 rows 0x0F..0x11, cursor (1, 0x0F). */
+    fillCellRect(c, 1, kMessageRow, 0x26, 3);
 
     if (view.show_party_options) {
-        textAt(c, 1, 0x11, "Options: A-Attack B-Bribe H-Hide R-Run");
+        /* string @ 0x13222, printed via -$7EC0 (0x12F74). */
+        textAt(c, 1, kMessageRow, "Options: A-Attack B-Bribe H-Hide R-Run");
+        return;
+    }
+
+    /* Combat cast @ 0x11A90 → 0x79EE: prompts on message band only (no LAB_6622 grid).
+       Combat mode uses prompt row $0F (0x7A04); exploration uses $15. */
+    if (view.show_cast_level) {
+        textAt(c, 2, kMessageRow, " Spell Level: ");
+        return;
+    }
+    if (view.show_cast_number) {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), " Spell Level: %d", view.cast_level);
+        textAt(c, 2, kMessageRow, buf);
+        textAt(c, 0x0C, kMessageRow, "Number: ");
         return;
     }
 
     if (view.show_command_options && view.options_for[0] != '\0') {
-        char head[48];
-        std::snprintf(head, sizeof(head), "Options for: %s", view.options_for);
-        textAt(c, 1, 0x11, head);
-        textAt(c, 1, 0x12, "A-Attack B-Block R-Run");
+        /* combat_command_bar_build @ 0x11866: " Options for:" at (1,0x0F),
+         * name at (2,0x10), commands column-major in the 3x3 grid at
+         * cols {0x0F,0x18,0x20} rows {0x0F,0x10,0x11} (tables -$6F54/-$6F4B). */
+        textAt(c, 1, kMessageRow, " Options for:");
+        textAt(c, 2, kMessageRow + 1, view.options_for);
+
+        const char *cmds[9];
+        int n = 0;
+        if (view.opt_melee) {
+            cmds[n++] = "A-Attack";
+            cmds[n++] = "F-Fight";
+        }
+        if (view.opt_shoot) {
+            cmds[n++] = "S-Shoot";
+        }
+        if (view.opt_cast) {
+            cmds[n++] = "C-Cast";
+        }
+        cmds[n++] = "U-Use";
+        cmds[n++] = "B-Block";
+        cmds[n++] = "R-Run";
+        cmds[n++] = "E-Exch";
+        cmds[n++] = "V-View";
+
+        static const int kGridCols[3] = {0x0F, 0x18, 0x20};
+        for (int i = 0; i < n && i < 9; ++i) {
+            textAt(c, kGridCols[i / 3], kMessageRow + (i % 3), cmds[i]);
+        }
         return;
     }
 
     if (view.message[0] != '\0') {
-        textAt(c, 1, 0x11, view.message, 255, 255, 128);
+        textAt(c, 1, kMessageRow, view.message);
     }
 }
 

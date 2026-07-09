@@ -42,8 +42,11 @@ void eventRunFixedEncounter(GameStateView &gs, EventTextView &text, EventVmWait 
     }
     /* 0x16362: abort flag set so the event interpreter yields to combat.
      * 0x16368-0x1637C: post-combat pending-event latch (-$7F1A → A4-$7952) is
-     * driven by GameSession once combat->active() goes false. */
-    mm2_gs_set_u8(a4, MM2_GS_SCRIPT_ABORT, 1);
+     * driven by GameSession once combat->active() goes false.
+     * Port: only abort when a fight actually armed (empty picker → no yield). */
+    if (combat && combat->active()) {
+        mm2_gs_set_u8(a4, MM2_GS_SCRIPT_ABORT, 1);
+    }
 }
 
 void eventRunTileAmbientEncounter(GameStateView &gs, combat::CombatSession *combat,
@@ -66,7 +69,9 @@ void eventRunTileAmbientEncounter(GameStateView &gs, combat::CombatSession *comb
     if (combat && world) {
         combat->enter(gs, *world);
     }
-    mm2_gs_set_u8(a4, MM2_GS_SCRIPT_ABORT, 1);
+    if (combat && combat->active()) {
+        mm2_gs_set_u8(a4, MM2_GS_SCRIPT_ABORT, 1);
+    }
 }
 
 }  // namespace mm2::events

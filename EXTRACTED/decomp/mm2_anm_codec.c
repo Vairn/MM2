@@ -188,6 +188,8 @@ mm2_anm_error mm2_anm_load_file(const char *path, mm2_anm_file *out) {
     }
     memset(&anm, 0, sizeof(anm));
 
+/* Keep systemUse only around DOS I/O — RLE decode runs with OS disabled so
+ * copper/blitter keep running during the CPU-heavy part. */
 #if defined(MM2_CODEC_AMIGA) || defined(MM2_HOST_AMIGA)
     systemUse();
 #endif

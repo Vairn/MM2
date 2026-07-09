@@ -209,33 +209,80 @@ def export_wall_slices(export_dir: Path, out: Path) -> list[int]:
     return exported
 
 
-def write_maps_markdown(out_docs: Path, *, image_prefix: str = "/gallery/mm1") -> None:
+def write_maps_markdown(
+    out_docs: Path,
+    *,
+    image_prefix: str = "/gallery/mm1",
+    links: dict[str, str] | None = None,
+    use_frontmatter: bool = True,
+) -> None:
     out_docs.parent.mkdir(parents=True, exist_ok=True)
-    lines = [
-        "---",
-        "title: MM1 map gallery",
-        "---",
-        "",
+    lk = links or {}
+    mm1_overview = lk.get("mm1_overview", "/docs/reverse-engineering/50-mm1-overview")
+    mazedata_fmt = lk.get("mazedata_format", "MM1-MAZEDATA-Format")
+    map_carto = lk.get("maps", "Map-Cartography")
+    map_walker = lk.get("map_walker", "MM1-Map-Walker")
+    mm1_outdoor = lk.get("mm1_outdoor", "MM1-to-MM2-Outdoor")
+
+    lines: list[str] = []
+    if use_frontmatter:
+        lines += ["---", "title: MM1 map gallery", "---", ""]
+
+    lines += [
         "# MM1 2D map renders",
         "",
-        "Top-down wall maps from `MAZEDATA.DTA` page 0 (N/E/S/W wall types: "
-        "gray=wall, gold=torch, green=door). Red dots = collision event flag `0x80`.",
+        "Each screen is a **16×16** top-down wall map from `MAZEDATA.DTA` page 0 "
+        "(visual walls) with event triggers from page 1 (collision `0x80`).",
         "",
-        "See [MM1 overview](/docs/reverse-engineering/50-mm1-overview).",
+        "**North is at the top** (disk row 15); row 0 on disk is south — same convention as "
+        f"[Map Cartography]({map_carto}) / MM2 `map.dat`.",
         "",
-        "## World overland",
+        "Wall types (N/E/S/W, 2 bits each): **gray** = wall, **gold** = torch, **green** = door. "
+        "Red dots = collision event flag `0x80`.",
         "",
-        f"![MM1 overland 5×4]({image_prefix}/maps/world-overland-5x4.png)",
+        f"See [MM1 Overview]({mm1_overview}) · [MAZEDATA format]({mazedata_fmt}) · "
+        f"[MM1 map walker ↗]({map_walker})",
+        "",
+        "## Overview by area type",
+        "",
+        "All **55** map screens (`MAZEDATA.DTA` indices 0–54), grouped like the game world.",
         "",
     ]
-    for slug, title, _screens, _cols in MM1_OVERVIEW_GROUPS:
+
+    overview_sections = [
+        ("overview-towns", "Towns (0–4)", "Five starting towns: Sorpigal through Erliquin."),
+        ("overview-caves", "Caves 1–9 (5–13)", "Early dungeon screens linked from the overland."),
+        ("overview-overland", "Outdoor overland — 5×4 sectors (A1–E4)", (
+            "Twenty surface maps in **column A–E, row 1–4** order (north at top). "
+            f"Same world grid as MM2 — see [MM1 to MM2 outdoor]({mm1_outdoor})."
+        )),
+        ("overview-late", "Late dungeons (34–54)", (
+            "Endgame areas: Doom, Black Ridge, Queen's Pyramids, Rainbow Road, "
+            "Enchanted Forest, Dragadune, Demon, Alamar, Protection Point, Astral Plane."
+        )),
+    ]
+    for slug, heading, blurb in overview_sections:
+        title = next(t for s, t, _, _ in MM1_OVERVIEW_GROUPS if s == slug)
         lines += [
-            f"## {title}",
+            f"### {heading}",
+            "",
+            blurb,
             "",
             f"![{title}]({image_prefix}/maps/{slug}.png)",
             "",
         ]
-    lines += ["## All 55 screens", ""]
+
+    lines += [
+        "## World overland map",
+        "",
+        "Full **5×4** stitch at native render resolution — center surface sectors **A1–E4** "
+        "(town interiors 0–4 are separate screens, not shown here).",
+        "",
+        f"![MM1 overland 5×4]({image_prefix}/maps/world-overland-5x4.png)",
+        "",
+        "## Per-screen maps",
+        "",
+    ]
     for sid, slug in enumerate(MM1_MAP_SLUGS):
         name = mm1_map_title(slug)
         lines += [
@@ -330,6 +377,8 @@ def export_mm1_gallery(
     wallpix_dir: Path | None = None,
     docs_out: Path | None = None,
     image_prefix: str = "/gallery/mm1",
+    links: dict[str, str] | None = None,
+    use_frontmatter: bool = True,
     scale: int = 2,
 ) -> None:
     out.mkdir(parents=True, exist_ok=True)
@@ -338,7 +387,12 @@ def export_mm1_gallery(
     if mazedata and mazedata.is_file():
         print("Exporting MM1 maps…")
         export_maps(mazedata, out, exe=exe if exe and exe.is_file() else None, scale=scale)
-        write_maps_markdown(md_root / "mm1-maps.md", image_prefix=image_prefix)
+        write_maps_markdown(
+            md_root / "mm1-maps.md",
+            image_prefix=image_prefix,
+            links=links,
+            use_frontmatter=use_frontmatter,
+        )
     else:
         print(f"skip MM1 maps: missing MAZEDATA ({mazedata})")
 

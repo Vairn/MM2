@@ -16,8 +16,10 @@ extern const uint8_t mm2_font8x8[128][8];
 const uint8_t *mm2_font8x8_live(void);
 
 #if defined(AMIGA)
-/** Copy mm2_font8x8 into chip RAM (call once after memCreate). */
+/** Copy mm2_font8x8 into chip RAM and build the 1bpp blitter glyph atlas. */
 void mm2_amiga_font_init(void);
+/** Free chip glyph atlas / ink stamp (call from platform shutdown). */
+void mm2_amiga_font_shutdown(void);
 #endif
 
 #ifdef __cplusplus

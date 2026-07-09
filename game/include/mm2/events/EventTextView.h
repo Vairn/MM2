@@ -53,6 +53,13 @@ public:
     void showSpacePrompt();
     void clearSpacePrompt();
 
+    /** OP_2F text entry — solid block cursor after echoed input (not used for Y/N). */
+    void setTextEntry(const char *typed, int typed_len);
+    void clearTextEntry();
+    bool textEntryActive() const { return text_entry_; }
+    /** Bumps when typed text / cursor visibility changes (partial redraw). */
+    int textEntryRevision() const { return text_entry_revision_; }
+
     /** True when OP_0B loaded an .anm portrait/sign overlay. */
     bool hasServicePortrait() const { return sign_overlay_.loaded(); }
 
@@ -98,6 +105,10 @@ private:
     EventTextLayer layers_[4]{};
     int layer_count_ = 0;
     bool space_prompt_ = false;
+    bool text_entry_ = false;
+    char text_entry_buf_[11]{};
+    int text_entry_len_ = 0;
+    int text_entry_revision_ = 0;
     bool exit_bit0_ = false;
     bool exit_bit1_ = false;
 

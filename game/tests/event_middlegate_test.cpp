@@ -1284,10 +1284,12 @@ int main(int argc, char **argv)
 
         mm2::platform::KeyState keys{};
         keys.last_ascii = 'A';
-        combat.tick(gs, fixedWorld, keys);
+        combat.tick(gs, fixedWorld, keys); /* party options -> round loop -> member turn */
         keys.last_ascii = 'A';
-        const bool ended = combat.tick(gs, fixedWorld, keys);
-        expect(ended, "the party's Attack ends the fight this tick", fails);
+        combat.tick(gs, fixedWorld, keys); /* attack resolves; kill message awaits a key */
+        keys.last_ascii = ' ';
+        const bool ended = combat.tick(gs, fixedWorld, keys); /* ack -> victory */
+        expect(ended, "acknowledging the kill message ends the fight", fails);
         expect(!combat.active(), "combat inactive after victory", fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 1,
                "OP_2B's gate (COMBAT_VICTORY_LATCH) set after victory", fails);
@@ -1338,9 +1340,11 @@ int main(int argc, char **argv)
 
         mm2::platform::KeyState keys{};
         keys.last_ascii = 'A';
-        combat.tick(gs, arenaWorld, keys);
+        combat.tick(gs, arenaWorld, keys); /* party options -> member turn */
         keys.last_ascii = 'A';
-        combat.tick(gs, arenaWorld, keys);
+        combat.tick(gs, arenaWorld, keys); /* attack kills; message awaits a key */
+        keys.last_ascii = ' ';
+        combat.tick(gs, arenaWorld, keys); /* ack -> victory */
         expect(!combat.active(), "arena combat resolves after Attack", fails);
         expect(combat.lastOutcome() == mm2::combat::CombatOutcome::Victory,
                "arena combat outcome == Victory", fails);
@@ -1588,6 +1592,28 @@ int main(int argc, char **argv)
     expect(!runtime.textView().containsText("Feldecarb Fountain"),
            "Nordon must not show Feldecarb fountain text", fails);
 
+    /* Corak ghost @ event 18 (4,7)/DIR_N: OP_0B 51.anm + OP_0E 0x09 → loc-60
+     * queued dispatch. ASM rebuilds the string anchor as LE from work_buf[0..1]
+     * (0x00FF) and pool_seeks id 1 from parse_pos=2 → OP_03 str[1] Corak
+     * monologue. A BE-anchor + codec-string bytecode fallback previously ran
+     * the Nordon goblet-award script here instead. */
+    runtime.enterLocation(0, gs, world);
+    gs.setCoordX(7);
+    gs.setCoordY(4);
+    gs.setFacingKey('N');
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+    expect(runtime.scanAndRun(gs, world), "event 18 Corak ghost fires at (7,4) facing N", fails);
+    expect(runtime.textView().containsText("spirit of Corak"),
+           "Corak ghost shows Corak monologue", fails);
+    expect(runtime.textView().containsText("Fantastic adventure"),
+           "Corak monologue includes adventure line", fails);
+    expect(!runtime.textView().containsText("goblet"),
+           "Corak ghost must not show goblet award/quest text", fails);
+    expect(!runtime.textView().containsText("Nordon"),
+           "Corak ghost must not show Nordon text", fails);
+    expect(!runtime.textView().containsText("Eagle Eye"),
+           "Corak ghost must not show goblet reward text", fails);
+
     /* Feldecarb Fountain @ event 17 (15,15)/NE: OP_0E 0x0E shows farthing prompt. */
     runtime.enterLocation(0, gs, world);
     gs.setCoordX(15);
@@ -1720,6 +1746,9 @@ int main(int argc, char **argv)
         }
 
         runtime.bindCombat(nullptr);
+        /* tier_roster/tier_launch are scope-locals — unbind before they die so
+         * later sections (Pegasus OP_18) fall back to the GS-image roster. */
+        runtime.bindParty(nullptr, nullptr);
     }
 
     /* Event 20 @ (5,15) ENTER — OP_01 str[24] then OP_09 Y/N. */
@@ -1991,6 +2020,41 @@ int main(int argc, char **argv)
                "brain detox clears roster+0x50 skill pack", fails);
         expect(roster.records[0].gold == 100u, "brain detox deducted 100 gp from selected char", fails);
         runtime.bindParty(nullptr, nullptr);
+    }
+
+    /* OP_30 @ 0x17034: 10-byte space-padded compare (toupper via -$7B78). */
+    {
+        using mm2::events::eventVmCheckOp30Password;
+        uint8_t expected[10];
+        const char *ans = "MEENU";
+        for (int i = 0; i < 10; ++i) {
+            const char c = (i < 5) ? ans[i] : ' ';
+            expected[i] = static_cast<uint8_t>((0x11A - static_cast<uint8_t>(c)) & 0xFF);
+        }
+        uint8_t buf[11];
+        for (int i = 0; i < 10; ++i) {
+            buf[i] = (i < 5) ? static_cast<uint8_t>(ans[i]) : static_cast<uint8_t>(' ');
+        }
+        buf[10] = 0;
+        expect(eventVmCheckOp30Password(buf, expected, 10), "OP_30 MEENU matches", fails);
+        buf[0] = 'X';
+        expect(!eventVmCheckOp30Password(buf, expected, 10), "OP_30 wrong answer fails", fails);
+        uint8_t empty[10] = {};
+        expect(!eventVmCheckOp30Password(empty, expected, 10), "OP_30 empty buffer fails", fails);
+    }
+
+    /* Castle blob locs leave anchor $FFFF (no 00 00 00 terminator). */
+    {
+        uint8_t castle_gs_image[static_cast<size_t>(MM2_A4_ANCHOR) + 0x8000u]{};
+        mm2::GameStateView castle_gs(mm2_gs_base_from_image(castle_gs_image));
+        mm2::world::MapWorld castle_world;
+        expect(castle_world.load(data_dir), "castle map", fails);
+        mm2::events::EventRuntime castle_rt;
+        expect(castle_rt.load(data_dir), "castle event", fails);
+        if (castle_rt.enterLocation(63, castle_gs, castle_world)) {
+            expect(mm2_gs_u16(castle_gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR) == 0xFFFF,
+                   "castle blob loc 63 leaves anchor $FFFF", fails);
+        }
     }
 
     if (fails == 0) {

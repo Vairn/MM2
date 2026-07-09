@@ -50,6 +50,31 @@ inline constexpr int kSpellsPerSchool = 48;
 inline constexpr int kSpellLevels = 9;
 inline constexpr uint8_t kSpellsPerLevel[kSpellLevels] = {7, 7, 6, 6, 5, 5, 4, 4, 4};
 
+/** Cumulative flat-index base for level 1..9 (A4-$73DE / -$8C22). */
+inline constexpr uint8_t kSpellLevelBase[kSpellLevels] = {0, 7, 14, 20, 26, 31, 36, 40, 44};
+
+/** Flat school index 0..47 from 1-based level/number, or -1 if out of range. */
+inline int spellFlatFromLevelNumber(int level, int number)
+{
+    if (level < 1 || level > kSpellLevels || number < 1) {
+        return -1;
+    }
+    const int max_n = kSpellsPerLevel[level - 1];
+    if (number > max_n) {
+        return -1;
+    }
+    return static_cast<int>(kSpellLevelBase[level - 1]) + (number - 1);
+}
+
+/** Retail dispatch code: sorcerer/archer keep 0..47; cleric/paladin add $30 (0x79EE). */
+inline int spellDispatchCode(SpellSchool school, int flat0)
+{
+    if (flat0 < 0 || flat0 >= kSpellsPerSchool) {
+        return -1;
+    }
+    return (school == SpellSchool::Cleric) ? (flat0 + 0x30) : flat0;
+}
+
 // Record offset of the spell-book bitfield ($51) relative to the codec's
 // `spells[]` array (which starts at record $4C). spell N -> byte index + N/8.
 inline constexpr int kSpellBookByteBase = 0x51 - 0x4C;  // = 5

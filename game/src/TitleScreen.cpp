@@ -9,8 +9,6 @@
 #include "mm2_gfx_sheet.h"
 #include "mm2_pc_gfx_codec.h"
 
-#include <cstdio>
-
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
 #include "mm2/platform/amiga/mm2_amiga_file.h"

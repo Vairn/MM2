@@ -74,6 +74,47 @@ constexpr int kPartySlotColLeft = 0x01;
 constexpr int kPartySlotColRight = 0x14;
 constexpr int kPartySlotClearWidth = 0x13;  // empty slot clear @ 0x6178 (-$7F62)
 
+// Combat HUD — combat_display_refresh @ 0x135BE (narrow hood + wide right band).
+constexpr int kCombatDividerCol = 0x0F;          // v_line(0, 0x0E, 0x0F) @ 0x135F6
+constexpr int kCombatDividerRowEnd = 0x0E;
+constexpr int kCombatViewportCol = 0x01;
+constexpr int kCombatViewportWidthCells = 0x0E;  // cols 1..14 (14 cells = 112 px)
+constexpr int kCombatViewportHeightCells = 0x0E; // rows 1..14
+constexpr int kCombatRightCol = 0x10;          // "D-Delay…" @ 0x13682
+constexpr int kCombatRightWidthCells = 0x17;   // cols 0x10..0x26 (23 cells)
+constexpr int kCombatHoodBottomRow = 0x0E;     // h_line(0, 0x27, 0x0E) @ 0x135E6
+constexpr int kCombatHeaderRuleRow = 0x02;     // h_line(0x0F, 0x27, 0x02) @ 0x13606
+constexpr int kCombatPanelLineCol1 = 0x27;     // both h_lines end col 0x27
+constexpr int kCombatMonsterRow0 = 0x03;       // slot row = slot + 3 (0x1267A)
+constexpr int kCombatMonsterOverflowRow = 0x0D; // "+N Name" @ 0x126A0
+// Pre-combat encounter name box @ 0x12DA2: console_box cols 0x16..0x26, row 1.
+constexpr int kCombatEncounterBoxCol = 0x16;
+constexpr int kCombatEncounterBoxWidthCells = 0x11;
+constexpr int kCombatView3DViewportW = kCombatViewportWidthCells * 8;
+constexpr int kCombatView3DViewportH = kCombatViewportHeightCells * 8;
+constexpr int kCombatViewportBoxHeightCells = 0x0D; /* console_box @ 0x136AA (rows 1..13) */
+constexpr int kCombatView3DSkyY = 8;
+constexpr int kCombatView3DFloorY = kCombatView3DSkyY + (kCombatView3DViewportH / 2);
+
+/**
+ * AGA multi-monster gallery offsets inside the narrow combat hood (presentation
+ * upgrade — not retail A4-$7538). Index 0 = back-most; blit low→high.
+ * Dest = (kViewOriginX + x, kViewOriginY + y); sprites are then centered in the
+ * remaining hood via blitCenteredInViewport when w/h known.
+ */
+struct AgaCombatSpriteLayout {
+    int x;
+    int y;
+};
+
+constexpr int kAgaCombatSpriteLayoutCount = 4;
+constexpr AgaCombatSpriteLayout kAgaCombatSpriteLayout[kAgaCombatSpriteLayoutCount] = {
+    {16, 24}, /* back-left */
+    {48, 16}, /* back-right */
+    {8, 40},  /* front-left */
+    {40, 48}, /* front-center */
+};
+
 // In-game modal overlays (Quick Ref @ 0x595C, character sheet @ 0x39B4 family).
 constexpr int kPlayOverlayBorderRow = 1;
 constexpr int kPlayOverlayBorderCol = 1;

@@ -196,7 +196,7 @@ export const OPCODE_STATUS = {
   0x1e: "partial", 0x1f: "partial", 0x20: "partial", 0x21: "real", 0x22: "real", 0x23: "real",
   0x24: "real", 0x25: "real", 0x26: "real", 0x27: "real", 0x28: "real", 0x29: "real",
   0x2a: "real", 0x2b: "real", 0x2c: "real", 0x2d: "real", 0x2e: "partial", 0x2f: "real",
-  0x30: "partial", 0x31: "partial", 0x32: "real",
+  0x30: "real", 0x31: "partial", 0x32: "real",
 };
 
 const SELECTOR_SPRITES = {
@@ -411,6 +411,7 @@ function decodeU16Code25(args) {
   return (args[0] << 8) | args[1];
 }
 
+/** Decode OP_30 expected bytes for display (trim trailing spaces). */
 function decodeOp30Answer(args) {
   let s = "";
   for (const b of args) {
@@ -418,6 +419,44 @@ function decodeOp30Answer(args) {
     s += c >= 0x20 && c <= 0x7e ? String.fromCharCode(c) : "?";
   }
   return s.trimEnd();
+}
+
+/**
+ * OP_30 @ 0x17034: compare 10 space-padded input bytes vs (0x11A - expected[i]).
+ * input must already be uppercase (toupper via -$7B78 in ASM).
+ */
+function checkOp30Password(inputBuf, expectedArgs) {
+  if (!inputBuf || expectedArgs.length < 10) return false;
+  for (let i = 0; i < 10; i++) {
+    const got = (inputBuf.charCodeAt(i) || 0x20) & 0xff;
+    const want = (0x11a - (expectedArgs[i] & 0xff)) & 0xff;
+    if (got !== want) return false;
+  }
+  return true;
+}
+
+/**
+ * OP_0C @ 0x15E12 bit6 / high remaps before map load.
+ * Without a seeded rng, roll=1 (same fallback as C++ when rng unbound).
+ */
+function remapOp0cDest(destScreen, destTile, rng = null) {
+  let dest = destScreen & 0xff;
+  let tile = destTile & 0xff;
+  const roll = (lo, hi) => {
+    if (typeof rng === "function") return rng(lo, hi) | 0;
+    return lo;
+  };
+  if ((dest & 0x40) !== 0) {
+    let d = (roll(1, 20) + 5) & 0xff;
+    if (d >= 0x11) d = (d + 0x10) & 0xff;
+    d |= 0x80;
+    dest = d;
+  }
+  if (dest >= 0x80) {
+    tile = roll(1, 255) & 0xff;
+  }
+  dest &= 0x3f;
+  return { dest, tile };
 }
 
 function townIntroSlot(screenId) {
@@ -687,6 +726,7 @@ export async function runEventScript(ctx) {
     resolveEventText,
     waitForSpace,
     promptYesNo,
+    promptAnswer,
     promptMenuKey,
     promptCombatResult,
     onViewportOverlay,
@@ -729,6 +769,7 @@ export async function runEventScript(ctx) {
   ctx.note = note;
   ctx.waitForSpace = waitForSpace;
   ctx.promptYesNo = promptYesNo;
+  ctx.promptAnswer = promptAnswer;
   ctx.promptMenuKey = promptMenuKey;
   ctx.screenId = screenId;
   ctx.manifest = manifest;
@@ -824,16 +865,19 @@ export async function runEventScript(ctx) {
       }
 
       case 0x0c: {
-        vmStep(nodeIndex, op, `→ screen ${args[0]}`);
-        const dest = args[0];
-        const tile = args[1];
+        /* event_op0c_map_transition @ 0x15E12 — bit6 / >=$80 remaps before load. */
+        const remapped = remapOp0cDest(args[0] ?? 0, args[1] ?? 0, ctx.rng);
+        const dest = remapped.dest;
+        const tile = remapped.tile;
+        vmStep(nodeIndex, op, `→ screen ${dest}`);
         const ty = (tile >> 4) & 0xf;
         const tx = tile & 0xf;
         const destName = maps?.screens?.[dest]?.name ?? `screen ${dest}`;
         onTeleport?.(dest, tx, ty);
         teleported = true;
         ended = true;
-        note(`Map transition → ${destName} (${tx},${ty})`);
+        note(`Map transition → ${destName} (${tx},${ty})` +
+          (((args[0] ?? 0) & 0x40) ? " [bit6 remap]" : ""));
         return { teleported, ended, aborted, notes, trace };
       }
 
@@ -846,6 +890,8 @@ export async function runEventScript(ctx) {
       }
 
       case 0x0e: {
+        /* event_op0e_selector_dispatch @ 0x160C2: SCRIPT_ABORT=1 at entry so
+         * the current script ends after the selector returns. */
         const sel = (args[0] ?? 0) & 0xff;
         vmStep(nodeIndex, op, `selector 0x${sel.toString(16)}`);
         const slot = townIntroSlot(screenId);
@@ -853,6 +899,7 @@ export async function runEventScript(ctx) {
         const sprite = lastSignSprite ?? (fallbackSheet ? { sheet: fallbackSheet, frame: "0" } : null);
         lastSignSprite = null;
         const title = serviceTitle || SELECTOR_LABEL[sel] || "Town service";
+        aborted = true; /* ASM sets -$79EA at OP_0E entry */
 
         if (sel === 0x11 && screenId === 0) {
           const yes = await promptYesNo(POORMANS_PORTAL, sprite, op);
@@ -860,7 +907,8 @@ export async function runEventScript(ctx) {
             if (!sessionDeductGold(session, 10)) {
               await waitForSpace("Not enough gold!", sprite, op);
               note("Poorman's Portal: insufficient gold");
-              break;
+              ended = true;
+              return { teleported, ended, aborted, notes, trace };
             }
             onTeleport?.(4, 0x61 & 0xf, (0x61 >> 4) & 0xf);
             teleported = true;
@@ -870,27 +918,32 @@ export async function runEventScript(ctx) {
             return { teleported, ended, aborted, notes, trace };
           }
           note("Poorman's Portal declined");
-          break;
+          ended = true;
+          return { teleported, ended, aborted, notes, trace };
         }
 
         if (sel === 0x0a) {
           await runNordonGobletQuestStub(ctx);
-          break;
+          ended = true;
+          return { teleported, ended, aborted, notes, trace };
         }
 
         if (sel === 0x0e) {
           await runFeldecarbFountain(ctx, sprite, op);
-          break;
+          ended = true;
+          return { teleported, ended, aborted, notes, trace };
         }
 
         if (sel === 0x10 && screenId === 0) {
           const yes = await promptYesNo(BRAIN_DETOX_INTRO, sprite, op);
           if (!yes) {
             note("Brain detox declined");
-            break;
+            ended = true;
+            return { teleported, ended, aborted, notes, trace };
           }
           await runBrainDetoxService(ctx);
-          break;
+          ended = true;
+          return { teleported, ended, aborted, notes, trace };
         }
 
         ctx.tileX = tileX;
@@ -901,7 +954,8 @@ export async function runEventScript(ctx) {
           const yes = await promptYesNo(TEMPLE_INTRO[slot], sprite, op);
           if (!yes) {
             note(`${title}: declined`);
-            break;
+            ended = true;
+            return { teleported, ended, aborted, notes, trace };
           }
         }
 
@@ -909,7 +963,8 @@ export async function runEventScript(ctx) {
           const yes = await promptYesNo(SMITH_INTRO[slot], sprite, op);
           if (!yes) {
             note(`${title}: declined`);
-            break;
+            ended = true;
+            return { teleported, ended, aborted, notes, trace };
           }
         }
 
@@ -917,7 +972,8 @@ export async function runEventScript(ctx) {
           const yes = await promptYesNo(GUILD_ENROLL_INTRO, sprite, op);
           if (!yes) {
             note("Guild enroll declined");
-            break;
+            ended = true;
+            return { teleported, ended, aborted, notes, trace };
           }
         }
 
@@ -941,16 +997,16 @@ export async function runEventScript(ctx) {
           await runTownService(ctx, sel, title, sprite);
           if (ctx.teleported) {
             teleported = true;
-            ended = true;
-            onSessionChange?.(session);
-            return { teleported, ended, aborted, notes, trace };
           }
-          break;
+          ended = true;
+          onSessionChange?.(session);
+          return { teleported, ended, aborted, notes, trace };
         }
 
         await waitForSpace(`${title}\n(selector 0x${sel.toString(16)})`, sprite, op);
         note(`exec_selector(0x${sel.toString(16)}) — unhandled`);
-        break;
+        ended = true;
+        return { teleported, ended, aborted, notes, trace };
       }
 
       case 0x0f:
@@ -1248,17 +1304,27 @@ export async function runEventScript(ctx) {
         break;
       }
 
-      case 0x2f:
-        session.inputBuffer = "";
-        vmStep(nodeIndex, op, "clear input");
+      case 0x2f: {
+        /* event_op2f @ 0x16FEA: prompts via -$7F92 into A4-$5C50 (10 chars, space-padded). */
+        vmStep(nodeIndex, op, "answer prompt");
+        const ask = typeof promptAnswer === "function" ? promptAnswer : null;
+        if (ask) {
+          session.inputBuffer = await ask("?", null, 0x2f);
+        } else {
+          session.inputBuffer = "          ";
+          note("OP_2F: no promptAnswer bound — empty buffer");
+        }
+        note(`OP_2F input="${(session.inputBuffer || "").trimEnd()}"`);
         break;
+      }
 
       case 0x30: {
+        /* event_op30_answer_check @ 0x17034: 10-byte compare vs input buffer. */
         const answer = decodeOp30Answer(args);
-        session.cond = 0;
+        session.cond = checkOp30Password(session.inputBuffer || "", args) ? 1 : 0;
         syncCond();
-        vmStep(nodeIndex, op, `password "${answer}"`);
-        note(`OP_30 password "${answer}" — no input buffer (cond=0)`);
+        vmStep(nodeIndex, op, `password "${answer}" → ${session.cond}`);
+        note(`OP_30 password "${answer}" → cond=${session.cond}`);
         break;
       }
 
@@ -1286,4 +1352,4 @@ export async function runEventScript(ctx) {
   return { teleported, ended, aborted, notes, trace };
 }
 
-export { createSessionState };
+export { createSessionState, checkOp30Password, remapOp0cDest };

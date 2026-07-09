@@ -56,6 +56,10 @@ uint8_t mm2_create_starting_thievery(int class_id);
 
 void mm2_create_build_record(const Mm2PendingCharacter *pending, Mm2RosterRecord *out);
 
+/** When spell_level > 0 but sp_max is 0 (stale roster.dat), derive max/current SP
+ *  from class + stats per 0x19C30 / $7B36: sp_per_level * spell_level. */
+void mm2_roster_refresh_spell_points(Mm2RosterRecord *rec);
+
 #ifdef __cplusplus
 }
 #endif

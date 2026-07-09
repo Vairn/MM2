@@ -2,7 +2,7 @@
 """Build side-by-side platform compare pages: monsters + wall/sprite sheets.
 
 Exports numbered thumbs for:
-  - Combat monsters: picture ids 01–74 (MONSTERS.4 / .16 / NN.anm)
+  - Combat monsters: picture ids 01–74 (MONSTERS.4 / .16 / NN.anm / SNES table)
   - Wall sheets: per-frame CGA / EGA / Amiga .32 (TOWN, CASTLE, SKY, …)
 
 Usage:
@@ -21,7 +21,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_GOG = Path(r"C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 2")
 DEFAULT_OUT = ROOT / "EXTRACTED" / "pc_gfx" / "compare"
-COMPARE_CACHE_VERSION = 1
+COMPARE_CACHE_VERSION = 5
+
+SNES_MONSTER_SPRITE_DIRS = [
+    ROOT / "EXTRACTED" / "SNES" / "gfx" / "export" / "monsters" / "sprites",
+    ROOT / "EXTRACTED" / "SNES" / "gfx" / "monsters_assembled",
+    ROOT / "EXTRACTED" / "snes" / "gfx" / "export" / "monsters" / "sprites",
+    ROOT / "EXTRACTED" / "snes" / "gfx" / "monsters_assembled",
+]
 
 sys.path.insert(0, str(ROOT / "tools"))
 
@@ -189,6 +196,54 @@ def export_monster_thumb(
     im = rgba_list_to_pil(rgba, COMBAT_CANVAS_W, COMBAT_CANVAS_H)
     pil_save(flatten_rgba(pad_rgba(im)), out, scale=MONSTER_SCALE)
     return method, fo
+
+
+def resolve_snes_monster_sprite(picture_id: int) -> Path | None:
+    """Picture id ``N`` (1-based) → SNES table index ``N-1`` → ``monster_XX.png``.
+
+    Validated by RGB similarity vs Amiga ``NN.anm`` thumbs (2026-07): ``N-1`` wins
+    34/36 sampled slots over direct ``N`` indexing.
+    """
+    if picture_id < 1:
+        return None
+    idx = picture_id - 1
+    name = f"monster_{idx:02d}.png"
+    for base in SNES_MONSTER_SPRITE_DIRS:
+        path = base / name
+        if path.is_file():
+            return path
+    return None
+
+
+def crop_rgba_content(im: Image.Image) -> Image.Image:
+    """Trim fully transparent borders."""
+    bbox = im.getbbox()
+    if not bbox:
+        return im
+    return im.crop(bbox)
+
+
+def prepare_snes_monster_thumb(im: Image.Image) -> Image.Image:
+    """Tight-crop SNES assembled sprite; scale longest side to combat canvas (×MONSTER_SCALE)."""
+    im = crop_rgba_content(im.convert("RGBA"))
+    if im.width == 0 or im.height == 0:
+        return im
+    target = COMBAT_CANVAS_W * MONSTER_SCALE
+    scale = target / max(im.width, im.height)
+    nw = max(1, int(im.width * scale))
+    nh = max(1, int(im.height * scale))
+    if nw != im.width or nh != im.height:
+        im = im.resize((nw, nh), Image.NEAREST)
+    return im
+
+
+def export_snes_monster_thumb(picture_id: int, out: Path) -> bool:
+    src = resolve_snes_monster_sprite(picture_id)
+    if src is None or Image is None:
+        return False
+    im = prepare_snes_monster_thumb(Image.open(src))
+    pil_save(flatten_rgba(pad_rgba(im)), out, scale=1)
+    return True
 
 
 def export_anm_thumb(anm_path: Path, out: Path) -> bool:
@@ -378,7 +433,8 @@ def build_html(
           <td class="meta">{html.escape(r["ega_note"])}</td>
           <td class="thumb">{cell_img(r.get("ega_img"), f"EGA {r['slot']:02d}")}</td>
           <td class="thumb">{cell_img(r.get("anm_img"), f"ANM {r['slot']:02d}")}</td>
-          <td class="meta">{html.escape(r["anm_note"])}</td>
+          <td class="thumb">{cell_img(r.get("snes_img"), f"SNES {r['slot']:02d}")}</td>
+          <td class="meta">{html.escape(r["anm_note"])}<br>{html.escape(r.get("snes_note", ""))}</td>
         </tr>"""
 
     nav_links = '<a href="#monsters">Monsters 01–74</a>'
@@ -471,8 +527,10 @@ def build_html(
     <h1>MM2 platform graphics index</h1>
     <p>
       Numbered slots side-by-side: <strong>Amiga</strong> (planar <code>.32</code> / combat <code>.anm</code>)
-      vs <strong>PC CGA</strong> (<code>.4</code>) vs <strong>PC EGA</strong> (<code>.16</code>).
-      Monster picture id <strong>N</strong> uses header entry <code>N−1</code> in <code>MONSTERS.*</code>.
+      vs <strong>PC CGA</strong> (<code>.4</code>) vs <strong>PC EGA</strong> (<code>.16</code>)
+      vs <strong>SNES</strong> (table <code>$14:8060</code>).
+      Monster picture id <strong>N</strong> uses header entry <code>N−1</code> in <code>MONSTERS.*</code>
+      and SNES sprite <code>monster_&#123;N−1&#125;.png</code>.
       Wall sheets share the same stem (<code>TOWN</code> ↔ <code>town.32</code>); frame counts may differ by port.
     </p>
   </header>
@@ -488,6 +546,7 @@ def build_html(
         Row <strong>N</strong> = <code>monsters.dat</code> picture byte <code>&amp; 0x7F</code>.
         Orange: named monster uses this id but no PC thumb decodes.
         <code>NN.anm</code> is Amiga combat art (same index when ported).
+        SNES CHR is assembled from table <code>$14:8060</code> (index <code>N−1</code>).
       </p>
       <table>
         <thead>
@@ -500,6 +559,7 @@ def build_html(
             <th>MONSTERS.16</th>
             <th>thumb</th>
             <th>Amiga .anm</th>
+            <th>SNES</th>
             <th>notes</th>
           </tr>
         </thead>
@@ -531,7 +591,7 @@ def build_markdown(
         "# Platform graphics index",
         "",
         "Every **numbered slot** for combat monsters and wall/sprite sheets —",
-        "**Amiga** (`.32` / `.anm`) vs **PC CGA** (`.4`) vs **PC EGA** (`.16`).",
+        "**Amiga** (`.32` / `.anm`) vs **PC CGA** (`.4`) vs **PC EGA** (`.16`) vs **SNES**.",
         "",
     ]
     if embed_iframe:
@@ -572,11 +632,12 @@ def build_github_wiki_pages(
 ) -> list[str]:
     """GitHub Wiki markdown with embedded PNGs (no raw HTML links)."""
     prefix = image_prefix.rstrip("/")
+    bust = f"?v={COMPARE_CACHE_VERSION}"
 
     def img_cell(path: Path | None) -> str:
         if path and path.is_file():
             rel = path.relative_to(assets_dir).as_posix()
-            return f"![]({prefix}/{rel})"
+            return f"![]({prefix}/{rel}{bust})"
         return "—"
 
     pages: list[str] = []
@@ -584,14 +645,14 @@ def build_github_wiki_pages(
     hub: list[str] = [
         "# Platform graphics index",
         "",
-        "Numbered slots side-by-side: **Amiga** (`.32` / `.anm`) vs **PC CGA** (`.4`) vs **PC EGA** (`.16`).",
+        "Numbered slots side-by-side: **Amiga** (`.32` / `.anm`) vs **PC CGA** (`.4`) vs **PC EGA** (`.16`) vs **SNES**.",
         "",
         "Format: [PC DOS graphics](PC-DOS-Graphics-Formats) · [ANM/TV](ANM-TV-Format) · "
-        "[Monster variants by name](Monster-Variants).",
+        "[SNES graphics](SNES-Graphics) · [Monster variants by name](Monster-Variants).",
         "",
         "## Combat monsters",
         "",
-        "[Picture ids 01–74](Platform-Monsters-01-74) — header slot index with CGA / EGA / `.anm` thumbs.",
+        "[Picture ids 01–74](Platform-Monsters-01-74) — header slot index with CGA / EGA / `.anm` / SNES thumbs.",
         "",
         "## Wall / sprite sheets",
         "",
@@ -613,16 +674,17 @@ def build_github_wiki_pages(
         "[← Platform index](Platform-Graphics-Index)",
         "",
         "Row **N** = `monsters.dat` picture byte `& 0x7F`. Header entry **`N−1`** in `MONSTERS.*`.",
+        "SNES table `$14:8060` index **`N−1`** → `monster_XX.png` (validated vs Amiga thumbs).",
         "",
-        "| Pic | monsters.dat | CGA | EGA | Amiga |",
-        "|----:|--------------|-----|-----|-------|",
+        "| Pic | monsters.dat | CGA | EGA | Amiga | SNES |",
+        "|----:|--------------|-----|-----|-------|------|",
     ]
     for r in monster_rows:
         names = r["monsters"].replace("|", "\\|")
         mon.append(
             f"| {r['slot']:02d} | {names} | "
             f"{img_cell(r.get('cga_img'))} | {img_cell(r.get('ega_img'))} | "
-            f"{img_cell(r.get('anm_img'))} |"
+            f"{img_cell(r.get('anm_img'))} | {img_cell(r.get('snes_img'))} |"
         )
     (wiki_dir / "Platform-Monsters-01-74.md").write_text("\n".join(mon) + "\n", encoding="utf-8")
     pages.append("Platform-Monsters-01-74")
@@ -670,6 +732,7 @@ def export_monster_rows(
             "cga_note": "",
             "ega_note": "",
             "anm_note": "",
+            "snes_note": "",
         }
 
         cga_img = assets / "monsters" / "cga" / f"{slot:02d}.png"
@@ -697,6 +760,13 @@ def export_monster_rows(
                 row["anm_note"] = f"{anm_path.name} decode fail"
         else:
             row["anm_note"] = "no file"
+
+        snes_img = assets / "monsters" / "snes" / f"{slot:02d}.png"
+        if export_snes_monster_thumb(slot, snes_img):
+            row["snes_img"] = snes_img
+            row["snes_note"] = f"idx {slot - 1:02d}"
+        else:
+            row["snes_note"] = "no sprite"
 
         rows.append(row)
     return rows
@@ -832,9 +902,10 @@ def main(argv: list[str] | None = None) -> int:
     cga_n = sum(1 for r in monster_rows if r.get("cga_img"))
     ega_n = sum(1 for r in monster_rows if r.get("ega_img"))
     anm_n = sum(1 for r in monster_rows if r.get("anm_img"))
+    snes_n = sum(1 for r in monster_rows if r.get("snes_img"))
     wall_frames = sum(len(s["rows"]) for s in wall_sections)
     print(f"Wrote {html_path}")
-    print(f"  monsters: CGA {cga_n}/74 · EGA {ega_n}/74 · .anm {anm_n}/74")
+    print(f"  monsters: CGA {cga_n}/74 · EGA {ega_n}/74 · .anm {anm_n}/74 · SNES {snes_n}/74")
     print(f"  wall sheets: {len(wall_sections)} stems · {wall_frames} frame rows")
     if args.markdown:
         print(f"Wrote {args.markdown}")

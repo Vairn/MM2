@@ -96,6 +96,11 @@ void AppHost::framePresent()
         platform::waitVblank();
         return;
     }
+    if (!in_town_active_ && character_ui_ready_ && character_ui_.active() && !char_ui_redrew_) {
+        /* Idle character chooser / create screens — same gate as play. */
+        platform::waitVblank();
+        return;
+    }
 #endif
     platform::presentFrame(c.pixels(), c.width(), c.height());
 #if !MM2_HOST_AMIGA
@@ -272,6 +277,10 @@ void AppHost::charChooseEnter()
 #if MM2_HOST_AMIGA
     MM2_DBG("MM2 GOTO: charChooseEnter blit_sync\n");
     mm2_amiga_blit_sync();
+    /* Inn→goto-town destroys the UI cache in releaseChipForPlayMode; recreate. */
+    if (!mm2_amiga_ui_cache_ready()) {
+        mm2_amiga_ui_cache_create();
+    }
     mm2_amiga_ui_cache_invalidate();
     MM2_DBG("MM2 GOTO: charChooseEnter clearScreen\n");
     platform::clearScreen();
@@ -282,6 +291,7 @@ void AppHost::charChooseEnter()
         return;
     }
     char_create_prepare_done_ = true;
+    char_ui_redrew_ = false;
     MM2_DBG("MM2 GOTO: charChooseEnter startChooseParty\n");
     const uint8_t town_filter = pending_choose_town_filter_;
     pending_choose_town_filter_ = 1;
@@ -368,38 +378,43 @@ void AppHost::charStep()
 void AppHost::charDraw()
 {
 #if MM2_HOST_AMIGA
+    char_ui_redrew_ = false;
     const bool goto_trace = false; // character_ui_.mode() == ui::CharacterUiMode::ChooseParty;
     if (goto_trace) {
         MM2_DBG("MM2 GOTO: charDraw begin redraw=%d chip=%lu\n", character_ui_.needsRedraw() ? 1 : 0,
                 apphost_chip_free());
     }
+    if (!character_ui_.needsRedraw()) {
+        /* Static chooser: keep the previous front buffer; framePresent waits vblank. */
+        return;
+    }
     /* Drain blits from menuSuspend/clearScreen — Release can outrun the ACE blitter. */
     mm2_amiga_blit_sync();
     if (goto_trace) {
-        MM2_DBG("MM2 GOTO: charDraw post-sync\n");
+        MM2_DBG("MM2 GOTO: charDraw ui_cache_begin+render\n");
     }
-    if (character_ui_.needsRedraw()) {
-        if (goto_trace) {
-            MM2_DBG("MM2 GOTO: charDraw ui_cache_begin+render\n");
+    platform::applyUiPalette();
+    if (character_ui_.needsIncrementalRedraw()) {
+        /* Ctrl+letter tick: patch check/count cells; cache already holds the rest. */
+        mm2_amiga_ui_cache_begin_keep();
+        if (character_ui_ready_) {
+            character_ui_.renderIncremental(title_.compositor());
         }
-        platform::applyUiPalette();
+        mm2_amiga_ui_cache_end();
+    } else {
         mm2_amiga_ui_cache_begin();
         if (character_ui_ready_) {
             character_ui_.render(title_.compositor());
         }
         mm2_amiga_ui_cache_end();
-        character_ui_.ackRedraw();
-        if (goto_trace) {
-            MM2_DBG("MM2 GOTO: charDraw render done chip=%lu\n", apphost_chip_free());
-        }
     }
-    /* Always composite cached UI to pBack before buffer swap (title menu does the same). */
+    character_ui_.ackRedraw();
     mm2_amiga_blit_sync();
-    platform::applyUiPalette();
     if (goto_trace) {
         MM2_DBG("MM2 GOTO: charDraw ui_cache_present\n");
     }
     mm2_amiga_ui_cache_present();
+    char_ui_redrew_ = true;
     if (goto_trace) {
         MM2_DBG("MM2 GOTO: charDraw end\n");
     }
@@ -490,10 +505,11 @@ void AppHost::inTownDraw()
         in_town_redrew_ = true;
     }
     /* ACE keyUse is edge-triggered; re-poll after the play-screen draw so a short
-     * SPACE tap during a slow Corak frame is not lost between loop polls. */
+     * SPACE / combat-command tap during a slow frame is not lost between loop polls. */
     if (session_.awaitingContinuePrompt()) {
         const platform::KeyState after = platform::pollInput();
-        if (after.space || after.enter || after.any_key) {
+        if (after.space || after.enter || after.any_key || after.last_ascii != 0) {
+            keys_ = after;
             session_.tick(after);
             if (session_.shouldQuit()) {
                 quit_ = true;
@@ -540,6 +556,11 @@ void AppHost::inTownEndForGotoTown()
     in_town_active_ = false;
     session_.clearGotoTownRequest();
     session_.shutdown();
+#if MM2_HOST_AMIGA
+    /* Play mode freed the title UI cache — restore before char choose redraws. */
+    mm2_amiga_ui_cache_create();
+    platform::applyUiPalette();
+#endif
 #if !MM2_HOST_AMIGA
     char window_title[256];
     std::snprintf(window_title, sizeof(window_title), "MM2 (%s) — goto town", platform::hostName());

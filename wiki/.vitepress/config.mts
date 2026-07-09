@@ -46,6 +46,7 @@ export default defineConfig({
             { text: 'GFX Loading (.32)', link: '/docs/reverse-engineering/06-gfx-loading' },
             { text: 'ANM / TV Format', link: '/docs/reverse-engineering/07-anm-tv-format' },
             { text: 'PC DOS (.4 / .16)', link: '/docs/reverse-engineering/54-pc-dos-graphics-formats' },
+            { text: 'SNES graphics', link: '/docs/reverse-engineering/snes-graphics' },
             { text: '3D View & Game Screen', link: '/docs/reverse-engineering/15-3d-view-and-game-screen' },
           ],
         },
@@ -89,6 +90,10 @@ export default defineConfig({
             { text: 'Map Cartography', link: '/docs/gallery/maps' },
             { text: '3D View Graphics', link: '/docs/gallery/views' },
             { text: 'PC DOS (CGA/EGA)', link: '/docs/gallery/pc-index' },
+            { text: 'SNES', link: '/docs/gallery/snes-index' },
+            { text: 'SNES atlases', link: '/docs/gallery/snes-atlases' },
+            { text: 'SNES wall faces', link: '/docs/gallery/snes-walls' },
+            { text: 'SNES monsters', link: '/docs/gallery/snes-monsters' },
           ],
         },
         {

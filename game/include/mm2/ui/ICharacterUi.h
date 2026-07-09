@@ -33,6 +33,22 @@ public:
     virtual bool needsRedraw() const { return true; }
     /** Amiga: call after cache rebuild. */
     virtual void ackRedraw() {}
+    /**
+     * Amiga party chooser: Ctrl+letter tick toggle can patch the existing UI
+     * cache instead of a full clear+repaint. Default = always full rebuild.
+     */
+    virtual bool needsIncrementalRedraw() const { return false; }
+    /** Patch only dirty tick/count cells into the current UI cache. */
+    virtual void renderIncremental(gfx::ScreenCompositor & /*compositor*/) {}
+    /** Union rect of the last incremental patch (for partial present). */
+    virtual bool takeIncrementalPresentRect(int *out_x, int *out_y, int *out_w, int *out_h)
+    {
+        (void)out_x;
+        (void)out_y;
+        (void)out_w;
+        (void)out_h;
+        return false;
+    }
 
     virtual void beginViewParty(Mm2RosterFile &roster) = 0;
     virtual UiResult tickViewParty(const platform::KeyState &keys) = 0;

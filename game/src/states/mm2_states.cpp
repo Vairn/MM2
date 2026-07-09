@@ -248,11 +248,10 @@ static void char_choose_create(void)
 static void char_choose_loop(void)
 {
     AppHost &h = host();
-    const bool ui_active = h.characterUi().active();
     MM2_DBG(
         "MM2 GOTO: char_choose loop #%d active=%d mode=%d redraw=%d chip=%lu\n",
         g_char_choose_frame,
-        ui_active ? 1 : 0,
+        h.characterUi().active() ? 1 : 0,
         static_cast<int>(h.characterUi().mode()),
         h.characterUi().needsRedraw() ? 1 : 0,
         goto_chip_free()

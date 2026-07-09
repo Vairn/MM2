@@ -568,27 +568,21 @@ void eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
 bool eventVmCheckOp30Password(const uint8_t *input_buf, const uint8_t *expected,
                               size_t expected_len)
 {
-    if (!input_buf || !expected || expected_len == 0) {
+    /* event_op30_answer_check @ 0x17034: for i in 0..9 compare
+     * toupper(input[i]) vs (0x11A - expected[i]); cond=1 iff all 10 match.
+     * Trailing expected bytes are typically 0xFA → space. */
+    if (!input_buf || !expected || expected_len < 10) {
         return false;
     }
-    char decoded[16];
-    size_t n = expected_len;
-    if (n > sizeof(decoded) - 1) {
-        n = sizeof(decoded) - 1;
+    for (size_t i = 0; i < 10; ++i) {
+        const uint8_t got =
+            static_cast<uint8_t>(std::toupper(static_cast<unsigned char>(input_buf[i])));
+        const uint8_t want = static_cast<uint8_t>((0x11A - expected[i]) & 0xFF);
+        if (got != want) {
+            return false;
+        }
     }
-    for (size_t i = 0; i < n; ++i) {
-        decoded[i] = static_cast<char>((0x11A - expected[i]) & 0xFF);
-    }
-    decoded[n] = '\0';
-    while (n > 0 && decoded[n - 1] == ' ') {
-        decoded[--n] = '\0';
-    }
-
-    if (input_buf[0] == '\0') {
-        return false;
-    }
-    return std::strcmp(reinterpret_cast<const char *>(input_buf),
-                       decoded) == 0;
+    return true;
 }
 
 uint32_t eventVmDeductPartyGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,

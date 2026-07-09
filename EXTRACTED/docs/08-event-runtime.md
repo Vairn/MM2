@@ -61,7 +61,21 @@ for each triplet (pos, event_id, cond):
     pool_seek(event_id) → optional era gate → interpreter
     clear triplet bytes (one-shot)
 if queued_event_id != $FF:
-    rebuild anchor from work_buf[0..1] as BE u16; seek queued id; re-init
+    rebuild anchor from work_buf[0..1] as LE u16 (buf[1]<<8|buf[0]); parse_pos=2;
+    pool_seek(queued_id) → interpreter;
+    -$7DFA event_dat_loader + 0x1754A re-init
+```
+
+**OP_0E default-range** (`0x15EDC` / `0x160A2`): temporarily sets `screen_mode_id` to
+the overlay category, calls `-$7DFA` (loader), restores `screen_mode_id`, stores
+the adjusted index in `queued_event_id` (`A4-$5D46`), then returns. The **scanner
+epilogue** (not the OP_0E handler) runs that queued script.
+
+**Castle blobs** (locs 63/65/68): no `00 00 00` terminator — `0x1754A` never
+completes; leave `event_script_anchor=$FFFF` and use queued dispatch only.
+
+```
+# (scanner epilogue continued)
 if left trigger tile → clear visited bit7 + tile_rt bit7
 else → pending_event_latch = 1
 ```

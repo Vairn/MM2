@@ -14,9 +14,11 @@ void formatPartyHpField(uint16_t hp, char *out, size_t cap)
         return;
     }
 
-    /* draw_party_status_panel @ 0x628E..0x62C2: 3-cell decimal field after " /".
-     * Digits are right-aligned (leading spaces when HP < 100 / < 10). */
-    std::snprintf(out, cap, "%3u", static_cast<unsigned>(hp));
+    /* draw_party_status_panel @ 0x6266..0x629A: print digits via -$7BDE, then
+     * trailing spaces when HP < 100 / < 10 so the 3-cell field is left-aligned.
+     * Right-align would put the ones digit on col 0x14, which the next slot's
+     * empty clear (or right-column text) would wipe. */
+    std::snprintf(out, cap, "%-3u", static_cast<unsigned>(hp));
 }
 
 size_t formatPartyStatusLine(char *out, size_t cap, int slot_index, const char *name, uint16_t hp,
@@ -39,18 +41,21 @@ size_t formatPartyStatusLine(char *out, size_t cap, int slot_index, const char *
 
     const int slot_digit = (slot_index >= 0 && slot_index < 8) ? slot_index + 1 : 1;
 
-    if (prefix_style == PartyStatusPrefix::CombatCheckmark) {
+    if (prefix_style == PartyStatusPrefix::CombatFrontRank || prefix_style == PartyStatusPrefix::CombatBackRank) {
+        /* combat_message_helper @ 0x12848: glyph 0x17 or space, then left-aligned
+         * HP digits padded with trailing spaces to 3 cells (0x1291E..0x12956). */
+        const char prefix =
+            prefix_style == PartyStatusPrefix::CombatFrontRank ? static_cast<char>(0x17) : ' ';
         if (hp > 999) {
-            std::snprintf(out, cap, "%c%d)%-*s /+++", static_cast<char>(0x7E), slot_digit, kPartyNameFieldWidth,
-                          name_field);
+            std::snprintf(out, cap, "%c%d) %-*s /+++", prefix, slot_digit, kPartyNameFieldWidth, name_field);
         } else {
-            std::snprintf(out, cap, "%c%d)%-*s /%s", static_cast<char>(0x7E), slot_digit, kPartyNameFieldWidth,
-                          name_field, hp_field);
+            std::snprintf(out, cap, "%c%d) %-*s /%-3u", prefix, slot_digit, kPartyNameFieldWidth, name_field,
+                          static_cast<unsigned>(hp));
         }
     } else if (hp > 999) {
-        std::snprintf(out, cap, " %d)%-*s /+++", slot_digit, kPartyNameFieldWidth, name_field);
+        std::snprintf(out, cap, " %d) %-*s /+++", slot_digit, kPartyNameFieldWidth, name_field);
     } else {
-        std::snprintf(out, cap, " %d)%-*s /%s", slot_digit, kPartyNameFieldWidth, name_field, hp_field);
+        std::snprintf(out, cap, " %d) %-*s /%s", slot_digit, kPartyNameFieldWidth, name_field, hp_field);
     }
 
     return std::strlen(out);

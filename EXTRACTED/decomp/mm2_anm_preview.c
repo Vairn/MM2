@@ -303,6 +303,17 @@ static void anm_build_pen_remap(const mm2_anm_file *anm, int map_to_host, UBYTE 
     }
 }
 
+static int anm_remap_is_identity(const UBYTE remap[MM2_ANM_PALETTE_COLORS])
+{
+    int p;
+    for (p = 0; p < MM2_ANM_PALETTE_COLORS; ++p) {
+        if (remap[p] != (UBYTE)p) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static void anm_put_pen_bitmap(tBitMap *bm, int x, int y, UBYTE pen)
 {
     UBYTE pl;
@@ -329,9 +340,31 @@ static void anm_clear_rect_bitmap(tBitMap *bm, int x, int y, int w, int h)
 {
     int py;
     int px;
+    UBYTE pl;
     if (!bm || w <= 0 || h <= 0) {
         return;
     }
+
+    /* Byte-aligned clear: memset plane rows (retail prelude patches are usually word-aligned). */
+    if ((x & 7) == 0 && (w & 7) == 0) {
+        const int byte_x = x >> 3;
+        const int nbytes = w >> 3;
+        const UWORD bpr = bm->BytesPerRow;
+        const int depth = (int)bm->Depth;
+        if (byte_x >= 0 && byte_x + nbytes <= (int)bpr) {
+            for (py = 0; py < h; ++py) {
+                const int oy = y + py;
+                if (oy < 0 || oy >= (int)bm->Rows) {
+                    continue;
+                }
+                for (pl = 0; pl < depth; ++pl) {
+                    memset(bm->Planes[pl] + (ULONG)oy * (ULONG)bpr + (ULONG)byte_x, 0, (size_t)nbytes);
+                }
+            }
+            return;
+        }
+    }
+
     for (py = 0; py < h; ++py) {
         const int oy = y + py;
         if (oy < 0 || oy >= (int)bm->Rows) {
@@ -345,6 +378,55 @@ static void anm_clear_rect_bitmap(tBitMap *bm, int x, int y, int w, int h)
             anm_put_pen_bitmap(bm, ox, oy, 0);
         }
     }
+}
+
+/* Identity remap + byte-aligned dst: memcpy source planes like .32 planar_frame. */
+static int anm_blit_planes_identity_aligned(tBitMap *dst, int dst_x, int dst_y, const uint8_t *planes,
+                                            uint16_t sw, uint16_t sh, int copy_w, int copy_h)
+{
+    const size_t rs = mm2_anm_rassize(sw, sh);
+    const int src_bpr = (int)((((uint32_t)sw + 15U) >> 3) & 0xFFFEU);
+    const UWORD dst_bpr = dst->BytesPerRow;
+    const int byte_x = dst_x >> 3;
+    int copy_bytes;
+    int y;
+    UBYTE pl;
+    const UBYTE dst_planes = (dst->Depth < MM2_ANM_PLANES) ? dst->Depth : (UBYTE)MM2_ANM_PLANES;
+
+    if ((dst_x & 7) != 0 || dst_x < 0 || dst_y < 0) {
+        return 0;
+    }
+    if (copy_w > (int)sw) {
+        copy_w = (int)sw;
+    }
+    if (copy_h > (int)sh) {
+        copy_h = (int)sh;
+    }
+    /* Copy whole source bytes covering copy_w; trailing pad bits are already 0 in RLE decode. */
+    copy_bytes = (copy_w + 7) >> 3;
+    if (copy_bytes > src_bpr) {
+        copy_bytes = src_bpr;
+    }
+    if (byte_x + copy_bytes > (int)dst_bpr) {
+        return 0;
+    }
+    if (dst_y + copy_h > (int)dst->Rows) {
+        copy_h = (int)dst->Rows - dst_y;
+    }
+    if (copy_h <= 0 || copy_bytes <= 0) {
+        return 0;
+    }
+
+    for (pl = 0; pl < dst_planes; ++pl) {
+        const uint8_t *src_plane = planes + (size_t)pl * rs;
+        uint8_t *dst_plane = dst->Planes[pl];
+        for (y = 0; y < copy_h; ++y) {
+            memcpy(dst_plane + (ULONG)(dst_y + y) * (ULONG)dst_bpr + (ULONG)byte_x,
+                   src_plane + (ULONG)y * (ULONG)src_bpr, (size_t)copy_bytes);
+        }
+    }
+    /* AGA 6th plane stays 0 (indices 0-31) — already cleared by BMF_CLEAR / anm_clear. */
+    return 1;
 }
 
 static void anm_blit_planes_to_bitmap(tBitMap *dst, int dst_x, int dst_y, const uint8_t *planes, uint16_t sw,
@@ -363,6 +445,12 @@ static void anm_blit_planes_to_bitmap(tBitMap *dst, int dst_x, int dst_y, const 
     }
     if (copy_h > (int)sh) {
         copy_h = (int)sh;
+    }
+
+    /* Retail overlays use pens 3-17 as-is (identity remap). Plane memcpy matches .32. */
+    if (anm_remap_is_identity(remap) &&
+        anm_blit_planes_identity_aligned(dst, dst_x, dst_y, planes, sw, sh, copy_w, copy_h)) {
+        return;
     }
 
     for (y = 0; y < copy_h; ++y) {
@@ -414,14 +502,28 @@ static void anm_refresh_pen0_mask(const tBitMap *bm, tBitMap *msk, UWORD uwVisW,
         row_bytes = (ULONG)msk_bpr;
     }
 
+    /* Fast path: same pitch + full-height → OR whole planes once (like .32 build_pen0_mask). */
+    if (bm_bpr == msk_bpr && uwVisH == bm->Rows && uwVisH == msk->Rows &&
+        row_bytes == (ULONG)msk_bpr) {
+        const ULONG bytes = (ULONG)msk_bpr * (ULONG)msk->Rows;
+        ULONG i;
+        memcpy(msk->Planes[0], bm->Planes[0], (size_t)bytes);
+        for (pl = 1; pl < bm->Depth; ++pl) {
+            UBYTE *dst = msk->Planes[0];
+            const UBYTE *src = bm->Planes[pl];
+            for (i = 0; i < bytes; ++i) {
+                dst[i] |= src[i];
+            }
+        }
+        return;
+    }
+
     for (y = 0; y < uwVisH; ++y) {
         UBYTE *mrow = msk->Planes[0] + (ULONG)y * (ULONG)msk_bpr;
         const UBYTE *prow0 = bm->Planes[0] + (ULONG)y * (ULONG)bm_bpr;
         ULONG i;
 
-        for (i = 0; i < row_bytes; ++i) {
-            mrow[i] = prow0[i];
-        }
+        memcpy(mrow, prow0, (size_t)row_bytes);
         for (pl = 1; pl < bm->Depth; ++pl) {
             const UBYTE *prow = bm->Planes[pl] + (ULONG)y * (ULONG)bm_bpr;
             for (i = 0; i < row_bytes; ++i) {

@@ -189,8 +189,7 @@ void blitBookFramePc(gfx::ScreenCompositor &c, const mm2_gfx_sheet &book, int fr
     if (!f->bitmap) {
         return;
     }
-    platform::blitImage32(&book.img, static_cast<uint16_t>(frame), static_cast<UWORD>(dst_x), static_cast<UWORD>(dst_y),
-                          0);
+    platform::blitImage32(&book.img, static_cast<uint16_t>(frame), dst_x, dst_y, 0);
 #else
     if (!f->rgba) {
         return;
@@ -473,6 +472,8 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
 
     if (session && session->sub_mode == SheetSubMode::SpellBook) {
         renderSpellBook(c, roster, launch, party_slot);
+    } else if (session && session->sub_mode == SheetSubMode::CastPicker) {
+        renderCastPicker(c, roster, launch, party_slot, *session);
     }
 }
 
@@ -536,10 +537,10 @@ void InGameCharacterSheet::renderSpellBook(gfx::ScreenCompositor &c, const Mm2Ro
         return;
     }
 
-    /* Spell-book popup @ 0x6736: window -$7C74(row $A, col $7, w $1D, h $13).
-       Grid renderer @ 0x65FA: title $6714, header $671F, rows = level 1..9,
+    /* Spell-book popup @ 0x675A: window -$7C74(row $A, col $7, w $1D, h $13).
+       Grid renderer @ 0x6622: title $673C, header $6747, rows = level 1..9,
        known marks = font glyph $17, columns spaced every 2 cells from col $5.
-       Height clipped to fit the 24-row play overlay (cast prompt @ row $17). */
+       Combat/sheet 'V' is view-only — no cast prompts (doc 43 §6.1). */
     constexpr int kWinRow = 10;
     constexpr int kWinCol = 7;
     constexpr int kWinW = 29;
@@ -573,10 +574,25 @@ void InGameCharacterSheet::renderSpellBook(gfx::ScreenCompositor &c, const Mm2Ro
             ++flat;
         }
     }
+}
 
-    /* Cast picker prompt @ 0x79C6 (cast execution is still a GAP). */
-    drawCellText(c, 0x16, 0x0B, "Cast Spell Level:", 255, 255, 255);
-    drawCellText(c, 0x16, 0x17, "|", 255, 255, 255);
+void InGameCharacterSheet::renderCastPicker(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
+                                            const Mm2PartyLaunch &launch, int party_slot,
+                                            const SheetSession &session) const
+{
+    /* Exploration cast @ 0x6E30: LAB_6622 grid then -$7E12 / 0x79EE prompts. */
+    renderSpellBook(c, roster, launch, party_slot);
+
+    /* Prompt row: combat mode uses row $0F; exploration uses $15 (0x79F2/0x7A04). */
+    constexpr int kPromptRow = 0x16;
+    if (session.cast_phase == CastPromptPhase::Level) {
+        drawCellText(c, kPromptRow, 0x02, " Spell Level: ", 255, 255, 255);
+    } else {
+        char buf[24];
+        std::snprintf(buf, sizeof(buf), " Spell Level: %d", session.cast_level);
+        drawCellText(c, kPromptRow, 0x02, buf, 255, 255, 255);
+        drawCellText(c, kPromptRow, 0x0C, "Number: ", 255, 255, 255);
+    }
 }
 
 SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session, Mm2RosterFile &roster,
@@ -665,11 +681,45 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         return SheetKeyOutcome::None;
     }
 
-    /* Spell-book view (cast picker grid @ 0x65fa). The grid is a read-only view of
-       the known spells; cast execution ($CD90 / LAB_CDB8 after the 0x79C6 picker)
-       is a documented GAP. Swallow non-ESC keys so the book stays open (ESC is
-       consumed upstream and returns to the sheet). */
+    /* View-only spell book (combat/sheet 'V' → 0x675A). ESC closes upstream. */
     if (session.sub_mode == SheetSubMode::SpellBook) {
+        return SheetKeyOutcome::None;
+    }
+
+    /* Exploration cast picker @ 0x6E30 / 0x79EE: level then number; ESC aborts. */
+    if (session.sub_mode == SheetSubMode::CastPicker) {
+        if (key >= '1' && key <= '9') {
+            const int digit = key - '0';
+            if (session.cast_phase == CastPromptPhase::Level) {
+                const int max_sl = rec->spell_level > 0 ? static_cast<int>(rec->spell_level) : 0;
+                if (digit < 1 || digit > max_sl || digit > kSpellLevels) {
+                    return SheetKeyOutcome::None;
+                }
+                session.cast_level = digit;
+                session.cast_phase = CastPromptPhase::Number;
+                return SheetKeyOutcome::None;
+            }
+            const int flat = spellFlatFromLevelNumber(session.cast_level, digit);
+            if (flat < 0 || !spellKnownInBook(*rec, flat)) {
+                return SheetKeyOutcome::None;
+            }
+            session.cast_spell_flat = flat;
+            session.sub_mode = SheetSubMode::Normal;
+            session.cast_phase = CastPromptPhase::Level;
+            /* Effect dispatch ($CDB8 / combat $CFF8) is still a GAP — acknowledge pick. */
+            {
+                const SpellSchool school = spellSchoolForClass(rec->class_id);
+                const SpellMeta *table = schoolSpellTable(school);
+                if (table) {
+                    char buf[48];
+                    std::snprintf(buf, sizeof(buf), "Cast %s (stub).", table[flat].name);
+                    setStatus(session, buf);
+                } else {
+                    setStatus(session, "Cast (stub).");
+                }
+            }
+            return SheetKeyOutcome::None;
+        }
         return SheetKeyOutcome::None;
     }
 
@@ -844,18 +894,20 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         }
         break;
     case 'C': {
+        /* Sheet 'C' → exploration cast @ 0x6E30 (grid + 0x79EE). Combat command
+           'C' never opens the sheet — GameSession routes it to CombatSession. */
         if (combat_mode) {
             break;
         }
-        /* 'C' (Cast) opens the spell-book grid (cast picker @ 0x65fa). Only caster
-           classes have a spell book; non-casters get the empty case. School and
-           known spells are derived from the roster record ($51..$56 bitfield). */
         const SpellSchool school = spellSchoolForClass(rec->class_id);
-        if (school == SpellSchool::None) {
+        if (school == SpellSchool::None || rec->spell_level == 0) {
             setStatus(session, "No spell book.");
             break;
         }
-        session.sub_mode = SheetSubMode::SpellBook;
+        session.sub_mode = SheetSubMode::CastPicker;
+        session.cast_phase = CastPromptPhase::Level;
+        session.cast_level = 0;
+        session.cast_spell_flat = -1;
         setStatus(session, "");
         break;
     }

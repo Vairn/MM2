@@ -329,11 +329,46 @@ public:
         has_throw_ = false;
     }
 
-    void requestRedraw() override { frame_dirty_ = true; }
+    void requestRedraw() override
+    {
+        frame_dirty_ = true;
+        incr_dirty_ = false;
+        incr_letter_ = -1;
+    }
 
-    bool needsRedraw() const override { return frame_dirty_; }
+    bool needsRedraw() const override { return frame_dirty_ || incr_dirty_; }
 
-    void ackRedraw() override { frame_dirty_ = false; }
+    bool needsIncrementalRedraw() const override { return incr_dirty_ && !frame_dirty_; }
+
+    void ackRedraw() override
+    {
+        frame_dirty_ = false;
+        incr_dirty_ = false;
+        incr_letter_ = -1;
+        /* Keep incr_present_* until takeIncrementalPresentRect (or next mark). */
+    }
+
+    void renderIncremental(gfx::ScreenCompositor &compositor) override
+    {
+        if (!incr_dirty_ || frame_dirty_) {
+            return;
+        }
+        renderPartyChooserIncremental(compositor);
+    }
+
+    bool takeIncrementalPresentRect(int *out_x, int *out_y, int *out_w, int *out_h) override
+    {
+        if (!out_x || !out_y || !out_w || !out_h || incr_present_w_ <= 0 || incr_present_h_ <= 0) {
+            return false;
+        }
+        *out_x = incr_present_x_;
+        *out_y = incr_present_y_;
+        *out_w = incr_present_w_;
+        *out_h = incr_present_h_;
+        incr_present_w_ = 0;
+        incr_present_h_ = 0;
+        return true;
+    }
 
     void beginViewParty(Mm2RosterFile &roster) override
     {
@@ -519,8 +554,12 @@ public:
                 return UiResult::Continue;
             }
             if (keys.ctrl) {
+                const int before = party_count_;
+                const bool was_full = party_count_ >= kMaxParty;
                 togglePartyMember(slot);
-                markDirty();
+                if (party_count_ != before || (was_full != (party_count_ >= kMaxParty))) {
+                    markTickDirty(ch - 'A');
+                }
             } else {
                 sheet_roster_index_ = slot;
                 sheet_slot_letter_ = ch;
@@ -561,7 +600,101 @@ private:
     enum class PartyPage { Characters, Hirelings };
     enum class PartySub { List, Sheet };
 
-    void markDirty() { frame_dirty_ = true; }
+    void markDirty()
+    {
+        frame_dirty_ = true;
+        incr_dirty_ = false;
+        incr_letter_ = -1;
+        incr_present_w_ = 0;
+        incr_present_h_ = 0;
+    }
+
+    void markTickDirty(int letter_index)
+    {
+        if (frame_dirty_) {
+            return;
+        }
+        incr_dirty_ = true;
+        incr_letter_ = letter_index;
+    }
+
+    void expandIncrPresent(int x, int y, int w, int h)
+    {
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+        if (incr_present_w_ <= 0) {
+            incr_present_x_ = x;
+            incr_present_y_ = y;
+            incr_present_w_ = w;
+            incr_present_h_ = h;
+            return;
+        }
+        const int x1 = incr_present_x_ < x ? incr_present_x_ : x;
+        const int y1 = incr_present_y_ < y ? incr_present_y_ : y;
+        const int x2 = (incr_present_x_ + incr_present_w_) > (x + w) ? (incr_present_x_ + incr_present_w_)
+                                                                    : (x + w);
+        const int y2 = (incr_present_y_ + incr_present_h_) > (y + h) ? (incr_present_y_ + incr_present_h_)
+                                                                    : (y + h);
+        incr_present_x_ = x1;
+        incr_present_y_ = y1;
+        incr_present_w_ = x2 - x1;
+        incr_present_h_ = y2 - y1;
+    }
+
+    void renderPartyChooserIncremental(gfx::ScreenCompositor &c)
+    {
+        using namespace amiga_layout;
+        incr_present_w_ = 0;
+        incr_present_h_ = 0;
+
+        if (incr_letter_ >= 0 && incr_letter_ < kPartySlotCount) {
+            const bool right = incr_letter_ >= kPartySlotsPerColumn;
+            const int row = (incr_letter_ % kPartySlotsPerColumn) + kPartyListRowBase;
+            const int check_col = right ? kPartyListColRightCheck : kPartyListColLeftCheck;
+            const int page_offset =
+                (party_page_ == PartyPage::Hirelings) ? kRosterHirelingPageOffset : 0;
+            const int slot = rosterSlotForLetter(incr_letter_, page_offset);
+            const int cx = cellX(check_col);
+            const int cy = cellY(row);
+            c.clearRect(cx, cy, kCellW, kCellH, 0, 0, 0, 255);
+            if (isPartyListEntryVisible(slot) && isPartyListEntryChecked(slot)) {
+                drawCheckMark(c, row, check_col);
+            }
+            expandIncrPresent(cx, cy, kCellW, kCellH);
+        }
+
+        /* C=/H= counter — short string, always refresh with the tick. */
+        {
+            const int char_count = partyCharacterCount();
+            const int hire_count = party_count_ - char_count;
+            char counts[24];
+            std::snprintf(counts, sizeof(counts), "C=%d / H=%d", char_count, hire_count);
+            const int len = static_cast<int>(std::strlen(counts));
+            const int cx = cellX(kPartyRightCol);
+            const int cy = cellY(kPartyCountRow);
+            const int cw = 10 * kCellW; /* enough for "C=6 / H=0" */
+            c.clearRect(cx, cy, cw, kCellH, 0, 0, 0, 255);
+            drawCellText(c, kPartyCountRow, kPartyRightCol, counts);
+            expandIncrPresent(cx, cy, (len > 10 ? len : 10) * kCellW, kCellH);
+        }
+
+        /* Party-full banner appears/disappears at the 8-member boundary. */
+        {
+            const char *full = "*** Party is Full ***";
+            const int len = static_cast<int>(std::strlen(full));
+            const int col = (kPartyTextCols - len) / 2;
+            const int cx = cellX(col);
+            const int cy = cellY(kPartyFullRow);
+            const int cw = len * kCellW;
+            c.clearRect(cx, cy, cw, kCellH, 0, 0, 0, 255);
+            if (party_count_ >= kMaxParty) {
+                c.fillRect(cx, cy, cw, kCellH, kPartyHiliteR, kPartyHiliteG, kPartyHiliteB);
+                drawCellText(c, kPartyFullRow, col, full, 0, 0, 0);
+            }
+            expandIncrPresent(cx, cy, cw, kCellH);
+        }
+    }
 
     void loadItems()
     {
@@ -1762,6 +1895,12 @@ private:
     Mm2PartyLaunch party_launch_{};
     bool has_party_launch_ = false;
     bool frame_dirty_ = false;
+    bool incr_dirty_ = false;
+    int incr_letter_ = -1;
+    int incr_present_x_ = 0;
+    int incr_present_y_ = 0;
+    int incr_present_w_ = 0;
+    int incr_present_h_ = 0;
 };
 
 }  // namespace

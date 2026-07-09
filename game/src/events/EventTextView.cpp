@@ -273,6 +273,9 @@ void EventTextView::reset()
 {
     layer_count_ = 0;
     space_prompt_ = false;
+    text_entry_ = false;
+    text_entry_len_ = 0;
+    text_entry_buf_[0] = '\0';
     exit_bit0_ = false;
     exit_bit1_ = false;
     sign_overlay_.unload();
@@ -353,7 +356,9 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, const GameS
         const int anm_id =
             ServiceSignResolver::resolveForGameState(gs.a4(), static_cast<int>(gs.screenId()), attrib, str_idx);
         if (anm_id > 0) {
-            has_sign = sign_overlay_.loadFromId(data_dir, anm_id);
+            /* Retail applies .anm pens 3-17 at blit time (mode $17), not at load —
+             * same as combat / scripted sprites. */
+            has_sign = sign_overlay_.loadFromId(data_dir, anm_id, gfx::AnmLoopMode::Loop, false);
         }
     }
     const bool has_text = text != nullptr && text[0] != '\0';
@@ -376,7 +381,9 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, int screen_
     if (data_dir) {
         const int anm_id = ServiceSignResolver::resolveForScreen(screen_id, attrib, str_idx);
         if (anm_id > 0) {
-            has_sign = sign_overlay_.loadFromId(data_dir, anm_id);
+            /* Retail applies .anm pens 3-17 at blit time (mode $17), not at load —
+             * same as combat / scripted sprites. */
+            has_sign = sign_overlay_.loadFromId(data_dir, anm_id, gfx::AnmLoopMode::Loop, false);
         }
     }
     const bool has_text = text != nullptr && text[0] != '\0';
@@ -406,6 +413,35 @@ void EventTextView::showSpacePrompt()
 void EventTextView::clearSpacePrompt()
 {
     space_prompt_ = false;
+}
+
+void EventTextView::setTextEntry(const char *typed, int typed_len)
+{
+    text_entry_ = true;
+    text_entry_len_ = 0;
+    text_entry_buf_[0] = '\0';
+    if (typed && typed_len > 0) {
+        if (typed_len > 10) {
+            typed_len = 10;
+        }
+        for (int i = 0; i < typed_len; ++i) {
+            text_entry_buf_[i] = typed[i];
+        }
+        text_entry_buf_[typed_len] = '\0';
+        text_entry_len_ = typed_len;
+    }
+    ++text_entry_revision_;
+}
+
+void EventTextView::clearTextEntry()
+{
+    if (!text_entry_ && text_entry_len_ == 0) {
+        return;
+    }
+    text_entry_ = false;
+    text_entry_len_ = 0;
+    text_entry_buf_[0] = '\0';
+    ++text_entry_revision_;
 }
 
 bool EventTextView::tickAnimation()
@@ -493,6 +529,18 @@ void EventTextView::draw(gfx::ScreenCompositor &c) const
     drawServiceSignOverlay(c);
     drawPegasusIllustration(c);
 
+    /* OP_2F @ 0x16FEA: putchar(' ') then -$7F92 echoes typed chars + leaves the
+     * text cursor as a solid block. Y/N (OP_09) draws nothing extra (doc 44). */
+    if (text_entry_) {
+        using namespace gfx::font_glyphs;
+        const int col = 2; /* after the "?" prompt at (1,19) */
+        const int row = 19;
+        if (text_entry_len_ > 0) {
+            textAt(c, col, row, text_entry_buf_);
+        }
+        glyphAt(c, col + text_entry_len_, row, kSolidBlock);
+    }
+
     if (space_prompt_) {
         textAt(c, 9, 23, "('Space' to continue)");
     }
@@ -554,6 +602,7 @@ void EventTextView::clearConsoleMessageLayers()
     }
     layer_count_ = kept;
     space_prompt_ = false;
+    clearTextEntry();
 }
 
 void EventTextView::scriptCleanup(bool *redraw_status, bool *redraw_roster, bool *redraw_divider)
@@ -581,6 +630,7 @@ void EventTextView::scriptCleanup(bool *redraw_status, bool *redraw_roster, bool
     }
     layer_count_ = kept;
     space_prompt_ = false;
+    clearTextEntry();
     exit_bit0_ = false;
     exit_bit1_ = false;
     pegasus_overlay_.unload();

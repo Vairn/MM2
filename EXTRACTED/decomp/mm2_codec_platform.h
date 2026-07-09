@@ -21,6 +21,7 @@ extern "C" {
 #endif
 extern void *mm2_malloc(size_t size);
 extern void *mm2_malloc_fast(size_t size);
+extern void *mm2_realloc(void *ptr, size_t size);
 extern void mm2_free(void *ptr);
 #ifdef __cplusplus
 }
@@ -31,6 +32,8 @@ extern void mm2_free(void *ptr);
 static inline void *codec_malloc(size_t size) { return mm2_malloc(size); }
 
 static inline void codec_free(void *ptr) { mm2_free(ptr); }
+
+static inline void *codec_realloc(void *ptr, size_t size) { return mm2_realloc(ptr, size); }
 
 static inline void *codec_calloc(size_t nmemb, size_t size)
 {
@@ -44,6 +47,7 @@ static inline void *codec_calloc(size_t nmemb, size_t size)
 
 #define malloc codec_malloc
 #define free codec_free
+#define realloc codec_realloc
 #define calloc codec_calloc
 
 static inline int fputc(int ch, FILE *stream)

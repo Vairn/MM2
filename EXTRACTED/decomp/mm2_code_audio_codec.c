@@ -1,8 +1,6 @@
 #include "mm2_code_audio_codec.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "mm2_codec_platform.h"
 
 static uint16_t mm2_be_u16(const uint8_t *p)
 {

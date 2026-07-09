@@ -4,6 +4,7 @@
 #include "mm2/Config.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/PartyStatusFormat.h"
+#include "mm2/gfx/mm2_font8x8.h"
 
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
@@ -65,16 +66,39 @@ void glyphAt(ScreenCompositor &c, int col, int row, uint8_t glyph)
 void textAt(ScreenCompositor &c, int col, int row, const char *text, uint8_t r = 255, uint8_t g = 255,
             uint8_t b = 255)
 {
+    if (!text) {
+        return;
+    }
 #if MM2_HOST_AMIGA
+    /* drawTextPen skips codepoints < 32; combat check glyph 0x17 needs drawGlyphPen. */
+    uint8_t pen = kPenWhite;
     if (r >= 200 && g <= 96 && b <= 96) {
-        c.drawTextPen(col * 8, row * 8, text, kPenWarn);
-    } else if (r >= 210 && g >= 210 && b >= 210) {
-        c.drawTextPen(col * 8, row * 8, text, kPenWhite);
-    } else {
-        c.drawText(col * 8, row * 8, text, r, g, b);
+        pen = kPenWarn;
+    } else if (!(r >= 210 && g >= 210 && b >= 210)) {
+        /* Non-white RGB path still uses white UI pen on Amiga (palette banks). */
+        pen = kPenWhite;
+    }
+    int x = col * 8;
+    const int y = row * 8;
+    for (const char *p = text; *p; ++p) {
+        const unsigned uch = static_cast<unsigned char>(*p);
+        if (uch >= MM2_FONT8X8_GLYPHS) {
+            continue;
+        }
+        c.drawGlyphPen(x, y, static_cast<uint8_t>(uch), pen);
+        x += 8;
     }
 #else
-    c.drawText(col * 8, row * 8, text, r, g, b);
+    int x = col * 8;
+    const int y = row * 8;
+    for (const char *p = text; *p; ++p) {
+        const unsigned uch = static_cast<unsigned char>(*p);
+        if (uch >= MM2_FONT8X8_GLYPHS) {
+            continue;
+        }
+        c.drawGlyph(x, y, static_cast<uint8_t>(uch), r, g, b);
+        x += 8;
+    }
 #endif
 }
 
@@ -182,6 +206,32 @@ void drawPlayViewportDivider(ScreenCompositor &c)
     vLine(c, 0, 0x10, 0x1B);
 }
 
+void drawCombatScreenLines(ScreenCompositor &c)
+{
+    /* combat_display_refresh @ 0x135BE rules:
+     *   h_line(0, 0x27, 0x0E), v_line(0, 0x0E, 0x0F), h_line(0x0F, 0x27, 0x02),
+     *   border patches: glyph 0x0B at (0,0x10)/(0x27,0x10), glyph 0x05 at (0x1B,0). */
+    hLine(c, 0, kCombatPanelLineCol1, kCombatHoodBottomRow);
+    vLine(c, 0, kCombatDividerRowEnd, kCombatDividerCol);
+    hLine(c, kCombatDividerCol, kCombatPanelLineCol1, kCombatHeaderRuleRow);
+    glyphAt(c, 0x00, 0x10, kGlyphVSeg);
+    glyphAt(c, 0x27, 0x10, kGlyphVSeg);
+    glyphAt(c, 0x1B, 0x00, kGlyphHSeg);
+}
+
+void drawCombatScreenChrome(ScreenCompositor &c)
+{
+    /* combat_display_refresh @ 0x135BE: clear cols 1..0x26 rows 1..0x11 (wipes
+     * the exploration h-line 0x10 + v-line 0x1B), then the combat rules. */
+    fillCellRect(c, 1, 1, 0x26, 0x11);
+    drawCombatScreenLines(c);
+}
+
+void drawCombatViewportDivider(ScreenCompositor &c)
+{
+    vLine(c, 0, kCombatDividerRowEnd, kCombatDividerCol);
+}
+
 void drawPlayStatusBar(ScreenCompositor &c, int day, int year, char facing_key, bool new_game)
 {
     /* draw_status_bar @ 0x62C8 — row 17 (0x11). */
@@ -218,19 +268,23 @@ void drawPlayPartyPanel(ScreenCompositor &c, const PlayPartySlot slots[8])
         const int col = (i & 1) ? kPartySlotColRight : kPartySlotColLeft;
         const PlayPartySlot &s = slots[i];
 
-        /* Empty or occupied: clear slot strip via -$7F62 @ 0x6178 before text. */
-        fillCellRect(c, col, row, kPartySlotClearWidth, 1);
-
+        /* Empty slots only: -$7F62 clear @ 0x6178 when party word is $FFFF.
+         * Occupied slots overwrite in place; clearing width 0x13 from col 1
+         * would erase the left slot's last HP cell (shared with col 0x14). */
         if (!s.present) {
+            fillCellRect(c, col, row, kPartySlotClearWidth, 1);
             continue;
         }
 
-        const PartyStatusPrefix prefix_style = PartyStatusPrefix::Exploration;
-
+        PartyStatusPrefix prefix_style = PartyStatusPrefix::Exploration;
+        if (s.in_combat) {
+            prefix_style =
+                s.combat_front_rank ? PartyStatusPrefix::CombatFrontRank : PartyStatusPrefix::CombatBackRank;
+        }
         char line[48];
         formatPartyStatusLine(line, sizeof(line), i, s.name, static_cast<uint16_t>(s.hp), prefix_style);
 
-        constexpr int kPrefixLen = 3;
+        constexpr int kPrefixLen = 4; /* " N) " @ 0x6150 */
         char prefix[kPrefixLen + 1];
         char name_field[kPartyNameFieldWidth + 1];
         char tail[16];

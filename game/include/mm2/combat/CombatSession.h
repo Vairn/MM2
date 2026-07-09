@@ -33,6 +33,9 @@ enum class CombatState : uint8_t {
     AwaitingSurpriseDismiss,  /* surprise banner; any key continues (0x12F4E) */
     AwaitingPartyOptions,     /* party-level A/B/H/R before round loop (0x12F74) */
     AwaitingCommand,          /* a living party member's turn; waiting for A/B/R */
+    AwaitingCastLevel,        /* combat 'C' @ 0x11A90 → 0x79EE level digit (no spell grid) */
+    AwaitingCastNumber,       /* 0x79EE number digit after level */
+    AwaitingActionAck,        /* action message shown; any key advances the round loop */
 };
 
 enum class CombatOutcome : uint8_t { None, Victory, Fled, Defeated };
@@ -59,6 +62,14 @@ public:
     bool active() const { return state_ != CombatState::Inactive; }
     bool awaitingCommand() const { return state_ == CombatState::AwaitingCommand; }
     bool awaitingPartyOptions() const { return state_ == CombatState::AwaitingPartyOptions; }
+    /** True while combat is blocked on a key (party options / command / cast / ack / surprise). */
+    bool awaitingInput() const
+    {
+        return state_ == CombatState::AwaitingSurpriseDismiss || state_ == CombatState::AwaitingPartyOptions ||
+               state_ == CombatState::AwaitingCommand || state_ == CombatState::AwaitingCastLevel ||
+               state_ == CombatState::AwaitingCastNumber || state_ == CombatState::AwaitingActionAck;
+    }
+    CombatState state() const { return state_; }
     CombatOutcome lastOutcome() const { return outcome_; }
 
     /** Arena Games ticket combat (OP_0E selector 0x08 / asm 0x9F04-0x9F2C):
@@ -90,6 +101,18 @@ public:
     /** Party slot (0..7) whose turn is active, or -1. */
     int activePartySlot() const { return active_party_slot_; }
 
+    /** Round-loop acted flag for party slot i (initiative skip @ 0x12BBE). */
+    bool partySlotActed(int party_slot) const
+    {
+        return party_slot >= 0 && party_slot < MM2_GS_PARTY_SIZE && party_acted_[party_slot];
+    }
+
+    /** Combat strip check glyph @ 0x12892: slot < front-rank cutoff A4-$5E4D. */
+    bool partySlotInFrontRank(int party_slot) const
+    {
+        return party_slot >= 0 && party_slot < front_rank_count_;
+    }
+
     /** Monster slot (0..10) currently acting in the round loop (A4-$4F7), or -1. */
     int activeMonsterSlot() const { return active_monster_slot_; }
 
@@ -102,6 +125,10 @@ private:
 
     void beginRound(GameStateView &gs);
     void beginEncounterUi(GameStateView &gs, const world::MapWorld &world);
+    /** combat_state_recompute @ 0x11D0C: roll A4-$524 / A4-$5E4D at round-loop entry. */
+    void recomputeRangeCounts(GameStateView &gs);
+    /** Command capability flags @ 0x11866 for the active character. */
+    void commandFlagsForActiveSlot(bool &melee, bool &shoot, bool &cast) const;
     void applySurpriseRoll(GameStateView &gs);
     void startRoundLoop(GameStateView &gs, const world::MapWorld &world);
     void resolvePartyAttack(GameStateView &gs, const world::MapWorld &world);
@@ -110,9 +137,13 @@ private:
     void resolvePartyRun(GameStateView &gs, const world::MapWorld &world);
     void runUntilDecisionOrEnd(GameStateView &gs, const world::MapWorld &world);
     bool checkOutcome(GameStateView &gs, const world::MapWorld &world);
-    void resolvePlayerAttack(GameStateView &gs);
+    void resolvePlayerAttack(GameStateView &gs, bool shooting);
     void resolvePlayerBlock();
     void resolvePlayerRun(GameStateView &gs, const world::MapWorld &world);
+    /** Combat cast picker @ 0x11A90 / 0x79EE — level then number, no LAB_6622 grid. */
+    void beginCastPicker();
+    bool tickCastPicker(char key);
+    void resolvePlayerCast(int flat0);
     void resolveMonsterTurn(GameStateView &gs, int slot);
     void finishVictory(GameStateView &gs);
     void finishLeave(GameStateView &gs, bool fled);
@@ -142,7 +173,10 @@ private:
 
     int active_party_slot_ = -1; /* party slot (0..7) awaiting a command */
     int active_monster_slot_ = -1; /* monster slot (0..10) acting this step (A4-$4F7) */
+    int melee_range_count_ = 0;  /* A4-$524: monsters within melee reach (0x11D0C) */
+    int front_rank_count_ = 0;   /* A4-$5E4D: party front-rank cutoff (0x11D0C) */
     int encounter_live_total_ = 0; /* roster size at fight start (for "+N more") */
+    int cast_level_ = 0;         /* 1..9 while AwaitingCastNumber (0x79EE) */
     uint8_t overflow_type_ = 0;
     uint8_t surprise_mode_ = 0;  /* 2 = party surprised, 3 = monsters surprised */
     uint32_t xp_pool_ = 0;       /* -$119E: combat XP accrued from kills this fight */

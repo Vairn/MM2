@@ -36,6 +36,10 @@ flowchart TD
 
 ## Combat cast path
 
+Combat **does not** draw the spell-book grid. `C` goes straight to the level/number
+prompt (`-$7E12` / `0x79EE`). The grid (`LAB_6622`) is only used from exploration
+cast (`0x6E30`) and from combat character-sheet **`V`** (`0x675A`).
+
 | Step | Address | IRA / gap line | Role |
 |------|---------|----------------|------|
 | Player turn | `0x119C2` | ~13501 (DC) | Combat menu loop |

@@ -12,6 +12,7 @@
 #include "mm2/combat/CombatSession.h"
 #include "mm2/combat/EncounterPicker.h"
 #include "mm2/events/EventVmHelpers.h"
+#include "mm2/gameplay/SpellBook.h"
 #include "mm2/world/MapWorld.h"
 
 #include "mm2_monsters_codec.h"
@@ -83,6 +84,23 @@ void seedFixedEncounter(mm2::GameStateView &gs, uint8_t monster_type)
     mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 1);
 }
 
+/* Drive combat with repeated key presses until it ends or we stall. */
+bool fightToEnd(mm2::combat::CombatSession &combat, mm2::GameStateView &gs, const mm2::world::MapWorld &world,
+                char key, int max_ticks = 64)
+{
+    for (int i = 0; i < max_ticks; ++i) {
+        mm2::platform::KeyState keys{};
+        keys.last_ascii = key;
+        if (combat.tick(gs, world, keys)) {
+            return true;
+        }
+        if (!combat.active()) {
+            return true;
+        }
+    }
+    return !combat.active();
+}
+
 }  // namespace
 
 int main()
@@ -130,9 +148,8 @@ int main()
         combat.tick(gs, world, keys);
         expect(combat.awaitingCommand(), "victory scenario: party prompted first (higher speed)", fails);
 
-        keys.last_ascii = 'A';
-        const bool ended = combat.tick(gs, world, keys);
-        expect(ended, "victory scenario: Attack kills the 1-HP monster this tick", fails);
+        const bool ended = fightToEnd(combat, gs, world, 'A');
+        expect(ended, "victory scenario: Attack kills the 1-HP monster", fails);
         expect(combat.lastOutcome() == CombatOutcome::Victory, "victory scenario: outcome == Victory", fails);
         expect(!combat.active(), "victory scenario: combat inactive after victory", fails);
         expect(roster.records[0].experience == 150, "victory scenario: 150 XP credited (sole survivor)",
@@ -163,8 +180,7 @@ int main()
         platform::KeyState keys{};
         keys.last_ascii = 'A';
         combat.tick(gs, world, keys);
-        keys.last_ascii = 'A';
-        const bool ended = combat.tick(gs, world, keys);
+        const bool ended = fightToEnd(combat, gs, world, 'A');
         expect(ended, "xp split: fight ends on kill", fails);
         expect(combat.lastOutcome() == CombatOutcome::Victory, "xp split: victory", fails);
         expect(roster.records[0].experience == 75, "xp split: conscious member gets half", fails);
@@ -195,8 +211,7 @@ int main()
         platform::KeyState keys{};
         keys.last_ascii = 'A';
         combat.tick(gs, world, keys);
-        keys.last_ascii = 'A';
-        combat.tick(gs, world, keys);
+        fightToEnd(combat, gs, world, 'A');
         expect(roster.records[0].experience == 150,
                "xp split: sole eligible member receives full pool", fails);
         expect(roster.records[1].experience == 0, "xp split: dead member receives nothing", fails);
@@ -226,9 +241,8 @@ int main()
         platform::KeyState keys{};
         keys.last_ascii = 'A';
         combat.tick(gs, world, keys);
-        keys.last_ascii = 'A';
-        const bool ended = combat.tick(gs, world, keys);
-        expect(ended, "arena scenario: fight resolves this tick", fails);
+        const bool ended = fightToEnd(combat, gs, world, 'A');
+        expect(ended, "arena scenario: fight resolves", fails);
         expect(combat.lastOutcome() == CombatOutcome::Victory, "arena scenario: outcome == Victory", fails);
         const uint32_t expected_gold = events::eventVmArenaGoldReward(2, 0);
         expect(roster.records[0].gold == 100 + expected_gold,
@@ -256,7 +270,8 @@ int main()
 
         platform::KeyState keys{};
         keys.last_ascii = 'A';
-        combat.tick(gs, world, keys); /* monster acts first and ends the fight synchronously */
+        combat.tick(gs, world, keys);
+        fightToEnd(combat, gs, world, 'A');
 
         expect(!combat.active(), "defeat scenario: combat ends after choosing Attack", fails);
         expect(combat.lastOutcome() == CombatOutcome::Defeated, "defeat scenario: outcome == Defeated", fails);
@@ -328,6 +343,38 @@ int main()
         }
     }
 
+    /* ---- Zero XP budget must not arm a 0-monster fight (stock inn starters
+     * ship with hp_current=0; without the leave-inn wake that yields budget 0). */
+    {
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        mm2_gs_set_u8(gs.a4(), MM2_GS_DISPOSITION, 2);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE, 0);
+        for (int i = 0; i < MM2_GS_MONSTER_SLOT_COUNT; ++i) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + i, 0);
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_COUNT, 0);
+
+        Mm2RosterFile zeroRoster{};
+        Mm2PartyLaunch zeroLaunch{};
+        setupParty(zeroRoster, zeroLaunch, /*might=*/50, /*speed=*/50, /*hp=*/0);
+        zeroRoster.records[0].hp_current = 0;
+        zeroRoster.records[0].hp_max = 48;
+        zeroRoster.records[0].hp_aux = 48;
+
+        Mm2MonstersFile monsters{};
+        CombatSession combat;
+        combat.bindParty(&zeroRoster, &zeroLaunch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+
+        mm2::world::MapWorld world;
+        if (world.load("../..") && world.enterScreen(0)) {
+            expect(!combat.enter(gs, world),
+                   "zero-budget random fight: CombatSession::enter refuses empty fight", fails);
+            expect(!combat.active(), "zero-budget random fight: combat stays inactive", fails);
+        }
+    }
+
     /* ---- Town screens: no random step fights (doc 35; env type $11). */
     {
         mm2::world::MapWorld townWorld;
@@ -344,6 +391,131 @@ int main()
                        "town gate: runtime env is $04 not wilderness $0A", fails);
             }
         }
+    }
+
+    /* ---- AGA multi-monster gallery: panelView groups alive slots by picture id. */
+    {
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        /* Types 1..5 with pictures 10,10,20,30,40 — expect 4 distinct slots, pic10 stack=2. */
+        setMonsterField(monsters.records[1], MM2_MON_OFF_HP, 0x0F);
+        setMonsterField(monsters.records[1], MM2_MON_OFF_PICTURE, 10);
+        setMonsterField(monsters.records[2], MM2_MON_OFF_HP, 0x0F);
+        setMonsterField(monsters.records[2], MM2_MON_OFF_PICTURE, 10);
+        setMonsterField(monsters.records[3], MM2_MON_OFF_HP, 0x0F);
+        setMonsterField(monsters.records[3], MM2_MON_OFF_PICTURE, 20);
+        setMonsterField(monsters.records[4], MM2_MON_OFF_HP, 0x0F);
+        setMonsterField(monsters.records[4], MM2_MON_OFF_PICTURE, 30);
+        setMonsterField(monsters.records[5], MM2_MON_OFF_HP, 0x0F);
+        setMonsterField(monsters.records[5], MM2_MON_OFF_PICTURE, 40);
+        setMonsterField(monsters.records[6], MM2_MON_OFF_HP, 0x0F);
+        setMonsterField(monsters.records[6], MM2_MON_OFF_PICTURE, 50); /* 5th distinct — capped out */
+
+        setupParty(roster, launch, /*might=*/99, /*speed=*/99, /*hp=*/999);
+        uint8_t *a4 = gs.a4();
+        mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_MODE, 0x80);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 0, 1);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 1, 2);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 2, 3);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 3, 4);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 4, 5);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 5, 6);
+        for (int i = 6; i < MM2_GS_MONSTER_SLOT_COUNT; ++i) {
+            mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, 0);
+        }
+        mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_OVERFLOW_TYPE, 0);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 6);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "sprite gallery: enter multi-type fight", fails);
+
+        const gfx::CombatPanelView view = combat.panelView();
+        expect(view.sprite_disk_index == 10, "sprite gallery: first picture is 10", fails);
+        expect(view.sprite_slot_count == gfx::kAgaCombatSpriteCap,
+               "sprite gallery: capped at kAgaCombatSpriteCap distinct pictures", fails);
+        expect(view.sprite_slots[0].disk_index == 10 && view.sprite_slots[0].stack_count == 2,
+               "sprite gallery: pic 10 stacks to 2", fails);
+        expect(view.sprite_slots[1].disk_index == 20 && view.sprite_slots[1].stack_count == 1,
+               "sprite gallery: pic 20 alone", fails);
+        expect(view.sprite_slots[2].disk_index == 30, "sprite gallery: pic 30 present", fails);
+        expect(view.sprite_slots[3].disk_index == 40, "sprite gallery: pic 40 present", fails);
+        /* picture 50 is the 5th distinct id — dropped by the AGA cap. */
+        bool has50 = false;
+        for (int i = 0; i < view.sprite_slot_count; ++i) {
+            if (view.sprite_slots[i].disk_index == 50) {
+                has50 = true;
+            }
+        }
+        expect(!has50, "sprite gallery: 5th distinct picture dropped by cap", fails);
+    }
+
+    /* Combat cast @ 0x11A90 / 0x79EE: level+number on message band, no spell grid. */
+    {
+        Mm2RosterFile roster{};
+        Mm2PartyLaunch launch{};
+        Mm2MonstersFile monsters{};
+        std::memset(&monsters, 0, sizeof(monsters));
+        std::memcpy(monsters.records[1].name, "Rat", 3);
+        setMonsterField(monsters.records[1], MM2_MON_OFF_HP, 0x0F);
+        setMonsterField(monsters.records[1], MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(monsters.records[1], MM2_MON_OFF_DAMAGE, 0x01);
+
+        setupParty(roster, launch, /*might=*/50, /*speed=*/99, /*hp=*/100);
+        roster.records[0].class_id = 4; /* Sorcerer */
+        roster.records[0].spell_level = 2;
+        roster.records[0].sp_current = 20;
+        mm2::gameplay::spellLearnInBook(roster.records[0], 0); /* L1/1 Awaken */
+
+        uint8_t *a4 = gs.a4();
+        mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_MODE, 0x80);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 0, 1);
+        for (int i = 1; i < MM2_GS_MONSTER_SLOT_COUNT; ++i) {
+            mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, 0);
+        }
+        mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_OVERFLOW_TYPE, 0);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 1);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "cast: enter fight", fails);
+
+        /* Skip surprise / party options into a command turn. */
+        platform::KeyState keys{};
+        keys.last_ascii = ' ';
+        combat.tick(gs, world, keys);
+        if (combat.state() == CombatState::AwaitingPartyOptions) {
+            keys.last_ascii = 'A';
+            combat.tick(gs, world, keys);
+        }
+        /* Drain action acks until a party command. */
+        for (int i = 0; i < 32 && combat.active() && combat.state() != CombatState::AwaitingCommand; ++i) {
+            keys.last_ascii = ' ';
+            combat.tick(gs, world, keys);
+        }
+        expect(combat.state() == CombatState::AwaitingCommand, "cast: reached command turn", fails);
+        expect(combat.panelView().opt_cast, "cast: opt_cast set for sorcerer", fails);
+
+        keys.last_ascii = 'C';
+        combat.tick(gs, world, keys);
+        expect(combat.state() == CombatState::AwaitingCastLevel, "cast: C opens level prompt", fails);
+        expect(combat.panelView().show_cast_level, "cast: panel shows Spell Level", fails);
+        expect(!combat.panelView().show_command_options, "cast: command grid hidden during pick", fails);
+
+        keys.last_ascii = '1';
+        combat.tick(gs, world, keys);
+        expect(combat.state() == CombatState::AwaitingCastNumber, "cast: level digit -> number", fails);
+        expect(combat.panelView().show_cast_number && combat.panelView().cast_level == 1,
+               "cast: panel shows Number after level", fails);
+
+        keys.last_ascii = '1';
+        combat.tick(gs, world, keys);
+        expect(combat.state() == CombatState::AwaitingActionAck, "cast: number completes cast", fails);
+        expect(std::strstr(combat.statusLine(), "Awaken") != nullptr, "cast: status names spell", fails);
     }
 
     if (fails == 0) {

@@ -121,88 +121,98 @@ KeyState pollInput()
     while (SDL_PollEvent(&ev)) {
         if (ev.type == SDL_QUIT) {
             k.quit = true;
-        } else if (ev.type == SDL_KEYDOWN) {
-            k.any_key = true;
-            if (ev.key.keysym.mod & KMOD_CTRL) {
-                k.ctrl = true;
-            }
-
-            switch (ev.key.keysym.sym) {
-            case SDLK_ESCAPE:
-                k.escape = true;
-                break;
-            case SDLK_RETURN:
-            case SDLK_KP_ENTER:
-                k.enter = true;
-                break;
-            case SDLK_SPACE:
-                k.space = true;
-                break;
-            case SDLK_UP:
-                k.up = true;
-                break;
-            case SDLK_DOWN:
-                k.down = true;
-                break;
-            case SDLK_LEFT:
-                k.left = true;
-                break;
-            case SDLK_RIGHT:
-                k.right = true;
-                break;
-            case SDLK_KP_2:
-                k.down = true;
-                break;
-            case SDLK_KP_4:
-                k.left = true;
-                break;
-            case SDLK_KP_6:
-                k.right = true;
-                break;
-            case SDLK_KP_8:
-                k.up = true;
-                break;
-            case SDLK_c:
-                k.key_c = true;
-                break;
-            case SDLK_d:
-                k.key_d = true;
-                break;
-            case SDLK_n:
-                k.key_n = true;
-                break;
-            case SDLK_m:
-                k.key_m = true;
-                break;
-            case SDLK_o:
-                k.key_o = true;
-                break;
-            case SDLK_p:
-                k.key_p = true;
-                break;
-            case SDLK_q:
-                k.key_q = true;
-                break;
-            case SDLK_BACKSPACE:
-                k.backspace = true;
-                break;
-            default:
-                break;
-            }
-
-            const SDL_Keycode sym = ev.key.keysym.sym;
-            if (sym >= SDLK_a && sym <= SDLK_z) {
-                const bool upper =
-                    ((ev.key.keysym.mod & KMOD_SHIFT) != 0) ^ ((ev.key.keysym.mod & KMOD_CAPS) != 0);
-                k.last_ascii = static_cast<char>((upper ? 'A' : 'a') + (sym - SDLK_a));
-            } else if (sym >= SDLK_0 && sym <= SDLK_9) {
-                k.last_ascii = static_cast<char>('0' + (sym - SDLK_0));
-            }
-
         }
-
     }
 
+    /* Level-sample the keyboard. Relying only on SDL_KEYDOWN makes held movement
+     * wait on the OS key-repeat delay after the first press (feels laggy). */
+    const Uint8 *kb = SDL_GetKeyboardState(nullptr);
+    const SDL_Keymod mods = SDL_GetModState();
+    k.ctrl = (mods & KMOD_CTRL) != 0;
+    k.escape = kb[SDL_SCANCODE_ESCAPE] != 0;
+    k.enter = kb[SDL_SCANCODE_RETURN] != 0 || kb[SDL_SCANCODE_KP_ENTER] != 0;
+    k.space = kb[SDL_SCANCODE_SPACE] != 0;
+    k.backspace = kb[SDL_SCANCODE_BACKSPACE] != 0;
+
+    const bool up = kb[SDL_SCANCODE_UP] != 0 || kb[SDL_SCANCODE_KP_8] != 0;
+    const bool down = kb[SDL_SCANCODE_DOWN] != 0 || kb[SDL_SCANCODE_KP_2] != 0;
+    const bool left = kb[SDL_SCANCODE_LEFT] != 0 || kb[SDL_SCANCODE_KP_4] != 0;
+    const bool right = kb[SDL_SCANCODE_RIGHT] != 0 || kb[SDL_SCANCODE_KP_6] != 0;
+    const bool arrow = up || down || left || right;
+
+    /* First arrow frame fires immediately; while held, re-fire ~8 Hz so walk
+     * does not burn a step every vsync. */
+    static bool s_arrow_held = false;
+    static Uint32 s_arrow_last_ms = 0;
+    constexpr Uint32 kArrowRepeatMs = 120;
+    if (arrow) {
+        const Uint32 now = SDL_GetTicks();
+        if (!s_arrow_held || now - s_arrow_last_ms >= kArrowRepeatMs) {
+            k.up = up;
+            k.down = down;
+            k.left = left;
+            k.right = right;
+            s_arrow_last_ms = now;
+            s_arrow_held = true;
+        }
+    } else {
+        s_arrow_held = false;
+    }
+
+    /* Edge-trigger letters/digits and named menu keys so combat/menus get one
+     * shot per press without OS repeat delay or per-frame spam while held. */
+    static bool s_prev_letter[26]{};
+    static bool s_prev_digit[10]{};
+    static bool s_prev_named[7]{};
+    const bool upper = ((mods & KMOD_SHIFT) != 0) ^ ((mods & KMOD_CAPS) != 0);
+    for (int i = 0; i < 26; ++i) {
+        const bool key_down = kb[SDL_SCANCODE_A + i] != 0;
+        if (key_down && !s_prev_letter[i] && k.last_ascii == 0) {
+            k.last_ascii = static_cast<char>((upper ? 'A' : 'a') + i);
+        }
+        s_prev_letter[i] = key_down;
+    }
+    for (int i = 0; i < 10; ++i) {
+        const bool key_down = kb[SDL_SCANCODE_0 + i] != 0 || kb[SDL_SCANCODE_KP_0 + i] != 0;
+        if (key_down && !s_prev_digit[i] && k.last_ascii == 0) {
+            k.last_ascii = static_cast<char>('0' + i);
+        }
+        s_prev_digit[i] = key_down;
+    }
+
+    const bool named_down[7] = {
+        kb[SDL_SCANCODE_C] != 0, kb[SDL_SCANCODE_D] != 0, kb[SDL_SCANCODE_M] != 0, kb[SDL_SCANCODE_N] != 0,
+        kb[SDL_SCANCODE_O] != 0, kb[SDL_SCANCODE_P] != 0, kb[SDL_SCANCODE_Q] != 0,
+    };
+    bool *named_flags[7] = {&k.key_c, &k.key_d, &k.key_m, &k.key_n, &k.key_o, &k.key_p, &k.key_q};
+    for (int i = 0; i < 7; ++i) {
+        *named_flags[i] = named_down[i] && !s_prev_named[i];
+        s_prev_named[i] = named_down[i];
+    }
+
+    /* Escape/Enter/Space/Backspace: edge for one-shot menus; level also kept so
+     * held SPACE still works across slow frames (Amiga parity). */
+    static bool s_prev_escape = false;
+    static bool s_prev_enter = false;
+    static bool s_prev_space = false;
+    static bool s_prev_backspace = false;
+    const bool esc_edge = k.escape && !s_prev_escape;
+    const bool enter_edge = k.enter && !s_prev_enter;
+    const bool space_edge = k.space && !s_prev_space;
+    const bool bs_edge = k.backspace && !s_prev_backspace;
+    s_prev_escape = k.escape;
+    s_prev_enter = k.enter;
+    s_prev_space = k.space;
+    s_prev_backspace = k.backspace;
+    /* Keep level for space/enter (continue prompts); edge-only for escape/backspace. */
+    k.escape = esc_edge;
+    k.backspace = bs_edge;
+    (void)enter_edge;
+    (void)space_edge;
+
+    k.any_key = k.escape || k.enter || k.space || k.backspace || k.last_ascii != 0 || k.up || k.down ||
+                k.left || k.right || k.key_c || k.key_d || k.key_m || k.key_n || k.key_o || k.key_p ||
+                k.key_q;
     return k;
 }
 

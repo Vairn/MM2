@@ -28,12 +28,20 @@ enum class SheetSubMode : uint8_t {
     EquipPickBackpack,
     RemovePickEquip,
     DropPickSlot,
+    /** Exploration cast @ 0x6E30: spell grid + level/number prompt (0x79EE). */
     CastPicker,
+    /** View-only spell grid @ 0x675A / combat sheet 'V' — no cast prompts. */
     SpellBook,
     GatherPick,
     TradePickType,
     TradePickTarget,
     TradePickItemSlot,
+};
+
+/** Cast level/number prompt phase inside CastPicker (0x79EE). */
+enum class CastPromptPhase : uint8_t {
+    Level,   /* " Spell Level: " — digit 1..spell_level */
+    Number,  /* "Number: " — digit 1..spells-in-level */
 };
 
 enum class SheetTradeKind : uint8_t {
@@ -60,6 +68,9 @@ struct SheetSession {
     SheetSubMode sub_mode = SheetSubMode::Normal;
     SheetTradeKind trade_kind = SheetTradeKind::None;
     int trade_target_slot = -1; /* Item trade ($E492): target chosen before backpack-letter pick. */
+    CastPromptPhase cast_phase = CastPromptPhase::Level;
+    int cast_level = 0; /* 1..9 after level digit accepted */
+    int cast_spell_flat = -1; /* 0..47 school-local index when picker completes */
     char status_line[48] = {};
 };
 
@@ -74,10 +85,13 @@ public:
     void renderQuickRef(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
                         const Mm2PartyLaunch &launch) const;
 
-    /** Spell-book popup (grid @ 0x65fa inside window @ 0x6736). Overlays the
-        character sheet with the retail 9×7 known-spell grid and cast prompt. */
+    /** Spell-book popup (grid @ 0x6622 inside window @ 0x675A). View-only known-spell marks. */
     void renderSpellBook(gfx::ScreenCompositor &c, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
                          int party_slot) const;
+
+    /** Exploration cast UI: same grid as SpellBook plus 0x79EE level/number prompts. */
+    void renderCastPicker(gfx::ScreenCompositor &c, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
+                          int party_slot, const SheetSession &session) const;
 
     /** Sheet sub-menu @ $8EA6 (C/D/E/G/R/S/T/U). Mutates roster on equip/remove/drop. */
     SheetKeyOutcome handleKey(char key, SheetSession &session, Mm2RosterFile &roster,
