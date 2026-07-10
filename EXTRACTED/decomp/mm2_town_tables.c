@@ -1,5 +1,7 @@
 #include "mm2_town_tables.h"
 
+#include <stddef.h>
+
 /*
  * Per-town commerce constants (map id 0..4). Values cross-checked against
  * EXTRACTED/docs/28-town-services.md §13.1 and the 68k disassembly:
@@ -157,7 +159,7 @@ uint32_t mm2_class_xp_for_level(uint8_t class_id, int level)
                         : kXpGroupB[level - MM2_XP_FIRST_LEVEL];
 }
 
-/* HP per level at END 11-12 (doc 32), indexed by class id 0..7. */
+/* A4-$64DA BE u16[8] — class HP base @ training 0x2039C (data hunk). */
 static const uint8_t kClassHpPerLevel[8] = {
     12, /* 0 Knight    */
     10, /* 1 Paladin   */
@@ -165,13 +167,63 @@ static const uint8_t kClassHpPerLevel[8] = {
     8,  /* 3 Cleric    */
     6,  /* 4 Sorcerer  */
     8,  /* 5 Robber    */
-    10, /* 6 Ninja     */
+    8,  /* 6 Ninja     — data hunk 0x64DA; FAQ/doc-32 listed 10 (wrong) */
     15, /* 7 Barbarian */
 };
+
+/* A4-$64EE BE u16[5] — per-map HP mul @ 0x203A8. */
+static const uint16_t kTrainHpMul[5] = {1, 5, 2, 3, 2};
+/* A4-$64E4 BE u16[5] — per-map HP div @ 0x203C0. */
+static const uint16_t kTrainHpDiv[5] = {2, 5, 3, 4, 3};
 
 int mm2_class_hp_per_level(uint8_t class_id)
 {
     return (class_id < 8) ? (int)kClassHpPerLevel[class_id] : 0;
+}
+
+int mm2_train_hp_gain(uint8_t class_id, int map_id, uint8_t endurance_current)
+{
+    /* Training Hall HP leaf @ 0x20390..0x20454:
+     *   base = ($64DA[class] * $64EE[map]) / $64E4[map]
+     *   rem  = same product % div; if rem!=0 and class∉{3,5,6} → base++
+     *   end  = -$7F56(+$27); if end>=$F0 → 0
+     *   gain = base + end
+     */
+    if (class_id >= 8 || map_id < 0 || map_id >= 5) {
+        return 0;
+    }
+    const uint16_t cls = (uint16_t)kClassHpPerLevel[class_id];
+    const uint16_t mul = kTrainHpMul[map_id];
+    const uint16_t div = kTrainHpDiv[map_id];
+    if (div == 0) {
+        return 0;
+    }
+    const uint32_t prod = (uint32_t)cls * (uint32_t)mul;
+    uint16_t base = (uint16_t)(prod / (uint32_t)div);
+    const uint16_t rem = (uint16_t)(prod % (uint32_t)div);
+    /* 0x203FA: Cleric/Robber/Ninja skip the rem→+1 bump. */
+    if (rem != 0 && class_id != 3 && class_id != 5 && class_id != 6) {
+        base = (uint16_t)(base + 1);
+    }
+    /* 0x2042E: -$7F56(+$27) — same table walk as Rest SP @ 0x4442. */
+    uint8_t end_b = 0;
+    {
+        static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
+                                          60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
+        uint8_t bonus = 0xFD; /* −3 */
+        size_t i;
+        for (i = 0; i < sizeof(kThresh); ++i) {
+            if (endurance_current <= kThresh[i]) {
+                break;
+            }
+            ++bonus;
+        }
+        end_b = bonus;
+    }
+    if (end_b >= 0xF0) { /* 0x20444 */
+        end_b = 0;
+    }
+    return (int)base + (int)end_b;
 }
 
 int mm2_attr_bonus(int v)

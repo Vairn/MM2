@@ -43,12 +43,20 @@ import {
   formatEventScriptFlow,
 } from "./ui.js";
 import { runEventScript, runTileAmbientEncounter } from "./eventVm.js";
+import { promptSelectMember } from "./townServices.js";
 import {
   createSessionState,
   formatSessionPartyPanel,
   isTileCleared as sessionTileCleared,
   syncSessionGoldFromParty,
   sessionPartyGoldTotal,
+  sessionSearchPrepare,
+  sessionSearchDistribute,
+  sessionSearchOpenOrFind,
+  sessionSearchDetectMagic,
+  sessionSearchLeave,
+  sessionInteractionGate,
+  restoreEntryCoord,
 } from "./sessionState.js";
 import {
   SCREEN_W,
@@ -605,7 +613,7 @@ function waitForSpace(text, sprite = null, vmOp = null) {
 }
 
 function promptCombatResult(enc) {
-  const text = `${enc.heading}!\n\nPress V = victory (set combat latch)\nPress N = flee (abort script)`;
+  const text = `${enc.heading}!\n\nPress V = victory (set combat latch)\nPress N = flee (abort script)\nPress D = defeat wipe → entry_coord`;
   return new Promise((resolve) => {
     uiState = {
       type: "prompt",
@@ -824,6 +832,18 @@ function handleUIKey(ev) {
         draw();
         return true;
       }
+      if (ev.key.toLowerCase() === "d") {
+        /* combat_defeat_retreat @ 0x1164A — restore attrib entry_coord. */
+        restoreEntryCoord(state, maps.screens[state.screen]);
+        sessionInteractionGate(session, maps.screens[state.screen], state.x, state.y);
+        const resolve = uiState.resolve;
+        uiState = null;
+        uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+        statusEl.textContent = `Defeat wipe → entry ${tileLabel(state.x, state.y)}`;
+        resolve(false);
+        draw();
+        return true;
+      }
       if (ev.key.toLowerCase() === "n" || ev.code === "Space" || ev.key === "Escape") {
         const resolve = uiState.resolve;
         uiState = null;
@@ -993,6 +1013,69 @@ function currentScreenRec() {
   return maps?.screens?.[state.screen] ?? null;
 }
 
+function handleSearch() {
+  /* Key S @ 0x4800 → 0x1B19C Identify modal (0x1B3F2) when sentinel==0. */
+  const r = sessionSearchPrepare(session, (lo, hi) => exploreRng.range(lo, hi));
+  if (!r.needIdentify) {
+    statusEl.textContent = r.msg.replace(/\n/g, " ");
+    syncPartyEditorsFromSession();
+    draw();
+    return;
+  }
+  void (async () => {
+    let rating = r.rating | 0;
+    let msg = r.msg;
+    while (true) {
+      const k = await promptMenuKey(msg, "1234", null, 0x1b);
+      if (k == null || k === "4") {
+        sessionSearchLeave(session);
+        statusEl.textContent = "Left it.";
+        break;
+      }
+      if (k === "3") {
+        const det = sessionSearchDetectMagic(session, rating);
+        msg = `${det}\n1) Open  2) Find  3) Detect  4) Leave`;
+        continue;
+      }
+      if (k === "1" || k === "2") {
+        const slot = await promptSelectMember({
+          session,
+          promptMenuKey,
+        });
+        if (slot == null) {
+          msg = r.msg;
+          continue;
+        }
+        const open = sessionSearchOpenOrFind(
+          session,
+          slot,
+          rating,
+          k === "2",
+          (lo, hi) => exploreRng.range(lo, hi)
+        );
+        if (open.aborted) {
+          msg = r.msg;
+          continue;
+        }
+        const dist = sessionSearchDistribute(session);
+        statusEl.textContent = open.trapped
+          ? `Trap! ${open.trapDamage} damage. ${dist.msg.replace(/\n/g, " ")}`
+          : dist.msg.replace(/\n/g, " ");
+        break;
+      }
+    }
+    syncPartyEditorsFromSession();
+    draw();
+  })();
+}
+
+/** Main-loop auto-Search @ 0x1276 when -$794C == $FE. */
+function maybeAutoSearch() {
+  if ((session.foundItemSentinel | 0) !== 0xfe) return;
+  session.foundItemSentinel = 0xff;
+  handleSearch();
+}
+
 function handleBashDoor() {
   const sc = currentScreenRec();
   if (!sc || sc.outdoor) {
@@ -1100,6 +1183,8 @@ function applyMove(next) {
   state.x = next.x;
   state.y = next.y;
   session.combatVictory = false;
+  /* 0x53C0: refresh can't-see from live tile + light (Corak's Cave dark cells). */
+  sessionInteractionGate(session, maps.screens[state.screen], state.x, state.y);
   viewportOverlay = null;
   lastEventNotes = [];
   screenSelect.value = String(state.screen);
@@ -1337,6 +1422,8 @@ function bindControls() {
     if (handlePlayOverlayKey(ev)) return;
     if (isEventRunning) return;
 
+    maybeAutoSearch();
+
     if (playOverlay === "none" && !uiState) {
       if (ev.key.toLowerCase() === "q") {
         ev.preventDefault();
@@ -1365,10 +1452,13 @@ function bindControls() {
         stepForward();
         break;
       case "ArrowDown":
+        ev.preventDefault();
+        stepBackward();
+        break;
       case "s":
       case "S":
         ev.preventDefault();
-        stepBackward();
+        handleSearch();
         break;
       case "ArrowLeft":
       case "a":
@@ -1449,7 +1539,7 @@ async function init() {
   jumpEntry();
   syncAnimCache();
   startAnimLoop();
-  statusEl.textContent = `W/↑ forward · B bash · U unlock · Q quick ref · build ${BUILD_ID}`;
+  statusEl.textContent = `W/↑ forward · S search · B bash · U unlock · Q quick ref · build ${BUILD_ID}`;
 }
 
 init();

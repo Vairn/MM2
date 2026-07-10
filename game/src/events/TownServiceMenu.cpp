@@ -1,6 +1,10 @@
 #include "mm2/events/TownServiceMenu.h"
 #include "mm2/events/TownServiceTransactions.h"
 
+#include "mm2/CppStdCompat.h"
+
+#include "mm2_gamestate.h"
+
 namespace mm2::events {
 
 Mm2RosterRecord *townSvcMemberRecord(const TownServiceContext &ctx, int party_slot)
@@ -70,7 +74,8 @@ void townSvcRunTemple(ITownServiceUi &ui, const TownServiceContext &ctx)
             break;
         }
         case TempleOption::Donate: {
-            const TownSvcDonateResult r = townSvcTempleDonate(ctx.a4, *rec, ctx.map_id);
+            const TownSvcDonateResult r =
+                townSvcTempleDonate(ctx.a4, *rec, ctx.map_id, ctx.rng);
             if (!r.paid) {
                 ui.reportNotEnoughGold();
             } else {
@@ -245,130 +250,111 @@ void townSvcRunSmith(ITownServiceUi &ui, const TownServiceContext &ctx)
  * Pub / tavern tables and runner
  * -------------------------------------------------------------------------- */
 
-/* str.dat RUMOR pool (A4-$594E): per-town strings for option E "Listen for rumors".
- * The game init fills this table FIRST (40 strings = 8 per town × 5 towns).
- * Day-based selector (0x1c962) returns 0, 1, or 3; only pairs {0,1}, {2,3},
- * {6,7} are ever displayed.  Entries at index 4 and 5 are never shown. */
+/* tip-cipher C-strings after 40 pre-rumor fills (0x1D2B0/0x1D2EE via -$7DE2).
+ * Bank1 @ str.dat+$5BA (0x9666 / A4-$71E8[1]); day-pair {0,1}/{2,3}/{6,7}. */
 static const char *const kPubRumors[5][kPubRumorCount] = {
-    /* 0 Middlegate */
     {
         "Children at 0,15",
         "Goblets at 0,7",
         "Meal A, then C1 2,10",
         "Meal B, then C1 2,6",
-        "(unused)",                             /* index 4 – never shown */
-        "(unused)",                             /* index 5 – never shown */
+        "Time travel at",
+        "Pinehurst",
+        "Meal B, then A2",
+        "14,10",
+    },
+    {
+        "S7,1 B2 15,11",
         "Meal C, then C1 1,8",
         "'Murray's rejuvenates'",
-    },
-    /* 1 Atlantium */
-    {
         "Hirelings at 15,10",
-        "Cast C2,3 day 93\n   gain S9,3",
+        "Cast C2,3 day 93",
+        "gain S9,3",
         "Meal C-an experience",
-        "B2, day 140-170,\n     14,4",
-        "(unused)",
-        "(unused)",
+        "B2, day 140-170,",
+    },
+    {
+        "14,4",
+        "C3,6 C2 11,1",
+        "Lord Haart B1 5,5",
         "Meal B is a riot",
         "Mandagaul D2 6,8",
-    },
-    /* 2 Tundara */
-    {
         "The Gourmet A3 7,6",
         "C9,2 C1 south",
         "Meal C, 7,3-Sarakin",
+    },
+    {
         "See Nordon at 10,2",
-        "(unused)",
-        "(unused)",
+        "Donate at all",
+        "temples",
+        "Nordon has S2,1",
         "Meal C, then D1 2,7",
         "Hirelings at 0,14",
+        "Transmutations 8,8",
+        "the corners",
     },
-    /* 3 Vulcania */
     {
-        "Transmutations 8,8\nthe corners",
-        "Castle Xabran holds\nall clues",
+        "Castle Xabran holds",
+        "all clues",
         "Meal A, then C4 14,8",
         "C2,3 C3 1,9",
-        "(unused)",
-        "(unused)",
+        "Hoardall seeks items",
+        "Keys add castle gold",
         "Meal B, then C3 1,9",
         "Visit Dawn's, D4 3,7",
     },
-    /* 4 Sandsobar */
+};
+/* Linear 0x976E fill after rumors: town0 tips then drink/food chrome (ASM-faithful). */
+static const char *const kPubTips[5][kPubTipCount] = {
     {
         "Slayer seeks death",
         "S5,2 C1 1,8",
         "Meal C, then E1 2,3",
-        "Tavern drinks give a\nbonus",
-        "(unused)",
-        "(unused)",
+        "Tavern drinks give a",
+        "bonus",
+        "S3,6 7,4",
+        "Meal A, then 3,11",
         "Meal B, then E4 3,10",
-        "See Nordon at 10,2",
     },
-};
-
-/* str.dat TIP pool (A4-$58AE): per-town strings for option D "Tip the bartender".
- * The game init fills this table SECOND (40 more strings), AFTER the rumor table.
- * Same day-based selector as rumors; D costs 1 gold and only succeeds on a 1-in-N
- * RNG roll (N = char_attr_0x73 + 5).  Exact original strings are stored encoded
- * in the game binary (+0x1C cipher, blob @ A4-$77CE); these are approximations
- * from game guides until the decoder is ported.  Same {0,1}/{2,3}/{6,7} pair
- * scheme applies — indices 4 and 5 are never displayed. */
-static const char *const kPubTips[5][kPubTipCount] = {
-    /* 0 Middlegate */
     {
-        "S7,1 B2 15,11",
-        "Time travel at\n  Pinehurst",
-        "Lord Haart B1 5,5",
-        "C3 Jail - show your\nticket",
-        "(unused)",
-        "(unused)",
-        "Keys add castle gold",
-        "Nordon has S2,1",
+        "A) Orc Beer      - ",
+        "B) Straight shot - ",
+        "C) Id Elixir     - ",
+        "D) Academic Ale  - ",
+        "E) Rare Vintage  - ",
+        "F) Mystic Brew   - ",
+        "A) Horrors",
+        "d'oeuvres",
     },
-    /* 1 Atlantium */
     {
-        "C3,6 C2 11,1",
-        "Lord Haart B1 5,5",
-        "Hoardall seeks items",
-        "Keys add castle gold",
-        "(unused)",
-        "(unused)",
-        "Castle Xabran holds\nall clues",
-        "Donate at all\ntemples",
+        "B) Soup de Ghoul",
+        "w/garlic toast",
+        "C) Dragon Steak",
+        "Tartar",
+        "A) Lightly salted",
+        "tongue of toad",
+        "B) Puree of Gnome",
+        "C) Devils Food",
     },
-    /* 2 Tundara */
     {
-        "Nordon has S2,1",
-        "Donate at all\ntemples",
-        "Transmutations 8,8\nthe corners",
-        "C2,3 C3 1,9",
-        "(unused)",
-        "(unused)",
-        "Hirelings at 0,14",
-        "C9,2 C1 south",
+        "Brownie",
+        "A) Sizzling",
+        "Swine Soup",
+        "B) Red Hot Wolf",
+        "Nipple Chips",
+        "C) Roast Leg of",
+        "Wyvern",
+        "A) Pickled Pixie",
     },
-    /* 3 Vulcania */
     {
-        "Hoardall seeks items",
-        "Keys add castle gold",
-        "S3,6 7,4",
-        "Meal A, then 3,11",
-        "(unused)",
-        "(unused)",
-        "Slayer seeks death",
-        "S5,2 C1 1,8",
-    },
-    /* 4 Sandsobar */
-    {
-        "C2,3 C3 1,9",
-        "Hirelings at 15,10",
-        "Lord Haart B1 5,5",
-        "Meal A, then C4 14,8",
-        "(unused)",
-        "(unused)",
-        "S3,6 7,4",
-        "Meal A, then 3,11",
+        "Brains",
+        "B) Deep fried",
+        "Troll liver",
+        "C) Cream of",
+        "Kobold soup",
+        "A) Gourmet Dinner",
+        "B Wyrm Chop Suey",
+        "B) Roast Peasant",
     },
 };
 
@@ -466,8 +452,7 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
             break;
         }
         case TavernOption::Specialties: {
-            /* C @ 0x1CD2E — A4-$6760 pay + A4-$786C → +$76. Also run 0x18EC0
-             * encode onto party +$78 (selector 0xC9 leaf shares the meal index). */
+            /* C @ 0x1CD2E — A4-$6760 pay + (sick OR A4-$786C → +$76). No 0x18EC0. */
             int food = -1;
             if (ui.chooseTavernFood(ctx, data, food) && food >= 0 && food < kPubFoodOptions) {
                 int member = 0;
@@ -477,15 +462,6 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
                         const TownSvcSpecialtyResult r =
                             townSvcTavernSpecialty(*rec, ctx.map_id, food, ctx.rng);
                         ui.reportTavernSpecialty(r);
-                        /* 0x18EC0 encode is selector 0xC9, not 0x1CD2E. Remake
-                         * also writes +$78 on specialty buy so meal encoding is
-                         * visible without inventing FAQ tile coords; gold was
-                         * already taken via A4-$6760 above (encoder itself never
-                         * deducts). */
-                        if (r.paid) {
-                            (void)townSvcFoodEncodePurchase(ctx.roster, ctx.launch, food,
-                                                            ctx.rng);
-                        }
                     }
                 }
                 ui.reportTavernFood(ctx, food);
@@ -493,25 +469,68 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
             break;
         }
         case TavernOption::Tip: {
-            const char *tip = data.tips[0];
-            for (int i = 0; i < kPubTipCount; ++i) {
-                if (data.tips[i] && data.tips[i][0] && data.tips[i][0] != '(') {
-                    tip = data.tips[i];
-                    break;
-                }
+            /* D @ 0x1CFCA: member → 1gp + RNG + day-pair tips (0x1C962). */
+            int member = 0;
+            if (!ui.selectMember(ctx, member)) {
+                break;
             }
-            ui.reportTavernTip(ctx, tip);
+            Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
+            if (!rec) {
+                break;
+            }
+            const uint16_t day = ctx.a4 ? mm2_gs_day(ctx.a4, mm2_gs_u16(ctx.a4, MM2_GS_ERA)) : 1;
+            const TownSvcTipResult tip_r = townSvcTavernTip(*rec, day, ctx.rng);
+            if (!tip_r.ok) {
+                if (tip_r.reject == TownSvcTipReject::NotEnoughGold) {
+                    ui.reportNotEnoughGold();
+                } else if (tip_r.reject == TownSvcTipReject::NoTip) {
+                    ui.reportTavernTip(ctx, "Thank you -\nPlease come again");
+                }
+                break;
+            }
+            char tip_buf[160];
+            const int b = tip_r.pair_base;
+            const char *a = (b >= 0 && b < kPubTipCount) ? data.tips[b] : nullptr;
+            const char *c = (b + 1 < kPubTipCount) ? data.tips[b + 1] : nullptr;
+            if (a && c && a[0] && a[0] != '(' && c[0] && c[0] != '(') {
+                std::snprintf(tip_buf, sizeof(tip_buf), "%s\n%s", a, c);
+            } else if (a && a[0] && a[0] != '(') {
+                std::snprintf(tip_buf, sizeof(tip_buf), "%s", a);
+            } else {
+                std::snprintf(tip_buf, sizeof(tip_buf), "Thank you -\nPlease come again");
+            }
+            ui.reportTavernTip(ctx, tip_buf);
             break;
         }
         case TavernOption::Rumors: {
-            const char *rumor = data.rumors[0];
-            for (int i = 0; i < kPubRumorCount; ++i) {
-                if (data.rumors[i] && data.rumors[i][0] && data.rumors[i][0] != '(') {
-                    rumor = data.rumors[i];
-                    break;
-                }
+            /* E @ 0x1D0B4: cond gate + day-pair rumors (no gold). */
+            int member = 0;
+            if (!ui.selectMember(ctx, member)) {
+                break;
             }
-            ui.reportTavernRumor(ctx, rumor);
+            Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
+            if (!rec) {
+                break;
+            }
+            const uint16_t day = ctx.a4 ? mm2_gs_day(ctx.a4, mm2_gs_u16(ctx.a4, MM2_GS_ERA)) : 1;
+            const TownSvcTipResult rum_r = townSvcTavernRumor(*rec, day);
+            if (!rum_r.ok) {
+                break;
+            }
+            char rum_buf[160];
+            const int b = rum_r.pair_base;
+            const char *a = (b >= 0 && b < kPubRumorCount) ? data.rumors[b] : nullptr;
+            const char *c = (b + 1 < kPubRumorCount) ? data.rumors[b + 1] : nullptr;
+            if (a && c && a[0] && a[0] != '(' && c[0] && c[0] != '(') {
+                std::snprintf(rum_buf, sizeof(rum_buf), "%s\n%s", a, c);
+            } else if (a && a[0] && a[0] != '(') {
+                std::snprintf(rum_buf, sizeof(rum_buf), "%s", a);
+            } else {
+                rum_buf[0] = '\0';
+            }
+            if (rum_buf[0]) {
+                ui.reportTavernRumor(ctx, rum_buf);
+            }
             break;
         }
         case TavernOption::Exit:

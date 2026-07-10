@@ -264,7 +264,8 @@ void setupMember(Mm2RosterFile &roster, int idx, uint8_t level, uint32_t gold)
     rec.hp_current = 5;         /* current HP (record+0x74) */
     rec.might_base = 20;        /* record+0x6B */
     rec.class_id = 0;           /* Knight (XP Group A) — record+0x0F */
-    rec.endurance_base = 14;    /* attr bonus 1 (record+0x73) */
+    rec.endurance_base = 14;    /* +$73 — tip RNG / specialty sick */
+    rec.endurance_current = 14; /* +$27 — training HP -$7F56 @ 0x2042E */
     rec.experience = 0;         /* record+0x62 (callers set for level-up tests) */
 }
 
@@ -317,9 +318,10 @@ void testTownServiceTransactions(int &fails)
         expect(r.cost == 50u, "training fee = level*index*50 = 1*1*50 = 50", fails);
         expect(rec.gold == 9950u, "training deducts the fee from char gold", fails);
         expect(r.leveled && rec.level == 2, "Knight advanced from L1 to L2", fails);
-        /* Knight HP/level = 12 + END(14)->bonus 1 = 13 added to permanent max. */
-        expect(r.hp_gain == 13 && rec.hp_aux == 53, "level-up adds class HP + END bonus", fails);
-        expect(rec.hp_current == rec.hp_aux, "level-up heals to new max", fails);
+        /* Middlegate: (12*$64EE[0]=1)/$64E4[0]=2 → 6 + -$7F56(14)=1 → 7.
+         * Adds to +$60/+ $74/+ $5E (not replace-to-max). */
+        expect(r.hp_gain == 7 && rec.hp_aux == 47, "level-up HP @ 0x20390 Middlegate Knight", fails);
+        expect(rec.hp_current == 12 && rec.hp_max == 17, "level-up adds gain to current/work max", fails);
     }
 
     /* ---- Training XP gate: under threshold -> not eligible AND no charge. ---- */

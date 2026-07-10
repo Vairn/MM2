@@ -40,9 +40,8 @@ enum class MageGuildOption : uint8_t {
     Exit,
 };
 
-/* Training Hall menu (handler -$7D16). The hall levels the chosen character up
- * from experience (townSvcTrainLevelUp); there is no stat sub-menu. The exact
- * per-level HP RNG roll (0x9BCA) and calendar mode select (0x9B48) are deferred. */
+/* Training Hall menu (handler -$7D16). Levels up via townSvcTrainLevelUp;
+ * HP gain is ASM leaf 0x20390 (not 0x9BCA bash-door). */
 enum class TrainingOption : uint8_t {
     LevelUp = 0,
     Exit,

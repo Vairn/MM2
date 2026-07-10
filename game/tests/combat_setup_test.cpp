@@ -260,6 +260,10 @@ int main()
 
         setupParty(roster, launch, /*might=*/1, /*speed=*/1, /*hp=*/1);
         seedFixedEncounter(gs, 1);
+        /* 0x1164A: wipe restores from -$560C (attrib entry_coord via 0x923E). */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENTRY_COORD, 0x57); /* Middlegate (7,5) */
+        gs.setCoordX(3);
+        gs.setCoordY(9);
 
         CombatSession combat;
         combat.bindParty(&roster, &launch);
@@ -277,6 +281,8 @@ int main()
         expect(combat.lastOutcome() == CombatOutcome::Defeated, "defeat scenario: outcome == Defeated", fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 0,
                "defeat scenario: COMBAT_VICTORY_LATCH stays clear", fails);
+        expect(gs.coordX() == 7 && gs.coordY() == 5,
+               "defeat scenario: wipe restores entry_coord (7,5)", fails);
     }
 
     /* ---- Run: a zero-difficulty screen (attrib byte 0x0D == 0) always flees. */

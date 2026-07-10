@@ -744,11 +744,10 @@ only the buffer state). Documented here rather than stubbed with invented behavi
   presentation/audio only. Port: consume argc=1.
 - `OP_1E` `-$7BC0`→`0x22B4A` delay(10) + `-$7BD2`→`0x22586` input poll,
   `arg` iterations, break on key. Timing only. Port: consume argc=1 (no-op).
-- `OP_31` `-$7F08`→`0x4952` (per-member combat/spell damage field op —
-  deferred) + `-$7F14`→`0x47EC` (abort if `roster_count_living_chars` @
-  `0x47A2` is 0 → `SCRIPT_ABORT=1`). Port: `EXIT_FLAGS|=2` + living abort.
-
-Do not invent `0x4952` damage results without combat scratch context.
+- `OP_31` `-$7F08`→`0x4952` (per-member damage). OP_31 call site peals three
+  zero out-flags → AC/resist prologue skipped; HP path ported. Full combat
+  scratch branches unused here. Living abort `-$7F14`→`0x47EC` ported.
+  See doc 56 §3.
 
 ## Disassembly Alignment Check
 
@@ -885,8 +884,8 @@ incomplete; **Unknown** = behaviour not traced.
 | `0E` | Partial | Dispatch + default-range bins **Verified**. **Ported:** temple/training/smith/guild/tavern menus; **Feldecarb `0x0E`**; **Nordon `0x0A`**; **Nordonna `0x0B`**. **Partial:** tavern food/drink RNG, store `0xA62C`, inn hireling unlock, guild enroll edges. Inn rest = world Rest (`0x19E20`), not OP_0E `0x01` (registry) |
 | `0F` | Verified | End script / cleanup `0x171AC` |
 | `10`/`11` | Verified | Conditional token skip; full `-$6CC8` length table now extracted byte-exact and ported (`eventVmTokenDelta`, includes the `OP_00`/`OP_25` ROM quirks — see §Notes on `*_SKIPTOK` Opcodes) |
-| `12` | Verified | 10 monster ids → `A4-$11DE`; mode=0x80; **tail1=`-$11D4` overflow/breed type, tail2=`-$77BE` live count** (see §OP_12/13). Combat run (`-$7EDE`) is unported engine |
-| `13` | Verified | Same setup, mode=0 (seeded-random); clears tail fields; random picker `0x1213E` augments |
+| `12` | Verified* | 10 monster ids → `A4-$11DE`; mode=0x80; **tail1=`-$11D4` overflow/breed type, tail2=`-$77BE` live count**. Setup + `CombatSession::enter` ported; *fight-depth Partial (doc 35 / doc 56 §4) |
+| `13` | Verified* | Same setup, mode=0 (seeded-random); clears tail fields; random picker `0x1213E` ported in `encounterRunRandomPicker`. *Same fight-depth gap as OP_12 |
 | `14` | Verified | Clear tile event / visited bit7 |
 | `15` | Verified | Party field test @ `0x16426`: member-spec 0=all (N..1), 1..8=one, 9=selected (`-$5D42`/`-$5D3F`); cond \|= (val? field&val : field). Field map via `0x17766` |
 | `16` | Verified | Party item-presence scan (arg1 discarded, arg2 = item id). Behavior byte-exact; port now scans `rec[0x28+m]`/`rec[0x3A+m]` (m=0..5) over party. NOTE: the 6-byte stride-1 read implies equipped/backpack store **6 item-ids contiguously** (SoA), not the interleaved id/bonus/flags the roster struct currently models — flagged for the roster team |
@@ -908,13 +907,13 @@ incomplete; **Unknown** = behaviour not traced.
 | `28` | Verified | Backpack-only consume (`+$3A`); 1st arg discarded; always consumes on hit → cond |
 | `29` | Verified | Force script abort |
 | `2A` | Verified | 14-byte treasure/reward block (u24 gold/exp, u16 gems, 3× id/charges/flags triplets). Fills the found-item buffer (`A4-$3F10` gold / `-$3F12` gems / `-$3F1C`-`-$3F19`-`-$3F16` items) + sentinel `A4-$794C=$FF`, byte-exact via `mm2_found_items_op2a_fill`. Does NOT distribute to the party (that is the deferred Search payoff `0x1B19C`); the old port's immediate member-0 deposit was a fabrication and was removed. See §Found-item / treasure buffer |
-| `2B` | Verified | Token skip only when `A4-$77BD` (combat-victory latch) set; ASM-traced byte-exact @ `0x16D74` (reads `u8` count via `0x155BE`, tests latch, `jsr $157FC`). Port never itself *sets* the latch (no combat engine yet — same gap as OP_12/13) |
+| `2B` | Verified | Token skip only when `A4-$77BD` (combat-victory latch) set; ASM-traced byte-exact @ `0x16D74`. Latch set by `CombatSession::finishVictory` @ `0x12438` (not by the opcode itself) |
 | `2C` | Verified | Add `u8` to word `-$79B8`; `EXIT_FLAGS \|= 1` |
 | `2D` | Verified | Match party class/sex/race nibble (any/all mode); 2-value variant when arg1 has no high bits |
 | `2E` | Verified | OR arg2 into member `+(arg1-0x6E)+0x51` for two specific classes ({4,2}/{3,1}) |
 | `2F` | Verified | **Not a silent clear** — `0x16FEA` calls `-$7F92` to read up to 10 chars into `-$5C50`, space-pads remainder, clears `-$5C46`. Port: `EventVmWait::Answer` fills the buffer then resumes |
 | `30` | Verified | 10-byte compare: `toupper(input[i])` vs `(0x11A - expected[i])` for i=0..9; cond=1 iff all match. Port byte-exact |
-| `31` | Partial | Sets `EXIT_FLAGS` bit1 (ported); `-$7F14`→`0x47EC` living-party abort (ported: `SCRIPT_ABORT` when `(+$26&$E0)!=0` for all). Per-member `-$7F08`→`0x4952` combat/spell damage **deferred**. argc=3 |
+| `31` | Partial | Sets `EXIT_FLAGS` bit1; living abort `-$7F14`→`0x47EC` ported. Per-member `-$7F08`→`0x4952`: OP_31 peals three **zero** out-flags so AC/resist prologue is skipped — HP path (`+$26`/`+$5E`) ported. Full AC/RNG branches unused by this opcode. Spec `9` = selected (`0x1710A`); **not** spec `8`. argc=3 |
 | `32` | Verified | cond = party class-nibble count (`0x04614`/`0x45C4`, not a var load) |
 
 **Overlay locations 60–70** (see `event_location_inventory.json`): most are

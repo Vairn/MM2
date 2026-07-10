@@ -2,7 +2,7 @@
 "use strict";
 
 import { MAGE_GUILD_MEMBER_MASK } from "./townTables.js";
-import { resolveMemberFieldOffset } from "./eventFieldMap.js";
+import { resolveMemberFieldOffset, resolveMemberField } from "./eventFieldMap.js";
 
 const TOWN_TRAIN_INDEX = { 0: 1, 1: 5, 2: 2, 3: 4, 4: 2 };
 const DONATION_GOLD = { 0: 20, 1: 250, 2: 40, 3: 120, 4: 40 };
@@ -89,37 +89,112 @@ export function memberGuildMember(member, mapId) {
   return mask !== 0 && ((member.classQuestGuildMask ?? 0) & mask) !== 0;
 }
 
+/** Named roster fields keyed by Amiga record offset (Mm2RosterRecord). */
+const NAMED_U8 = {
+  0x0b: "homeTown",
+  0x0c: "sex",
+  0x0e: "race",
+  0x0f: "classId",
+  0x10: "might",
+  0x11: "intelligence",
+  0x12: "personality",
+  0x13: "speed",
+  0x14: "accuracy",
+  0x15: "luck",
+  0x16: "thievery",
+  0x21: "age",
+  0x24: "armorClass",
+  0x25: "food",
+  0x26: "condition",
+  0x27: "endurance",
+  0x50: "skillPack",
+  0x6d: "personality",
+  0x6e: "speed",
+  0x6f: "accuracy",
+  0x70: "luck",
+  0x71: "level",
+  0x72: "spellLevel",
+  0x73: "endurance",
+  0x79: "classQuestGuildMask",
+};
+
+const NAMED_WIDE = {
+  0x58: { key: "spMax", width: 2 },
+  0x5a: { key: "spCurrent", width: 2 },
+  0x5c: { key: "gems", width: 2 },
+  0x5e: { key: "hpMax", width: 2 },
+  0x60: { key: "hpAux", width: 2 },
+  0x62: { key: "experience", width: 4 },
+  0x66: { key: "gold", width: 4 },
+  0x74: { key: "hpCurrent", width: 2 },
+};
+
 /** Read a roster record byte by offset (mirrors eventVmApplyPartyByteOp field access). */
 export function getMemberFieldByte(member, offset) {
-  switch (offset) {
-    case 0x0b:
-      return member.homeTown ?? 0;
-    case 0x50:
-      return member.skillPack ?? 0;
-    case 0x79:
-      return member.classQuestGuildMask ?? 0;
-    default:
-      if (!member.rawFields) member.rawFields = {};
-      return member.rawFields[offset] ?? 0;
+  const wide = NAMED_WIDE[offset];
+  if (wide) return (member[wide.key] ?? 0) & 0xff;
+  /* Mid-byte of a wide field (e.g. gold+1). */
+  for (const [base, info] of Object.entries(NAMED_WIDE)) {
+    const b = Number(base);
+    if (offset > b && offset < b + info.width) {
+      const shift = (offset - b) * 8;
+      return ((member[info.key] ?? 0) >>> shift) & 0xff;
+    }
   }
+  const key = NAMED_U8[offset];
+  if (key) return (member[key] ?? 0) & 0xff;
+  if (!member.rawFields) member.rawFields = {};
+  return member.rawFields[offset] ?? 0;
 }
 
 /** Write a roster record byte by offset (full byte replace @ 0x1A1D0 for home town). */
 export function setMemberFieldByte(member, offset, value) {
   const v = value & 0xff;
-  switch (offset) {
-    case 0x0b:
-      member.homeTown = v;
+  for (const [base, info] of Object.entries(NAMED_WIDE)) {
+    const b = Number(base);
+    if (offset >= b && offset < b + info.width) {
+      const shift = (offset - b) * 8;
+      const cur = (member[info.key] ?? 0) >>> 0;
+      member[info.key] = (cur & ~(0xff << shift)) | (v << shift);
       return;
-    case 0x50:
-      member.skillPack = v;
-      return;
-    case 0x79:
-      member.classQuestGuildMask = v;
-      return;
-    default:
-      if (!member.rawFields) member.rawFields = {};
-      member.rawFields[offset] = v;
+    }
+  }
+  const key = NAMED_U8[offset];
+  if (key) {
+    member[key] = v;
+    return;
+  }
+  if (!member.rawFields) member.rawFields = {};
+  member.rawFields[offset] = v;
+}
+
+/** Load LE multi-byte field at record offset (width 1/2/4). */
+export function getMemberFieldValue(member, offset, width) {
+  const info = NAMED_WIDE[offset];
+  if (info && width === info.width) return (member[info.key] ?? 0) >>> 0;
+  let v = 0;
+  const w = width || 1;
+  for (let i = 0; i < w; i++) {
+    v |= (getMemberFieldByte(member, offset + i) & 0xff) << (8 * i);
+  }
+  return v >>> 0;
+}
+
+/** Store LE multi-byte value; write_bytes may exceed natural width (ASM width_op @ 0x168CA). */
+export function setMemberFieldValue(member, offset, value, writeBytes) {
+  const n = Math.min(4, Math.max(0, writeBytes | 0));
+  const v = value >>> 0;
+  const info = NAMED_WIDE[offset];
+  if (info && n >= info.width) {
+    member[info.key] = info.width === 2 ? v & 0xffff : v;
+    /* If width_op writes past natural width, spill into following bytes. */
+    for (let i = info.width; i < n; i++) {
+      setMemberFieldByte(member, offset + i, (v >>> (8 * i)) & 0xff);
+    }
+    return;
+  }
+  for (let i = 0; i < n; i++) {
+    setMemberFieldByte(member, offset + i, (v >>> (8 * i)) & 0xff);
   }
 }
 
@@ -419,6 +494,8 @@ export function createSessionState(overrides = {}) {
     partyCount: party.length,
     cond: 0,
     combatVictory: false,
+    cantSeeFlag: 0, /* A4-$79E1 — OP_04/05/06 draw gate */
+    lightFactor: 0, /* A4-$79AB — Light / Lasting Light */
     scriptCounter: 0,
     flags: {},
     partyFields: { 0x76: 0x01 },
@@ -427,6 +504,9 @@ export function createSessionState(overrides = {}) {
     questDonationBits: 0,
     selectedMember: 0,
     foundItemBuffer: null,
+    foundItemSentinel: 0, /* A4-$794C: 0 / $FE pending / $FF filled */
+    posChangedLatch: 0, /* A4-$79E4 — Search @ 0x1B1B0 clears */
+    exitFlags: 0, /* A4-$7950 — Search short path sets 3 @ 0x1B4D4 */
     inputBuffer: "",
     titleNibbleCount: 0,
     ...rest,
@@ -594,32 +674,252 @@ export function sessionApplyPartyByteOp(
   return masked;
 }
 
-/** OP_1F / OP_20 gold or HP on stub party. */
+/** OP_1F / OP_20 @ 0x1690E → 0x167B0: field-map arithmetic + width_op writeback.
+ * Script layout (6 bytes): [member_spec][selector][width_op][value:3 LE]. */
 export function sessionApplyPartyEffect(session, args, subtract = false) {
-  const selector = args[0] ?? 0;
-  const value24 = (args[2] ?? 0) | ((args[3] ?? 0) << 8) | ((args[4] ?? 0) << 16);
+  let memberSpec = (args[0] ?? 0) & 0xff;
+  const selector = (args[1] ?? 0) & 0xff;
+  const widthOp = (args[2] ?? 0) & 0xff;
+  let value24 = ((args[3] ?? 0) | ((args[4] ?? 0) << 8) | ((args[5] ?? 0) << 16)) >>> 0;
+  const field = resolveMemberField(selector);
+  if (!field) {
+    session.cond = 1;
+    return;
+  }
+
+  const party = ensureParty(session);
+  const partyN = party.length;
+  const incomingCond = session.cond & 0xff;
+
+  if (memberSpec & 0x80) {
+    memberSpec &= 0x7f;
+    value24 = incomingCond;
+  }
+  if (memberSpec === 9) {
+    const slot = (session.selectedMember ?? 0) + 1;
+    memberSpec = slot >= 1 && slot <= partyN ? slot : incomingCond;
+  }
+
   session.cond = 1;
-  if (selector === 0x3c || selector === 0x3d) {
-    const amount = value24 & 0xffffffff;
+  if (memberSpec > partyN) return;
+
+  const amountMask = field.width === 4 ? 0xffffffff : field.width === 2 ? 0xffff : 0xff;
+  const amount = value24 & amountMask;
+  const writeBytes = widthOp === 3 ? 4 : widthOp;
+  const cap = amountMask;
+
+  const applyOne = (member) => {
+    if (!member) return;
+    const cur = getMemberFieldValue(member, field.offset, field.width) >>> 0;
+    let next;
     if (subtract) {
-      if (!sessionDeductGold(session, amount)) {
+      if (cur < amount) {
         session.cond = 0;
         return;
       }
+      next = cur - amount;
     } else {
-      sessionAddGold(session, amount);
+      const sum = cur + amount;
+      next = sum > cap ? cap : sum;
     }
-    return;
+    if (session.cond !== 0) {
+      setMemberFieldValue(member, field.offset, next, writeBytes);
+    }
+  };
+
+  if (memberSpec === 0) {
+    for (let i = 0; i < partyN; i++) applyOne(party[i]);
+  } else {
+    applyOne(party[memberSpec - 1]);
   }
-  if (selector === 0x02 || selector === 0x03) {
-    const amount = value24 & 0xff;
-    if (subtract) {
-      if (session.hp < amount) session.cond = 0;
-      else session.hp -= amount;
-    } else {
-      session.hp = Math.min(session.maxHp, session.hp + amount);
+  syncSessionGoldFromParty(session);
+  if (party[0]) {
+    session.hp = party[0].hpCurrent ?? session.hp;
+    session.maxHp = party[0].hpMax ?? session.maxHp;
+  }
+}
+
+/**
+ * Search @ 0x4800 → 0x1B19C.
+ * Sentinel==0 long path: rate + Identify menu (host '1'..'4'); else distribute.
+ * @returns {{ok:boolean, msg:string, needIdentify?:boolean, rating?:number}}
+ */
+export function sessionSearchPrepare(session, rngRoll) {
+  session.posChangedLatch = 0;
+  const buf = session.foundItemBuffer;
+  const hasLoot =
+    buf &&
+    ((buf.gold | 0) !== 0 ||
+      (buf.gems | 0) !== 0 ||
+      (Array.isArray(buf.items) && buf.items.some((it) => (it?.id | 0) !== 0)) ||
+      (buf.id | 0) !== 0);
+  if (!hasLoot) {
+    return { ok: false, msg: "Nothing Here!" };
+  }
+
+  const sent0 = session.foundItemSentinel | 0;
+  if (sent0 === 0) {
+    let score = 0;
+    const gold = buf.gold | 0;
+    for (let i = 0; i < 3; i++) {
+      if (((gold >> (i * 8)) & 0xff) !== 0) score++;
+    }
+    const gems = buf.gems | 0;
+    if ((gems & 0xff) !== 0) score++;
+    if (((gems >> 8) & 0xff) !== 0) score++;
+    if (score === 0) score = 1;
+    let maxFlag = 0;
+    for (const it of Array.isArray(buf.items) ? buf.items : []) {
+      const f = (it?.flags | 0) & 0x3f;
+      if (f > maxFlag) maxFlag = f;
+    }
+    if (maxFlag > 1) score++;
+    score += maxFlag >> 2;
+    if (score > 8) score = 8;
+    /* 0x1B270: if score<4, rng(1,100); >=$1E → use roll else 0. */
+    let rating = score;
+    if (score < 4) {
+      const roll = typeof rngRoll === "function" ? rngRoll(1, 100) : 1;
+      rating = roll >= 0x1e ? roll & 0xff : 0;
+    }
+    session.exitFlags = 7;
+    session.posChangedLatch = 1;
+    return {
+      ok: true,
+      needIdentify: true,
+      rating,
+      msg:
+        `The Party Has found:\nTreasure!\n(rating ${rating})\n` +
+        "1) Open It  2) Find Trap\n3) Detect Magic  4) Leave",
+    };
+  }
+
+  return sessionSearchDistribute(session);
+}
+
+/** Distribute @ 0x1AC94 after Open/Find. */
+export function sessionSearchDistribute(session) {
+  const buf = session.foundItemBuffer;
+  if (!buf) {
+    return { ok: false, msg: "Nothing Here!" };
+  }
+
+  /* 0x1B4A4: non-$FF sentinel folds into id[0]. */
+  const sent = session.foundItemSentinel | 0;
+  if (sent !== 0 && sent !== 0xff) {
+    if (!Array.isArray(buf.items)) buf.items = [];
+    if (!buf.items[0]?.id) {
+      buf.items[0] = { id: sent & 0xff, charges: 0, flags: 0 };
     }
   }
+  session.foundItemSentinel = 0;
+
+  const party = ensureParty(session);
+  const slots = session.rosterSlots || party.map((_, i) => i);
+  const partyN = party.length > 0 ? party.length : 1;
+
+  let goldDiv = 0;
+  for (let i = 0; i < partyN; i++) {
+    if ((slots[i] | 0) < 0x18) goldDiv++;
+  }
+  if (goldDiv <= 0) goldDiv = 1;
+
+  const gold = (buf.gold | 0) >>> 0;
+  const goldEach = Math.floor(gold / goldDiv);
+  const gems = (buf.gems | 0) & 0xffff;
+  const gemsEach = Math.floor(gems / partyN);
+
+  buf.gold = 0;
+  buf.gems = 0;
+  session.foundOverflowLatch = 0;
+
+  for (let i = 0; i < partyN; i++) {
+    const m = party[i];
+    if (!m) continue;
+    m.gems = ((m.gems | 0) + gemsEach) & 0xffff;
+    if ((slots[i] | 0) < 0x18) m.gold = ((m.gold | 0) + goldEach) >>> 0;
+  }
+
+  const items = Array.isArray(buf.items) ? buf.items : [];
+  const remaining = [];
+  let overflow = false;
+  for (const it of items) {
+    if (!it?.id) continue;
+    let placed = false;
+    for (const m of party) {
+      const slot = memberBackpackFreeSlot(m);
+      if (slot >= 0) {
+        memberGiveItem(m, it.id, it.charges | 0, it.flags | 0);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      remaining.push(it);
+      session.foundOverflowLatch = (session.foundOverflowLatch | 0) + 1;
+      session.foundItemSentinel = 0xff;
+      overflow = true;
+    }
+  }
+
+  if (remaining.length > 0) {
+    session.foundItemBuffer = { gold: 0, gems: 0, items: remaining };
+  } else {
+    session.foundItemBuffer = null;
+    if (!overflow) session.foundItemSentinel = 0;
+  }
+  syncSessionGoldFromParty(session);
+  session.gems = party.reduce((s, m) => s + (m.gems | 0), 0);
+  session.exitFlags = 3;
+  session.posChangedLatch = 0;
+  return { ok: true, msg: "It Opens!\nThe Party Has found:\nTreasure!" };
+}
+
+/** @deprecated prefer sessionSearchPrepare */
+export function sessionSearchPayoff(session) {
+  const r = sessionSearchPrepare(session);
+  if (r.needIdentify) {
+    return sessionSearchDistribute(session);
+  }
+  return r;
+}
+
+/** Open/Find @ 0x1AEC2 / 0x1AF6E — thievery vs rng(1,100); trap dmg rating*2+4. */
+export function sessionSearchOpenOrFind(session, partySlot, rating, findTraps, rngRoll) {
+  const party = ensureParty(session);
+  const m = party[partySlot | 0];
+  if (!m) return { aborted: true, opened: false, trapped: false, trapDamage: 0 };
+  if (((m.condition | 0) & 0xf0) !== 0) {
+    return { aborted: true, opened: false, trapped: false, trapDamage: 0 };
+  }
+  const thievery = m.thievery | 0;
+  const roll = typeof rngRoll === "function" ? rngRoll(1, 100) : 1;
+  const fail = roll <= 0x60 && roll > thievery;
+  let trapped = false;
+  let trapDamage = 0;
+  if (fail && (rating | 0) !== 0) {
+    trapped = true;
+    trapDamage = ((rating | 0) * 2 + 4) & 0xffff;
+    m.hpCurrent = Math.max(0, (m.hpCurrent | 0) - trapDamage);
+  }
+  void findTraps;
+  return { aborted: false, opened: true, trapped, trapDamage };
+}
+
+export function sessionSearchDetectMagic(session, rating) {
+  const buf = session.foundItemBuffer;
+  let n = 0;
+  for (const it of Array.isArray(buf?.items) ? buf.items : []) {
+    if ((it?.flags | 0) !== 0 || (it?.charges | 0) !== 0) n++;
+  }
+  const mag = n !== 0 ? "Yes" : "No";
+  const trap = (rating | 0) !== 0 ? "Yes" : "No";
+  return `Contents magical (${mag}), has trap (${trap})`;
+}
+
+export function sessionSearchLeave(session) {
+  session.posChangedLatch = 0;
+  session.exitFlags = 7;
 }
 
 export function sessionPartyGemsTotal(session) {
@@ -676,6 +976,40 @@ export function sessionClearTileFlag(session, screenId, x, y, maps) {
   if (sc?.collision && pos >= 0 && pos < sc.collision.length) {
     sc.collision[pos] = sc.collision[pos] & ~0x80;
   }
+}
+
+/**
+ * session_interaction_gate darkness leaf @ 0x53C0..0x53E8.
+ * clr cantSee; if light==0 and (attrib flags>=0x80 or collision bit5) → set.
+ * @param {object} session
+ * @param {object | null | undefined} screen maps.screens[id]
+ * @param {number} x
+ * @param {number} y
+ */
+export function sessionInteractionGate(session, screen, x, y) {
+  session.cantSeeFlag = 0;
+  if ((session.lightFactor | 0) !== 0) return;
+  const flags1A = screen?.flags1A ?? screen?.attribFlags ?? 0;
+  if ((flags1A & 0xff) >= 0x80) {
+    session.cantSeeFlag = 1;
+    return;
+  }
+  const pos = ((y & 0x0f) << 4) | (x & 0x0f);
+  const cell = screen?.collision?.[pos] ?? 0;
+  if ((cell & 0x20) !== 0) {
+    session.cantSeeFlag = 1;
+  }
+}
+
+/**
+ * combat_defeat_retreat @ 0x1164A: restore party XY from attrib entry_coord.
+ * @param {object} state walker {x,y,screen}
+ * @param {object | null | undefined} screen
+ */
+export function restoreEntryCoord(state, screen) {
+  if (!screen?.entry) return;
+  state.x = screen.entry[0] & 0x0f;
+  state.y = screen.entry[1] & 0x0f;
 }
 
 export function isTileCleared(session, screenId, pos) {

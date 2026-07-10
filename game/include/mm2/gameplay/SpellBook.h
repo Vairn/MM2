@@ -66,13 +66,21 @@ inline int spellFlatFromLevelNumber(int level, int number)
     return static_cast<int>(kSpellLevelBase[level - 1]) + (number - 1);
 }
 
-/** Retail dispatch code: sorcerer/archer keep 0..47; cleric/paladin add $30 (0x79EE). */
+/** Retail picker return (0x79EE): sorc/archer = flat0; cleric/paladin = flat0+$30.
+ *  $CFF8 then does `subq.l #2,d0` before the sparse table; $CDB8 indexes as-is. */
 inline int spellDispatchCode(SpellSchool school, int flat0)
 {
     if (flat0 < 0 || flat0 >= kSpellsPerSchool) {
         return -1;
     }
     return (school == SpellSchool::Cleric) ? (flat0 + 0x30) : flat0;
+}
+
+/** $CFF8 sparse index after subq #2 (Energy Blast flat2 → code0 → stub $B66C). */
+inline int spellCff8SparseCode(SpellSchool school, int flat0)
+{
+    const int picker = spellDispatchCode(school, flat0);
+    return (picker >= 2) ? (picker - 2) : -1;
 }
 
 // Record offset of the spell-book bitfield ($51) relative to the codec's

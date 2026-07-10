@@ -1,7 +1,12 @@
 #include "mm2/gameplay/Movement.h"
 
 #include "mm2/events/EventVmHelpers.h"
+#include "mm2_attrib_codec.h"
 #include "mm2_map_codec.h"
+#include "mm2_party_launch.h"
+#include "mm2_roster_codec.h"
+
+#include <cstddef>
 
 namespace mm2::gameplay {
 
@@ -102,11 +107,32 @@ bool resolveScreenEdge(world::MapWorld &world, GameStateView &gs, int *x, int *y
     return true;
 }
 
+/* Party aging @ 0x6988 (called from day rollover @ 0x6A3E):
+ * for each party slot: ++record+$22; if >= $B5 → ++$21 and $22=1. */
+void agePartyOnDayRollover(Mm2RosterFile *roster, const Mm2PartyLaunch *launch)
+{
+    if (!roster || !launch) {
+        return;
+    }
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch->roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        auto *raw = reinterpret_cast<uint8_t *>(&roster->records[idx]);
+        raw[0x22] = static_cast<uint8_t>(raw[0x22] + 1);
+        if (raw[0x22] >= 0xB5) {
+            raw[0x21] = static_cast<uint8_t>(raw[0x21] + 1);
+            raw[0x22] = 1;
+        }
+    }
+}
+
 /* Day rollover @ 0x6A06: once subday reaches one full day (0x100), advance the
  * per-era calendar and fold subday back into [0,0x100). Shared by the per-step
  * tick (n=1) and the multi-tick advance (Rest n=0x55). Arithmetic mirrors the
  * ASM exactly. */
-void applyDayRollover(GameStateView &gs)
+void applyDayRollover(GameStateView &gs, Mm2RosterFile *roster, const Mm2PartyLaunch *launch)
 {
     uint8_t *a4 = gs.a4();
     uint16_t subday = mm2_gs_u16(a4, MM2_GS_TIME_SUBDAY);
@@ -132,9 +158,8 @@ void applyDayRollover(GameStateView &gs)
     subday = static_cast<uint16_t>(subday % 0x100);
     mm2_gs_set_u16(a4, MM2_GS_TIME_SUBDAY, subday);
 
-    /* DEFER: per-party-member aging @ 0x6988 (jsr $6988): increments each
-     * roster member's age-day byte (record +$22), rolling to ++age-year
-     * (+$21) at >=0xB5. Needs roster-record access (owned elsewhere). */
+    /* 0x6A3E: jsr 0x6988 — age every party member. */
+    agePartyOnDayRollover(roster, launch);
 
     /* 006a42/4a/52: period-flag clears at day 60 / 120 / 180. */
     if (day == 60 || day == 120 || day == 180) {
@@ -158,7 +183,8 @@ void applyDayRollover(GameStateView &gs)
 
 }  // namespace
 
-void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest)
+void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest, Mm2RosterFile *roster,
+                       const Mm2PartyLaunch *launch)
 {
     /* time_tick @ 0x69DC(n=1): subday += n; dark tile drains light when -$79AB > 0. */
     uint16_t subday = mm2_gs_u16(gs.a4(), MM2_GS_TIME_SUBDAY);
@@ -174,10 +200,11 @@ void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest)
         }
     }
 
-    applyDayRollover(gs);
+    applyDayRollover(gs, roster, launch);
 }
 
-void advanceTimeTick(GameStateView &gs, uint16_t n)
+void advanceTimeTick(GameStateView &gs, uint16_t n, Mm2RosterFile *roster,
+                     const Mm2PartyLaunch *launch)
 {
     /* time_tick @ 0x69DC(n!=1): subday += n then day rollover. The light-drain
      * (0069e8) and date-redraw (006abe) branches are gated on n==1, so a Rest
@@ -185,7 +212,68 @@ void advanceTimeTick(GameStateView &gs, uint16_t n)
     uint16_t subday = mm2_gs_u16(gs.a4(), MM2_GS_TIME_SUBDAY);
     subday = static_cast<uint16_t>(subday + n);
     mm2_gs_set_u16(gs.a4(), MM2_GS_TIME_SUBDAY, subday);
-    applyDayRollover(gs);
+    applyDayRollover(gs, roster, launch);
+}
+
+void materializeScreenAttrib(GameStateView &gs, const world::MapWorld &world)
+{
+    /* 0x923E: copy attrib.dat[screen]*64 → A4-$561A. */
+    if (!gs.valid() || !world.loaded()) {
+        return;
+    }
+    const Mm2AttribRecord &rec = world.attrib();
+    uint8_t *a4 = gs.a4();
+    for (int i = 0; i < MM2_ATTRIB_RECORD_SIZE; ++i) {
+        mm2_gs_set_u8(a4, MM2_GS_ATTRIB_BUF + i, rec.raw[i]);
+    }
+}
+
+void syncCurrentCellFlags(GameStateView &gs, const world::MapWorld &world)
+{
+    /* 0x1B1C: collision[(y<<4)|x] → -$55D6 (current-cell byte). */
+    if (!gs.valid() || !world.loaded()) {
+        return;
+    }
+    const uint8_t cell = world.collisionAt(static_cast<int>(gs.coordX()), static_cast<int>(gs.coordY()));
+    mm2_gs_set_u8(gs.a4(), MM2_GS_TILE_RT_FLAGS, cell);
+}
+
+void sessionInteractionGate(GameStateView &gs)
+{
+    /* Darkness leaf of session_interaction_gate @ 0x53C0..0x53E8. */
+    if (!gs.valid()) {
+        return;
+    }
+    uint8_t *a4 = gs.a4();
+    mm2_gs_set_u8(a4, MM2_GS_CANT_SEE_FLAG, 0); /* 0x53C0 */
+    if (mm2_gs_u8(a4, MM2_GS_LIGHT_FACTOR) != 0) { /* 0x53C4: light suppresses */
+        return;
+    }
+    /* 0x53CA: -$5600 (attrib flags 0x1A) >= $80 → can't-see. */
+    if (mm2_gs_u8(a4, MM2_GS_ATTRIB_FLAGS) >= 0x80) {
+        mm2_gs_set_u8(a4, MM2_GS_CANT_SEE_FLAG, 1); /* 0x53D6 */
+        return;
+    }
+    /* 0x53DC: btst #5,-$55D6 (S-dark on current collision cell). */
+    if ((mm2_gs_u8(a4, MM2_GS_TILE_RT_FLAGS) & 0x20) != 0) {
+        mm2_gs_set_u8(a4, MM2_GS_CANT_SEE_FLAG, 1); /* 0x53E4 */
+    }
+}
+
+uint8_t restSpellBonusFactor(uint8_t attr)
+{
+    /* 0x4442: walk A4-$7486 thresholds; start bonus=$FD (−3 signed), addq per miss.
+     * Return value is the unsigned byte used at 0x19C74 before addq #3. */
+    static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
+                                      60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
+    uint8_t bonus = 0xFD; /* −3 */
+    for (size_t i = 0; i < sizeof(kThresh); ++i) {
+        if (attr <= kThresh[i]) {
+            break;
+        }
+        ++bonus;
+    }
+    return bonus;
 }
 
 MoveResult turn(world::MapWorld &world, GameStateView &gs, bool right_cw)
@@ -204,7 +292,8 @@ MoveResult turn(world::MapWorld &world, GameStateView &gs, bool right_cw)
     return r;
 }
 
-MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward)
+MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward, Mm2RosterFile *roster,
+                const Mm2PartyLaunch *launch)
 {
     MoveResult r{};
     if (!gs.valid()) {
@@ -252,8 +341,10 @@ MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward)
     }
 
     const uint8_t dest_cell = collisionAt(world, tx, ty);
-    applyStepTimeTick(gs, dest_cell);
+    applyStepTimeTick(gs, dest_cell, roster, launch);
     events::eventVmTickSpellEyeOnStep(gs.a4(), world.isOutdoor());
+    /* Hood refresh @ 0x1B1C latches the destination collision into -$55D6. */
+    syncCurrentCellFlags(gs, world);
 
     r.acted = true;
     r.moved = true;

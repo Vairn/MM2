@@ -20,6 +20,7 @@ import {
   sessionCountPartyItem,
   sessionCountPartyNibbleMatches,
   sessionCountLivingPartyMembers,
+  sessionSearchPayoff,
   syncSessionGoldFromParty,
   getPartyMember,
   ensureParty,
@@ -37,6 +38,8 @@ import {
   runArenaTicketSelector,
   promptSelectMember,
   svcGeneralStoreConvert,
+  svcApplyDrinkEncoding,
+  svcApplyFoodEncoding,
 } from "./townServices.js";
 
 import { binExecSelector } from "./selectorBin.js";
@@ -111,6 +114,8 @@ async function runOp12Combat(ctx, args) {
     : await promptYesNo("Did the party win?", sprite, 0x12);
   if (won) {
     session.combatVictory = true;
+    /* 0x1243e: clr.b -$794C — do not invent post-fight $FE. */
+    session.foundItemSentinel = 0;
     note(`${enc.heading}: victory latch set`);
   } else {
     note(`${enc.heading}: fled — script ends`);
@@ -145,6 +150,7 @@ export async function runTileAmbientEncounter(ctx) {
     : await promptYesNo("Did the party win?", enc.sprite, 0x13);
   if (won) {
     session.combatVictory = true;
+    session.foundItemSentinel = 0; /* 0x1243e */
     notes.push("Tile-flag encounter: victory latch set");
   } else {
     notes.push("Tile-flag encounter: fled");
@@ -182,18 +188,24 @@ export const OP_ARGC = {
   0x2d: 2, 0x2e: 2, 0x2f: 0, 0x30: 10, 0x31: 3, 0x32: 1,
 };
 
-/** Opcode implementation status for audit report. */
+/** Opcode implementation status for audit report (C++ remake fidelity).
+ * Keep aligned with EXTRACTED/docs/56-event-system-remaining-gaps.md §3. */
 export const OPCODE_STATUS = {
-  0x00: "real", 0x01: "real", 0x02: "real", 0x03: "real", 0x04: "real", 0x05: "real", 0x06: "real",
-  0x07: "real", 0x08: "real", 0x09: "real", 0x0a: "real", 0x0b: "real", 0x0c: "real",
-  0x0d: "partial", 0x0e: "partial", /* OP_0E services: inn/tavern/guild/portal; store deferred */
+  0x00: "real", 0x01: "partial", 0x02: "partial", 0x03: "partial", 0x04: "partial",
+  0x05: "partial", 0x06: "partial", 0x07: "real", 0x08: "partial", 0x09: "real",
+  0x0a: "partial", 0x0b: "partial", 0x0c: "real",
+  0x0d: "real", /* presentation-only; no GS writes */
+  0x0e: "partial", /* dispatch verified; selector engines separate */
   0x0f: "real", 0x10: "real", 0x11: "real",
   0x12: "partial", 0x13: "partial", 0x14: "real", 0x15: "real", 0x16: "real", 0x17: "real",
-  0x18: "real", 0x19: "real", 0x1a: "real", 0x1b: "real", 0x1c: "real", 0x1d: "partial",
-  0x1e: "partial", 0x1f: "partial", 0x20: "partial", 0x21: "real", 0x22: "real", 0x23: "real",
-  0x24: "real", 0x25: "real", 0x26: "real", 0x27: "real", 0x28: "real", 0x29: "real",
-  0x2a: "real", 0x2b: "real", 0x2c: "real", 0x2d: "real", 0x2e: "partial", 0x2f: "real",
-  0x30: "real", 0x31: "partial", 0x32: "real",
+  0x18: "real", 0x19: "real", 0x1a: "real", 0x1b: "real", 0x1c: "real",
+  0x1d: "real", 0x1e: "real", /* presentation/timing only */
+  0x1f: "real", 0x20: "real", 0x21: "real", 0x22: "real", 0x23: "real",
+  0x24: "real", 0x25: "real", 0x26: "partial", 0x27: "partial", 0x28: "real", 0x29: "real",
+  0x2a: "real", 0x2b: "real", 0x2c: "real", 0x2d: "real", 0x2e: "real", 0x2f: "real",
+  0x30: "real", 0x31: "real", 0x32: "real",
+  /* OP_04/05/06: can't-see gate -$79E1 + OP_06 '-'→'{' are GS/logic-exact;
+   * remaining Partial = glyph/centering chrome only. */
 };
 
 const SELECTOR_SPRITES = {
@@ -204,7 +216,7 @@ const SELECTOR_SPRITES = {
 const SELECTOR_LABEL = {
   0x01: "Inn", 0x02: "Training hall", 0x03: "Tavern", 0x04: "Temple",
   0x05: "Mages guild", 0x06: "Blacksmith", 0x07: "General store", 0x08: "Arena / special shop",
-  0x64: "Portal travel",
+  0x64: "Circus",
 };
 
 const TAVERN_INTRO = [
@@ -442,7 +454,7 @@ function signSpriteFromPseudo(pseudo) {
 
 function formatTreasureMessage(treasure, manifest, resolveEventText, session) {
   sessionApplyTreasure(session, treasure);
-  const parts = ["Treasure! (stored in found-item buffer — Search payoff deferred)"];
+  const parts = ["Treasure! (Search to collect)"];
   if (treasure.gold > 0) parts.push(`Gold: ${treasure.gold} gp`);
   if (treasure.gems > 0) parts.push(`Gems: ${treasure.gems}`);
   for (const it of treasure.items) {
@@ -637,6 +649,25 @@ async function runTownService(ctx, sel, title, sprite) {
     await runArenaTicketSelector(ctx, sel);
     return;
   }
+  if (sel === 0xc9 || sel === 0xca) {
+    /* 0x19AB4/0x19AC4 → 0x1980A: food XP 0x18DE0 / drink XP 0x18D3A; encode UI deferred. */
+    if (sel === 0xca) {
+      for (const m of ensureParty(session)) {
+        svcApplyDrinkEncoding(m);
+      }
+      syncSessionGoldFromParty(session);
+      note("OP_0E 0xCA drink apply (armed +$7C bit1)");
+      ctx.onSessionChange?.(session);
+    } else {
+      for (const m of ensureParty(session)) {
+        svcApplyFoodEncoding(m, ctx.manifest);
+      }
+      syncSessionGoldFromParty(session);
+      note("OP_0E 0xC9 food apply (items.dat gold×8)");
+      ctx.onSessionChange?.(session);
+    }
+    return;
+  }
   if (isTownServiceSelector(sel)) {
     /* Skill vendors + quests: real overlay bytecode (no EventSkillBuy hijack). */
     if (await runDefaultRangeOverlay(ctx, sel)) {
@@ -750,14 +781,22 @@ export async function runEventScript(ctx) {
       const strIdx = args[0];
       vmStep(nodeIndex, op, `str[${strIdx}]`);
       if (strIdx < strings.length) {
-        const text = strAt(strIdx);
+        let text = strAt(strIdx);
+        /* OP_04/05/06 @ 0x15A00/0x15A52/0x15B24: skip draw when -$79E1 != 0. */
+        const cantSee = (session.cantSeeFlag | 0) !== 0;
+        if (op === 0x06) {
+          /* 0x15AFE: rewrite '-' → '{' before glyph draw. */
+          text = text.replace(/-/g, "{");
+        }
         if (op === 0x04) {
-          onViewportOverlay?.({ type: "door", text });
-          serviceTitle = captureServiceTitle(text, { title: serviceTitle });
+          if (!cantSee) {
+            onViewportOverlay?.({ type: "door", text });
+            serviceTitle = captureServiceTitle(text, { title: serviceTitle });
+          }
         } else if (op === 0x05) {
-          onViewportOverlay?.({ type: "wall", text });
+          if (!cantSee) onViewportOverlay?.({ type: "wall", text });
         } else if (op === 0x06) {
-          onViewportOverlay?.({ type: "signpost", text });
+          if (!cantSee) onViewportOverlay?.({ type: "signpost", text });
         } else if (op >= 0x01 && op <= 0x03) {
           const followedByYn = nextOp(i) === 0x09 || nextOp(i) === 0x0a;
           if (followedByYn) {
@@ -875,6 +914,8 @@ export async function runEventScript(ctx) {
           sel === 0x64 ||
           sel === 0x07 ||
           sel === 0x08 ||
+          sel === 0xc9 ||
+          sel === 0xca ||
           isTownServiceSelector(sel);
 
         if (serviceHandled) {
@@ -937,6 +978,7 @@ export async function runEventScript(ctx) {
           : await promptYesNo("Did the party win?", sprite, op);
         if (won) {
           session.combatVictory = true;
+          session.foundItemSentinel = 0; /* 0x1243e */
           note(`${enc.heading}: victory latch set`);
         } else {
           note(`${enc.heading}: fled — script ends`);
@@ -1136,22 +1178,31 @@ export async function runEventScript(ctx) {
       }
 
       case 0x26:
-        vmStep(nodeIndex, op, "select member skill");
-        {
-          const slot = await promptSelectMember(ctx);
-          session.selectedMember = slot != null ? slot : 0;
-          note(`OP_26 select member → slot ${session.selectedMember + 1}`);
+      case 0x27: {
+        /* OP_26/27 @ 0x16BC0: digit 1..party → cond/-$5D42/-$5D3F; dead ≥$81 re-prompt;
+         * ESC → SCRIPT_ABORT. No invented prompt string (script text already shown). */
+        vmStep(nodeIndex, op, op === 0x26 ? "select member skill" : "select member");
+        while (true) {
+          const slot0 = await promptSelectMember(ctx);
+          if (slot0 == null) {
+            aborted = true;
+            ended = true;
+            note(`OP_${op.toString(16)} ESC — script abort`);
+            return { teleported, ended, aborted, notes, trace };
+          }
+          const m = ensureParty(session)[slot0];
+          if (m && (m.condition ?? 0) >= 0x81) {
+            note(`OP_${op.toString(16)} reject dead slot ${slot0 + 1}`);
+            continue;
+          }
+          session.selectedMember = slot0;
+          session.cond = slot0 + 1;
+          syncCond();
+          note(`OP_${op.toString(16)} select member → slot ${slot0 + 1}`);
+          break;
         }
         break;
-
-      case 0x27:
-        vmStep(nodeIndex, op, "select member");
-        {
-          const slot = await promptSelectMember(ctx);
-          session.selectedMember = slot != null ? slot : 0;
-          note(`OP_27 select member → slot ${session.selectedMember + 1}`);
-        }
-        break;
+      }
 
       case 0x28: {
         /* OP_28 @ 0x16C86: discard arg0; backpack-only consume always. */
@@ -1250,7 +1301,8 @@ export async function runEventScript(ctx) {
         if (spec === 0) {
           for (let i = 0; i < party.length; i++) targets.push(i);
         } else {
-          let slot = (spec === 8 || spec === 9) ? (session.selectedMember ?? 1) : spec;
+          /* ASM 0x1710A: only spec==9 → selected (-$5D42); 1..8 = member slots. */
+          let slot = spec === 9 ? (session.selectedMember ?? 1) : spec;
           if (slot >= 1 && slot <= party.length) targets.push(slot - 1);
         }
         for (const i of targets) {

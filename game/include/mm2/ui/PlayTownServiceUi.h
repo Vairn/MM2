@@ -95,6 +95,8 @@ private:
     void applyTavernFeedingFrenzy();
     void applyTavernStatBoost(int slot);
     void applyTavernSpecialty(int food_idx);
+    void applyTavernTip();
+    void applyTavernRumor();
     void applyGuildBuyAndReturn(int party_slot);
     void showActiveMemberGold();
     void buildSmithView();

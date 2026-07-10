@@ -83,35 +83,25 @@ struct TownSvcTrainResult {
     uint8_t spell_level = 0;
 };
 
+/* Level-up HP @ 0x20390: ($64DA[class]*$64EE[map])/$64E4[map] + -$7F56(+$27).
+ * 0x9BCA is bash-door — do not use it here. */
 TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id,
                                        gameplay::Rng *rng = nullptr);
-
-/* Calendar HP-path roll @ 0x9BCA (mode 2 from 0x9B48). Confirmed math only:
- *   base = party[0].+$6B (+ party[1].+$6B when party_count>1)
- *   addend = (-$7BB4(0x6D,0xA) as u16) / 10
- *   if addend != 5: base += addend
- * The subsequent -$7D22/-$7D28 HP write and calendar gate are DEFERRED. */
-struct TownSvcHpRoll {
-    uint8_t might_sum = 0;
-    uint8_t rng_addend = 0; /* quotient after divu #10 */
-    uint8_t rolled_base = 0; /* might_sum [+ addend when addend!=5] */
-};
-
-TownSvcHpRoll townSvcCalendarHpRoll(const Mm2RosterRecord *party0,
-                                    const Mm2RosterRecord *party1_or_null,
-                                    gameplay::Rng *rng);
 
 struct TownSvcDonateResult {
     bool paid = false;
     uint32_t cost = 0;
     bool all_temples_donated = false; /* A4-$799E reached 0x1F this donation */
     bool reward_queued = false; /* 0x1D7E8: sentinel $FE + item 0xD4 in found buffer */
+    bool blessed = false; /* RNG(1,100)>0x5A → buff writes @ 0x1D7FE */
 };
 
 /* Temple C @ 0x1D796: cost = A4-$6714[map]×100 (0x1DC1A); OR quest bit into
  * A4-$799E. When bits==0x1F: move.b #$FE,-$794C; move.b #$D4,-$3F1C; clr -$799E.
- * Blessed-buff block (A4-$79AB..-$799F + -$5770++) is presentation — stubbed. */
-TownSvcDonateResult townSvcTempleDonate(uint8_t *a4, Mm2RosterRecord &rec, int map_id);
+ * Independent RNG -$7BB4(100,1)>0x5A → blessed buff writes 0x1D7FE..0x1D852
+ * (A4-$79AB..-$799F + addq.w #1,A4-$5770). */
+TownSvcDonateResult townSvcTempleDonate(uint8_t *a4, Mm2RosterRecord &rec, int map_id,
+                                        gameplay::Rng *rng = nullptr);
 
 uint32_t townSvcTrainingCost(int level, int map_id);
 uint32_t townSvcHealingCost(int level, int map_id); /* healthy: level×$6714×10 */
@@ -272,8 +262,8 @@ TownSvcStatBoostResult townSvcTavernStatBoost(Mm2RosterRecord &rec, int slot, in
                                               gameplay::Rng *rng);
 
 /* Tavern C specialties @ 0x1CD2E: pay A4-$6760[town*3+menu] (0x1CEA4), then
- * OR A4-$786C mask into record+$76 (0x1C8D4). Sick RNG(1,end+5)==1 → bset #$2,$26.
- * NOT the 0x18EC0 / +$78 encoder (that is selector 0xC9/0xCA @ 0x19962). */
+ * sick RNG(1, -$7F56(+$73)+5)==1 → bset #$2,$26 and SKIP mask; else
+ * 0x1C8D4 OR A4-$786C into +$76. NOT the 0x18EC0 / +$78 encoder (0xC9/0xCA). */
 struct TownSvcSpecialtyResult {
     bool ok = false;
     bool paid = false;
@@ -286,7 +276,8 @@ TownSvcSpecialtyResult townSvcTavernSpecialty(Mm2RosterRecord &rec, int map_id, 
                                               gameplay::Rng *rng);
 
 /* Food encoder 0x18EC0 + party write 0x019030 (selector 0xC9 A–C). No A4-$6760
- * gold deduct. Writes encoding to every party +$78; +$7C bit0 cleared (food). */
+ * gold deduct. Writes encoding to every party +$78; +$7C bit0 cleared (food).
+ * Do NOT call from tavern C specialties (0x1CD2E) — separate OP_0E path. */
 struct TownSvcFoodEncodeResult {
     bool ok = false;
     uint8_t encoding = 0;
@@ -297,12 +288,46 @@ TownSvcFoodEncodeResult townSvcFoodEncodePurchase(Mm2RosterFile *roster,
                                                   const Mm2PartyLaunch *launch, int menu /*0..2*/,
                                                   gameplay::Rng *rng);
 
-/* Drink encoder 0x18F78 + 0x019030 with drink mode (+$7C bit0 set). Selector 0xCA. */
+/* Drink encoder 0x18F78 + 0x019030 with drink mode (+$7C bit0 set). Selector 0xCA.
+ * Encoding only — base-stat bonuses are FAQ fiction; apply leaf is gold @ 0x18D3A. */
 TownSvcFoodEncodeResult townSvcDrinkEncodePurchase(Mm2RosterFile *roster,
                                                    const Mm2PartyLaunch *launch, int drink /*0..5*/,
                                                    gameplay::Rng *rng);
 
-/* Legacy FAQ drink bonus helper (sick roll). Prefer encode purchase for 0xCA. */
+/* Combat attack phase @ 0x10C66: if +$78 == monster type and +$7C bit0 (drink),
+ * bset +$7C bit1 (armed for gold apply). */
+void townSvcArmDrinkMatchOnKill(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                uint8_t monster_type);
+
+/* Drink gold apply @ 0x18D3A: +$7C bit1 + matching +$78 → A4-$6AE0[tier] added
+ * to experience +$62, then clr +$78 and clear bit1. Called from tavern check
+ * 0x19516, not mid-combat. */
+struct TownSvcDrinkApplyResult {
+    bool applied = false;
+    uint32_t gold = 0;
+};
+
+TownSvcDrinkApplyResult townSvcApplyDrinkEncoding(Mm2RosterRecord &rec);
+
+/* Food EXP apply @ 0x18DE0: +$78 encoding as items.dat id; XP = gold(+$12)×8
+ * via A4-$3EEC (= items base -$3EFE + $12). Clr +$78. Cond ≥$80 skips. */
+struct TownSvcFoodApplyResult {
+    bool applied = false;
+    uint32_t xp = 0;
+};
+
+TownSvcFoodApplyResult townSvcApplyFoodEncoding(const Mm2ItemsFile *items, Mm2RosterRecord &rec);
+
+/* Party backpack scan @ 0x18C74 / 0x18CE6: first slot whose +$3A == item_id.
+ * Returns 1-based slot count (ASM addq #1), or 0 if not found. */
+int townSvcPartyFindBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                 uint8_t item_id);
+
+/* Consume first matching backpack id @ 0x18D06 → -$7F26 clear slot. */
+bool townSvcPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                     uint8_t item_id);
+
+/* FAQ-era drink helper — no base-stat mutate. Prefer encode + apply leaves. */
 struct TownSvcDrinkResult {
     bool ok = false;
     bool sick = false;
@@ -310,5 +335,30 @@ struct TownSvcDrinkResult {
 };
 
 TownSvcDrinkResult townSvcPubDrink(Mm2RosterRecord &rec, int drink_idx, gameplay::Rng *rng);
+
+/* Tip/rumor day-pair index @ 0x1C962: returns 0, 1, or 3 (then ×2 → tip pair
+ * base into A4-$58AE / A4-$594E). Day word from -$79DE[era]. */
+int townSvcTipDayPairBase(uint16_t day_of_year);
+
+enum class TownSvcTipReject : uint8_t {
+    None = 0,
+    Condition,    /* 0x1CFD2: +$26 != 0 → caption 4 */
+    NotEnoughGold, /* 0x1C9C0 fail → caption 2 */
+    NoTip,        /* RNG miss @ 0x1D02A → caption 0 */
+};
+
+struct TownSvcTipResult {
+    bool ok = false;
+    TownSvcTipReject reject = TownSvcTipReject::None;
+    int pair_base = 0; /* 0, 2, or 6 — index of first line of the tip pair */
+};
+
+/* Tavern D @ 0x1CFCA: cond==0, deduct 1gp, RNG(1, -$7F56(+$73)+5)==1, then
+ * day-pair tips. `pair_base` indexes tips[pair_base] + tips[pair_base+1]. */
+TownSvcTipResult townSvcTavernTip(Mm2RosterRecord &rec, uint16_t day_of_year,
+                                  gameplay::Rng *rng);
+
+/* Tavern E @ 0x1D0B4: cond==0 then day-pair rumors (no gold / no RNG). */
+TownSvcTipResult townSvcTavernRumor(Mm2RosterRecord &rec, uint16_t day_of_year);
 
 }  // namespace mm2::events

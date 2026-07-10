@@ -342,7 +342,14 @@ void EventTextView::showOp06(const char *text)
     if (layer_count_ < static_cast<int>(sizeof(layers_) / sizeof(layers_[0]))) {
         EventTextLayer &layer = layers_[layer_count_++];
         layer.op = EventTextOp::Op06Signpost;
+        /* OP_06 @ 0x15AFE–0x15B22: rewrite ASCII '-' (0x2D) → '{' (0x7B) in the
+         * resolved buffer before the glyph draw (presentation glyph map). */
         copyResolvedText(layer.text, sizeof(layer.text), text);
+        for (char *p = layer.text; *p; ++p) {
+            if (*p == '-') {
+                *p = '{';
+            }
+        }
     }
 }
 

@@ -305,9 +305,8 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
          * and can pay the fee (level×index×50). It does NOT raise a stat — the prior
          * port's stat-add (0x1C898) was the wrong handler/semantics. When a UI
          * backend is bound, the faithful XP→level-up menu runs (TownServiceMenu →
-         * townSvcTrainLevelUp). DEFERRED: the exact per-level HP RANDOM roll
-         * (0x9BCA) is modelled by the doc-32 average; calendar mode @ 0x9B48. No
-         * NPC intro string -> the OP_0B sign title fallback when no backend. */
+         * townSvcTrainLevelUp). HP gain = leaf 0x20390 ($64DA/$64EE/$64E4 +
+         * -$7F56(+$27)); 0x9BCA is bash door, not training. */
         if (runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::Training)) {
             break;
         }
@@ -315,8 +314,8 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         break;
     case 0x03:
         /* Pub @ 0x1D208 / jump 0x1D650: A frenzy 0x1CA2E, B stat-boost 0x1CAC4
-         * (A4-$6738), C specialties 0x1CD2E (A4-$6760 + 0x1C8D4 → +$76) with
-         * 0x18EC0/+78 encode also applied on purchase; D tip; E rumors.
+         * (A4-$6738), C specialties 0x1CD2E (A4-$6760 + sick-or-0x1C8D4 → +$76);
+         * D tip; E rumors. Encode 0x18EC0/+78 is selector 0xC9 — not C.
          * Drinks = selector 0xCA → 0x18F78 / 0x019030 (not key B). */
         showServiceIntro(gs, text, wait, tavernIntro(location_id));
         if (canRunBoundMenu(rt, roster, launch, items, MenuKind::Tavern)) {
@@ -430,6 +429,35 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
             "line the circus grounds. Play (y/n)?";
         showServiceIntro(gs, text, wait, kCircusIntro);
         rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Circus);
+        break;
+    }
+    case 0xC9:
+    case 0xCA: {
+        /* 0x19AB4 / 0x19AC4 → 0x1980A(food=0 / drink=1): encode 0x19030 + check
+         * 0x193AC / apply 0x19516. Full A–C / drink picker UI not hosted — apply
+         * food XP (0x18DE0 items.dat gold×8) / armed drink XP (0x18D3A). */
+        const bool drink = (sel == 0xCA);
+        if (roster && launch) {
+            for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                const int idx = launch->roster_slots[i];
+                if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+                    continue;
+                }
+                if (drink) {
+                    (void)townSvcApplyDrinkEncoding(roster->records[idx]);
+                } else {
+                    (void)townSvcApplyFoodEncoding(items, roster->records[idx]);
+                }
+            }
+        }
+        (void)rt;
+        (void)gs;
+        (void)world;
+        (void)text;
+        (void)wait;
+        (void)location_id;
+        (void)title;
+        (void)rng;
         break;
     }
     default:

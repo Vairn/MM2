@@ -30,8 +30,12 @@ struct CombatPanelView {
     char options_for[16]{};    /* active character name when awaiting a command */
     bool show_command_options = false; /* draw per-character command grid (0x11866) */
     bool show_party_options = false;   /* draw party-level A/B/H/R bar (0x13222) */
+    bool show_bribe_kind = false;      /* 0x12FB8 "Bribe with:  1-Food  2-Gold  3-Gems" */
+    bool show_bribe_amount = false;    /* 0x1326D "How much?" + digit entry */
     bool show_cast_level = false;      /* 0x79EE " Spell Level: " (combat cast, no grid) */
     bool show_cast_number = false;     /* 0x79EE "Number: " after level digit */
+    bool show_cast_target = false;     /* 0xD43C "Which monster?" + A–J */
+    bool show_party_pick = false;      /* 0xD2EA "On whom (1-N)?" */
     int cast_level = 0;                /* echoed after level accepted */
     bool label_monster_slots = false;  /* A–J prefixes (round loop only) */
     /* Command capability flags for the active character (0x11866):

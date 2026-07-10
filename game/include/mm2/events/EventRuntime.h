@@ -28,12 +28,6 @@ enum class EventVmWait : uint8_t {
     Answer,
 };
 
-struct EventPortalOffer {
-    uint32_t cost = 0;
-    uint8_t dest_screen = 0;
-    uint8_t dest_tile = 0; /* packed (y<<4)|x */
-};
-
 class EventRuntime {
 public:
     bool load(const char *data_dir);
@@ -86,10 +80,6 @@ public:
      *  instead of only seeding A4 and aborting the script. */
     void bindCombat(combat::CombatSession *combat) { combat_ = combat; }
     combat::CombatSession *combat() const { return combat_; }
-
-    void setPendingPortal(const EventPortalOffer &offer) { pending_portal_ = offer; pending_portal_active_ = true; }
-    void clearPendingPortal() { pending_portal_active_ = false; }
-    bool hasPendingPortal() const { return pending_portal_active_; }
 
     /** After a str.dat service intro Y/N (OP_0E 0x03/0x04/0x06), open the bound
      *  town-service menu on "yes" (ASM: handler shell gates on A4-$7951). */
@@ -160,7 +150,6 @@ private:
     void remapOp0cDest(uint8_t &dest_screen, uint8_t &dest_tile);
     /** Restore home location after OP_0E overlay swap when idle. */
     void restoreOverlayIfIdle(GameStateView &gs);
-    bool finishPendingPortal(GameStateView &gs, world::MapWorld &world, bool accepted);
     bool finishPendingTownMenu(GameStateView &gs, bool accepted);
 
     Mm2EventFile file_{};
@@ -181,8 +170,6 @@ private:
     ITownServiceUi *town_service_ui_ = nullptr;
     gameplay::Rng *rng_ = nullptr;
     combat::CombatSession *combat_ = nullptr;
-    bool pending_portal_active_ = false;
-    EventPortalOffer pending_portal_{};
     PendingTownMenu pending_town_menu_ = PendingTownMenu::None;
     bool pending_inn_goto_town_ = false;
     bool pending_skill_buy_member_ = false;

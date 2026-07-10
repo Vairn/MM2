@@ -101,12 +101,16 @@ uint32_t mm2_class_xp_for_level(uint8_t class_id, int level);
  * "Attribute -> bonuses per level"). The original adds a per-level RANDOM roll
  * (HP path @ 0x9BCA); the exact RNG is a documented gap, so the remake applies
  * the documented average (class base HP + END bonus; caster SP = stat bonus+3).
- *   mm2_class_hp_per_level: base HP/level at END 11-12 (no bonus).
- *   mm2_attr_bonus: the shared HP(END)/AC(SPD)/SP(INT|PER)-3 bonus column.
+ *   mm2_class_hp_per_level: A4-$64DA class base (training 0x2039C).
+ *   mm2_train_hp_gain: full Training Hall HP leaf @ 0x20390.
+ *   mm2_attr_bonus: FAQ/doc-32 column (not the -$7F56 table walk).
  *   mm2_class_caster_stat: 0 none, 1 INT (Sorcerer/Archer), 2 PER (Cleric/Paladin).
  *   mm2_class_spell_level_for: spell level reachable at `char_level`
  *     (pure casters 2X-1; fighter-mages 2X+5, natural cap 7). */
 int mm2_class_hp_per_level(uint8_t class_id);
+/* Training Hall HP gain @ 0x20390: ($64DA[class]*$64EE[map])/$64E4[map]
+ * (+1 if rem!=0 and class not Cleric/Robber/Ninja) + -$7F56(+$27). */
+int mm2_train_hp_gain(uint8_t class_id, int map_id, uint8_t endurance_current);
 int mm2_attr_bonus(int attribute_value);
 int mm2_class_caster_stat(uint8_t class_id);
 int mm2_class_spell_level_for(uint8_t class_id, int char_level);

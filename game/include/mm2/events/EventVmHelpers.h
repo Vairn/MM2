@@ -1,11 +1,15 @@
 #pragma once
 
 #include "mm2/world/MapWorld.h"
+#include "mm2/gameplay/ExploreActions.h"
 
 #include "mm2_party_launch.h"
 #include "mm2_roster_codec.h"
 #include "mm2_gamestate.h"
 #include "mm2_event_codec.h"
+
+#include <cstddef>
+#include <cstdint>
 
 namespace mm2::events {
 
@@ -106,11 +110,52 @@ void eventVmApplyOp31Damage(Mm2RosterRecord *rec, uint16_t damage);
 void eventVmOp31IterateDamage(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                               uint8_t member_spec, uint16_t damage);
 
-/** Search key @ 0x4800 → 0x1B19C: if found-item buffer has loot, distribute
- *  gold/gems/items to the party and clear the buffer. Returns true when loot
- *  was present (caller shows "The Party Has found:" / "Nothing Here!"). */
+/** Search key @ 0x4800 → 0x1B19C. */
+enum class SearchPrepareResult : uint8_t {
+    Nothing = 0,       /* "Nothing Here!" */
+    Distributed,       /* short path: loot already given (sentinel was non-0) */
+    NeedIdentify,      /* long path: rating ready; host '1'..'4' @ 0x1B3F2 */
+};
+
+struct SearchPrepareOut {
+    uint8_t rating = 0; /* display rating after 0x1B270 re-roll */
+    char msg[96]{};
+};
+
+/** Prepare Search: nothing / short-path distribute / long-path Identify modal.
+ *  Long path does NOT clear the found buffer — call distribute after Open/Find. */
+SearchPrepareResult eventVmSearchPrepare(uint8_t *a4, Mm2RosterFile *roster,
+                                         const Mm2PartyLaunch *launch, gameplay::Rng *rng,
+                                         SearchPrepareOut *out);
+
+/** Distribute found buffer @ 0x1AC94 (after Open/Find or short path). */
+bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                             char *msg, size_t msg_cap);
+
+/** Legacy one-shot: prepare + auto-distribute (no Identify modal). Prefer
+ *  eventVmSearchPrepare when a UI can host 0x1B3F2. */
 bool eventVmSearchPayoff(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                          char *msg, size_t msg_cap);
+
+/** Open / Find Traps thievery leaf @ 0x1AEC2 / 0x1AF6E.
+ *  `party_slot` 0-based; `find_traps` selects Find path (always opens after roll).
+ *  On trap spring: damage = rating*2+4 to that member (0x1AA70 → 0x1A90E simplified). */
+struct SearchOpenResult {
+    bool opened = false;     /* distribute should run */
+    bool trapped = false;    /* thievery failed and trap sprung */
+    bool aborted = false;    /* ESC on member pick */
+    uint16_t trap_damage = 0;
+};
+
+SearchOpenResult eventVmSearchOpenOrFind(uint8_t *a4, Mm2RosterFile *roster,
+                                         const Mm2PartyLaunch *launch, int party_slot,
+                                         uint8_t rating, bool find_traps, gameplay::Rng *rng);
+
+/** Detect Magic @ 0x1AFE8 — "Contents magical (Yes|No), has trap (Yes|No)". */
+void eventVmSearchDetectMagic(uint8_t *a4, uint8_t rating, char *msg, size_t msg_cap);
+
+/** Leave @ 0x1B45C: keep loot, set -$7950 := 7. */
+void eventVmSearchLeave(uint8_t *a4);
 
 bool eventVmCheckOp30Password(const uint8_t *input_buf, const uint8_t *expected,
                               size_t expected_len);
@@ -135,6 +180,10 @@ bool eventVmPartyTryPayGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLa
 /** OP_25 @ 0x16B82 → -$7E66 → 0x6B9A: same pool/deduct for gems (+$5C, u16). */
 bool eventVmPartyTryPayGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                             uint16_t amount);
+
+/** Bribe food pay @ 0x6C66 (thunk -$7E60): pool/deduct party food (+$25, u8). */
+bool eventVmPartyTryPayFood(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                            uint8_t amount);
 
 /* ---------------------------------------------------------------------------
  * Arena Games ticket-combat engine (ASM 0x9D76). CORRECTED 2026-07: this
@@ -216,11 +265,9 @@ int eventVmTrainingTownIndex(int map_screen);
 
 /** Per-character TRAINING cost (FAQ §3-6, doc 34 §13.2):
  *  `current_level × training_town_index × 50` gp. `town_index` comes from
- *  eventVmTrainingTownIndex() (map→index [1,5,2,4,2]). This is the gold the
- *  deferred training engine (OP_0E 0x04 → A4 thunk -$7D16 → menu 0x8050; HP
- *  path 0x9BCA, stat path 0x1C898) charges per trained character. Exposed for
- *  the future engine port + unit tests. Status: FAQ-sourced; the exact
- *  multiply/index sequence in 0x9B48/0x9BCA is not yet ASM-confirmed. */
+ *  eventVmTrainingTownIndex() (map→index [1,5,2,4,2]). OP_0E training hall
+ *  level-up (townSvcTrainLevelUp). Stat shrine 0x1C898 is a separate leaf.
+ *  0x9B48/0x9BCA are bash-door (doc 43) — not training HP. */
 uint32_t eventVmTrainingCostPerChar(int level, int town_index);
 
 /** Per-character base HEALING cost (FAQ §3-6, doc 34 §13.2) for a LIVING
@@ -231,5 +278,23 @@ uint32_t eventVmTrainingCostPerChar(int level, int town_index);
  *  (doc 06), and the dead-vs-eradicated threshold is not yet ASM-confirmed.
  *  Exposed for the future engine port + unit tests. */
 uint32_t eventVmHealingCostPerChar(int level, int town_index);
+
+/** str.dat tip/rumor bank (0x9666 / A4-$7DE8):
+ *  Bank word table at A4-$71E8; raw file at A4-$ED6 ($1E80 bytes).
+ *  Decode: (byte+0x1C), then 0x1D→NUL into A4-$ED2; 0x976E walks C-strings. */
+constexpr int kStrDatSize = 0x1E80;
+constexpr int kStrBankSpan = 0x924;
+/** ASM-clear bank starts: jokes @0, tavern/tip pool @0x5BA (Children/Slayer fill). */
+constexpr uint16_t kStrBankOffs[] = {0x0000, 0x05BA, 0x0EDE, 0x1802, 0x1E80};
+constexpr int kStrBankCount = 4;
+
+/** Seed A4-$71E8 bank offsets (call once after loading str.dat into -$ED6). */
+void eventVmInitStrBankOffsets(uint8_t *a4);
+
+/** 0x9666: decode bank `bank_index` (0..3) into A4-$ED2; clr -$71EA. */
+void eventVmDecodeStrBank(uint8_t *a4, int bank_index, const uint8_t *str_dat, size_t str_len);
+
+/** 0x976E: next C-string in decode buf; advances -$71EA. Returns nullptr at end. */
+const char *eventVmNextStrBankCString(uint8_t *a4);
 
 }  // namespace mm2::events

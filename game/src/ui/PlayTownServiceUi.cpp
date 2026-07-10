@@ -441,12 +441,19 @@ void PlayTownServiceUi::applyTempleAndReturn(int party_slot)
     case mm2::events::TempleOption::Donate: {
         const uint32_t cost = mm2_town_temple_donate_cost(ctx_.map_id);
         const mm2::events::TownSvcDonateResult r =
-            mm2::events::townSvcTempleDonate(ctx_.a4, *rec, ctx_.map_id);
+            mm2::events::townSvcTempleDonate(ctx_.a4, *rec, ctx_.map_id, ctx_.rng);
         if (!r.paid) {
             std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, cost);
+        } else if (r.all_temples_donated && r.blessed) {
+            std::snprintf(status_, sizeof(status_),
+                          "%s donated %u gp. Fe Farthing queued — Today you are blessed!", name,
+                          r.cost);
         } else if (r.all_temples_donated) {
             std::snprintf(status_, sizeof(status_),
                           "%s donated %u gp. All temples — Fe Farthing queued!", name, r.cost);
+        } else if (r.blessed) {
+            std::snprintf(status_, sizeof(status_),
+                          "%s donated %u gp.\nToday you are blessed!", name, r.cost);
         } else {
             std::snprintf(status_, sizeof(status_), "%s donated %u gp.", name, r.cost);
         }
@@ -690,6 +697,74 @@ void PlayTownServiceUi::applyTavernStatBoost(int slot)
     phase_ = Phase::Menu;
 }
 
+void PlayTownServiceUi::applyTavernTip()
+{
+    /* D @ 0x1CFCA: 1gp + RNG + day-pair tips (0x1C962 → A4-$58AE). */
+    Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
+    if (!rec) {
+        return;
+    }
+    const uint16_t era = ctx_.a4 ? mm2_gs_u16(ctx_.a4, MM2_GS_ERA) : 0;
+    const uint16_t day = ctx_.a4 ? mm2_gs_day(ctx_.a4, era) : 1;
+    const mm2::events::TownSvcTipResult r =
+        mm2::events::townSvcTavernTip(*rec, day, ctx_.rng);
+    tavern_tipped_ = true;
+    if (!r.ok) {
+        if (r.reject == mm2::events::TownSvcTipReject::NotEnoughGold) {
+            std::snprintf(status_, sizeof(status_), "Not enough gold!");
+        } else if (r.reject == mm2::events::TownSvcTipReject::Condition) {
+            std::snprintf(status_, sizeof(status_), "Cannot tip while afflicted.");
+        } else {
+            std::snprintf(status_, sizeof(status_), "Thank you -\nPlease come again");
+        }
+        phase_ = Phase::TavernRumor;
+        return;
+    }
+    const int b = r.pair_base;
+    const char *a = (b >= 0 && b < mm2::events::kPubTipCount) ? tavern_data_.tips[b] : nullptr;
+    const char *c =
+        (b + 1 < mm2::events::kPubTipCount) ? tavern_data_.tips[b + 1] : nullptr;
+    if (a && c && a[0] && a[0] != '(' && c[0] && c[0] != '(') {
+        std::snprintf(status_, sizeof(status_), "%s\n%s", a, c);
+    } else if (a && a[0] && a[0] != '(') {
+        std::snprintf(status_, sizeof(status_), "%s", a);
+    } else {
+        std::snprintf(status_, sizeof(status_), "Thank you -\nPlease come again");
+    }
+    phase_ = Phase::TavernRumor;
+}
+
+void PlayTownServiceUi::applyTavernRumor()
+{
+    /* E @ 0x1D0B4: day-pair rumors (A4-$594E), no gold. */
+    Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
+    if (!rec) {
+        return;
+    }
+    const uint16_t era = ctx_.a4 ? mm2_gs_u16(ctx_.a4, MM2_GS_ERA) : 0;
+    const uint16_t day = ctx_.a4 ? mm2_gs_day(ctx_.a4, era) : 1;
+    const mm2::events::TownSvcTipResult r = mm2::events::townSvcTavernRumor(*rec, day);
+    tavern_tipped_ = false;
+    if (!r.ok) {
+        std::snprintf(status_, sizeof(status_), "Cannot listen while afflicted.");
+        phase_ = Phase::TavernRumor;
+        return;
+    }
+    const int b = r.pair_base;
+    const char *a =
+        (b >= 0 && b < mm2::events::kPubRumorCount) ? tavern_data_.rumors[b] : nullptr;
+    const char *c =
+        (b + 1 < mm2::events::kPubRumorCount) ? tavern_data_.rumors[b + 1] : nullptr;
+    if (a && c && a[0] && a[0] != '(' && c[0] && c[0] != '(') {
+        std::snprintf(status_, sizeof(status_), "%s\n%s", a, c);
+    } else if (a && a[0] && a[0] != '(') {
+        std::snprintf(status_, sizeof(status_), "%s", a);
+    } else {
+        status_[0] = '\0';
+    }
+    phase_ = Phase::TavernRumor;
+}
+
 void PlayTownServiceUi::applyTavernSpecialty(int food_idx)
 {
     Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
@@ -698,20 +773,18 @@ void PlayTownServiceUi::applyTavernSpecialty(int food_idx)
     }
     char name[20];
     mm2_roster_name_to_cstr(rec, name, sizeof(name));
+    /* 0x1CD2E only — no 0x18EC0 encode (that is selector 0xC9). */
     const mm2::events::TownSvcSpecialtyResult r =
         mm2::events::townSvcTavernSpecialty(*rec, ctx_.map_id, food_idx, ctx_.rng);
     const char *food = tavern_data_.food.options[food_idx];
     if (!r.paid) {
         std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, r.cost);
+    } else if (r.sick) {
+        std::snprintf(status_, sizeof(status_), "%s: %s — you feel sick!", name,
+                      food ? food : "meal");
     } else {
-        (void)mm2::events::townSvcFoodEncodePurchase(ctx_.roster, ctx_.launch, food_idx, ctx_.rng);
-        if (r.sick) {
-            std::snprintf(status_, sizeof(status_), "%s: %s — you feel sick!", name,
-                          food ? food : "meal");
-        } else {
-            std::snprintf(status_, sizeof(status_), "%s ordered %s (%u gp).", name,
-                          food ? food : "meal", r.cost);
-        }
+        std::snprintf(status_, sizeof(status_), "%s ordered %s (%u gp).", name,
+                      food ? food : "meal", r.cost);
     }
     phase_ = Phase::Menu;
 }
@@ -840,44 +913,9 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
                 tavern_opt_ = mm2::events::TavernOption::Specialties;
                 phase_ = Phase::TavernFood;
             } else if (ch == 'D') {
-                /* D "Tip the bartender": draws from the TIP pool (A4-$58AE),
-                 * which is separate from the RUMOR pool used by E. */
-                tavern_tipped_ = true;
-                const char *tip = nullptr;
-                for (int i = 0; i < mm2::events::kPubTipCount; ++i) {
-                    const int idx = (tavern_tip_idx_ + i) % mm2::events::kPubTipCount;
-                    if (tavern_data_.tips[idx] && tavern_data_.tips[idx][0] &&
-                        tavern_data_.tips[idx][0] != '(') {
-                        tip = tavern_data_.tips[idx];
-                        tavern_tip_idx_ = (idx + 1) % mm2::events::kPubTipCount;
-                        break;
-                    }
-                }
-                if (tip) {
-                    std::snprintf(status_, sizeof(status_), "%s", tip);
-                    phase_ = Phase::TavernRumor;
-                } else {
-                    std::snprintf(status_, sizeof(status_),
-                                  "Thank you -\nPlease come again");
-                    phase_ = Phase::TavernRumor;
-                }
+                applyTavernTip();
             } else if (ch == 'E') {
-                /* Pick the next available rumor from the RUMOR pool (A4-$594E). */
-                tavern_tipped_ = false;
-                const char *rumor = nullptr;
-                for (int i = 0; i < mm2::events::kPubRumorCount; ++i) {
-                    const int idx = (tavern_rumor_idx_ + i) % mm2::events::kPubRumorCount;
-                    if (tavern_data_.rumors[idx] && tavern_data_.rumors[idx][0] &&
-                        tavern_data_.rumors[idx][0] != '(') {
-                        rumor = tavern_data_.rumors[idx];
-                        tavern_rumor_idx_ = (idx + 1) % mm2::events::kPubRumorCount;
-                        break;
-                    }
-                }
-                if (rumor) {
-                    std::snprintf(status_, sizeof(status_), "%s", rumor);
-                    phase_ = Phase::TavernRumor;
-                }
+                applyTavernRumor();
             }
         }
         break;

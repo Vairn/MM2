@@ -83,13 +83,27 @@ for town in TOWN_NAMES:
 # buggy 0x9D76 class-quest reward loop (doc 36-class-quest-hp-bug.md).
 MAGE_GUILD_MEMBER_MASK = [0x02, 0x04, 0x08, 0x10, 0x20]
 
-# FAQ §4-1 portal legs (screen id = town index 0..4)
+# ASM/event.dat portal legs (NOT FAQ §4-1). Tile = OP_0C dest packed as (y<<4)|x.
+# Middlegate OP_0E 0x11 → loc 61 idx 1; other towns use inline scripts.
 TOWN_PORTALS = [
-    {"screen": 0, "x": 0, "y": 5, "cost": 10, "destScreen": 4, "destX": 6, "destY": 1, "facing": 2},
-    {"screen": 4, "x": 4, "y": 14, "cost": 50, "destScreen": 2, "destX": 6, "destY": 11, "facing": 1},
-    {"screen": 2, "x": 6, "y": 9, "cost": 50, "destScreen": 3, "destX": 6, "destY": 3, "facing": 3},
-    {"screen": 3, "x": 8, "y": 3, "cost": 100, "destScreen": 1, "destX": 3, "destY": 0, "facing": 0},
-    {"screen": 1, "x": 12, "y": 0, "cost": 25, "destScreen": 0, "destX": 0, "destY": 5, "facing": 0, "oneWay": True},
+    # Middlegate (5,0)/W brownie → Sandsobar (8,1) 10gp  [loc61 idx1: OP_0C 0x04,0x18]
+    {"screen": 0, "x": 0, "y": 5, "cost": 10, "destScreen": 4, "destX": 8, "destY": 1},
+    # Sandsobar (8,1) desert trader → Middlegate (0,5) 20gp  [OP_0C 0x00,0x50]
+    {"screen": 4, "x": 8, "y": 1, "cost": 20, "destScreen": 0, "destX": 0, "destY": 5},
+    # Sandsobar (4,15) nomad → Tundara (6,11) 50gp  [OP_0C 0x02,0xB6]
+    {"screen": 4, "x": 4, "y": 15, "cost": 50, "destScreen": 2, "destX": 6, "destY": 11},
+    # Tundara (6,11) Jean-Luc → Sandsobar (4,15) 10gp  [OP_0C 0x04,0xF4]
+    {"screen": 2, "x": 6, "y": 11, "cost": 10, "destScreen": 4, "destX": 4, "destY": 15},
+    # Tundara (6,9) polar bear → Vulcania (6,3) 50gp  [OP_0C 0x03,0x36]
+    {"screen": 2, "x": 6, "y": 9, "cost": 50, "destScreen": 3, "destX": 6, "destY": 3},
+    # Vulcania (6,3) transport → Tundara (6,9) 30gp  [OP_0C 0x02,0x96]
+    {"screen": 3, "x": 6, "y": 3, "cost": 30, "destScreen": 2, "destX": 6, "destY": 9},
+    # Vulcania (8,3) export → Atlantium (3,0) 100gp  [OP_0C 0x01,0x03]
+    {"screen": 3, "x": 8, "y": 3, "cost": 100, "destScreen": 1, "destX": 3, "destY": 0},
+    # Atlantium (3,0) toga → Vulcania (8,3) 50gp  [OP_0C 0x03,0x38]
+    {"screen": 1, "x": 3, "y": 0, "cost": 50, "destScreen": 3, "destX": 8, "destY": 3},
+    # Atlantium (12,0) committee → Middlegate (0,5) 25gp one-way  [OP_0C 0x00,0x50]
+    {"screen": 1, "x": 12, "y": 0, "cost": 25, "destScreen": 0, "destX": 0, "destY": 5, "oneWay": True},
 ]
 
 _HELPERS = """

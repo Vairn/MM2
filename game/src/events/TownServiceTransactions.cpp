@@ -14,6 +14,21 @@ namespace mm2::events {
 
 namespace {
 
+/* -$7F56 / 0x4442 — same table as Rest SP / training HP (A4-$7486). */
+uint8_t attrTableBonus(uint8_t attr)
+{
+    static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
+                                      60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
+    uint8_t bonus = 0xFD;
+    for (size_t i = 0; i < sizeof(kThresh); ++i) {
+        if (attr <= kThresh[i]) {
+            break;
+        }
+        ++bonus;
+    }
+    return bonus;
+}
+
 /* A4-$6738 BE u16 ×6 — tavern B / temple-style restore menu costs @ 0x1CB48. */
 static const uint16_t kStatBoostCosts[6] = {5, 5, 20, 20, 50, 100};
 
@@ -42,6 +57,10 @@ static const uint8_t kFoodAddends[3][6] = {
 /* A4-$6AF0 base / A4-$6AED addend — drink encode @ 0x18F78. */
 static const uint8_t kDrinkBase[6] = {48, 64, 48, 31, 79, 143};
 static const uint8_t kDrinkAddend[6] = {31, 79, 143, 48, 64, 80};
+
+/* A4-$6AEA thresholds / A4-$6AE0 gold longs — drink apply @ 0x18D3A (data hunk). */
+static const uint8_t kDrinkGoldThresh[10] = {0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xA0, 0xB0, 0xC0};
+static const uint32_t kDrinkGoldAward[10] = {2000, 4000, 5000, 7000, 10000, 15000, 25000, 50000, 100000, 250000};
 
 /* Encode food gold byte @ 0x18EC0 (no gp deduct). */
 uint8_t encodeFoodByte(int menu, gameplay::Rng *rng)
@@ -362,24 +381,18 @@ TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id, gamepla
 
     rec.level = static_cast<uint8_t>(next_level);
 
-    /* HP: doc-32 class/END average, plus confirmed 0x9BCA RNG addend when rng
-     * is supplied. Calendar mode select (0x9B48) and -$7D22/-$7D28 write path
-     * remain deferred — we only fold the traced roll into the average gain. */
-    int hp_gain = mm2_class_hp_per_level(rec.class_id) + mm2_attr_bonus(rec.endurance_base);
-    if (rng) {
-        const int roll = rng->range(1, 0x6D);
-        const uint8_t addend = static_cast<uint8_t>((static_cast<unsigned>(roll) & 0xFFFFu) / 10u);
-        if (addend != 5) {
-            hp_gain += static_cast<int>(addend);
-        }
+    /* HP @ 0x20390..0x20478: class*$64EE[map]/$64E4[map] (+rem bump) +
+     * -$7F56(+$27). Writes +$60/+ $74/+ $5E. Not 0x9BCA (bash door). */
+    (void)rng;
+    int hp_gain = mm2_train_hp_gain(rec.class_id, map_id, rec.endurance_current);
+    if (hp_gain < 0) {
+        hp_gain = 0;
     }
-    if (hp_gain < 1) {
-        hp_gain = 1;
-    }
-    rec.hp_aux = static_cast<uint16_t>(rec.hp_aux + hp_gain);
-    rec.hp_max = rec.hp_aux;
-    rec.hp_current = rec.hp_aux;
-    r.hp_gain = static_cast<uint16_t>(hp_gain);
+    const uint16_t gain16 = static_cast<uint16_t>(hp_gain);
+    rec.hp_aux = static_cast<uint16_t>(rec.hp_aux + gain16);
+    rec.hp_current = static_cast<uint16_t>(rec.hp_current + gain16);
+    rec.hp_max = static_cast<uint16_t>(rec.hp_max + gain16);
+    r.hp_gain = gain16;
 
     const int caster_stat = mm2_class_caster_stat(rec.class_id);
     if (caster_stat != 0) {
@@ -400,28 +413,8 @@ TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id, gamepla
     return r;
 }
 
-TownSvcHpRoll townSvcCalendarHpRoll(const Mm2RosterRecord *party0,
-                                    const Mm2RosterRecord *party1_or_null, gameplay::Rng *rng)
-{
-    /* 0x9BCA confirmed roll math only (calendar mode / HP write deferred). */
-    TownSvcHpRoll r;
-    if (!party0) {
-        return r;
-    }
-    r.might_sum = party0->might_base;
-    if (party1_or_null) {
-        r.might_sum = static_cast<uint8_t>(r.might_sum + party1_or_null->might_base);
-    }
-    const int roll = rng ? rng->range(1, 0x6D) : 1;
-    r.rng_addend = static_cast<uint8_t>((static_cast<unsigned>(roll) & 0xFFFFu) / 10u);
-    r.rolled_base = r.might_sum;
-    if (r.rng_addend != 5) {
-        r.rolled_base = static_cast<uint8_t>(r.rolled_base + r.rng_addend);
-    }
-    return r;
-}
-
-TownSvcDonateResult townSvcTempleDonate(uint8_t *a4, Mm2RosterRecord &rec, int map_id)
+TownSvcDonateResult townSvcTempleDonate(uint8_t *a4, Mm2RosterRecord &rec, int map_id,
+                                        gameplay::Rng *rng)
 {
     TownSvcDonateResult r;
     Mm2TownCommerce town;
@@ -442,12 +435,32 @@ TownSvcDonateResult townSvcTempleDonate(uint8_t *a4, Mm2RosterRecord &rec, int m
         mm2_gs_set_u8(a4, MM2_GS_TEMPLE_DONATION, bits);
         if (bits == MM2_TEMPLE_DONATION_ALL_BITS) {
             r.all_temples_donated = true;
-            /* 0x1D7E8: move.b #$FE,-$794C; move.b #$D4,-$3F1C; clr.b -$799E.
-             * Item 0xD4 = Fe Farthing. Blessed-buff UI (0x1D7FE..) deferred. */
+            /* 0x1D7E8: move.b #$FE,-$794C; move.b #$D4,-$3F1C; clr.b -$799E. */
             mm2_gs_set_u8(a4, MM2_GS_FOUND_SENTINEL, MM2_GS_FOUND_SENTINEL_PENDING);
             mm2_gs_set_u8(a4, MM2_GS_FOUND_ITEM_ID, 0xD4);
             mm2_gs_set_u8(a4, MM2_GS_TEMPLE_DONATION, 0);
             r.reward_queued = true;
+        }
+        /* 0x1D7C4: -$7BB4(100,1); sgt vs 0x5A → blessed buff @ 0x1D7FE.
+         * Independent of the 0x1F Farthing path. */
+        const int bless_roll = rng ? rng->range(1, 100) : 1;
+        if (bless_roll > 0x5A) {
+            r.blessed = true;
+            mm2_gs_set_u8(a4, MM2_GS_LIGHT_FACTOR, 0xC8);
+            mm2_gs_set_u8(a4, MM2_GS_MAGIC_PROTECT, 0x3C);
+            mm2_gs_set_u8(a4, MM2_GS_FORCES_PROTECT, 0x3C);
+            mm2_gs_set_u8(a4, MM2_GS_LEVITATE_FLAG, 1);
+            mm2_gs_set_u8(a4, MM2_GS_WALK_WATER_FLAG, 1);
+            mm2_gs_set_u8(a4, MM2_GS_GUARD_DOG_FLAG, 1);
+            mm2_gs_set_u8(a4, -0x79A5, 0); /* clr.b -$79A5 @ 0x1D82A */
+            mm2_gs_set_u8(a4, -0x79A1, 1);
+            mm2_gs_set_u8(a4, -0x79A2, 1);
+            mm2_gs_set_u8(a4, -0x79A3, 1);
+            mm2_gs_set_u8(a4, -0x79A4, 1); /* overlaps TALISMAN_BASE[0] — ASM writes it */
+            mm2_gs_set_u8(a4, MM2_GS_CLASS_QUEST_CNT, 0xC8); /* -$79A0 */
+            mm2_gs_set_u8(a4, MM2_GS_QUEST_COUNTER_B, 0xC8); /* -$799F */
+            const uint16_t ctr = mm2_gs_u16(a4, MM2_GS_TEMPLE_BLESS_CTR);
+            mm2_gs_set_u16(a4, MM2_GS_TEMPLE_BLESS_CTR, static_cast<uint16_t>(ctr + 1));
         }
     }
     return r;
@@ -835,52 +848,144 @@ bool townSvcCircusGiveCupieDoll(Mm2RosterFile *roster, const Mm2PartyLaunch *lau
     return false;
 }
 
+void townSvcArmDrinkMatchOnKill(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                uint8_t monster_type)
+{
+    /* 0x10C66: for each party member, if +$78==type and +$7C bit0 → bset bit1. */
+    if (!roster || !launch) {
+        return;
+    }
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch->roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        auto *raw = reinterpret_cast<uint8_t *>(&roster->records[idx]);
+        if (raw[0x78] == 0 || raw[0x78] != monster_type) {
+            continue;
+        }
+        if ((raw[0x7C] & 0x01) == 0) {
+            continue;
+        }
+        raw[0x7C] = static_cast<uint8_t>(raw[0x7C] | 0x02);
+    }
+}
+
+TownSvcDrinkApplyResult townSvcApplyDrinkEncoding(Mm2RosterRecord &rec)
+{
+    /* 0x18D3A: bit1 of +$7C; tier from +$78 vs A4-$6AEA; gold A4-$6AE0 → +$62. */
+    TownSvcDrinkApplyResult r;
+    auto *raw = reinterpret_cast<uint8_t *>(&rec);
+    if ((raw[0x7C] & 0x02) == 0) {
+        return r;
+    }
+    const uint8_t enc = raw[0x78];
+    if (enc == 0) {
+        return r;
+    }
+    if ((rec.condition & 0xFF) >= 0x80) {
+        return r;
+    }
+    int tier = 0;
+    while (tier < 10 && enc >= kDrinkGoldThresh[tier]) {
+        ++tier;
+    }
+    if (tier >= 10) {
+        tier = 9;
+    }
+    r.gold = kDrinkGoldAward[tier];
+    rec.experience += r.gold; /* 0x18DC0: add.l → +$62 experience (table is gold-sized XP). */
+    raw[0x78] = 0;
+    raw[0x7C] = static_cast<uint8_t>(raw[0x7C] & 0xFD);
+    r.applied = true;
+    return r;
+}
+
+TownSvcFoodApplyResult townSvcApplyFoodEncoding(const Mm2ItemsFile *items, Mm2RosterRecord &rec)
+{
+    /* 0x18DE0 leaf (XP arm @ 0x18E82): enc=+78 as items.dat id; gold×8 → +$62; clr +$78.
+     * A4-$3EEC = items.dat base (-$3EFE) + $12 gold word. */
+    TownSvcFoodApplyResult r;
+    auto *raw = reinterpret_cast<uint8_t *>(&rec);
+    const uint8_t enc = raw[0x78];
+    if (enc == 0) {
+        return r;
+    }
+    if ((rec.condition & 0xFF) >= 0x80) {
+        return r;
+    }
+    uint16_t item_gold = 0;
+    if (items) {
+        const Mm2ItemRecord *item = mm2_items_lookup(items, enc);
+        if (item) {
+            item_gold = item->gold;
+        }
+    }
+    r.xp = static_cast<uint32_t>(item_gold) << 3; /* asl.l #3 */
+    rec.experience += r.xp;
+    raw[0x78] = 0;
+    r.applied = true;
+    return r;
+}
+
+int townSvcPartyFindBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                 uint8_t item_id)
+{
+    /* 0x18C74 + 0x18CE6: scan party backpacks for id; return slot+1 or 0. */
+    if (!roster || !launch || item_id == 0) {
+        return 0;
+    }
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch->roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        Mm2RosterRecord &rec = roster->records[idx];
+        for (int s = 0; s < MM2_ROSTER_ITEM_SLOTS; ++s) {
+            if (rec.backpack_id[s] == item_id) {
+                return s + 1;
+            }
+        }
+    }
+    return 0;
+}
+
+bool townSvcPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                     uint8_t item_id)
+{
+    /* 0x18D06: find via 0x18C74 then -$7F26 clear id/charges/flags. */
+    if (!roster || !launch || item_id == 0) {
+        return false;
+    }
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch->roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        Mm2RosterRecord &rec = roster->records[idx];
+        for (int s = 0; s < MM2_ROSTER_ITEM_SLOTS; ++s) {
+            if (rec.backpack_id[s] == item_id) {
+                rec.backpack_id[s] = 0;
+                rec.backpack_charges[s] = 0;
+                rec.backpack_flags[s] = 0;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 TownSvcDrinkResult townSvcPubDrink(Mm2RosterRecord &rec, int drink_idx, gameplay::Rng *rng)
 {
-    /* Drink prices in A4 label table are 0; sick roll mirrors rest interrupt
-     * style RNG(1,50)==2 @ 0x19D64 family. Effects from FAQ-confirmed bonuses
-     * only applied when not sick — ASM opcode handlers still untraced. */
+    /* Caption stub — encode is townSvcDrinkEncodePurchase; apply is 0x18D3A. */
+    (void)rec;
+    (void)rng;
     TownSvcDrinkResult r;
     if (drink_idx < 0 || drink_idx >= 6) {
         return r;
     }
     r.name = kPubDrinkNames[drink_idx];
     r.ok = true;
-    const int roll = rng ? rng->range(1, 50) : 1;
-    if (roll == 2) {
-        r.sick = true;
-        /* Stat reset: currents ← bases (inverse of usual buff path). */
-        rec.might_current = rec.might_base;
-        rec.intelligence_current = rec.intelligence_base;
-        rec.personality_current = rec.personality_base;
-        rec.speed_current = rec.speed_base;
-        rec.accuracy_current = rec.accuracy_base;
-        rec.luck_current = rec.luck_base;
-        rec.endurance_current = rec.endurance_base;
-        return r;
-    }
-    switch (drink_idx) {
-    case 0:
-        satAddByte(&rec.might_current, 5);
-        break;
-    case 1:
-        satAddByte(&rec.accuracy_current, 20);
-        break;
-    case 2:
-        satAddByte(&rec.personality_current, 10);
-        break;
-    case 3:
-        satAddByte(&rec.intelligence_current, 10);
-        break;
-    case 4:
-        satAddByte(&rec.level, 3);
-        break;
-    case 5:
-        satAddByte(&rec.spell_level, 1);
-        break;
-    default:
-        break;
-    }
     return r;
 }
 
@@ -922,7 +1027,9 @@ TownSvcStatBoostResult townSvcTavernStatBoost(Mm2RosterRecord &rec, int slot, in
 TownSvcSpecialtyResult townSvcTavernSpecialty(Mm2RosterRecord &rec, int map_id, int menu,
                                               gameplay::Rng *rng)
 {
-    /* 0x1CD2E / 0x1CEA4: pay A4-$6760; 0x1C8D4 OR mask into +$76. */
+    /* 0x1CD2E / 0x1CEA4: pay A4-$6760; then sick OR mask — never both.
+     * ASM @ 0x1CECA: -$7F56(+$73) +5 → RNG; ==1 → bset #2,$26 and skip 0x1C8D4.
+     * Else 0x1CF0A → 0x1C8D4 OR A4-$786C into +$76. No 0x18EC0 encode here. */
     TownSvcSpecialtyResult r;
     const int town = (map_id >= 0 && map_id < 5) ? map_id : 0;
     if (menu < 0 || menu > 2) {
@@ -938,13 +1045,15 @@ TownSvcSpecialtyResult townSvcTavernSpecialty(Mm2RosterRecord &rec, int map_id, 
         return r;
     }
     r.paid = true;
-    rec.temp_score_word = static_cast<uint16_t>(rec.temp_score_word | kSpecialtyMask[town][menu]);
-    /* Sick: RNG(1, end+5)==1 → bset #2,$26 @ 0x1CEF4. */
+    /* Stub -$7F56 as endurance_base until that helper is traced. */
     const int end_hi = static_cast<int>(rec.endurance_base) + 5;
     const int sick_roll = rng ? rng->range(1, end_hi > 0 ? end_hi : 1) : 2;
     if (sick_roll == 1) {
         r.sick = true;
         rec.condition = static_cast<uint8_t>(rec.condition | 0x04);
+    } else {
+        rec.temp_score_word =
+            static_cast<uint16_t>(rec.temp_score_word | kSpecialtyMask[town][menu]);
     }
     r.ok = true;
     return r;
@@ -965,6 +1074,70 @@ TownSvcFoodEncodeResult townSvcDrinkEncodePurchase(Mm2RosterFile *roster,
 {
     TownSvcFoodEncodeResult r;
     writePartyEncoding(roster, launch, encodeDrinkByte(drink, rng), /*drink*/ true, r);
+    return r;
+}
+
+int townSvcTipDayPairBase(uint16_t day_of_year)
+{
+    /* 0x1C962: day from -$79DE[era]; if ==$B4 → 3; else if day%30==0 → day/30;
+     * else (day&1) xor 1. Result 0/1/3 then caller asl #1 → pair base 0/2/6. */
+    if (day_of_year == 0xB4) {
+        return 3 * 2;
+    }
+    if ((day_of_year % 30u) == 0) {
+        return static_cast<int>((day_of_year / 30u) * 2u);
+    }
+    return static_cast<int>(((day_of_year & 1u) ^ 1u) * 2u);
+}
+
+TownSvcTipResult townSvcTavernTip(Mm2RosterRecord &rec, uint16_t day_of_year, gameplay::Rng *rng)
+{
+    TownSvcTipResult r;
+    /* 0x1CFD2 */
+    if (rec.condition != 0) {
+        r.reject = TownSvcTipReject::Condition;
+        return r;
+    }
+    /* 0x1CFE6: deduct 1 gp via 0x1C9C0 */
+    if (!townSvcCharGoldDeduct(rec, 1)) {
+        r.reject = TownSvcTipReject::NotEnoughGold;
+        return r;
+    }
+    /* 0x1D006: hi = -$7F56(+$73)+5; rng(1,hi)==1 to show tip. */
+    const uint8_t factor = attrTableBonus(rec.endurance_base);
+    const int hi = static_cast<int>(factor) + 5;
+    const int roll = rng ? rng->range(1, hi > 0 ? hi : 1) : 1;
+    if (roll != 1) {
+        r.reject = TownSvcTipReject::NoTip;
+        return r;
+    }
+    r.pair_base = townSvcTipDayPairBase(day_of_year);
+    if (r.pair_base < 0) {
+        r.pair_base = 0;
+    }
+    if (r.pair_base > 6) {
+        r.pair_base = 6;
+    }
+    r.ok = true;
+    return r;
+}
+
+TownSvcTipResult townSvcTavernRumor(Mm2RosterRecord &rec, uint16_t day_of_year)
+{
+    TownSvcTipResult r;
+    /* 0x1D0B8: cond != 0 → caption 4 */
+    if (rec.condition != 0) {
+        r.reject = TownSvcTipReject::Condition;
+        return r;
+    }
+    r.pair_base = townSvcTipDayPairBase(day_of_year);
+    if (r.pair_base < 0) {
+        r.pair_base = 0;
+    }
+    if (r.pair_base > 6) {
+        r.pair_base = 6;
+    }
+    r.ok = true;
     return r;
 }
 

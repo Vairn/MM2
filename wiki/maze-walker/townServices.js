@@ -7,8 +7,9 @@ import {
   townCommerce,
   trainingCost,
   classXpForLevel,
-  classHpPerLevel,
   attrBonus,
+  trainHpGain,
+  tipDayPairBase,
   classCasterStat,
   classSpellLevelFor,
   smithInventory,
@@ -19,7 +20,6 @@ import {
   pubFoodMenu,
   mageGuildStock,
   templeSpellStock,
-  portalAt,
   TOWN_NAMES,
   PUB_DRINKS,
   templeDonateCost,
@@ -141,6 +141,18 @@ export function svcTempleDonate(session, member, mapId) {
     session.questDonationBits = 0;
     r.rewardQueued = true;
   }
+  /* 0x1D7C4: RNG(1,100)>0x5A → blessed buff writes (session mirror of A4-$79AB..). */
+  const blessRoll = Math.floor(Math.random() * 100) + 1;
+  if (blessRoll > 0x5a) {
+    r.blessed = true;
+    session.lightFactor = 0xc8;
+    session.magicProtect = 0x3c;
+    session.forcesProtect = 0x3c;
+    session.levitate = 1;
+    session.walkWater = 1;
+    session.guardDog = 1;
+    session.templeBlessCtr = ((session.templeBlessCtr | 0) + 1) & 0xffff;
+  }
   return r;
 }
 
@@ -176,15 +188,13 @@ export function svcTrainLevelUp(member, mapId) {
   }
   r.paid = true;
   member.level = next;
-  /* doc-32 average + confirmed 0x9BCA RNG addend (calendar mode / HP write deferred). */
-  let hpGain = classHpPerLevel(member.classId) + attrBonus(member.endurance);
-  const roll = Math.floor(Math.random() * 0x6d) + 1;
-  const addend = Math.floor(roll / 10) & 0xff;
-  if (addend !== 5) hpGain += addend;
-  if (hpGain < 1) hpGain = 1;
-  member.hpAux += hpGain;
-  member.hpMax = member.hpAux;
-  member.hpCurrent = member.hpAux;
+  /* HP @ 0x20390: ($64DA[class]*$64EE[map])/$64E4[map] + -$7F56(+$27). */
+  const endCur = member.enduranceCurrent ?? member.endurance ?? 0;
+  let hpGain = trainHpGain(member.classId, mapId, endCur);
+  if (hpGain < 0) hpGain = 0;
+  member.hpAux = (member.hpAux | 0) + hpGain;
+  member.hpCurrent = (member.hpCurrent | 0) + hpGain;
+  member.hpMax = (member.hpMax | 0) + hpGain;
   r.hpGain = hpGain;
   const caster = classCasterStat(member.classId);
   if (caster) {
@@ -492,14 +502,18 @@ export function svcInnRest(member) {
   if (member.spMax > 0) member.spCurrent = member.spMax;
 }
 
-/** @param {object} member @param {number} mapId @param {number} menuIdx 0..2 */
+/**
+ * Tavern C specialties @ 0x1CD2E / 0x1CEA4: pay A4-$6760, then sick OR mask.
+ * Sick RNG(1,end+5)==1 → bset #2,$26 and SKIP 0x1C8D4. Else OR A4-$786C → +$76.
+ * No 0x18EC0 encode (selector 0xC9). No FAQ meal→tile coords.
+ */
 export function svcPubBuyFood(member, mapId, menuIdx) {
   const menu = pubFoodMenu(mapId);
   const meal = menu[menuIdx];
-  if (!meal) return { paid: false, cost: 0 };
+  if (!meal) return { paid: false, cost: 0, sick: false };
+  if ((member.condition | 0) !== 0) return { paid: false, cost: meal.gold | 0, sick: false };
   const cost = meal.gold | 0;
-  if (!charGoldDeduct(member, cost)) return { paid: false, cost: 0 };
-  /* 0x1C8D4: OR A4-$786C mask into +$76 (temp_score_word). */
+  if (!charGoldDeduct(member, cost)) return { paid: false, cost: 0, sick: false };
   const masks = [
     [1, 2, 4],
     [4096, 8192, 16384],
@@ -508,8 +522,18 @@ export function svcPubBuyFood(member, mapId, menuIdx) {
     [8, 16, 32],
   ];
   const town = mapId >= 0 && mapId < 5 ? mapId : 0;
+  const endHi = (member.endurance | 0) + 5;
+  const sick = Math.floor(Math.random() * Math.max(1, endHi)) + 1 === 1;
+  if (sick) {
+    member.condition = (member.condition | 0) | 0x04;
+    return { paid: true, cost, meal, sick: true };
+  }
   member.tempScoreWord = ((member.tempScoreWord | 0) | (masks[town][menuIdx] | 0)) & 0xffff;
-  /* 0x18EC0 encode → +$78; +$7C bit0 clear (food). No invented meal→tile coords. */
+  return { paid: true, cost, meal, sick: false };
+}
+
+/** Selector 0xC9 food encode 0x18EC0 → party +$78 (no gold). Not tavern C. */
+export function svcFoodEncodePurchase(party, menuIdx) {
   const tiers = [
     [56, 24, 13, 6, 3, 8, 2, 1],
     [66, 29, 6, 7, 7, 15, 2, 1],
@@ -520,7 +544,7 @@ export function svcPubBuyFood(member, mapId, menuIdx) {
     [25, 79, 98, 118, 135, 157],
     [54, 85, 105, 125, 150, 159],
   ];
-  const t = tiers[menuIdx];
+  const t = tiers[menuIdx] || tiers[0];
   let enc = (Math.floor(Math.random() * t[0]) + 1) - 1;
   if (enc < 0) enc = 0;
   let i = 1;
@@ -531,14 +555,15 @@ export function svcPubBuyFood(member, mapId, menuIdx) {
   i -= 1;
   if (i < 0) i = 0;
   if (i > 5) i = 5;
-  enc = (enc + addends[menuIdx][i]) & 0xff;
-  member.scriptWorkFlag = enc;
-  member.pubMeal = enc;
-  if (member.rawBytes) {
-    member.rawBytes[0x78] = enc;
-    member.rawBytes[0x7c] = (member.rawBytes[0x7c] & 0xfe);
+  enc = (enc + addends[menuIdx | 0][i]) & 0xff;
+  for (const m of party || []) {
+    m.scriptWorkFlag = enc;
+    if (m.rawBytes) {
+      m.rawBytes[0x78] = enc;
+      m.rawBytes[0x7c] = m.rawBytes[0x7c] & 0xfe;
+    }
   }
-  return { paid: true, cost, meal, encoding: enc };
+  return { ok: true, encoding: enc };
 }
 
 /** Tavern B @ 0x1CAC4 — A–F costs A4-$6738; apply base-stat bump (0x1C7EC family). */
@@ -637,30 +662,99 @@ export function svcGeneralStoreConvert(member) {
   return { converted: true, paid: true, message: "The secondary skills are gone." };
 }
 
-/** @param {object} member @param {number} drinkIdx */
+/** FAQ drink caption stub — encode 0xCA / apply 0x18D3A (XP from A4-$6AE0). */
 export function svcPubBuyDrink(member, drinkIdx, drinks) {
   const row = drinks[drinkIdx];
   if (!row) return { paid: false, cost: 0 };
-  const cost = row.gold | 0;
-  if (cost > 0 && !charGoldDeduct(member, cost)) return { paid: false, cost: 0 };
-  /* ASM-family RNG(1,50)==2 → sick; FAQ bonuses when not sick (VM handlers untraced). */
-  const sick = Math.floor(Math.random() * 50) + 1 === 2;
-  if (sick) {
-    return { paid: true, cost, sick: true, name: row.name };
+  (void)member;
+  return { paid: true, cost: row.gold | 0, sick: false, name: row.name, encodeOnly: true };
+}
+
+/** A4-$6AEA / -$6AE0 — drink apply @ 0x18D3A (XP → +$62). */
+const DRINK_GOLD_THRESH = [0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0];
+const DRINK_GOLD_AWARD = [2000, 4000, 5000, 7000, 10000, 15000, 25000, 50000, 100000, 250000];
+
+export function svcApplyDrinkEncoding(member) {
+  const raw = member.rawBytes;
+  if (!raw || ((raw[0x7c] | 0) & 0x02) === 0) return { applied: false, gold: 0 };
+  const enc = raw[0x78] | 0;
+  if (!enc || ((member.condition | 0) & 0xff) >= 0x80) return { applied: false, gold: 0 };
+  let tier = 0;
+  while (tier < 10 && enc >= DRINK_GOLD_THRESH[tier]) tier++;
+  if (tier >= 10) tier = 9;
+  const gold = DRINK_GOLD_AWARD[tier];
+  member.experience = ((member.experience | 0) + gold) >>> 0;
+  raw[0x78] = 0;
+  raw[0x7c] = (raw[0x7c] | 0) & 0xfd;
+  return { applied: true, gold };
+}
+
+/** Food EXP apply @ 0x18DE0: +$78 as items.dat id; XP = gold×8 (A4-$3EEC). */
+export function svcApplyFoodEncoding(member, manifest) {
+  const raw = member.rawBytes;
+  if (!raw) return { applied: false, xp: 0 };
+  const enc = raw[0x78] | 0;
+  if (!enc || ((member.condition | 0) & 0xff) >= 0x80) return { applied: false, xp: 0 };
+  const itemGold = itemGoldFromManifest(manifest, enc) | 0;
+  const xp = (itemGold << 3) >>> 0;
+  member.experience = ((member.experience | 0) + xp) >>> 0;
+  raw[0x78] = 0;
+  return { applied: true, xp };
+}
+
+/** 0x18CE6: first party backpack slot with id (1-based), or 0. */
+export function svcPartyFindBackpackItem(party, itemId) {
+  const id = itemId & 0xff;
+  if (!id) return 0;
+  for (const m of party || []) {
+    const pack = m.backpack || m.rawBytes;
+    if (!pack) continue;
+    for (let s = 0; s < 6; s++) {
+      const slotId = m.backpackId?.[s] ?? pack[0x3a + s] ?? 0;
+      if ((slotId | 0) === id) return s + 1;
+    }
   }
-  const add = (k, n) => {
-    member[k] = Math.min(255, ((member[k] | 0) + n) | 0);
-  };
-  switch (drinkIdx) {
-    case 0: add("might", 5); break;
-    case 1: add("accuracy", 20); break;
-    case 2: add("personality", 10); break;
-    case 3: add("intelligence", 10); break;
-    case 4: add("level", 3); break;
-    case 5: add("spellLevel", 1); break;
-    default: break;
+  return 0;
+}
+
+/** 0x18D06: clear first matching backpack id. */
+export function svcPartyConsumeBackpackItem(party, itemId) {
+  const id = itemId & 0xff;
+  if (!id) return false;
+  for (const m of party || []) {
+    if (m.backpackId) {
+      for (let s = 0; s < 6; s++) {
+        if ((m.backpackId[s] | 0) === id) {
+          m.backpackId[s] = 0;
+          if (m.backpackCharges) m.backpackCharges[s] = 0;
+          if (m.backpackFlags) m.backpackFlags[s] = 0;
+          return true;
+        }
+      }
+    }
+    const raw = m.rawBytes;
+    if (!raw) continue;
+    for (let s = 0; s < 6; s++) {
+      if ((raw[0x3a + s] | 0) === id) {
+        raw[0x3a + s] = 0;
+        raw[0x40 + s] = 0;
+        raw[0x46 + s] = 0;
+        return true;
+      }
+    }
   }
-  return { paid: true, cost, sick: false, name: row.name };
+  return false;
+}
+
+/** Combat 0x10C66: arm +$7C bit1 when +$78 matches killed monster type. */
+export function svcArmDrinkMatchOnKill(party, monsterType) {
+  const t = monsterType & 0xff;
+  for (const m of party || []) {
+    const raw = m.rawBytes;
+    if (!raw || (raw[0x78] | 0) !== t) continue;
+    if (((raw[0x7c] | 0) & 0x01) === 0) continue;
+    raw[0x7c] = (raw[0x7c] | 0) | 0x02;
+  }
 }
 
 /**
@@ -723,8 +817,18 @@ export async function runTavernService(ctx) {
     if (!key || key === "0") break;
 
     if (key === "e") {
+      /* E @ 0x1D0B4: day-pair rumors (A4-$594E). */
+      const slot = await promptSelectMember(ctx);
+      if (slot == null) continue;
+      const member = getPartyMember(session, slot);
+      if ((member.condition | 0) !== 0) {
+        await waitForSpace("Cannot listen while afflicted.", sprite, 0x0e);
+        continue;
+      }
+      const day = session.day | 0;
+      const base = tipDayPairBase(day);
       await waitForSpace(
-        "You listen… rumors of temples, quests, and distant lands.\n(Event bytecode A4-$119A — display only in walker)",
+        `Rumors (day pair ${base}/${base + 1}):\n(A4-$594E — pool strings)`,
         sprite,
         0x0e
       );
@@ -732,7 +836,26 @@ export async function runTavernService(ctx) {
     }
 
     if (key === "d") {
-      await waitForSpace("Thank you -\nPlease come again\n(Tip pool A4-$58AE)", sprite, 0x0e);
+      /* D @ 0x1CFCA: 1gp + RNG + day-pair tips. */
+      const slot = await promptSelectMember(ctx);
+      if (slot == null) continue;
+      const member = getPartyMember(session, slot);
+      if ((member.condition | 0) !== 0) {
+        await waitForSpace("Cannot tip while afflicted.", sprite, 0x0e);
+        continue;
+      }
+      if (!charGoldDeduct(member, 1)) {
+        await waitForSpace("Not enough gold!", sprite, 0x0e);
+        continue;
+      }
+      const day = session.day | 0;
+      const base = tipDayPairBase(day);
+      await waitForSpace(
+        `Tip (day pair ${base}/${base + 1}):\n(A4-$58AE — pool strings)`,
+        sprite,
+        0x0e
+      );
+      note(`Tavern tip −1 gp day-pair ${base}`);
       continue;
     }
 
@@ -792,14 +915,17 @@ export async function runTavernService(ctx) {
       const member = getPartyMember(session, slot);
       const r = svcPubBuyFood(member, screenId, menuIdx);
       if (!r.paid) {
-        await waitForSpace("Not enough gold!", sprite, 0x0e);
+        await waitForSpace("Not enough gold / afflicted!", sprite, 0x0e);
+      } else if (r.sick) {
+        await waitForSpace(`${member.name}: ${meal.text} — you feel sick!`, sprite, 0x0e);
+        note(`Tavern specialty ${meal.text}: sick (no +$76 mask)`);
       } else {
         await waitForSpace(
-          `${member.name} ordered ${meal.text}.\n−${r.cost} gp  (+$78=0x${(r.encoding & 0xff).toString(16)})`,
+          `${member.name} ordered ${meal.text}.\n−${r.cost} gp  (+$76 mask)`,
           sprite,
           0x0e
         );
-        note(`Tavern meal ${meal.text} −${r.cost} gp enc=${r.encoding}`);
+        note(`Tavern specialty ${meal.text} −${r.cost} gp`);
       }
       afterTxn(ctx);
       continue;
@@ -880,36 +1006,13 @@ export async function runInnRegistry(ctx) {
   ctx.onSessionChange?.(session);
 }
 
-/** OP_0E 0x64 — inter-town portal when standing on portal tile. */
+/** OP_0E 0x64 is Circus (thunk -$7D9A → 0xDF04), not inter-town portals.
+ *  Town portal tiles use other selectors / OP_0C — do not call this for 0x64. */
 export async function runPortalTravel(ctx) {
-  const { screenId, tileX, tileY, session, waitForSpace, promptYesNo, note, sprite, onTeleport } = ctx;
-  const leg = portalAt(screenId, tileX, tileY);
-  if (!leg) {
-    await waitForSpace("No portal here.", sprite, 0x0e);
-    note("Portal 0x64: not on portal tile");
-    return false;
-  }
-  const destName = TOWN_NAMES[leg.destScreen] ?? `screen ${leg.destScreen}`;
-  const yes = await promptYesNo(
-    `Travel to ${destName} for ${leg.cost} gold (y/n)?`,
-    sprite,
-    0x0e
-  );
-  if (!yes) {
-    note("Portal travel declined");
-    return false;
-  }
-  const payer = getPartyMember(session, 0);
-  if ((payer.gold | 0) < leg.cost) {
-    await waitForSpace("Not enough gold!", sprite, 0x0e);
-    return false;
-  }
-  payer.gold -= leg.cost;
-  syncSessionGoldFromParty(session);
-  onTeleport?.(leg.destScreen, leg.destX, leg.destY, leg.facing ?? 0);
-  ctx.teleported = true;
-  note(`Portal → ${destName} (−${leg.cost} gp)`);
-  return true;
+  const { waitForSpace, note, sprite } = ctx;
+  await waitForSpace("No portal handler (0x64 is Circus).", sprite, 0x0e);
+  note("Portal stub: 0x64 is Circus @ 0xDF04");
+  return false;
 }
 
 /** Display-only stub for engine-deferred services (general store 0x07 / special

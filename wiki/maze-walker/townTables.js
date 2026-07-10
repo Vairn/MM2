@@ -14,7 +14,7 @@ export const PUB_DRINKS = [{"name": "Orc Beer", "gold": 0}, {"name": "Straight s
 export const MAGE_GUILD = [[{"flat": 0, "gold": 10, "label": "S1/1 Awaken", "key": "A"}, {"flat": 2, "gold": 1000, "label": "S1/3 Energy Blast", "key": "B"}, {"flat": 6, "gold": 50, "label": "S1/7 Sleep", "key": "C"}, {"flat": 9, "gold": 100, "label": "S2/3 Identify Monster", "key": "D"}], [{"flat": 41, "gold": 50000, "label": "S8/2 Mega Volts", "key": "A"}, {"flat": 42, "gold": 50000, "label": "S8/3 Meteor Shower", "key": "B"}, {"flat": 44, "gold": 100000, "label": "S9/1 Implosion", "key": "C"}, {"flat": 45, "gold": 100000, "label": "S9/2 Inferno", "key": "D"}], [{"flat": 21, "gold": 600, "label": "S4/2 Feeble Mind", "key": "A"}, {"flat": 22, "gold": 2000, "label": "S4/3 Fire Ball", "key": "B"}, {"flat": 26, "gold": 3000, "label": "S5/1 Disrupt", "key": "C"}, {"flat": 28, "gold": 3000, "label": "S5/3 Sand Storm", "key": "D"}], [{"flat": 31, "gold": 5000, "label": "S6/1 Disintegration", "key": "A"}, {"flat": 33, "gold": 5000, "label": "S6/3 Fantastic Freeze", "key": "B"}, {"flat": 35, "gold": 5000, "label": "S6/5 Super Shock", "key": "C"}, {"flat": 37, "gold": 25000, "label": "S7/2 Duplication", "key": "D"}], [{"flat": 13, "gold": 400, "label": "S2/7 Protection from Magic", "key": "A"}, {"flat": 14, "gold": 200, "label": "S3/1 Acid Stream", "key": "B"}, {"flat": 17, "gold": 1000, "label": "S3/4 Lightning Bolt", "key": "C"}, {"flat": 20, "gold": 500, "label": "S4/1 Cold Beam", "key": "D"}]];
 export const TEMPLE_SPELLS = [[{"flat": 0, "gold": 10, "label": "Apparition", "key": "D"}, {"flat": 1, "gold": 10, "label": "Awaken", "key": "E"}, {"flat": 5, "gold": 1000, "label": "Power Cure", "key": "F"}], [{"flat": 42, "gold": 20000, "label": "Mass Distortion", "key": "D"}, {"flat": 46, "gold": 50000, "label": "Resurrection", "key": "E"}, {"flat": 47, "gold": 100000, "label": "Uncurse Item", "key": "F"}], [{"flat": 14, "gold": 400, "label": "Cold Ray", "key": "D"}, {"flat": 18, "gold": 100, "label": "Lasting Light", "key": "E"}, {"flat": 23, "gold": 500, "label": "Restore Alignment", "key": "F"}], [{"flat": 25, "gold": 2000, "label": "Holy Bonus", "key": "D"}, {"flat": 30, "gold": 3000, "label": "Remove Condition", "key": "E"}, {"flat": 37, "gold": 10000, "label": "Fiery Flail", "key": "F"}], [{"flat": 8, "gold": 250, "label": "Heroism", "key": "D"}, {"flat": 11, "gold": 300, "label": "Protection From Elements", "key": "E"}, {"flat": 13, "gold": 200, "label": "Weaken", "key": "F"}]];
 export const MAGE_GUILD_MEMBER_MASK = [2, 4, 8, 16, 32];
-export const TOWN_PORTALS = [{"screen": 0, "x": 0, "y": 5, "cost": 10, "destScreen": 4, "destX": 6, "destY": 1, "facing": 2}, {"screen": 4, "x": 4, "y": 14, "cost": 50, "destScreen": 2, "destX": 6, "destY": 11, "facing": 1}, {"screen": 2, "x": 6, "y": 9, "cost": 50, "destScreen": 3, "destX": 6, "destY": 3, "facing": 3}, {"screen": 3, "x": 8, "y": 3, "cost": 100, "destScreen": 1, "destX": 3, "destY": 0, "facing": 0}, {"screen": 1, "x": 12, "y": 0, "cost": 25, "destScreen": 0, "destX": 0, "destY": 5, "facing": 0, "oneWay": true}];
+export const TOWN_PORTALS = [{"screen": 0, "x": 0, "y": 5, "cost": 10, "destScreen": 4, "destX": 8, "destY": 1}, {"screen": 4, "x": 8, "y": 1, "cost": 20, "destScreen": 0, "destX": 0, "destY": 5}, {"screen": 4, "x": 4, "y": 15, "cost": 50, "destScreen": 2, "destX": 6, "destY": 11}, {"screen": 2, "x": 6, "y": 11, "cost": 10, "destScreen": 4, "destX": 4, "destY": 15}, {"screen": 2, "x": 6, "y": 9, "cost": 50, "destScreen": 3, "destX": 6, "destY": 3}, {"screen": 3, "x": 6, "y": 3, "cost": 30, "destScreen": 2, "destX": 6, "destY": 9}, {"screen": 3, "x": 8, "y": 3, "cost": 100, "destScreen": 1, "destX": 3, "destY": 0}, {"screen": 1, "x": 3, "y": 0, "cost": 50, "destScreen": 3, "destX": 8, "destY": 3}, {"screen": 1, "x": 12, "y": 0, "cost": 25, "destScreen": 0, "destX": 0, "destY": 5, "oneWay": true}];
 
 export function townCommerce(mapId) {
   return TOWNS[mapId] ?? TOWNS[0];
@@ -33,10 +33,36 @@ export function classXpForLevel(classId, level) {
   return (g === 0 ? XP_GROUP_A : XP_GROUP_B)[level - 2];
 }
 
-const CLASS_HP = [12, 10, 10, 8, 6, 8, 10, 15];
+const CLASS_HP = [12, 10, 10, 8, 6, 8, 8, 15]; /* A4-$64DA (Ninja=8) */
+const TRAIN_HP_MUL = [1, 5, 2, 3, 2]; /* A4-$64EE */
+const TRAIN_HP_DIV = [2, 5, 3, 4, 3]; /* A4-$64E4 */
+const ATTR_THRESH = [4, 6, 9, 13, 15, 17, 19, 22, 26, 30, 45, 60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255];
 
 export function classHpPerLevel(classId) {
   return CLASS_HP[classId] ?? 0;
+}
+
+/** -$7F56 / 0x4442 table walk (same as Rest SP). */
+export function restSpellBonusFactor(attr) {
+  let bonus = 0xfd;
+  for (const th of ATTR_THRESH) {
+    if (attr <= th) break;
+    bonus = (bonus + 1) & 0xff;
+  }
+  return bonus;
+}
+
+/** Training Hall HP @ 0x20390. */
+export function trainHpGain(classId, mapId, enduranceCurrent) {
+  if (classId < 0 || classId > 7 || mapId < 0 || mapId > 4) return 0;
+  const div = TRAIN_HP_DIV[mapId] || 1;
+  const prod = (CLASS_HP[classId] | 0) * (TRAIN_HP_MUL[mapId] | 0);
+  let base = (prod / div) | 0;
+  const rem = prod % div;
+  if (rem !== 0 && classId !== 3 && classId !== 5 && classId !== 6) base += 1;
+  let endB = restSpellBonusFactor(enduranceCurrent | 0);
+  if (endB >= 0xf0) endB = 0;
+  return base + endB;
 }
 
 export function attrBonus(v) {
@@ -44,6 +70,14 @@ export function attrBonus(v) {
   let n = 0;
   for (const b of bounds) if (v >= b) n++;
   return n;
+}
+
+/** Tip/rumor day-pair base @ 0x1C962 (×2 already applied). */
+export function tipDayPairBase(dayOfYear) {
+  const d = dayOfYear | 0;
+  if (d === 0xb4) return 6;
+  if (d % 30 === 0) return Math.min(6, ((d / 30) | 0) * 2);
+  return ((d & 1) ^ 1) * 2;
 }
 
 export function classCasterStat(classId) {

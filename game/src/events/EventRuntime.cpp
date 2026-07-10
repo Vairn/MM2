@@ -89,7 +89,6 @@ void EventRuntime::unload()
     screen_changed_ = false;
     service_title_[0] = '\0';
     text_.reset();
-    pending_portal_active_ = false;
     pending_town_menu_ = PendingTownMenu::None;
     pending_inn_goto_town_ = false;
     pending_skill_buy_member_ = false;
@@ -132,7 +131,6 @@ bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world
     saved_loc_ = nullptr;
     service_title_[0] = '\0';
     text_.reset();
-    pending_portal_active_ = false;
     pending_town_menu_ = PendingTownMenu::None;
     pending_inn_goto_town_ = false;
     pending_skill_buy_member_ = false;
@@ -395,33 +393,6 @@ void EventRuntime::applyMapTransition(GameStateView &gs, world::MapWorld &world,
     screen_changed_ = true;
 }
 
-bool EventRuntime::finishPendingPortal(GameStateView &gs, world::MapWorld &world, bool accepted)
-{
-    if (!pending_portal_active_) {
-        return false;
-    }
-    pending_portal_active_ = false;
-
-    if (!accepted) {
-        return false;
-    }
-
-    const uint32_t have = eventVmPartyGoldTotal(gs.a4(), roster_, launch_);
-    if (have < pending_portal_.cost) {
-        text_.showOp02("Not enough gold!", 19);
-        text_.showSpacePrompt();
-        wait_ = EventVmWait::Space;
-        return true;
-    }
-
-    if (pending_portal_.cost > 0) {
-        eventVmDeductPartyGold(gs.a4(), roster_, launch_, pending_portal_.cost);
-    }
-    applyMapTransition(gs, world, pending_portal_.dest_screen, pending_portal_.dest_tile);
-    endScript(gs);
-    return true;
-}
-
 bool EventRuntime::finishPendingTownMenu(GameStateView &gs, bool accepted)
 {
     if (pending_town_menu_ == PendingTownMenu::None) {
@@ -550,18 +521,30 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         break;
     }
     case 0x04: {
+        /* OP_04 @ 0x159F4: resolve string, then skip draw if -$79E1 != 0. */
         const uint8_t idx = readU8(gs);
-        text_.showOp04(resolveString(idx, text_buf, sizeof(text_buf)));
+        const char *s = resolveString(idx, text_buf, sizeof(text_buf));
+        if (mm2_gs_u8(gs.a4(), MM2_GS_CANT_SEE_FLAG) == 0) {
+            text_.showOp04(s);
+        }
         break;
     }
     case 0x05: {
+        /* OP_05 @ 0x15A46: same can't-see gate @ 0x15A52. */
         const uint8_t idx = readU8(gs);
-        text_.showOp05(resolveString(idx, text_buf, sizeof(text_buf)));
+        const char *s = resolveString(idx, text_buf, sizeof(text_buf));
+        if (mm2_gs_u8(gs.a4(), MM2_GS_CANT_SEE_FLAG) == 0) {
+            text_.showOp05(s);
+        }
         break;
     }
     case 0x06: {
+        /* OP_06 @ 0x15AEE: '-'→'{' rewrite then can't-see gate @ 0x15B24. */
         const uint8_t idx = readU8(gs);
-        text_.showOp06(resolveString(idx, text_buf, sizeof(text_buf)));
+        const char *s = resolveString(idx, text_buf, sizeof(text_buf));
+        if (mm2_gs_u8(gs.a4(), MM2_GS_CANT_SEE_FLAG) == 0) {
+            text_.showOp06(s);
+        }
         break;
     }
     case 0x07:
@@ -878,12 +861,13 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         break;
     }
     case 0x26:
-        /* OP_26 @ 0x16BC0 flag=1: prompt; on success writes slot to cond + -$5D42 + -$5D3F. */
-        text_.showOp02("Who will learn this skill (1-8)?", 19);
+        /* OP_26 @ 0x16BC0 flag≠0: key wait only (thunks -$7D0A/-$7BD2). No ROM
+         * prompt string here — preceding OP_01/02 already drew the question.
+         * Success path @ 0x16C70 writes slot → cond / -$5D42 / -$5D3F. */
         wait_ = EventVmWait::MemberSelect;
         break;
     case 0x27:
-        text_.showOp02("Select a party member (1-8):", 19);
+        /* OP_27 @ 0x16BC0 flag=0: same leaf, input via -$7DDC. */
         wait_ = EventVmWait::MemberSelect;
         break;
     case 0x28: {
@@ -1389,11 +1373,6 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
             return true;
         }
         mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, ch == 'Y' ? 1 : 0);
-        if (hasPendingPortal()) {
-            if (finishPendingPortal(gs, world, ch == 'Y')) {
-                return script_active_ || wait_ != EventVmWait::None;
-            }
-        }
         if (hasPendingTownMenu()) {
             finishPendingTownMenu(gs, ch == 'Y');
         } else {

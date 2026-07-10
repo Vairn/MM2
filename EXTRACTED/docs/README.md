@@ -160,6 +160,8 @@ per-location scripts remain unported.
 | [`34-commerce-formulas.md`](34-commerce-formulas.md) | Training, healing, portals, bar, shop cycle |
 | [`34-commerce-and-world-services.md`](34-commerce-and-world-services.md) | Extended commerce / world services notes |
 | [`28-town-services.md`](28-town-services.md) | Inn, temple, guild, training, blacksmith — **OP_0E dispatch**, static tables, **PlayTownServiceUi** port status (§1.4.3 intro flow) |
+| [`56-event-system-remaining-gaps.md`](56-event-system-remaining-gaps.md) | Whole-event-system gap inventory (town services, VM, combat, Search, parity) |
+| [`57-user-help-trace-residuals.md`](57-user-help-trace-residuals.md) | **Playtest help** — in-game scenarios for remaining VM/event residuals (respawn, darkness, Rest, Search, portals, HoS) |
 | [`31-spell-sources.md`](31-spell-sources.md) | Where each spell is obtained in-game |
 
 **Runtime codecs (C + Python, not `.dat` files)**

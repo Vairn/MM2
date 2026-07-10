@@ -730,6 +730,7 @@ def build_maps_payload(attrib: list[bytes], screens: list[tuple[bytes, bytes]], 
                 },
                 "doorStrength": a[0x12],
                 "doorTrap": a[0x13],
+                "flags1A": a[0x1A],  # attrib flags → A4-$5600; bit7 = map-wide dark
                 "sector": a[0x15],
                 # attrib +0x20..+0x3F: 256 roof bits → sky.32 frame 1 (ceiling) vs 0 (open)
                 "roof": list(a[0x20:0x40]),

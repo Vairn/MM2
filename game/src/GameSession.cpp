@@ -320,6 +320,7 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     gs_.initCalendarDefaults();
     gs_.initControlsDefaults();
     gs_.initProtectDefaults();
+    events::eventVmInitStrBankOffsets(gs_.a4()); /* 0x9666 bank table A4-$71E8 */
     mm2_party_launch_apply(gs_.a4(), &launch_);
 
     mm2_image32_set_preview_opaque(0);
@@ -344,12 +345,16 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     }
     combat_.bindParty(&roster_, &launch_);
     combat_.bindMonsters(has_monsters_ ? &monsters_ : nullptr);
+    combat_.bindItems(has_items_ ? &items_ : nullptr);
     combat_.bindRng(&rng_);
 
     const bool has_world = world_.load(data_dir_) && world_.enterScreen(gs_.screenId());
     bool has_env = false;
     bool has_sky = false;
     if (has_world) {
+        gameplay::materializeScreenAttrib(gs_, world_);
+        gameplay::syncCurrentCellFlags(gs_, world_);
+        gameplay::sessionInteractionGate(gs_);
         has_sky = env_.loadGlobal(data_dir_);
         has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
         combat::encounterSyncScreenContext(gs_, world_);
@@ -422,6 +427,7 @@ void GameSession::tickBootstrap()
         }
         combat_.bindParty(&roster_, &launch_);
         combat_.bindMonsters(has_monsters_ ? &monsters_ : nullptr);
+        combat_.bindItems(has_items_ ? &items_ : nullptr);
         combat_.bindRng(&rng_);
         bootstrap_step_ = 1;
         markDirty();
@@ -430,6 +436,9 @@ void GameSession::tickBootstrap()
         MM2_DBG("MM2 GOTO: bootstrap world load screen=%d\n", gs_.screenId());
         const bool has_world = world_.load(data_dir_) && world_.enterScreen(gs_.screenId());
         if (has_world) {
+            gameplay::materializeScreenAttrib(gs_, world_);
+            gameplay::syncCurrentCellFlags(gs_, world_);
+            gameplay::sessionInteractionGate(gs_);
             combat::encounterSyncScreenContext(gs_, world_);
         }
         assets_ok_ = has_world;
@@ -531,12 +540,17 @@ void GameSession::refreshWorldAfterMove(const gameplay::MoveResult &move)
     if (move.acted && data_dir_) {
         if (move.screen_changed) {
             world_.enterScreen(gs_.screenId());
+            gameplay::materializeScreenAttrib(gs_, world_);
             const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
             assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
             combat::encounterSyncScreenContext(gs_, world_);
             if (events_loaded_) {
                 refreshEventsForScreen();
             }
+        }
+        if (move.moved || move.turned || move.screen_changed) {
+            gameplay::syncCurrentCellFlags(gs_, world_);
+            gameplay::sessionInteractionGate(gs_);
         }
         if (scripted_loaded_) {
             maybeQueueScriptedScenes(false);
@@ -608,6 +622,9 @@ void GameSession::refreshWorldAfterEventTransition()
     events_.clearScreenChanged();
 
     world_.enterScreen(gs_.screenId());
+    gameplay::materializeScreenAttrib(gs_, world_);
+    gameplay::syncCurrentCellFlags(gs_, world_);
+    gameplay::sessionInteractionGate(gs_);
     const bool has_env = env_.loadEnv(data_dir_, gfx::envKindFromAttrib(world_.attrib()));
     assets_ok_ = world_.loaded() && env_.loadGlobal(data_dir_) && has_env;
     combat::encounterSyncScreenContext(gs_, world_);
@@ -652,6 +669,11 @@ void GameSession::finishCombat()
     }
     runPendingEvents();
     refreshWorldAfterEventTransition();
+    /* Defeat @ 0x1164A may have restored coords from -$560C — refresh cell/gate. */
+    if (world_.loaded()) {
+        gameplay::syncCurrentCellFlags(gs_, world_);
+        gameplay::sessionInteractionGate(gs_);
+    }
     markDirty();
 }
 
@@ -762,13 +784,21 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
         markDirty();
         break;
     case gameplay::PlaySessionAction::Search: {
-        /* Key S @ 0x4800 → -$7D1C → 0x1B19C. State port: distribute found-item
-         * buffer; full Search window UI deferred. */
-        char buf[96];
-        if (events::eventVmSearchPayoff(gs_.a4(), &roster_, &launch_, buf, sizeof(buf))) {
-            showStatusMessage(buf);
+        /* Key S @ 0x4800 → -$7D1C → 0x1B19C. Long path (sentinel==0) opens
+         * Identify modal '1'..'4' @ 0x1B3F2; short path distributes immediately. */
+        events::SearchPrepareOut prep{};
+        const events::SearchPrepareResult r = events::eventVmSearchPrepare(
+            gs_.a4(), &roster_, &launch_, &rng_, &prep);
+        if (r == events::SearchPrepareResult::Nothing) {
+            showStatusMessage(prep.msg[0] ? prep.msg : "Nothing Here!");
+        } else if (r == events::SearchPrepareResult::NeedIdentify) {
+            search_identify_rating_ = prep.rating;
+            search_identify_pick_member_ = false;
+            search_identify_find_traps_ = false;
+            std::snprintf(status_message_, sizeof(status_message_), "%s", prep.msg);
+            overlay_ = PlayOverlay::SearchIdentify;
         } else {
-            showStatusMessage("Nothing Here!");
+            showStatusMessage(prep.msg);
         }
         markDirty();
         break;
@@ -777,12 +807,16 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
         handleUnlockDoor();
         break;
     case gameplay::PlaySessionAction::Rest:
-        /* Rest @ 0x19E20: set the modal flag, then put up the Y/N confirm overlay.
-         * Execution (pay / encounter / heal / day-advance) runs on confirm in
-         * executeRest(). The original's "Too dangerous!" pre-check (0x19E32
-         * btst #3,-$55D6) reads the re-bundled per-tile flag table that the port
-         * does not maintain yet, so it is DEFERRED (no false blocking). */
+        /* Rest @ 0x19E20: set modal flag; 0x19E32 btst #3,-$55D6 → "Too dangerous!".
+         * Current-cell latch -$55D6 is maintained by syncCurrentCellFlags. */
         mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 1); /* 0x19E24: -$7950 := 1 */
+        gameplay::syncCurrentCellFlags(gs_, world_);
+        if ((mm2_gs_u8(gs_.a4(), MM2_GS_TILE_RT_FLAGS) & 0x08) != 0) {
+            mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+            showStatusMessage("Too dangerous!"); /* 0x19EBC */
+            markDirty();
+            break;
+        }
         overlay_ = PlayOverlay::RestConfirm;
         markDirty();
         break;
@@ -878,7 +912,7 @@ void GameSession::handleBashDoor()
     /* 0x9B7A/0x9B82: outdoor, or no wall ahead -> a plain forward step + tick. */
     if (world_.isOutdoor() || field == MM2_MAP_WALL_OPEN) {
         maybeTriggerStepEncounter();
-        gameplay::MoveResult move = gameplay::step(world_, gs_, true);
+        gameplay::MoveResult move = gameplay::step(world_, gs_, true, &roster_, &launch_);
         refreshWorldAfterMove(move);
         return;
     }
@@ -886,7 +920,7 @@ void GameSession::handleBashDoor()
     /* 0x9B88: door already unlocked (no wall bit) -> step through. */
     if (!forwardDoorBlocked(world_, x, y, facing)) {
         maybeTriggerStepEncounter();
-        gameplay::MoveResult move = gameplay::step(world_, gs_, true);
+        gameplay::MoveResult move = gameplay::step(world_, gs_, true, &roster_, &launch_);
         refreshWorldAfterMove(move);
         return;
     }
@@ -929,7 +963,7 @@ void GameSession::handleBashDoor()
 
     /* 0x9C66: step forward + time tick. */
     maybeTriggerStepEncounter();
-    gameplay::MoveResult move = gameplay::step(world_, gs_, true);
+    gameplay::MoveResult move = gameplay::step(world_, gs_, true, &roster_, &launch_);
     refreshWorldAfterMove(move);
 }
 
@@ -1028,11 +1062,16 @@ void GameSession::executeRest()
     }
 
     /* --- 0x19D64 rest-interruption (encounter) check ---------------------- */
-    /* Conditions that suppress the encounter (all -> no roll): event tile, an
-     * active guard dog, or a non-zero move counter -$796C. */
+    /* ASM gates (all suppress the roll → return without ambush):
+     *   -$55D6 (current-cell collision latch) >= $80  (0x19D7C)
+     *   Guard Dog -$79A6 nonzero                     (0x19D88)
+     *   saved move-counter -$796C nonzero            (0x19D90; cleared @ 0x19D76)
+     * -$55D6 is the single current-cell byte (0x1B1C), not an array. */
+    gameplay::syncCurrentCellFlags(gs_, world_);
     const uint8_t move_counter = mm2_gs_u8(a4, -0x796C);
     mm2_gs_set_u8(a4, -0x796C, 0); /* 0x19D76: clr -$796C */
-    const bool on_event_tile = (world_.collisionAt(gs_.coordX(), gs_.coordY()) & MM2_MAP_COLL_EVENT) != 0;
+    const uint8_t tile_rt = mm2_gs_u8(a4, MM2_GS_TILE_RT_FLAGS);
+    const bool on_event_tile = tile_rt >= 0x80; /* 0x19D7C exact */
     const bool guard_dog = mm2_gs_u8(a4, MM2_GS_GUARD_DOG_FLAG) != 0;
 
     bool encounter = false;
@@ -1040,16 +1079,26 @@ void GameSession::executeRest()
         encounter = (rng_.range(1, 50) == 2); /* 0x19D98: rng(1,50)==2 */
     }
     if (encounter) {
-        /* 0x19DAC: wakes the party (sets condition bit 4) and starts a fixed
-         * fight (-$796B := 3, -$7EDE combat setup @ 0x051C2). Faithfully skip
-         * the heal + day advance (rest interrupted). */
+        /* 0x19DAC–0x19DE6: for each living member (cond < $80), bset #4,$26
+         * (wake from sleep). Then mode=3, clr -$77BE, zero 11 battle slots,
+         * jsr -$7EDE. Skip heal + day advance (rest interrupted). */
+        for (int i = 0; i < launch_.party_count; ++i) {
+            const int idx = launch_.roster_slots[i];
+            if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+                continue;
+            }
+            Mm2RosterRecord &rec = roster_.records[idx];
+            if (rec.condition < 0x80) {
+                rec.condition = static_cast<uint8_t>(rec.condition | 0x10);
+            }
+        }
         mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
         mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_MODE, 3);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 0); /* 0x19DEE: clr -$77BE */
         for (int i = 0; i < MM2_GS_MONSTER_SLOT_COUNT; ++i) {
             mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, 0);
         }
         mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_OVERFLOW_TYPE, 0);
-        mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 0);
         combat_.enter(gs_, world_);
         markDirty();
         return;
@@ -1103,18 +1152,56 @@ void GameSession::executeRest()
             rec.hp_max = rec.hp_current; /* 0x19C2A */
         }
 
-        /* 0x19C30 SP recompute: sp_current = (stat_bonus+3) * spell_level for
-         * casters (+$23), then sp_max = sp_current. The bonus lookup -$7F56 and
-         * the exact field semantics are not ported; restore SP to the stored max
-         * (the rested end state for an undrained caster). DEFER exact recompute. */
-        rec.sp_current = rec.sp_max;
+        /* 0x19C30 SP recompute (ASM-exact):
+         *   if +$23==0 → skip
+         *   attr = +$12 (PER); if class==4 or ==2 → attr = +$11 (INT)
+         *   bonus = -$7F56(attr) @ 0x4442 (table -$7486); clamp if >= $F2
+         *   sp_current (+$5A) = (bonus+3) * +$20; then sp_max (+$58) = sp_current */
+        const uint8_t caster_flag = static_cast<uint8_t>((rec.unknown_22 >> 8) & 0xFF); /* +$23 */
+        if (caster_flag != 0) {
+            uint8_t attr = rec.personality_current; /* +$12 */
+            if (rec.class_id == 4 || rec.class_id == 2) {
+                attr = rec.intelligence_current; /* +$11 */
+            }
+            uint8_t bonus = gameplay::restSpellBonusFactor(attr);
+            if (bonus >= 0xF2) {
+                bonus = 0;
+            }
+            const uint8_t mul = rec.unknown_1a_20[6]; /* +$20 */
+            const uint16_t sp = static_cast<uint16_t>((static_cast<uint16_t>(bonus) + 3u) * mul);
+            rec.sp_current = sp;
+            rec.sp_max = sp; /* 0x19CD2 */
+        }
     }
 
     /* 0x19CEC: advance the clock by 0x55 sub-day units (one rest = ~85 ticks),
      * rolling the calendar over so the day/night cycle progresses. */
-    gameplay::advanceTimeTick(gs_, 0x55);
+    gameplay::advanceTimeTick(gs_, 0x55, &roster_, &launch_);
 
-    /* DEFER 0x19CF6: era==9 endgame timeline-shuffle (rng(1,60) -> map reload). */
+    /* 0x19CF6: if era != 9, rng(1,$3C); if roll < $A → era=9 and
+     * -$7FDA(screen=0, x=$FF, y=$FF) @ 0x1B2A: Middlegate + entry_coord. */
+    if (mm2_gs_u16(a4, MM2_GS_ERA) != 9) {
+        const int roll = rng_.range(1, 0x3C);
+        if (roll < 0x0A) {
+            mm2_gs_set_u16(a4, MM2_GS_ERA, 9);
+            gs_.setScreenId(0);
+            world_.enterScreen(0);
+            gameplay::materializeScreenAttrib(gs_, world_);
+            /* 0x1C6A: $FF args → unpack -$560C (attrib 0x0E) → -$79F1/-$79F0. */
+            const uint8_t packed = mm2_gs_u8(a4, MM2_GS_ENTRY_COORD);
+            gs_.setCoordX(static_cast<uint8_t>(packed & 0x0F));
+            gs_.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
+            mm2_gs_set_u8(a4, MM2_GS_PENDING_EVENT_LATCH, 1); /* 0x19D28 */
+            mm2_gs_set_u8(a4, -0x79E4, 1); /* 0x19D2E */
+            if (events_loaded_) {
+                refreshEventsForScreen();
+            }
+        }
+    }
+
+    /* Light was cleared above — recompute can't-see from live tile (0x53C0). */
+    gameplay::syncCurrentCellFlags(gs_, world_);
+    gameplay::sessionInteractionGate(gs_);
 
     mm2_gs_set_u8(a4, MM2_GS_PENDING_EVENT_LATCH, 1); /* dispatcher epilogue $1420 */
     mm2_gs_set_u8(a4, MM2_GS_BUSY_STATUS, 1);
@@ -1132,6 +1219,69 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
             overlay_ = PlayOverlay::None;
         }
         markDirty();
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::SearchIdentify) {
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (search_identify_pick_member_) {
+            if (keys.escape || ch == 27) {
+                search_identify_pick_member_ = false;
+                std::snprintf(status_message_, sizeof(status_message_),
+                              "The Party Has found:\nTreasure!\n(rating %u)\n"
+                              "1) Open It  2) Find Trap\n3) Detect Magic  4) Leave",
+                              static_cast<unsigned>(search_identify_rating_));
+                markDirty();
+                return;
+            }
+            if (ch >= '1' && ch <= '8') {
+                const int slot = ch - '1';
+                const events::SearchOpenResult open = events::eventVmSearchOpenOrFind(
+                    gs_.a4(), &roster_, &launch_, slot, search_identify_rating_,
+                    search_identify_find_traps_, &rng_);
+                search_identify_pick_member_ = false;
+                if (open.aborted) {
+                    markDirty();
+                    return;
+                }
+                char buf[96];
+                events::eventVmSearchDistribute(gs_.a4(), &roster_, &launch_, buf, sizeof(buf));
+                if (open.trapped) {
+                    std::snprintf(status_message_, sizeof(status_message_),
+                                  "Trap! %u damage.\n%s",
+                                  static_cast<unsigned>(open.trap_damage), buf);
+                } else {
+                    std::snprintf(status_message_, sizeof(status_message_), "%s", buf);
+                }
+                overlay_ = PlayOverlay::StatusMessage;
+                mm2_gs_set_u8(gs_.a4(), -0x79E4, 0);
+                markDirty();
+            }
+            return;
+        }
+        if (keys.escape || ch == '4') {
+            events::eventVmSearchLeave(gs_.a4());
+            overlay_ = PlayOverlay::None;
+            status_message_[0] = '\0';
+            markDirty();
+            return;
+        }
+        if (ch == '1' || ch == '2') {
+            search_identify_find_traps_ = (ch == '2');
+            search_identify_pick_member_ = true;
+            std::snprintf(status_message_, sizeof(status_message_),
+                          "Who tries (1-%d)?", launch_.party_count);
+            markDirty();
+            return;
+        }
+        if (ch == '3') {
+            char det[96];
+            events::eventVmSearchDetectMagic(gs_.a4(), search_identify_rating_, det, sizeof(det));
+            std::snprintf(status_message_, sizeof(status_message_),
+                          "%s\n1) Open  2) Find  3) Detect  4) Leave", det);
+            markDirty();
+            return;
+        }
         return;
     }
 
@@ -1595,11 +1745,11 @@ void GameSession::tick(const platform::KeyState &keys)
                     break;
                 case gameplay::ExploreCode::Forward:
                     maybeTriggerStepEncounter();
-                    move = gameplay::step(world_, gs_, true);
+                    move = gameplay::step(world_, gs_, true, &roster_, &launch_);
                     break;
                 case gameplay::ExploreCode::Back:
                     maybeTriggerStepEncounter();
-                    move = gameplay::step(world_, gs_, false);
+                    move = gameplay::step(world_, gs_, false, &roster_, &launch_);
                     break;
                 default:
                     break;
@@ -1623,11 +1773,36 @@ void GameSession::tick(const platform::KeyState &keys)
         return;
     }
 
+    /* Main-loop auto-Search @ 0x1276: when -$794C == $FE (temple five-donate
+     * Farthing arm, etc.), bump sentinel to $FF and run Search @ 0x4800→0x1B19C.
+     * Combat victory CLEARS the sentinel (0x1243e) — never invent post-fight $FE. */
+    if (mm2_gs_u8(gs_.a4(), MM2_GS_FOUND_SENTINEL) == MM2_GS_FOUND_SENTINEL_PENDING) {
+        mm2_gs_set_u8(gs_.a4(), MM2_GS_FOUND_SENTINEL, MM2_GS_FOUND_SENTINEL_FILLED);
+        events::SearchPrepareOut prep{};
+        const events::SearchPrepareResult r = events::eventVmSearchPrepare(
+            gs_.a4(), &roster_, &launch_, &rng_, &prep);
+        if (r == events::SearchPrepareResult::NeedIdentify) {
+            search_identify_rating_ = prep.rating;
+            search_identify_pick_member_ = false;
+            search_identify_find_traps_ = false;
+            std::snprintf(status_message_, sizeof(status_message_), "%s", prep.msg);
+            overlay_ = PlayOverlay::SearchIdentify;
+        } else if (prep.msg[0]) {
+            showStatusMessage(prep.msg);
+        }
+        markDirty();
+    }
+
     runPendingEvents();
     if (combat_.active()) {
         return;
     }
     refreshWorldAfterEventTransition();
+    /* session_interaction_gate @ 0x53A0 — maintain -$79E1 from live tile/light. */
+    if (world_.loaded()) {
+        gameplay::syncCurrentCellFlags(gs_, world_);
+        gameplay::sessionInteractionGate(gs_);
+    }
     maybeOpenTownServiceMenu();
 }
 
@@ -2005,6 +2180,26 @@ void GameSession::renderOverlays()
         compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 128, 255);
         compositor_.drawText(8, 18 * 8, "(ESC to dismiss)", 180, 180, 180, 255);
         break;
+    case PlayOverlay::SearchIdentify: {
+        /* Identify menu @ 0x1B3F2 — multi-line console band. */
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 6);
+        int row = 0x11;
+        const char *p = status_message_;
+        while (*p && row <= 0x16) {
+            char line[40];
+            int n = 0;
+            while (*p && *p != '\n' && n < 38) {
+                line[n++] = *p++;
+            }
+            line[n] = '\0';
+            if (*p == '\n') {
+                ++p;
+            }
+            compositor_.drawText(8, row * 8, line, 255, 255, 128, 255);
+            ++row;
+        }
+        break;
+    }
     case PlayOverlay::Automap:
         gfx::renderAutomap(compositor_, env_, world_, automap_, gs_);
         break;
@@ -2160,7 +2355,7 @@ void GameSession::renderFrame(bool overlay_anim_only)
 
         if (overlay_ == PlayOverlay::None || overlay_ == PlayOverlay::StatusMessage ||
             overlay_ == PlayOverlay::QuitConfirm || overlay_ == PlayOverlay::RestConfirm ||
-            overlay_ == PlayOverlay::TownService) {
+            overlay_ == PlayOverlay::TownService || overlay_ == PlayOverlay::SearchIdentify) {
             /* Status-line prompts and town services draw in the lower console band
              * only (faithful, not fullscreen modals) — keep 3D view + right column. */
             const bool protect_panel = panel == gfx::PlayRightPanel::Protect;

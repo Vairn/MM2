@@ -65,26 +65,6 @@ uint32_t fieldLoad(const Mm2RosterRecord &rec, const FieldSpec &spec)
     return 0;
 }
 
-void fieldStore(Mm2RosterRecord &rec, const FieldSpec &spec, uint32_t v)
-{
-    uint8_t *p = reinterpret_cast<uint8_t *>(&rec) + spec.offset;
-    switch (spec.kind) {
-    case FieldKind::Byte:
-        p[0] = static_cast<uint8_t>(v);
-        break;
-    case FieldKind::Word:
-        p[0] = static_cast<uint8_t>(v);
-        p[1] = static_cast<uint8_t>(v >> 8);
-        break;
-    case FieldKind::Long:
-        p[0] = static_cast<uint8_t>(v);
-        p[1] = static_cast<uint8_t>(v >> 8);
-        p[2] = static_cast<uint8_t>(v >> 16);
-        p[3] = static_cast<uint8_t>(v >> 24);
-        break;
-    }
-}
-
 uint32_t fieldMax(FieldKind kind)
 {
     switch (kind) {
@@ -98,14 +78,42 @@ uint32_t fieldMax(FieldKind kind)
     return 0;
 }
 
+// Writeback @ 0x168CA..0x16908: script width_op selects how many bytes are
+// stored (3→4). Bytes are taken from the low end of the LE result — matching
+// the ASM's BE scratch at -$4(a5) + start_index=(4-width_op). May write past
+// the natural field width into adjacent record bytes when width_op > field width.
+void fieldStoreWidth(Mm2RosterRecord &rec, int offset, uint32_t v, int write_bytes)
+{
+    if (write_bytes <= 0) {
+        return;
+    }
+    if (write_bytes > 4) {
+        write_bytes = 4;
+    }
+    auto *raw = reinterpret_cast<uint8_t *>(&rec);
+    if (offset < 0 || offset + write_bytes > MM2_ROSTER_RECORD_SIZE) {
+        return;
+    }
+    for (int i = 0; i < write_bytes; ++i) {
+        raw[offset + i] = static_cast<uint8_t>(v >> (8 * i));
+    }
+}
+
+// Writeback byte count from script width_op @ 0x168CA (cmpi #3 → addq → 4).
+int writebackBytes(uint8_t width_op)
+{
+    return (width_op == 3) ? 4 : static_cast<int>(width_op);
+}
+
 // One member's arithmetic, faithfully replicating event_party_effect_apply @
 // 0x167B0: add (mode 0) saturates at the field-width max; subtract (mode 1)
 // fails atomically when the field can't cover the amount — it clears cond_flag
 // and writes nothing. The caller pre-sets cond_flag=1; the writeback is gated on
 // cond_flag for *every* member (so once a subtract underflows, later members in
 // an all-party op are also skipped, matching the ASM's shared -$7951 gate).
+// Arithmetic uses the field-map natural width; store uses script width_op.
 void applyMemberValueOp(GameStateView &gs, Mm2RosterRecord &rec, const FieldSpec &spec,
-                        uint32_t amount, bool subtract)
+                        uint32_t amount, bool subtract, int write_bytes)
 {
     const uint32_t cur = fieldLoad(rec, spec);
     uint32_t newval;
@@ -121,7 +129,7 @@ void applyMemberValueOp(GameStateView &gs, Mm2RosterRecord &rec, const FieldSpec
         newval = (sum > cap) ? cap : static_cast<uint32_t>(sum);
     }
     if (mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG) != 0) {
-        fieldStore(rec, spec, newval);
+        fieldStoreWidth(rec, spec.offset, newval, write_bytes);
     }
 }
 
@@ -150,11 +158,11 @@ void eventApplyPartyEffect(GameStateView &gs, Mm2RosterFile *roster, const Mm2Pa
     }
 
     const uint8_t selector = args[0];                  // field selector (-$5d3e)
+    const uint8_t width_op = args[1];                   // writeback byte count @ 0x168CA
     const uint32_t value24 =                            // 3-byte LE value ($155FC)
         static_cast<uint32_t>(args[2]) | (static_cast<uint32_t>(args[3]) << 8) |
         (static_cast<uint32_t>(args[4]) << 16);
     const bool subtract = mode_b;                       // OP_20 = subtract
-    (void)args[1];                                      // op/width arg: writeback at field width
 
     // event_op1f_party_effect @ 0x1690E member selection.
     const uint8_t incoming_cond = mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG);
@@ -182,16 +190,17 @@ void eventApplyPartyEffect(GameStateView &gs, Mm2RosterFile *roster, const Mm2Pa
         return;  // computed getter selector — nothing writable
     }
     const uint32_t amount = amountForField(amount_value, spec.kind);
+    const int wb = writebackBytes(width_op);
 
     if (member_spec == 0) {
         // member_spec 0 -> all party members (loop 1..party_count @ 0x169DA).
         for (int i = 0; i < party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
             if (Mm2RosterRecord *rec = memberBySlot(roster, launch, i)) {
-                applyMemberValueOp(gs, *rec, spec, amount, subtract);
+                applyMemberValueOp(gs, *rec, spec, amount, subtract, wb);
             }
         }
     } else if (Mm2RosterRecord *rec = memberBySlot(roster, launch, member_spec - 1)) {
-        applyMemberValueOp(gs, *rec, spec, amount, subtract);
+        applyMemberValueOp(gs, *rec, spec, amount, subtract, wb);
     }
 }
 

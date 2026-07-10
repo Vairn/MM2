@@ -178,6 +178,17 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
         return;
     }
 
+    if (view.show_bribe_kind) {
+        /* string @ 0x13249 (0x12FBC). */
+        textAt(c, 1, kMessageRow, "Bribe with:  1-Food  2-Gold  3-Gems");
+        return;
+    }
+    if (view.show_bribe_amount) {
+        /* string @ 0x1326D (0x12FF6); digits via -$7F8C → 0x3EE0. */
+        textAt(c, 1, kMessageRow, "How much?");
+        return;
+    }
+
     /* Combat cast @ 0x11A90 → 0x79EE: prompts on message band only (no LAB_6622 grid).
        Combat mode uses prompt row $0F (0x7A04); exploration uses $15. */
     if (view.show_cast_level) {
@@ -189,6 +200,18 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
         std::snprintf(buf, sizeof(buf), " Spell Level: %d", view.cast_level);
         textAt(c, 2, kMessageRow, buf);
         textAt(c, 0x0C, kMessageRow, "Number: ");
+        return;
+    }
+    if (view.show_cast_target) {
+        /* 0xD52E "What is the magical location?" family — combat path prompts monster letter. */
+        textAt(c, 1, kMessageRow, "Which monster?");
+        return;
+    }
+    if (view.show_party_pick) {
+        /* 0xD2EA patches "On whom (1-N)?" — message already in view.message. */
+        if (view.message[0] != '\0') {
+            textAt(c, 1, kMessageRow, view.message);
+        }
         return;
     }
 

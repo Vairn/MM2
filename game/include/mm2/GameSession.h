@@ -84,7 +84,18 @@ public:
     int currentScreenId() const { return world_.currentScreen(); }
 
 private:
-    enum class PlayOverlay : uint8_t { None, QuickRef, CharacterSheet, QuitConfirm, Controls, StatusMessage, Automap, TownService, RestConfirm };
+    enum class PlayOverlay : uint8_t {
+        None,
+        QuickRef,
+        CharacterSheet,
+        QuitConfirm,
+        Controls,
+        StatusMessage,
+        Automap,
+        TownService,
+        RestConfirm,
+        SearchIdentify, /* 0x1B3F2 '1'..'4' after long-path rating */
+    };
 
     static const char *townName(uint8_t town_filter);
 
@@ -183,7 +194,11 @@ private:
     gameplay::SheetSession sheet_session_{};
 
     PlayOverlay overlay_ = PlayOverlay::None;
-    char status_message_[64] = {};
+    char status_message_[160] = {};
+    /** Long-path Search Identify @ 0x1B3F2: rating from 0x1B270; phase for member pick. */
+    uint8_t search_identify_rating_ = 0;
+    bool search_identify_pick_member_ = false;
+    bool search_identify_find_traps_ = false;
 
     /* rng(min,max) source for Bash/Unlock/Rest rolls (0x22BC6 contract). */
     gameplay::Rng rng_;

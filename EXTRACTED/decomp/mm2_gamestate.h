@@ -39,6 +39,16 @@
 #define MM2_GS_ENGINE_FLAG_79E8 (-0x79E8)  /* byte  ($8618) untraced engine flag */
 #define MM2_GS_SCREEN_MODE_PREV (-0x79E6)  /* byte  ($861A) */
 #define MM2_GS_VIEW_MODE        (-0x79E2)  /* byte  ($861E) 0=dungeon 3D, 1=outdoor surface @ 0x10D6 */
+/* -$79E1 ($861F): "can't see" / interaction-suppress flag. Set by
+ * session_interaction_gate @ 0x53C0 (darkness / tile bit5). OP_04/05/06
+ * skip their draw when nonzero (0x15A00 / 0x15A52 / 0x15B24). */
+#define MM2_GS_CANT_SEE_FLAG    (-0x79E1)  /* byte  ($861F) */
+
+/* Current-screen attrib buffer @ A4-$561A (loader 0x923E copies 64 bytes).
+ * Field reads are A4-$561A + record offset (doc 12). */
+#define MM2_GS_ATTRIB_BUF       (-0x561A)  /* byte[64] ($A9E6) */
+#define MM2_GS_ENTRY_COORD      (-0x560C)  /* byte  ($A9F4) = attrib 0x0E packed (Y<<4)|X */
+#define MM2_GS_ATTRIB_FLAGS     (-0x5600)  /* byte  ($AA00) = attrib 0x1A flags */
 #define MM2_GS_SIGN_ENV_ID      (-0x79E3)  /* byte  ($861D) OP_0B table pick @ 0x15772 */
 #define MM2_GS_RUNTIME_ENV      (-0x7660)  /* byte  ($89A0) area gfx env id; surface_flag&0xF @ 0x1650 */
 #define MM2_GS_BUSY_STATUS      (-0x79E5)  /* byte  ($861B) */
@@ -61,6 +71,34 @@
 #define MM2_GS_LEVITATE_FLAG    (-0x79A8)  /* byte  ($8658) Levitate active */
 #define MM2_GS_WALK_WATER_FLAG  (-0x79A7)  /* byte  ($8659) Walk on Water */
 #define MM2_GS_GUARD_DOG_FLAG   (-0x79A6)  /* byte  ($865A) Guard Dog */
+#define MM2_GS_BUFF_79A5        (-0x79A5)  /* byte  ($865B) temple-bless / spell buff (addq @ 0x1FC2A) */
+#define MM2_GS_BUFF_79A3        (-0x79A3)  /* byte  ($865D) set #1 @ 0xB284 (C flat21 Air Transmute) */
+#define MM2_GS_BUFF_79A2        (-0x79A2)  /* byte  ($865E) set #1 @ 0xB400 (C flat41 Fire Transmute) */
+#define MM2_GS_BUFF_79A1        (-0x79A1)  /* byte  ($865F) set #1 @ 0xB34C (C flat31 Earth Transmute) */
+#define MM2_GS_SPELL_STATUS_MODE (-0x053B) /* byte  ($FAC5) 0=damage 1=status (0x108BC) */
+#define MM2_GS_SPELL_STATUS_CODE (-0x053C) /* byte  ($FAC4) status opcode; bits via -$6F2E */
+#define MM2_GS_STATUS_BIT_TBL   (-0x6F2E)  /* byte[8] ($90D2) data hunk 0x10D0: 02 04 08 10 20 40 80 00 */
+#define MM2_GS_MRES_CHANCE_TBL  (-0x7464)  /* byte[8] ($8B9C) data 0xB9A: 0,10,20,35,50,75,90,100 */
+#define MM2_GS_MONSTER_MRES     (-0x11AF)  /* byte  ($EE51) mres chance tbl[-$7464] (0x4C8E) */
+#define MM2_GS_MONSTER_UNDEAD   (-0x11AD)  /* byte  ($EE53) Sabil bit7 (0x4C8E) */
+#define MM2_GS_MONSTER_AC_BIT6  (-0x11AB)  /* byte  ($EE55) AC bit6 (0x4C8E) */
+#define MM2_GS_MONSTER_AC_BIT7  (-0x11AC)  /* byte  ($EE54) AC bit7 (0x4C8E) */
+#define MM2_GS_MONSTER_AC       (-0x11B4)  /* byte  ($EE4C) AC low5+1 (×10 if bit5) @ 0x4F0A */
+/* 0x1086E bank @ -$11AA[mode_d-1]: dmg.b6, dmg.b7, spd2.b6, spd2.b7, mres.b1, mres.b0, mres.b2 */
+#define MM2_GS_MONSTER_FLAG_BASE (-0x11AA) /* byte[] ($EE56) */
+#define MM2_GS_HP_APPLY         (-0x0F0C)  /* word  ($F0F2) 0x10ED4 damage scratch */
+#define MM2_GS_CUR_MON_SLOT     (-0x051D)  /* byte  ($FAE3) current monster slot (0x10894) */
+#define MM2_GS_BLESS_COUNTER    (-0x799D)  /* byte  ($8663) Bless addq @ 0xBFFC (also INPUT_STATE[0]) */
+#define MM2_GS_SHIELD_COUNTER   (-0x799B)  /* byte  ($8665) Shield addq @ 0xBB9C */
+#define MM2_GS_POWER_SHIELD_CTR (-0x799A)  /* byte  ($8666) Power Shield addq @ 0xBEFA */
+#define MM2_GS_TIME_DISTORT     (-0x0523)  /* byte  ($FADD) Time Distortion addq @ 0xBBCE */
+#define MM2_GS_ENTRAPMENT       (-0x0522)  /* byte  ($FADE) Entrapment addq @ 0xBD00 */
+#define MM2_GS_HOLY_WORD_GATE   (-0x0520)  /* byte  ($FAE0) Holy Word sets #1 @ 0xC756 */
+#define MM2_GS_TURN_UNDEAD_USED (-0x051F)  /* byte  ($FAE1) Turn Undead latch @ 0xC078 */
+#define MM2_GS_ERADICATE_SKIP_PRINT (-0x051E) /* byte ($FAE2) 1→0x10DFC skips " goes down!" */
+#define MM2_GS_SPELL_SKIP_RESIST (-0x051B) /* byte  ($FAE5) 0x10894 skips resist if set (Frenzy) */
+#define MM2_GS_FRENZY_LATCH     (-0x051C)  /* byte  ($FAE4) Frenzy once-per-fight @ 0xC3D8 */
+#define MM2_GS_SHELTER_FLAG     (-0x796C)  /* byte  ($8694) Shelter @ 0xADA8; rest ambush gate 0x19D6E */
 #define MM2_GS_PARTY_COUNT      (-0x795A)  /* word  ($86A6) active party size */
 #define MM2_GS_EVENT_PARSE_POS  (-0x7956)  /* word  ($86AA) */
 #define MM2_GS_EVENT_SCRIPT_ANCHOR (-0x7954)  /* word  ($86AC) */
@@ -118,6 +156,7 @@
  * party_xp_budget/tier_mod computed once per encounter by encounter_xp_budget_init
  * (0x11E58) from total party HP + disposition and from the highest party level. */
 #define MM2_GS_PARTY_XP_BUDGET      (-0x6FCA)  /* long  ($9036) picker budget = totalHP/8 (scaled by disposition) */
+#define MM2_GS_COMBAT_XP_POOL       (-0x6FC6)  /* long  ($903A) fight XP accumulator (0x10B74/0x10E5E → 0x12430) */
 #define MM2_GS_PICKER_TIER_MOD      (-0x6FC2)  /* byte  ($903E) = max(party level)/2, added to tier roll */
 #define MM2_GS_PICKER_DONE          (-0x6FC1)  /* byte  ($903F) picker loop done flag (budget/gate exhausted) */
 #define MM2_GS_MONSTER_FRIEND_COUNT (-0x11B7)  /* byte  ($6E47) picked monster's "friend count" (set by -$7EF6) */
@@ -153,6 +192,9 @@
 #define MM2_GS_FOUND_ITEM_SLOTS   3
 #define MM2_GS_FOUND_SENTINEL_FILLED  0xFF
 #define MM2_GS_FOUND_SENTINEL_PENDING 0xFE
+#define MM2_GS_LOOT_ITEM_TIER     (-0x5E29)  /* byte  ($A1D7) best treasure bits0-1 this fight (0x10B74) */
+#define MM2_GS_LOOT_ITEM_TYPE_HI  (-0x5E28)  /* byte  ($A1D8) type>>4 when tier updates (0x10B74) */
+#define MM2_GS_MONSTER_FLEE_PRINT (-0x5E27)  /* byte  ($A1D9) 1→" runs away!" else " goes down!" (0x10DFC) */
 
 #define MM2_GS_EVENT_SCRIPT_START (-0x5C44)  /* word  ($A3BC) */
 #define MM2_GS_QUEUED_EVENT_ID  (-0x5D46)  /* byte  ($A2BA) */
@@ -183,10 +225,22 @@
  * ticker @ 0x4672 and set by the spell handlers @ 0xAD20 / 0xA91C (5/level). The
  * stale names are kept until the spell-effect system lands; offsets are correct.
  * See docs/06-roster-format.md + docs/19-spells-and-item-use.md. */
-#define MM2_GS_QUEST_COUNTER_B  (-0x799F)  /* byte  ($8671) = Wizard Eye step timer (g=0x2C) */
-#define MM2_GS_CLASS_QUEST_CNT  (-0x79A0)  /* byte  ($8670) = Eagle Eye step timer  (g=0x2B) */
-#define MM2_GS_TALISMAN_BASE    (-0x79A4)  /* byte[4] ($866C) ids 0x27..0x2A */
+#define MM2_GS_WIZARD_EYE_TIMER (-0x799F)  /* byte  ($8671) Wizard Eye steps (g=0x2C); was QUEST_COUNTER_B */
+#define MM2_GS_EAGLE_EYE_TIMER  (-0x79A0)  /* byte  ($8670) Eagle Eye steps (g=0x2B); was CLASS_QUEST_CNT */
+#define MM2_GS_QUEST_COUNTER_B  MM2_GS_WIZARD_EYE_TIMER  /* alias — keep OP_1A / fountain callers */
+#define MM2_GS_CLASS_QUEST_CNT  MM2_GS_EAGLE_EYE_TIMER   /* alias */
+#define MM2_GS_TALISMAN_BASE    (-0x79A4)  /* byte[4] ($866C) ids 0x27..0x2A; also set #1 @ 0xB3BE */
+/* str.dat tip/rumor bank (0x9666 / -$7DE8): raw file @ -$ED6, bank offs @ -$71E8, cursor @ -$71EA */
+#define MM2_GS_STR_DAT_PTR      (-0x0ED6)  /* long  ($F12A) loaded str.dat ($1E80) */
+#define MM2_GS_STR_BANK_OFFS    (-0x71E8)  /* word[] ($8E18) bank start offsets into str.dat */
+#define MM2_GS_STR_BANK_CURSOR  (-0x71EA)  /* word  ($8E16) next C-string offset in decode buf -$ED2 */
+#define MM2_GS_STR_FILE_HANDLE  (-0x77CE)  /* long  ($8832) dos handle used when -$ED6 null */
+#define MM2_GS_SPELL_ACTED      (-0x7958)  /* byte  ($86A8) spell-acted latch (0xD506 / stubs) */
+#define MM2_GS_SPELL_DAMAGE     (-0x053E)  /* word  ($FAC2) 0x1338E damage accumulator */
 #define MM2_GS_TEMPLE_DONATION  (-0x799E)  /* byte  ($8672) OP_0E temple quest bits */
+/* Temple donate blessed path @ 0x1D7FE: writes light/protect/flags then addq.w #1.
+ * Offset confirmed in ASM; semantic name is descriptive (not a bootstrap symbol). */
+#define MM2_GS_TEMPLE_BLESS_CTR (-0x5770)  /* word  addq @ 0x1D852 after blessed buff */
 #define MM2_GS_EVENT_VAR_BANK   (-0x798B)  /* byte[24] ($8685) g=0x00..0x17 */
 #define MM2_GS_TUNDRA_LEVER     (-0x7990)  /* byte  ($8680) */
 #define MM2_GS_XABRAN_GATE      (-0x798F)  /* byte  ($8681) */
@@ -209,9 +263,12 @@
 #define MM2_GS_DRAW_CTX         (-0x7A1A)  /* ptr   ($85E6) */
 #define MM2_GS_MANX_POOL        (-0x5E62)  /* ptr   ($A19E) */
 #define MM2_GS_PARTY_SLOTS      (-0x5E5E)  /* byte[8] ($A1A2) */
-#define MM2_GS_TILE_RT_FLAGS    (-0x55D6)  /* byte[] ($AA2A) */
-#define MM2_GS_TILE_TABLE_A     (-0x55BA)  /* byte[] ($AA46) */
-#define MM2_GS_TILE_VISITED     (-0x54BA)  /* byte[] ($AB46) */
+/* -$55D6 ($AA2A): CURRENT-CELL collision byte after hood refresh (0x1B1C),
+ * NOT a 256-byte array. Rest/ambush/darkness/event-scan all read this single
+ * byte. Source = collision page -$54BA[(y<<4)|x] (MapWorld collision in remake). */
+#define MM2_GS_TILE_RT_FLAGS    (-0x55D6)  /* byte  ($AA2A) current-cell collision */
+#define MM2_GS_TILE_TABLE_A     (-0x55BA)  /* byte[] ($AA46) visual page / hood */
+#define MM2_GS_TILE_VISITED     (-0x54BA)  /* byte[256] ($AB46) collision page copy */
 #define MM2_GS_EVENT_WORK_BUF   (-0x47C8)  /* byte[2220] ($B838) */
 #define MM2_GS_ROSTER_BASE      (-0x2A3E)  /* byte[] ($D5C2) stride 0x82 */
 #define MM2_GS_MAP_BLOB         (-0x110C)  /* ptr   ($EEF4) */
