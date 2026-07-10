@@ -57,6 +57,27 @@ for town in TOWN_NAMES:
         )
     MAGE_GUILD.append(slots)
 
+temple_raw = shop.get("static_by_town", {}).get("temple_spells", {}).get(
+    "cleric_spells_by_town", {}
+)
+TEMPLE_SPELLS = []
+for town in TOWN_NAMES:
+    slots = []
+    for row in temple_raw.get(town, []):
+        # C++ stock stores cleric flat 0..47 (= spells_dat_index - 48).
+        flat = int(row["flat_index"])
+        if flat >= 48:
+            flat -= 48
+        slots.append(
+            {
+                "flat": flat,
+                "gold": row["gold_gp"],
+                "label": row.get("name", f"C/{flat}"),
+                "key": row.get("menu_key", ""),
+            }
+        )
+    TEMPLE_SPELLS.append(slots)
+
 # Per-town mage-guild membership bit in roster record+0x79
 # (class_quest_guild_mask), data hunk A4-$66A9. ONLY OR'd in by the unported,
 # buggy 0x9D76 class-quest reward loop (doc 36-class-quest-hp-bug.md).
@@ -119,8 +140,13 @@ export function trainingCost(level, townIndex) {
   return Math.max(0, level) * Math.max(0, townIndex) * 50;
 }
 
-export function healingCost(level, townIndex) {
-  return Math.max(0, level) * Math.max(0, townIndex) * 10;
+export function healingCost(level, templeCostIndex) {
+  return Math.max(0, level) * Math.max(0, templeCostIndex) * 10;
+}
+
+export function templeDonateCost(mapId) {
+  const t = townCommerce(mapId);
+  return (t.temple_cost_index | 0) * 100;
 }
 
 export function smithInventory(mapId, category) {
@@ -152,6 +178,10 @@ export function mageGuildStock(mapId) {
   return MAGE_GUILD[mapId] ?? MAGE_GUILD[0] ?? [];
 }
 
+export function templeSpellStock(mapId) {
+  return TEMPLE_SPELLS[mapId] ?? TEMPLE_SPELLS[0] ?? [];
+}
+
 /** Portal at current town tile (FAQ §4-1), or null. */
 export function portalAt(screenId, x, y) {
   for (const p of TOWN_PORTALS) {
@@ -178,6 +208,7 @@ OUT.write_text(
             f"export const PUB_FOOD = {json.dumps(PUB_FOOD)};",
             f"export const PUB_DRINKS = {json.dumps(PUB_DRINKS)};",
             f"export const MAGE_GUILD = {json.dumps(MAGE_GUILD)};",
+            f"export const TEMPLE_SPELLS = {json.dumps(TEMPLE_SPELLS)};",
             f"export const MAGE_GUILD_MEMBER_MASK = {json.dumps(MAGE_GUILD_MEMBER_MASK)};",
             f"export const TOWN_PORTALS = {json.dumps(TOWN_PORTALS)};",
             "",

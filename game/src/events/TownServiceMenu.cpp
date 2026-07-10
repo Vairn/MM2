@@ -1,4 +1,5 @@
 #include "mm2/events/TownServiceMenu.h"
+#include "mm2/events/TownServiceTransactions.h"
 
 namespace mm2::events {
 
@@ -49,19 +50,25 @@ void townSvcRunTemple(ITownServiceUi &ui, const TownServiceContext &ctx)
 
         switch (opt) {
         case TempleOption::Heal: {
-            const uint32_t cost = townSvcHealingCost(rec->level, ctx.map_id);
+            const uint32_t cost = townSvcTempleHealCost(*rec, ctx.map_id);
             const TownSvcHealResult r = townSvcHeal(*rec, cost);
-            if (!r.paid) {
+            if (cost > 0 && !r.paid) {
                 ui.reportNotEnoughGold();
             } else {
                 ui.reportHeal(r);
             }
             break;
         }
-        case TempleOption::RestoreCondition:
-            townSvcRestoreCondition(*rec);
-            ui.reportHeal(TownSvcHealResult{}); /* no charge for cond-only path */
+        case TempleOption::RestoreAlignment: {
+            const uint32_t cost = townSvcTempleAlignCost(*rec, ctx.map_id);
+            const TownSvcAlignResult r = townSvcRestoreAlignment(*rec, cost);
+            if (cost > 0 && !r.paid) {
+                ui.reportNotEnoughGold();
+            } else {
+                ui.reportAlign(r);
+            }
             break;
+        }
         case TempleOption::Donate: {
             const TownSvcDonateResult r = townSvcTempleDonate(ctx.a4, *rec, ctx.map_id);
             if (!r.paid) {
@@ -108,7 +115,7 @@ void townSvcRunTraining(ITownServiceUi &ui, const TownServiceContext &ctx)
         }
 
         (void)stat_id; /* the Training Hall has no stat sub-option (level-up only) */
-        const TownSvcTrainResult r = townSvcTrainLevelUp(*rec, ctx.map_id);
+        const TownSvcTrainResult r = townSvcTrainLevelUp(*rec, ctx.map_id, ctx.rng);
         if (r.eligible && !r.paid) {
             ui.reportNotEnoughGold();
         } else {
@@ -380,7 +387,7 @@ static const char *const kPubFood[5][kPubFoodOptions] = {
     {"Gourmet Dinner", "Wyrm Chop Suey", "Steak and Taters"},
 };
 
-/* str.dat ~208-213: drink menu (same for all towns). */
+/* str.dat ~208-213: drink labels (selector 0xCA encode path — not tavern B). */
 static const char *const kPubDrinks[kPubDrinkCount] = {
     "Orc Beer",
     "Straight shot",
@@ -388,6 +395,17 @@ static const char *const kPubDrinks[kPubDrinkCount] = {
     "Academic Ale",
     "Rare Vintage",
     "Mystic Brew",
+};
+
+/* A4-$6738 costs; captions approximate A4-$580E (0x1C7EC field order). */
+static const char *const kStatBoostLabels[kPubStatBoostCount] = {
+    "Might", "Accuracy", "Personality", "Intelligence", "Level", "Spell Level",
+};
+static const uint16_t kStatBoostGold[kPubStatBoostCount] = {5, 5, 20, 20, 50, 100};
+
+/* A4-$6760 specialties gold (town × menu). */
+static const uint16_t kSpecialtyGoldTable[5][kPubFoodOptions] = {
+    {10, 50, 100}, {1000, 2000, 3000}, {200, 100, 1000}, {5000, 500, 1000}, {20, 50, 250},
 };
 
 void townSvcPubTables(int map_id, TavernMenuData &out)
@@ -401,9 +419,14 @@ void townSvcPubTables(int map_id, TavernMenuData &out)
     }
     for (int i = 0; i < kPubFoodOptions; ++i) {
         out.food.options[i] = kPubFood[town][i];
+        out.food.costs[i] = kSpecialtyGoldTable[town][i];
     }
     for (int i = 0; i < kPubDrinkCount; ++i) {
         out.drinks[i].label = kPubDrinks[i];
+    }
+    for (int i = 0; i < kPubStatBoostCount; ++i) {
+        out.boosts[i].label = kStatBoostLabels[i];
+        out.boosts[i].cost = kStatBoostGold[i];
     }
 }
 
@@ -425,29 +448,51 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
             }
             break;
         }
+        case TavernOption::StatBoost: {
+            /* B @ 0x1CAC4 — A–F stat boost, NOT drinks. */
+            int slot = -1;
+            if (ui.chooseTavernStatBoost(ctx, data, slot) && slot >= 0 &&
+                slot < kPubStatBoostCount) {
+                int member = 0;
+                if (ui.selectMember(ctx, member)) {
+                    Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
+                    if (rec) {
+                        const TownSvcStatBoostResult r =
+                            townSvcTavernStatBoost(*rec, slot, ctx.map_id, ctx.rng);
+                        ui.reportTavernStatBoost(r);
+                    }
+                }
+            }
+            break;
+        }
         case TavernOption::Specialties: {
-            /* Food sub-menu — effects (food-satiation byte +$78, RNG-gated result
-             * "Great Stuff!" / "You feel sick!") are not yet traced; defer. */
+            /* C @ 0x1CD2E — A4-$6760 pay + A4-$786C → +$76. Also run 0x18EC0
+             * encode onto party +$78 (selector 0xC9 leaf shares the meal index). */
             int food = -1;
             if (ui.chooseTavernFood(ctx, data, food) && food >= 0 && food < kPubFoodOptions) {
+                int member = 0;
+                if (ui.selectMember(ctx, member)) {
+                    Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
+                    if (rec) {
+                        const TownSvcSpecialtyResult r =
+                            townSvcTavernSpecialty(*rec, ctx.map_id, food, ctx.rng);
+                        ui.reportTavernSpecialty(r);
+                        /* 0x18EC0 encode is selector 0xC9, not 0x1CD2E. Remake
+                         * also writes +$78 on specialty buy so meal encoding is
+                         * visible without inventing FAQ tile coords; gold was
+                         * already taken via A4-$6760 above (encoder itself never
+                         * deducts). */
+                        if (r.paid) {
+                            (void)townSvcFoodEncodePurchase(ctx.roster, ctx.launch, food,
+                                                            ctx.rng);
+                        }
+                    }
+                }
                 ui.reportTavernFood(ctx, food);
             }
             break;
         }
-        case TavernOption::Drink: {
-            /* Drink sub-menu — stat-bonus effects (0x19B28) are not yet traced. */
-            int drink = -1;
-            if (ui.chooseTavernDrink(ctx, data, drink) && drink >= 0 && drink < kPubDrinkCount) {
-                ui.reportTavernDrink(ctx, drink);
-            }
-            break;
-        }
         case TavernOption::Tip: {
-            /* D "Tip the bartender": draws from the separate TIP pool (A4-$58AE),
-             * NOT the rumor pool.  The original uses the same day-based selector
-             * (0x1c962 -> 0/1/3) to choose which pair to show, then a 1-in-N RNG
-             * roll (N = char_attr_0x73+5) before displaying.  We pick the first
-             * non-trivial tip entry for now; the exact RNG gate is not yet ported. */
             const char *tip = data.tips[0];
             for (int i = 0; i < kPubTipCount; ++i) {
                 if (data.tips[i] && data.tips[i][0] && data.tips[i][0] != '(') {
@@ -459,8 +504,6 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
             break;
         }
         case TavernOption::Rumors: {
-            /* E "Listen for rumors": draws from the RUMOR pool (A4-$594E).
-             * Separate from the tip pool used by D. */
             const char *rumor = data.rumors[0];
             for (int i = 0; i < kPubRumorCount; ++i) {
                 if (data.rumors[i] && data.rumors[i][0] && data.rumors[i][0] != '(') {

@@ -371,16 +371,16 @@ void testTownServiceTransactions(int &fails)
         expect(rec.might_base == 254, "stat unchanged on overflow", fails);
     }
 
-    /* ---- Temple donation (doc 28 §5.2): gold + quest bit into A4-$799E. ---- */
+    /* ---- Temple donation (0x1D796): A4-$6714×100 + quest bit into A4-$799E. ---- */
     {
         uint8_t a4img[static_cast<size_t>(MM2_A4_ANCHOR) + 0x100u]{};
         uint8_t *a4 = mm2_gs_base_from_image(a4img);
         Mm2RosterFile roster{};
         setupMember(roster, 0, 5, 10000);
         Mm2RosterRecord &rec = roster.records[0];
-        TownSvcDonateResult r = townSvcTempleDonate(a4, rec, 0 /*Middlegate cost 20 bit 0x01*/);
-        expect(r.paid && r.cost == 20u, "Middlegate donation costs 20", fails);
-        expect(rec.gold == 9980u, "donation deducts 20 from char gold", fails);
+        TownSvcDonateResult r = townSvcTempleDonate(a4, rec, 0 /*Middlegate $6714*100=100*/);
+        expect(r.paid && r.cost == 100u, "Middlegate donation costs 100", fails);
+        expect(rec.gold == 9900u, "donation deducts 100 from char gold", fails);
         expect(mm2_gs_u8(a4, MM2_GS_TEMPLE_DONATION) == 0x01, "donation sets Middlegate quest bit", fails);
         expect(!r.all_temples_donated, "one donation is not all five", fails);
         /* Donate at the other four towns -> bitfield reaches 0x1F. */
@@ -388,8 +388,31 @@ void testTownServiceTransactions(int &fails)
         townSvcTempleDonate(a4, rec, 2);
         townSvcTempleDonate(a4, rec, 3);
         r = townSvcTempleDonate(a4, rec, 4);
-        expect(mm2_gs_u8(a4, MM2_GS_TEMPLE_DONATION) == 0x1F, "all five donation bits set", fails);
         expect(r.all_temples_donated, "5th donation reports all temples donated", fails);
+        /* 0x1D7E8: clr -$799E; sentinel $FE; item 0xD4 in found buffer. */
+        expect(mm2_gs_u8(a4, MM2_GS_TEMPLE_DONATION) == 0,
+               "0x1F payoff clears donation bitfield", fails);
+        expect(mm2_gs_u8(a4, MM2_GS_FOUND_SENTINEL) == MM2_GS_FOUND_SENTINEL_PENDING,
+               "0x1F payoff sets found sentinel $FE", fails);
+        expect(mm2_gs_u8(a4, MM2_GS_FOUND_ITEM_ID) == 0xD4,
+               "0x1F payoff queues Fe Farthing 0xD4", fails);
+        expect(r.reward_queued, "0x1F payoff sets reward_queued", fails);
+    }
+
+    /* ---- Temple B alignment restore (0x1D758): +$0D → +$6A. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 5, 10000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.alignment_current = 1;
+        rec.alignment_base = 0;
+        const uint32_t cost = townSvcTempleAlignCost(rec, 0); /* 100*5*1 = 500 */
+        expect(cost == 500u, "align cost Middlegate L5 mismatched = 500", fails);
+        const TownSvcAlignResult r = townSvcRestoreAlignment(rec, cost);
+        expect(r.paid && r.restored, "align restore paid+wrote", fails);
+        expect(rec.alignment_base == 1, "align base copied from current", fails);
+        expect(rec.gold == 9500u, "align deducts 500", fails);
+        expect(townSvcTempleAlignCost(rec, 0) == 0u, "align cost 0 when matched", fails);
     }
 
     /* ---- Menu driver with scripted UI: heal member 0 then exit. ---- */
@@ -1184,7 +1207,7 @@ int main(int argc, char **argv)
         expect(all_match, "eventVmTokenDelta[0x00..0x32] matches ROM opcode_len_tbl byte-exact", fails);
         expect(eventVmTokenDelta(0x00) == 0, "OP_00 (invalid) skip delta = 0, not 1+argc", fails);
         expect(eventVmTokenDelta(0x25) == 2,
-               "OP_25 (check-code16) skip delta = 2 though handler reads 2 args (ROM quirk)", fails);
+               "OP_25 (gems pool-pay) skip delta = 2 though handler reads 2 args (ROM quirk)", fails);
         expect(eventVmTokenDelta(0x12) == 13, "OP_12 skip delta = 13 (12 args + opcode)", fails);
         expect(eventVmTokenDelta(0x2B) == 2, "OP_2B skip delta = 2 (count byte + opcode)", fails);
     }
@@ -1555,10 +1578,10 @@ int main(int argc, char **argv)
            "enroll mage guild must not show farthing error string", fails);
     expect(runtime.textView().containsText("sleepy conjurer"),
            "enroll mage guild shows real shared-string-bank prompt", fails);
-    expect(runtime.textView().containsText("enroll you in the local mage guild"),
+    expect(runtime.textView().containsText("local mage guild"),
            "enroll mage guild prompt mentions the guild (not farthing)", fails);
 
-    /* Accept enroll: 20 gp + Middlegate membership bit in record+0x79. */
+    /* Accept enroll: loc 60 qid 5 — OP_24 pay 20 + OP_18 mask sel 0x74 → +$79. */
     {
         Mm2RosterFile roster{};
         setupMember(roster, 0, 5, 100);
@@ -1572,25 +1595,137 @@ int main(int argc, char **argv)
         expect(mm2::events::townSvcMageGuildMember(roster.records[0], 0),
                "enroll sets Middlegate guild membership (record+0x79)", fails);
         expect(roster.records[0].gold == 80u, "enroll deducted 20 gp", fails);
-        expect(roster.records[0].town_flags == 1, "enroll sets home town (record+0x0B)", fails);
         runtime.bindParty(nullptr, nullptr);
     }
 
-    /* Nordon goblet quest @ event 30 (10,2)/DIR_W: OP_0E 0x0A must show the
-     * real Nordon intro, not Feldecarb Fountain text (that is selector 0x0E
-     * @ (15,15) event 17). */
-    runtime.enterLocation(0, gs, world);
-    gs.setCoordX(10);
-    gs.setCoordY(2);
-    gs.setFacingKey('W');
-    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
-    expect(runtime.scanAndRun(gs, world), "event 30 Nordon fires at (10,2) facing W", fails);
-    expect(runtime.textView().containsText("Nordon"),
-           "goblet quest shows Nordon intro", fails);
-    expect(runtime.textView().containsText("do me a service"),
-           "goblet quest shows Nordon service prompt", fails);
-    expect(!runtime.textView().containsText("Feldecarb Fountain"),
-           "Nordon must not show Feldecarb fountain text", fails);
+    /* Nordon @ event 30 (10,2)/W: OP_0E 0x0A → loc 60 qid 2 (default-range overlay).
+     * Quest state is roster+$76 bits — not EVENT_VAR_BANK FAQ stubs. */
+    {
+        auto dismissSpace = [&]() {
+            mm2::platform::KeyState space{};
+            space.space = true;
+            space.any_key = true;
+            (void)runtime.continueInput(gs, world, space);
+        };
+        /* Selector 0x76 → roster+$7B (EventFieldMap), not literal +$76. */
+        auto questByte = [](Mm2RosterRecord &r) -> uint8_t & {
+            return reinterpret_cast<uint8_t *>(&r)[0x7B];
+        };
+
+        Mm2RosterFile nordon_roster{};
+        setupMember(nordon_roster, 0, 5, 100);
+        nordon_roster.records[0].condition = 0;
+        questByte(nordon_roster.records[0]) = 0;
+        Mm2PartyLaunch nordon_launch{};
+        nordon_launch.party_count = 1;
+        nordon_launch.roster_slots[0] = 0;
+        runtime.bindParty(&nordon_roster, &nordon_launch);
+
+        runtime.enterLocation(0, gs, world);
+        gs.setCoordX(10);
+        gs.setCoordY(2);
+        gs.setFacingKey('W');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "event 30 Nordon fires at (10,2) facing W", fails);
+        expect(runtime.textView().containsText("Nordon"),
+               "goblet quest shows Nordon intro", fails);
+        expect(runtime.textView().containsText("do me a service"),
+               "goblet quest shows Nordon service prompt", fails);
+        expect(!runtime.textView().containsText("Feldecarb Fountain"),
+               "Nordon must not show Feldecarb fountain text", fails);
+        expect(runtime.blocksMovement(), "Nordon waits for Y/N", fails);
+
+        mm2::platform::KeyState yes{};
+        yes.last_ascii = 'Y';
+        expect(runtime.continueInput(gs, world, yes),
+               "Nordon Y without goblet waits for SPACE", fails);
+        expect(runtime.textView().containsText("magical golden"),
+               "Nordon without goblet shows quest brief", fails);
+        expect(nordon_roster.records[0].experience == 0,
+               "no XP without goblet turn-in", fails);
+        expect((questByte(nordon_roster.records[0]) & 0x01) != 0,
+               "Nordon accept sets roster+$7B bit0 (sel 0x76)", fails);
+        dismissSpace();
+
+        /* Quest accepted (bit0) + Gold Goblet → consume + rewards (no member pick). */
+        questByte(nordon_roster.records[0]) = 0x01;
+        nordon_roster.records[0].backpack_id[0] = 0xE0;
+        nordon_roster.records[0].experience = 0;
+        runtime.enterLocation(0, gs, world);
+        gs.setCoordX(10);
+        gs.setCoordY(2);
+        gs.setFacingKey('W');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "Nordon with goblet fires", fails);
+        expect(runtime.textView().containsText("Eagle Eye"),
+               "Nordon turn-in shows goblet award text", fails);
+        expect(nordon_roster.records[0].backpack_id[0] == 0,
+               "goblet consumed on turn-in", fails);
+        expect(nordon_roster.records[0].experience == 2000u,
+               "Nordon grants 2000 XP via OP_1F", fails);
+        expect(mm2_gs_u32(gs.a4(), MM2_GS_FOUND_GOLD_EXP) == 1000u,
+               "Nordon puts 1000 gp in found-item buffer", fails);
+        expect(runtime.blocksMovement(), "Nordon award waits for SPACE", fails);
+        dismissSpace();
+        expect(runtime.textView().containsText("Nordonna"),
+               "Nordon follow-up sends party to Nordonna", fails);
+        expect((questByte(nordon_roster.records[0]) & 0x02) != 0,
+               "Nordon turn-in sets roster+$7B bit1 (visit sister)", fails);
+        dismissSpace();
+    }
+
+    /* Nordonna @ event 31 (1,2)/N: OP_0E 0x0B → loc 60 qid 3. Gates on roster+$76. */
+    {
+        auto dismissSpace = [&]() {
+            mm2::platform::KeyState space{};
+            space.space = true;
+            space.any_key = true;
+            (void)runtime.continueInput(gs, world, space);
+        };
+        /* Selector 0x76 → roster+$7B (EventFieldMap), not literal +$76. */
+        auto questByte = [](Mm2RosterRecord &r) -> uint8_t & {
+            return reinterpret_cast<uint8_t *>(&r)[0x7B];
+        };
+
+        Mm2RosterFile nn_roster{};
+        setupMember(nn_roster, 0, 5, 100);
+        nn_roster.records[0].condition = 0;
+        questByte(nn_roster.records[0]) = 0;
+        Mm2PartyLaunch nn_launch{};
+        nn_launch.party_count = 1;
+        nn_launch.roster_slots[0] = 0;
+        runtime.bindParty(&nn_roster, &nn_launch);
+
+        runtime.enterLocation(0, gs, world);
+        gs.setCoordX(1);
+        gs.setCoordY(2);
+        gs.setFacingKey('N');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "event 31 Nordonna fires at (1,2)", fails);
+        expect(runtime.textView().containsText("Begone"),
+               "Nordonna before Nordon done shows begone", fails);
+        dismissSpace();
+
+        questByte(nn_roster.records[0]) = 0x02; /* Nordon sister bit */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "Nordonna after Nordon fires", fails);
+        expect(runtime.textView().containsText("kidnapped sons"),
+               "Nordonna after Nordon shows rescue quest", fails);
+        expect((questByte(nn_roster.records[0]) & 0x04) != 0,
+               "Nordonna quest-given sets roster+$7B bit2", fails);
+        dismissSpace();
+
+        /* Sons rescued: cavern OP_18 or=0x0A into sel 0x76 (+$7B). */
+        questByte(nn_roster.records[0]) = 0x0A;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "Nordonna after sons rescue fires", fails);
+        expect(runtime.textView().containsText("grateful sons"),
+               "Nordonna after rescue shows hireling reward", fails);
+        expect((questByte(nn_roster.records[0]) & 0x10) != 0,
+               "Nordonna done sets roster+$7B bit4", fails);
+        dismissSpace();
+        runtime.bindParty(nullptr, nullptr);
+    }
 
     /* Corak ghost @ event 18 (4,7)/DIR_N: OP_0B 51.anm + OP_0E 0x09 → loc-60
      * queued dispatch. ASM rebuilds the string anchor as LE from work_buf[0..1]
@@ -1625,6 +1760,64 @@ int main(int argc, char **argv)
            "Feldecarb shows fountain prompt", fails);
     expect(!runtime.textView().containsText("Nordon"),
            "Feldecarb must not show Nordon text", fails);
+    expect(runtime.blocksMovement(), "Feldecarb waits for Y/N", fails);
+    {
+        /* No farthing → loc 60 str[18] via OP_01 then OP_29 (no Space wait). */
+        Mm2RosterFile fountain_roster{};
+        setupMember(fountain_roster, 0, 5, 100);
+        fountain_roster.records[0].condition = 0;
+        Mm2PartyLaunch fountain_launch{};
+        fountain_launch.party_count = 1;
+        fountain_launch.roster_slots[0] = 0;
+        runtime.bindParty(&fountain_roster, &fountain_launch);
+        mm2::platform::KeyState yes{};
+        yes.last_ascii = 'Y';
+        (void)runtime.continueInput(gs, world, yes);
+        expect(runtime.textView().containsText("no farthing"),
+               "Feldecarb without farthing shows str[18]", fails);
+        expect(fountain_roster.records[0].backpack_id[0] == 0,
+               "no castle key without farthing", fails);
+    }
+
+    /* Feldecarb with Fe Farthing → consume + castle key. */
+    {
+        runtime.enterLocation(0, gs, world);
+        gs.setCoordX(15);
+        gs.setCoordY(15);
+        gs.setFacingKey('N');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        Mm2RosterFile fountain_roster{};
+        setupMember(fountain_roster, 0, 5, 100);
+        fountain_roster.records[0].condition = 0;
+        fountain_roster.records[0].backpack_id[0] = 0xD4; /* Fe Farthing */
+        Mm2PartyLaunch fountain_launch{};
+        fountain_launch.party_count = 1;
+        fountain_launch.roster_slots[0] = 0;
+        runtime.bindParty(&fountain_roster, &fountain_launch);
+        expect(runtime.scanAndRun(gs, world), "Feldecarb with farthing fires", fails);
+        mm2::platform::KeyState yes{};
+        yes.last_ascii = 'Y';
+        (void)runtime.continueInput(gs, world, yes);
+        expect(runtime.textView().containsText("castle key"),
+               "Feldecarb success shows str[17]", fails);
+        expect(fountain_roster.records[0].backpack_id[0] == 0xD5,
+               "Feldecarb replaces farthing slot with castle key", fails);
+    }
+
+    /* OP_31 living-party abort gate (-$7F14 → 0x47EC). */
+    {
+        Mm2RosterFile dead_roster{};
+        setupMember(dead_roster, 0, 5, 100);
+        dead_roster.records[0].condition = 0x81; /* dead — &0xE0 != 0 */
+        Mm2PartyLaunch dead_launch{};
+        dead_launch.party_count = 1;
+        dead_launch.roster_slots[0] = 0;
+        expect(mm2::events::eventVmCountLivingPartyMembers(gs.a4(), &dead_roster, &dead_launch) == 0,
+               "dead party counts as zero living", fails);
+        dead_roster.records[0].condition = 0;
+        expect(mm2::events::eventVmCountLivingPartyMembers(gs.a4(), &dead_roster, &dead_launch) == 1,
+               "healthy party counts as living", fails);
+    }
 
     /* Fountain of Clairvoyance @ event 42 (4,8)/DIR_S: OP_1A sets both eye timers. */
     runtime.enterLocation(0, gs, world);
@@ -1987,16 +2180,16 @@ int main(int argc, char **argv)
         expect(!runtime.continueInput(gs, world, yes), "Otto skill buy completes after member pick", fails);
         expect(mm2::gameplay::rosterHasSkillId(roster.records[0], 3),
                "Otto Mapper grants Cartographer (id 3) at roster+0x50", fails);
+        expect(roster.records[0].gold == 90u, "Otto deducted 10 gp via OP_24", fails);
         runtime.bindParty(nullptr, nullptr);
     }
 
-    /* Brain detox @ event 16 (1,8)/W: OP_0E 0x10 clears roster+0x50 skills. */
+    /* Event 16 (1,8)/W: OP_0E 0x10 → loc 60 qid 8 (locksmith key buy), NOT
+     * FAQ "brain detox". Detox is a FAQ invention; retail script is key purchase. */
     {
         Mm2RosterFile roster{};
-        setupMember(roster, 0, 1, 200);
+        setupMember(roster, 0, 1, 600);
         roster.records[0].condition = 0;
-        mm2::gameplay::rosterGrantSkillId(roster.records[0], 3);
-        mm2::gameplay::rosterGrantSkillId(roster.records[0], 11);
         Mm2PartyLaunch launch{};
         launch.party_count = 1;
         launch.roster_slots[0] = 0;
@@ -2006,19 +2199,18 @@ int main(int argc, char **argv)
         gs.setCoordY(8);
         gs.setFacingKey('W');
         mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
-        expect(runtime.scanAndRun(gs, world), "event 16 brain detox fires at (1,8) facing W", fails);
+        expect(runtime.scanAndRun(gs, world), "event 16 locksmith fires at (1,8) facing W", fails);
         expect(!runtime.textView().containsText("farthing"),
-               "brain detox must not show Feldecarb farthing text", fails);
-        expect(runtime.textView().containsText("Detoxification"),
-               "brain detox shows specialist intro", fails);
+               "locksmith must not show Feldecarb farthing text", fails);
+        expect(runtime.textView().containsText("mystic green glow"),
+               "locksmith shows ancient-key prompt (loc 60 str[19])", fails);
+        expect(runtime.blocksMovement(), "locksmith waits for Y/N", fails);
         mm2::platform::KeyState yes{};
         yes.last_ascii = 'Y';
-        runtime.continueInput(gs, world, yes);
-        yes.last_ascii = '1';
-        expect(!runtime.continueInput(gs, world, yes), "brain detox completes after member pick", fails);
-        expect(mm2::gameplay::rosterSkillPackedByte(roster.records[0]) == 0,
-               "brain detox clears roster+0x50 skill pack", fails);
-        expect(roster.records[0].gold == 100u, "brain detox deducted 100 gp from selected char", fails);
+        (void)runtime.continueInput(gs, world, yes);
+        expect(roster.records[0].gold == 100u, "locksmith deducted 500 gp", fails);
+        expect(roster.records[0].backpack_id[0] == 0x6F,
+               "locksmith grants item 0x6F", fails);
         runtime.bindParty(nullptr, nullptr);
     }
 
@@ -2055,6 +2247,46 @@ int main(int argc, char **argv)
             expect(mm2_gs_u16(castle_gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR) == 0xFFFF,
                    "castle blob loc 63 leaves anchor $FFFF", fails);
         }
+    }
+
+    /* OP_24 / OP_25: 0x6ACE gold + 0x6B9A gems pool+deduct. */
+    {
+        using mm2::events::eventVmPartyTryPayGold;
+        using mm2::events::eventVmPartyTryPayGems;
+
+        Mm2RosterFile pay_roster{};
+        setupMember(pay_roster, 0, 5, 100);
+        setupMember(pay_roster, 1, 5, 100);
+        pay_roster.records[0].gold = 30;
+        pay_roster.records[1].gold = 20;
+        pay_roster.records[0].gems = 5;
+        pay_roster.records[1].gems = 7;
+        Mm2PartyLaunch pay_launch{};
+        pay_launch.party_count = 2;
+        pay_launch.roster_slots[0] = 0;
+        pay_launch.roster_slots[1] = 1;
+
+        expect(!eventVmPartyTryPayGold(nullptr, &pay_roster, &pay_launch, 51),
+               "OP_24 fails when gold short", fails);
+        expect(pay_roster.records[0].gold == 30 && pay_roster.records[1].gold == 20,
+               "OP_24 failure leaves gold unchanged", fails);
+
+        expect(eventVmPartyTryPayGold(nullptr, &pay_roster, &pay_launch, 40),
+               "OP_24 succeeds when gold enough", fails);
+        expect(pay_roster.records[0].gold == 10 && pay_roster.records[1].gold == 0,
+               "OP_24 pools remainder on first eligible member", fails);
+
+        expect(!eventVmPartyTryPayGems(nullptr, &pay_roster, &pay_launch, 13),
+               "OP_25 fails when gems short", fails);
+        expect(eventVmPartyTryPayGems(nullptr, &pay_roster, &pay_launch, 8),
+               "OP_25 succeeds when gems enough", fails);
+        expect(pay_roster.records[0].gems == 4 && pay_roster.records[1].gems == 0,
+               "OP_25 pools remainder gems on first eligible", fails);
+
+        expect(eventVmPartyTryPayGold(nullptr, &pay_roster, &pay_launch, 0),
+               "OP_24 amount 0 succeeds", fails);
+        expect(eventVmPartyTryPayGems(nullptr, &pay_roster, &pay_launch, 0),
+               "OP_25 amount 0 succeeds", fails);
     }
 
     if (fails == 0) {

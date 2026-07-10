@@ -16,6 +16,7 @@ from attrib_codec import AttribRecord  # noqa: E402
 from decode_event import (  # noqa: E402
     read_header,
     decode_location,
+    decode_strings,
     split_script_segments,
     parse_segment_stream_nodes,
     decompile_op,
@@ -83,34 +84,44 @@ def string_looks_like_bytecode(seg: bytes) -> bool:
     return False
 
 
-def location_string_raw(blob: bytes, str_table_offset: int, idx: int) -> bytes | None:
-    """FF-delimited string-bank record @ string_table_offset (eventVmLocationStringRaw)."""
-    pos = str_table_offset
-    cur = 0
+def overlay_string_anchor(blob: bytes) -> int:
+    """LE u16 at work_buf[0..1] — ASM queued dispatch @ 0x176C2 rebuilds this."""
+    if len(blob) < 2:
+        return 0
+    return int(blob[0]) | (int(blob[1]) << 8)
+
+
+def pool_seek_segments(blob: bytes, start: int = 2) -> list[bytes]:
+    """FF-delimited pool from parse_pos (ASM pool_seek @ 0x17262).
+
+    Default-range overlays memcpy the whole location raw into work_buf, then
+    pool_seek from offset 2 with QUEUED_EVENT_ID. Do NOT index the codec string
+    table — loc 60 embeds bytecode in early pool slots and prose after the LE
+    string anchor (Corak/Nordon/Nordonna/Feldecarb).
+    """
+    segs: list[bytes] = []
+    pos = start
     while pos < len(blob):
-        start = pos
+        seg_start = pos
         while pos < len(blob) and blob[pos] != 0xFF:
             pos += 1
-        if cur == idx:
-            return blob[start:pos]
-        cur += 1
+        segs.append(blob[seg_start:pos])
+        if pos >= len(blob):
+            break
         pos += 1
-    return None
+    return segs
 
 
-def decode_overlay_slot(blob: bytes, loc: dict, index: int, items, loc_id: int) -> dict | None:
+def decode_overlay_slot(
+    blob: bytes, strings: list[str], index: int, items, loc_id: int
+) -> dict | None:
     """Decode one default-range overlay slot for JS runDefaultRangeOverlay."""
-    script_len = loc.get("script_length", 0)
-    if script_len > 0:
-        script = blob[loc["script_offset"] : loc["string_table_offset"]]
-        segments = split_script_segments(script)
-        if index < 0 or index >= len(segments):
-            return None
-        seg = segments[index]
-    else:
-        seg = location_string_raw(blob, loc["string_table_offset"], index)
-        if seg is None:
-            return None
+    segments = pool_seek_segments(blob, 2)
+    if index < 0 or index >= len(segments):
+        return None
+    seg = segments[index]
+    if not seg:
+        return None
 
     if looks_like_text_record(seg):
         text = seg.decode("ascii", errors="replace").replace("@", "\n")
@@ -122,7 +133,7 @@ def decode_overlay_slot(blob: bytes, loc: dict, index: int, items, loc_id: int) 
         for node in parse_segment_stream_nodes(seg):
             op = int(node["op"])
             args = [int(x) for x in node["args"]]
-            line = decompile_op(op, args, loc["strings"], items, loc_id)
+            line = decompile_op(op, args, strings, items, loc_id)
             pseudo.append(line)
             nodes.append({"op": op, "args": args, "pseudo": line})
         return {"kind": "bytecode", "nodes": nodes, "pseudo": pseudo}
@@ -145,15 +156,18 @@ def build_overlays_payload(event_data: bytes, event_header: list, items) -> dict
         off, length = event_header[cat]
         blob = event_data[off : off + length]
         loc = decode_location(blob, cat)
-        strings = loc["strings"]
+        # Prefer ASM LE string anchor over codec string_table_offset — the latter
+        # can mis-parse when 00 00 00 appears inside early pool bytecode (loc 60).
+        anchor = overlay_string_anchor(blob)
+        strings = (
+            decode_strings(blob, anchor)
+            if anchor < len(blob)
+            else loc["strings"]
+        )
+        segments = pool_seek_segments(blob, 2)
         slots: dict = {}
-        # Probe slots 0..max(strings, script segments)-1
-        max_slot = len(strings)
-        if loc.get("script_length", 0) > 0:
-            script = blob[loc["script_offset"] : loc["string_table_offset"]]
-            max_slot = max(max_slot, len(split_script_segments(script)))
-        for idx in range(max_slot):
-            slot = decode_overlay_slot(blob, loc, idx, items, cat)
+        for idx in range(len(segments)):
+            slot = decode_overlay_slot(blob, strings, idx, items, cat)
             if slot:
                 slots[str(idx)] = slot
         overlays[str(cat)] = {

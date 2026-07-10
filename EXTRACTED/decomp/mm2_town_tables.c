@@ -7,16 +7,17 @@
  *   training index  [1, 5, 2, 4, 2]   FAQ §3-6 (doc 34 §13.2) -- NOT map order
  *   stat add        [5, 20, 10, 10, 3] A4-$6720 (training_stat_apply 0x1C898)
  *   stat cap        [100,100,100,100,50] A4-$671A (cmp @ 0x1C8A8)
- *   donation gold   [20, 250, 40, 120, 40] A4-$6742 (debit 0x1CA3A, show 0x1D556)
- *   donation bit    [1, 2, 4, 8, 16]   A4-$66B1 (OR into A4-$799E, doc 28 §5.2)
+ *   temple scale    [1, 5, 2, 3, 2]   A4-$6714 (heal/align/donate @ 0x1DC1A+)
+ *   feeding frenzy  [20, 250, 40, 120, 40] A4-$6742 (debit 0x1CA3A)
+ *   donation bit    [1, 2, 4, 8, 16]   A4-$66B1 (OR into A4-$799E @ 0x1D7B8)
  */
 static const Mm2TownCommerce kTowns[MM2_TOWN_COUNT] = {
-    /* idx, add, cap, donation, bit */
-    {1, 5, 100, 20, 0x01},   /* 0 Middlegate */
-    {5, 20, 100, 250, 0x02}, /* 1 Atlantium  */
-    {2, 10, 100, 40, 0x04},  /* 2 Tundara    */
-    {4, 10, 100, 120, 0x08}, /* 3 Vulcania   */
-    {2, 3, 50, 40, 0x10},    /* 4 Sandsobar  */
+    /* train, add, cap, temple, frenzy, bit */
+    {1, 5, 100, 1, 20, 0x01},   /* 0 Middlegate */
+    {5, 20, 100, 5, 250, 0x02}, /* 1 Atlantium  */
+    {2, 10, 100, 2, 40, 0x04},  /* 2 Tundara    */
+    {4, 10, 100, 3, 120, 0x08}, /* 3 Vulcania   */
+    {2, 3, 50, 2, 40, 0x10},    /* 4 Sandsobar  */
 };
 
 /* Stat id 0..6 -> roster record byte offset, jump table @ 0x1C86C / 0x1C898. */
@@ -55,12 +56,21 @@ uint32_t mm2_town_training_cost(int level, int town_index)
     return (uint32_t)level * (uint32_t)town_index * 50u;
 }
 
-uint32_t mm2_town_healing_cost(int level, int town_index)
+uint32_t mm2_town_healing_cost(int level, int temple_cost_index)
 {
-    if (level < 0 || town_index < 0) {
+    if (level < 0 || temple_cost_index < 0) {
         return 0;
     }
-    return (uint32_t)level * (uint32_t)town_index * 10u;
+    return (uint32_t)level * (uint32_t)temple_cost_index * 10u;
+}
+
+uint32_t mm2_town_temple_donate_cost(int map_id)
+{
+    Mm2TownCommerce town;
+    if (!mm2_town_commerce(map_id, &town)) {
+        return 0;
+    }
+    return (uint32_t)town.temple_cost_index * 100u;
 }
 
 /* ------------------------------------------------------------------------- *

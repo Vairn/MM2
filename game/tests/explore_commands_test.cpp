@@ -99,6 +99,30 @@ int main()
         expect(in_bounds, "rng range stays within [min,max]", fails);
     }
 
+    /* ---- Amiga entropy 0x24048: state = state*0x41C64E6D + 0x3039 -------- */
+    {
+        Rng a(1);
+        /* First step from seed 1: 1*0x41C64E6D+0x3039 = 0x41C67EA6;
+         * raw15 = (>>16)&0x7FFF = 0x41C6. */
+        expect(a.range(0, 0x7FFF) == 0x41C6, "amiga LCG first raw15 from seed 1", fails);
+
+        Rng b(1);
+        Rng c(2);
+        bool differ = false;
+        for (int i = 0; i < 32; ++i) {
+            if (b.range(1, 100) != c.range(1, 100)) {
+                differ = true;
+                break;
+            }
+        }
+        expect(differ, "different seeds diverge within 32 rolls", fails);
+
+        Rng d(0xDEADBEEFu);
+        d.reseed(1);
+        Rng e(1);
+        expect(d.range(1, 1000) == e.range(1, 1000), "reseed(1) matches Rng(1)", fails);
+    }
+
     /* ---- Rest clock advance: +0x55 sub-day, with rollover (0x19CEC) ----- */
     {
         static uint8_t gs_image[static_cast<size_t>(MM2_A4_ANCHOR) + 0x8000u]{};

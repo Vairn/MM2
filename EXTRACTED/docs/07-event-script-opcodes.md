@@ -69,7 +69,7 @@ The following were re-confirmed directly from `mm2.capstone.asm`:
 | `19` | `0x165D8` | 4 | **give item to party**: `arg1, id, charges, flags`. cond=0 on entry; if `arg1>=0x80` id = cond_flag (pre-clear). Place in first member's first empty backpack id slot: `id→rec[0x3A+m]`, `charges→rec[0x40+m]`, `flags→rec[0x46+m]` (SoA), cond=1. All-full → found-item buffer `A4-$3F1C`/`A4-$794C` |
 | `1A` | `0x166F8` | 2 | store `u8` into resolved variable pointer |
 | `1B` | `0x16724` | 1 | clear cond unless `cond >= u8` (threshold gate) |
-| `1C` | `0x16742` | 1 | `cond_flag = (*A4-$7BB4)(1, u8)` — engine query via **runtime A4 function pointer** (`jsr (d16,a4)`), not a static thunk |
+| `1C` | `0x16742` | 1 | `cond_flag = rng_roll(1,u8)` via `-$7BB4`→`0x22BC6` (raw roll byte, not boolean) |
 | `1D` | `0x16762` | 1 | `(*A4-$7E84)(u8*7+1)` — engine dispatch via runtime A4 pointer; no VM-level state change |
 | `1E` | `0x16780` | 1 | busy-wait `u8` iterations: each `(*A4-$7BC0)(10)` delay + `(*A4-$7BD2)` input poll, break on keypress. Presentation/timing only |
 | `1F` | `0x1690E` | 6 | apply effect to party members (selector + values via `0x167B0`) |
@@ -77,8 +77,8 @@ The following were re-confirmed directly from `mm2.capstone.asm`:
 | `21` | `0x16A34` | 3 | set tile data at `(y,x)` (arg1 nibbles) into arrays `-$55BA`/`-$54BA` |
 | `22` | `0x16A9E` | 2 | set condition if **current era** (`-$79B5`, low byte of era word) is in `[lo, hi]` — era/time-range gate |
 | `23` | `0x16ADA` | 2 | day-of-year gate. day = low byte of `-$79DE[era]`; **arg1=`0xB5`** → cond=(day odd), **arg1=`0xB6`** → cond=(day even), else cond=(`arg1<=day<=arg2`). See §OP_23 |
-| `24` | `0x16B54` | 2 | check `u16` gold amount -> condition flag (strong evidence) |
-| `25` | `0x16B82` | 2 | check non-gold 16-bit code -> condition flag (`hi,lo` bytes) |
+| `24` | `0x16B54` | 2 | party gold pool-pay (`-$7E6C`→`0x6ACE`): sum `+$66`, deduct amount, pool remainder → cond |
+| `25` | `0x16B82` | 2 | party gems pool-pay (`-$7E66`→`0x6B9A`): sum `+$5C`, deduct amount, pool remainder → cond (`hi,lo`) |
 | `26` | `0x16BC0` | 0 | prompt to select a party member (ESC `0x1B` ends script) |
 | `27` | `0x16BC0` | 0 | select-party-member variant (input mode 1) |
 | `28` | `0x16C86` | 2 | consume item id (arg1) from party inventory -> condition flag |
@@ -304,7 +304,7 @@ from `str.dat`** (`11-str-decoded.txt`) and either opens the ported menu (when
 | `0x06` smith | **direct shop** (no y/n when UI bound) | 255–273 (defer path only) | **PORTED** A–D buy (`0x1C54A`/`0x1BE44`); Sell/Identify deferred |
 | `0x07` store | OP_0B sign title + SPACE | (generic shell) | general store `-$7DB8`→`0xA62C` traced, buy loop deferred |
 | `0x08` arena | **PORTED** ticket-check/combat engine (`0x9D76`) | "Sorry, but you must have a ticket…" / "The games master accepts…" | **Arena ticket** items `0xD0`–`0xD3`; Middlegate `(2,13)`. **Not** farthings. |
-| `0x0A` fountain | NPC y/n intro ("Fanciful Feldecarb Fountain…") | shared string bank (loc 60) str[23] | **Feldecarb Fountain** farthing-flick @ Middlegate `(2,10)/W`; handler deferred. **Unrelated to arena `0x08`.** |
+| `0x0A` fountain | NPC y/n intro ("Fanciful Feldecarb Fountain…") | shared string bank (loc 60) str[23] | **Mislabel in older notes** — Feldecarb is selector **`0x0E`**, not `0x0A`. `0x0A` is Nordon goblet. |
 | `0x0D` enroll | NPC y/n intro ("A sleepy conjurer yawns…") | shared string bank (loc 60) str[21] | 20gp deduct + roster+$0B write transaction (`-$7DA0` → `0xD89C` → `0x1A1B2`) deferred |
 
 **Intro y/n → menu (2026-07):** pub (`0x03`) and temple (`0x04`) always show the
@@ -458,8 +458,9 @@ walker DOES run the full ticket→combat→reward loop synchronously for selecto
   donation `0x1F` reward grant (found-item buffer `A4-$794C`/`A4-$3F1C`, stat bump
   `A4-$5770`), the training **HP path** (`0x9BCA`, calendar mode `0x9B48`),
   inn (`-$7CD4`), guild enroll gold-deduct + roster+$0B write (`-$7DA0` →
-  `0xD89C` → `0x1A1B2`), `0x0A` Feldecarb Fountain farthing check + castle-key
-  reward (`-$7DAC` → `0xD634`), `0x64` portal (`-$7D9A`), plus the interactive
+  `0xD89C` → `0x1A1B2`), **Feldecarb `0x0E` farthing→castle key ported**
+  (**Nordon `0x0A` goblet turn-in ported** — FAQ/loc-60; `0xD634` is selector
+  `0x7F` combat, not Nordon), `0x64` portal (`-$7D9A`), plus the interactive
   presentation (member-select UI, RNG caption tables).
 
 ### `event.dat` shared cross-town "string bank" (decoder location 60)
@@ -731,24 +732,23 @@ thunks** (`-$7c74`, `-$7be4`, `-$7f68`, `-$7d40`, …) plus the character-record
 engine; it remains **engine/UI territory and is deferred** (the headless port models
 only the buffer state). Documented here rather than stubbed with invented behaviour.
 
-**Runtime A4 function pointers (engine vtable) — why `OP_1C/1D/1E/31` stay
-Partial.** These opcodes call through `jsr (d16,a4)` (opcode `0x4EAC`), i.e. they
-jump to an address **stored in** the game-state block at `A4-$7Bxx/-$7Exx/-$7Fxx`,
-populated at engine init. Unlike the static thunks in
-`EXTRACTED/tmp_mm2_thunk_map.txt` (`4EF9` JMP stubs / pc-relative `4EBA`), these
-slots are not statically resolvable from the listing and dispatch into the
-combat/spell/UI engine, which the port has not yet implemented:
+**Runtime A4 function pointers — `OP_1C` Verified; `1D`/`1E` presentation-resolved; `31` Partial (abort gate ported).**
+`jsr (d16,a4)` (`0x4EAC`) hits the static JMP stubs in the data hunk (doc 49 /
+`tmp_mm2_thunk_map.txt`), not an opaque runtime vtable for these slots:
 
-- `OP_1C` `-$7BB4` — engine *query* whose byte result becomes `cond_flag`.
-- `OP_1D` `-$7E84` — indexed engine call (`u8*7+1`); no VM-level state change.
-- `OP_1E` `-$7BC0`/`-$7BD2` — frame delay + input poll (timing/presentation).
-- `OP_31` `-$7F08` (per-member field op) + `-$7F14` (abort gate).
+- `OP_1C` `-$7BB4` → **`rng_roll` @ `0x22BC6`** (entropy `0x24048`, state
+  `A4-$60E2`). Handler pushes `(1, u8)` and stores the **raw roll** into
+  `cond_flag` (`move.b d0,-$7951`). Port: `rng_->range(1, arg)`.
+- `OP_1D` `-$7E84` → **`audio_wait_helper` @ `0x6798`**: index `(u8*7+1)`,
+  halves wait, polls `-$7BD2`, yields via `-$7B42`. **No VM/GS write** —
+  presentation/audio only. Port: consume argc=1.
+- `OP_1E` `-$7BC0`→`0x22B4A` delay(10) + `-$7BD2`→`0x22586` input poll,
+  `arg` iterations, break on key. Timing only. Port: consume argc=1 (no-op).
+- `OP_31` `-$7F08`→`0x4952` (per-member combat/spell damage field op —
+  deferred) + `-$7F14`→`0x47EC` (abort if `roster_count_living_chars` @
+  `0x47A2` is 0 → `SCRIPT_ABORT=1`). Port: `EXIT_FLAGS|=2` + living abort.
 
-For each, the port consumes the correct `argc` (so the script stream stays in
-sync) and performs the **portable** VM side effects the handler does outside the
-engine call: `OP_1C` writes the neutral `cond_flag=0`; `OP_31` sets `EXIT_FLAGS`
-bit1 up front. The engine-dependent results are documented as deferred rather than
-guessed.
+Do not invent `0x4952` damage results without combat scratch context.
 
 ## Disassembly Alignment Check
 
@@ -791,7 +791,7 @@ records). Previously there were 35 underruns from the wrong arg counts.
 
 - `OP_24` is strongly indicated as a **gold check** opcode (not item-id):
   - observed args include `10`, `25`, `50`, `200`, `500`, matching common payment gates.
-- `OP_25` is a non-gold 16-bit predicate path (small observed codes `0/1/2` so far).
+- `OP_25` is party **gems** pool-pay (`0x6B9A`); small observed amounts `0/1/2` fit gem costs.
 - Arena gate blocks likely follow:
   - predicate (`OP_24`/`OP_25`) -> condition flag
   - conditional skip (`OP_10`/`OP_11`)
@@ -824,7 +824,7 @@ Observed `OP_25` contexts:
 
 Current best model:
 - `OP_24`: gold predicate (amount check to condition flag).
-- `OP_25`: non-gold code predicate (likely word/flag/class/item-code family).
+- `OP_25`: gems pool-pay (`+$5C`), same deduct+pool pattern as OP_24 gold.
 - `OP_28`: consume-item path; maps cleanly to multiple quest items/keys/discs.
 
 User-verified gate behavior supporting this model:
@@ -882,39 +882,39 @@ incomplete; **Unknown** = behaviour not traced.
 | `0B` | Partial | Service/title window (`-$7FBC`/`-$7FC2`); arg2 position byte semantics |
 | `0C` | Verified | Map transition @ `0x15E12`: bit6 → `rng(1,20)+5` (+0x10 if ≥0x11) \| bit7; dest≥0x80 → `rng(1,255)` tile; dest&=0x3F; then `-$7FDA` map load; sets pending latch. Ported |
 | `0D` | Verified | `0x06FB8` canned on-screen sequence player (idx 0..9; idx 0 gated by `-$79AF`, 1..9 by `-$79B0`). Presentation-only, no GS writes → port stubs it logic-faithfully |
-| `0E` | Partial | Dispatch + default-range bins **Verified** byte-exact. **Ported with UI backend:** temple/training/smith/guild/tavern menus; pub/temple intro y/n → menu; smith direct shop (doc 28 §1.4.3). **Partial:** tavern food/drink RNG, inn rest, store `0xA62C`, default-range `-$7DFA` reinvoke, **arena `0x08` victory rewards**, **Feldecarb farthing transaction `0x0A`**, guild enroll `0x0D` — **arena tickets and farthings are separate mechanics** |
+| `0E` | Partial | Dispatch + default-range bins **Verified**. **Ported:** temple/training/smith/guild/tavern menus; **Feldecarb `0x0E`**; **Nordon `0x0A`**; **Nordonna `0x0B`**. **Partial:** tavern food/drink RNG, store `0xA62C`, inn hireling unlock, guild enroll edges. Inn rest = world Rest (`0x19E20`), not OP_0E `0x01` (registry) |
 | `0F` | Verified | End script / cleanup `0x171AC` |
 | `10`/`11` | Verified | Conditional token skip; full `-$6CC8` length table now extracted byte-exact and ported (`eventVmTokenDelta`, includes the `OP_00`/`OP_25` ROM quirks — see §Notes on `*_SKIPTOK` Opcodes) |
 | `12` | Verified | 10 monster ids → `A4-$11DE`; mode=0x80; **tail1=`-$11D4` overflow/breed type, tail2=`-$77BE` live count** (see §OP_12/13). Combat run (`-$7EDE`) is unported engine |
 | `13` | Verified | Same setup, mode=0 (seeded-random); clears tail fields; random picker `0x1213E` augments |
 | `14` | Verified | Clear tile event / visited bit7 |
-| `15` | Partial | Apply byte to N party members via `0x163CA`; op/val/mask semantics |
+| `15` | Verified | Party field test @ `0x16426`: member-spec 0=all (N..1), 1..8=one, 9=selected (`-$5D42`/`-$5D3F`); cond \|= (val? field&val : field). Field map via `0x17766` |
 | `16` | Verified | Party item-presence scan (arg1 discarded, arg2 = item id). Behavior byte-exact; port now scans `rec[0x28+m]`/`rec[0x3A+m]` (m=0..5) over party. NOTE: the 6-byte stride-1 read implies equipped/backpack store **6 item-ids contiguously** (SoA), not the interleaved id/bonus/flags the roster struct currently models — flagged for the roster team |
-| `17` | Partial | Load script variable group/index → cond |
-| `18` | Partial | Masked party apply (`set`/`and`/`or` bytes) |
+| `17` | Verified | Load script variable group → cond (2nd byte discarded); raw byte |
+| `18` | Verified | Masked party write `(f&and)\|or` via same `0x16426` engine (flag=1); clears cond on entry |
 | `19` | Verified | Give item to party: fills first empty backpack SoA slot (`id`→`+0x3A+m`, `charges`→`+0x40+m`, `flags`→`+0x46+m`), cond=1. Ported byte-exact. All-backpacks-full overflow now appends to the modeled found-item buffer (`A4-$3F1C` ids / `-$3F19` flags / `-$3F16` charges, sentinel `A4-$794C=$FF`) via `mm2_found_items_overflow_append`; only the Search-payoff display (`0x1B19C`) is deferred. See §Found-item / treasure buffer |
-| `1A` | Partial | Store `u8` into script variable |
-| `1B` | Partial | Clear cond unless `cond >= threshold` |
-| `1C` | Partial | cond = `(*A4-$7BB4)(1,u8)`. `-$7BB4` is a **runtime A4 function pointer** (engine vtable, `jsr (d16,a4)`) — not statically resolvable; result is uncomputable headless. Port consumes argc=1 and writes neutral cond=0. **Deferred: engine query** |
-| `1D` | Partial | `(*A4-$7E84)(u8×7+1)`. Runtime A4 pointer dispatch; **no** VM-level state change (no cond/GS write). Port consumes argc=1, no side effect. **Deferred: pure engine call** |
-| `1E` | Partial | Busy-wait `u8`×{delay `(*A4-$7BC0)(10)`, input poll `(*A4-$7BD2)`}. Timing/presentation only, no game-state effect. Port consumes argc=1 (no-op in headless). **Deferred: timing** |
-| `1F`/`20` | Partial | Party effect dispatcher `0x167B0`; 6-byte payload; mode flag on `20` |
-| `21` | Partial | Write `(y,x)` tile bytes into `-$55BA` / visited `-$54BA` |
+| `1A` | Verified | Store `u8` into script variable (2 bytes: id, value — no index) |
+| `1B` | Verified | Clear cond unless `cond >= threshold` |
+| `1C` | Verified | `cond_flag = rng_roll(1,u8)` via `-$7BB4`→`0x22BC6` (entropy `0x24048` / `A4-$60E2`). Stores **raw roll**, not boolean. Port uses `gameplay::Rng`; `GameSession::start` reseeds so launches diverge |
+| `1D` | Verified* | `-$7E84`→`0x6798` audio_wait((u8×7)+1). **No** VM/GS write. Port consumes argc=1. *Presentation-only — fidelity is "no invented state" |
+| `1E` | Verified* | Busy-wait `u8`×{delay `-$7BC0`→`0x22B4A`(10), poll `-$7BD2`→`0x22586`}. Timing only. Port consumes argc=1 (headless no-op) |
+| `1F`/`20` | Verified | Party effect @ `0x1690E`/`0x167B0`: add/sub with saturate; subtract clears cond on underflow. Selected member via `-$5D42`. `width_op` writeback width still uses field-map natural width (edge GAP) |
+| `21` | Verified | Patch map tile + `EXIT_FLAGS \|= 4` (redraw bit2 @ `0x16A34`) |
 | `22` | Verified | Era range gate (`-$79B5`) |
 | `23` | Verified | Day-of-year gate (`0x16ADA`). day = low byte of `-$79DE[era]`. `arg1=0xB5`→odd-day, `arg1=0xB6`→even-day, else inclusive byte range `[arg1,arg2]`. Ported byte-exact (the `0xB5`/`0xB6` odd/even-day cases were previously missing). See §OP_23 |
-| `24` | Partial | Gold predicate via `0x155DA` + `-$7E66`; amounts 10/25/50/200/500 observed; exact compare op untested |
-| `25` | Partial | Non-gold `u16` code via `-$7E66`; decoded values `0`/`1`/`2` only. Handler reads 2 arg bytes (own length 3), but its ROM skip-table entry is 2 — see §Notes on `*_SKIPTOK` Opcodes |
-| `26`/`27` | Partial | Party-member select; `27` uses alternate input path when arg mode=1 |
-| `28` | Partial | Consume item if present → cond; keys/tickets user-verified |
+| `24` | Verified | Gold pool-pay via `0x155DA` + `-$7E6C`→`0x6ACE`: sum party gold `+$66` (slots with roster idx `<0x18`), if ≥ amount deduct and pool remainder on first eligible. Cond = success |
+| `25` | Verified | Gems pool-pay via `-$7E66`→`0x6B9A` (same pattern for `+$5C` u16). **Not** tickets/keys (those are OP_0E `0x08` / OP_28). Handler reads 2 arg bytes; ROM skip-table entry is 2 — see §Notes on `*_SKIPTOK` |
+| `26`/`27` | Verified | Member select @ `0x16BC0`: on success `cond=slot`, `-$5D42=slot`, `-$5D3F=slot`; reject dead (`+$26≥$81`); ESC aborts. Input-path difference 26 vs 27 still presentation-only |
+| `28` | Verified | Backpack-only consume (`+$3A`); 1st arg discarded; always consumes on hit → cond |
 | `29` | Verified | Force script abort |
 | `2A` | Verified | 14-byte treasure/reward block (u24 gold/exp, u16 gems, 3× id/charges/flags triplets). Fills the found-item buffer (`A4-$3F10` gold / `-$3F12` gems / `-$3F1C`-`-$3F19`-`-$3F16` items) + sentinel `A4-$794C=$FF`, byte-exact via `mm2_found_items_op2a_fill`. Does NOT distribute to the party (that is the deferred Search payoff `0x1B19C`); the old port's immediate member-0 deposit was a fabrication and was removed. See §Found-item / treasure buffer |
 | `2B` | Verified | Token skip only when `A4-$77BD` (combat-victory latch) set; ASM-traced byte-exact @ `0x16D74` (reads `u8` count via `0x155BE`, tests latch, `jsr $157FC`). Port never itself *sets* the latch (no combat engine yet — same gap as OP_12/13) |
-| `2C` | Partial | Add to global counter `-$79B8`; sets redraw exit flag |
+| `2C` | Verified | Add `u8` to word `-$79B8`; `EXIT_FLAGS \|= 1` |
 | `2D` | Verified | Match party class/sex/race nibble (any/all mode); 2-value variant when arg1 has no high bits |
 | `2E` | Verified | OR arg2 into member `+(arg1-0x6E)+0x51` for two specific classes ({4,2}/{3,1}) |
 | `2F` | Verified | **Not a silent clear** — `0x16FEA` calls `-$7F92` to read up to 10 chars into `-$5C50`, space-pads remainder, clears `-$5C46`. Port: `EventVmWait::Answer` fills the buffer then resumes |
 | `30` | Verified | 10-byte compare: `toupper(input[i])` vs `(0x11A - expected[i])` for i=0..9; cond=1 iff all match. Port byte-exact |
-| `31` | Partial | Sets `EXIT_FLAGS` bit1 (ported), then per resolved member runs engine op `(*A4-$7F08)(rec,value,&out×3)` and `(*A4-$7F14)` (script-abort gate). `-$7F08`/`-$7F14` are **runtime A4 pointers** (combat/spell field op). Port replicates only the `EXIT_FLAGS` side effect + argc=3. **Deferred: per-member engine op** |
+| `31` | Partial | Sets `EXIT_FLAGS` bit1 (ported); `-$7F14`→`0x47EC` living-party abort (ported: `SCRIPT_ABORT` when `(+$26&$E0)!=0` for all). Per-member `-$7F08`→`0x4952` combat/spell damage **deferred**. argc=3 |
 | `32` | Verified | cond = party class-nibble count (`0x04614`/`0x45C4`, not a var load) |
 
 **Overlay locations 60–70** (see `event_location_inventory.json`): most are

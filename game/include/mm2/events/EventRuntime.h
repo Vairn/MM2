@@ -99,9 +99,9 @@ public:
         Temple,
         Smith,
         Inn,
-        GuildEnroll,
-        BrainDetox,
         SkillBuy,
+        GeneralStore,
+        Circus,
     };
     void setPendingTownMenu(PendingTownMenu kind) { pending_town_menu_ = kind; }
     void setPendingSkillBuy(uint8_t skill_id, uint32_t gold_cost)
@@ -110,13 +110,12 @@ public:
         pending_skill_cost_ = gold_cost;
         pending_town_menu_ = PendingTownMenu::SkillBuy;
     }
-    bool hasPendingTownMenu() const { return pending_town_menu_ != PendingTownMenu::None; }
-    bool takePendingBrainDetoxMemberSelect()
+    void setPendingGeneralStore()
     {
-        const bool v = pending_brain_detox_member_;
-        pending_brain_detox_member_ = false;
-        return v;
+        /* Y/N wait only — member prompt is armed in finishPendingTownMenu on accept. */
+        pending_town_menu_ = PendingTownMenu::GeneralStore;
     }
+    bool hasPendingTownMenu() const { return pending_town_menu_ != PendingTownMenu::None; }
 
     int locationId() const { return location_id_; }
 
@@ -186,8 +185,9 @@ private:
     EventPortalOffer pending_portal_{};
     PendingTownMenu pending_town_menu_ = PendingTownMenu::None;
     bool pending_inn_goto_town_ = false;
-    bool pending_brain_detox_member_ = false;
     bool pending_skill_buy_member_ = false;
+    bool pending_general_store_member_ = false;
+    bool pending_circus_attr_ = false;
     uint8_t pending_skill_id_ = 0;
     uint32_t pending_skill_cost_ = 0;
 

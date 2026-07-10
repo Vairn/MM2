@@ -19,11 +19,10 @@ const char *obstructionMessage(ObstructionMsg msg)
 
 uint16_t Rng::raw15()
 {
-    /* Port LCG standing in for the 0x24048 entropy source. Numerical Recipes
-     * constants; we only consume the top 15 bits to match the original's
-     * [0,0x7FFF] working range used by 0x22BC6's divide. */
-    state_ = state_ * 1664525u + 1013904223u;
-    return static_cast<uint16_t>((state_ >> 17) & 0x7FFFu);
+    /* Amiga entropy @ 0x24048: state = state * 0x41C64E6D + 0x3039 (A4-$60E2),
+     * return (state >> 16) & 0x7FFF. (mul via -$7B54 in ROM; same 32-bit wrap.) */
+    state_ = state_ * 0x41C64E6Du + 0x3039u;
+    return static_cast<uint16_t>((state_ >> 16) & 0x7FFFu);
 }
 
 int Rng::range(int lo, int hi)

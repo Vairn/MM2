@@ -20,9 +20,12 @@ extern "C" {
  * Confirmed ASM sources (EXTRACTED/mm2.capstone.annotated.asm):
  *   - A4-$6720  training stat add per map  @ training_stat_apply 0x1C898
  *   - A4-$671A  training stat cap per map  @ 0x1C8A8 (cmp before write)
- *   - A4-$6742  temple donation gold (BE u16) @ 0x1CA3A / display 0x1D556
- *   - A4-$66B1  temple donation quest bit    @ doc 28 §5.2 (OR into A4-$799E)
+ *   - A4-$6714  temple cost scale (BE u16) @ 0x1DC26 / 0x1DD2A / 0x1DC84
+ *               donate = scale*100; heal/align multiply by scale (and level)
+ *   - A4-$6742  tavern feeding-frenzy gold (BE u16) @ 0x1CA3A (NOT temple donate)
+ *   - A4-$66B1  temple donation quest bit    @ 0x1D7B8 (OR into A4-$799E)
  *   - training "town index" multiplier (FAQ §3-6, doc 34 §13): map->[1,5,2,4,2]
+ *     (Vulcania training=4 but temple scale A4-$6714=3 — do not conflate)
  *
  * Stat-id -> roster record byte offset, from the jump table @ 0x1C86C feeding
  * 0x1C898 (caller passes char ptr in $a(a5), map index in $8(a5)):
@@ -46,10 +49,11 @@ typedef enum Mm2TownId {
 } Mm2TownId;
 
 typedef struct Mm2TownCommerce {
-    uint8_t training_town_index; /* FAQ §3-6 cost multiplier (NOT the map index) */
+    uint8_t training_town_index; /* FAQ §3-6 training fee multiplier (NOT the map index) */
     uint8_t stat_train_add;      /* A4-$6720[map]: amount added to trained stat */
     uint8_t stat_train_cap;      /* A4-$671A[map]: max value the trained stat may reach */
-    uint16_t donation_gold;      /* A4-$6742[map]: temple donation cost (gp) */
+    uint8_t temple_cost_index;   /* A4-$6714[map]: temple heal/align/donate scale */
+    uint16_t feeding_frenzy_gold; /* A4-$6742[map]: tavern A feeding-frenzy debit */
     uint8_t donation_quest_bit;  /* A4-$66B1[map]: OR'd into A4-$799E on donation */
 } Mm2TownCommerce;
 
@@ -64,10 +68,11 @@ int mm2_town_commerce(int map_id, Mm2TownCommerce *out);
  * or -1 if out of range. */
 int mm2_town_stat_field_offset(int stat_id);
 
-/* Cost formulas (FAQ §3-6, doc 34 §13.2). town_index is the *training* index
- * (mm2_town_commerce().training_town_index), not the raw map id. */
+/* Cost formulas. Training uses FAQ training_town_index; temple heal uses
+ * A4-$6714 (temple_cost_index) — Vulcania differs (4 vs 3). */
 uint32_t mm2_town_training_cost(int level, int town_index); /* level*index*50 */
-uint32_t mm2_town_healing_cost(int level, int town_index);  /* level*index*10 */
+uint32_t mm2_town_healing_cost(int level, int temple_cost_index); /* level*index*10 (healthy) */
+uint32_t mm2_town_temple_donate_cost(int map_id); /* A4-$6714[map]*100 @ 0x1DC1A */
 
 /* ------------------------------------------------------------------------- *
  * Training-hall LEVEL progression (OP_0E 0x04, handler -$7D16). The Training

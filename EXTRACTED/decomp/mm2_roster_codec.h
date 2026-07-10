@@ -40,6 +40,8 @@ typedef struct Mm2RosterItemSlot {
     uint8_t flags;
 } Mm2RosterItemSlot;
 
+/* Packed: Amiga records are 0x82 bytes; EventFieldMap / OP_15/1F use raw offsets. */
+#pragma pack(push, 1)
 typedef struct Mm2RosterRecord {
     char name[MM2_ROSTER_NAME_SIZE]; /* Not guaranteed NUL-terminated. */
     uint8_t town_flags;              /* low 7 bits town, bit7 likely in-party. */
@@ -114,8 +116,19 @@ typedef struct Mm2RosterRecord {
     uint16_t temp_score_word;       /* +0x76: u16 LE; purpose unknown */
     uint8_t script_work_flag;       /* +0x78: transient script/work flag */
     uint8_t class_quest_guild_mask; /* +0x79: class-quest/guild bitmask; bit7 = in-game class '+' */
-    uint8_t tail_padding_7a_81[10]; /* +0x7A..+0x81: mostly unknown/padding */
+    uint8_t tail_padding_7a_81[8]; /* +0x7A..+0x81: mostly unknown/padding */
 } Mm2RosterRecord;
+#pragma pack(pop)
+
+/* Must match Amiga 0x82-byte record — EventFieldMap / OP_15/1F use raw offsets. */
+#ifdef __cplusplus
+static_assert(sizeof(Mm2RosterRecord) == MM2_ROSTER_RECORD_SIZE,
+              "Mm2RosterRecord must be packed to 0x82 bytes");
+static_assert(offsetof(Mm2RosterRecord, experience) == 0x62, "experience @ +0x62");
+static_assert(offsetof(Mm2RosterRecord, temp_score_word) == 0x76, "temp_score_word @ +0x76");
+static_assert(offsetof(Mm2RosterRecord, class_quest_guild_mask) == 0x79,
+              "class_quest_guild_mask @ +0x79");
+#endif
 
 typedef struct Mm2RosterFile {
     Mm2RosterRecord records[MM2_ROSTER_RECORD_COUNT];

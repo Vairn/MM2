@@ -518,6 +518,34 @@ int main()
         expect(std::strstr(combat.statusLine(), "Awaken") != nullptr, "cast: status names spell", fails);
     }
 
+    /* ---- Seeded-random picker: different seeds → different type picks ---- */
+    {
+        Mm2AttribRecord attrib{};
+        attrib.raw[0x0B] = 8;  /* max_monsters */
+        attrib.raw[0x0C] = 1;  /* min_monsters */
+        attrib.raw[0x0A] = 20; /* group_size_gate (high so picker can add) */
+
+        auto pickType = [&](uint32_t seed) -> uint8_t {
+            std::memset(&gs_image, 0, sizeof(gs_image));
+            mm2_gs_set_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE, 0); /* seeded-random */
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS, 1);   /* seed slot 0 */
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_COUNT, 1);
+            mm2_gs_set_u32(gs.a4(), MM2_GS_PARTY_XP_BUDGET, 50000);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_PICKER_TIER_MOD, 2);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_PICKER_DONE, 0);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_DISPOSITION, 2);
+
+            gameplay::Rng local(seed);
+            encounterAddsFriends(gs, attrib, local, nullptr, nullptr);
+            /* Adds into slots starting at live_count (we seeded count=1 → slot[1]). */
+            return mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + 1);
+        };
+
+        const uint8_t t1 = pickType(1);
+        const uint8_t t2 = pickType(99991);
+        expect(t1 != t2, "encounterAddsFriends differs across seeds (monsters not always same)", fails);
+    }
+
     if (fails == 0) {
         std::printf("OK: combat_setup_test\n");
         return 0;

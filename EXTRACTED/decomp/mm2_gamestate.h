@@ -61,6 +61,7 @@
 #define MM2_GS_LEVITATE_FLAG    (-0x79A8)  /* byte  ($8658) Levitate active */
 #define MM2_GS_WALK_WATER_FLAG  (-0x79A7)  /* byte  ($8659) Walk on Water */
 #define MM2_GS_GUARD_DOG_FLAG   (-0x79A6)  /* byte  ($865A) Guard Dog */
+#define MM2_GS_PARTY_COUNT      (-0x795A)  /* word  ($86A6) active party size */
 #define MM2_GS_EVENT_PARSE_POS  (-0x7956)  /* word  ($86AA) */
 #define MM2_GS_EVENT_SCRIPT_ANCHOR (-0x7954)  /* word  ($86AC) */
 #define MM2_GS_PENDING_EVENT_LATCH (-0x7952)  /* byte  ($86AE) */
@@ -155,9 +156,13 @@
 
 #define MM2_GS_EVENT_SCRIPT_START (-0x5C44)  /* word  ($A3BC) */
 #define MM2_GS_QUEUED_EVENT_ID  (-0x5D46)  /* byte  ($A2BA) */
-#define MM2_GS_SELECTED_MEMBER  (-0x5D43)  /* byte  ($A2BD) OP_26/27 pick 1..8 */
-#define MM2_GS_SAVED_COND_FLAG  (-0x5D42)  /* byte  ($A2BE) */
 #define MM2_GS_STRING_WALK_INDEX (-0x5D44)  /* word  ($A2BC) */
+/* OP_26/27 @ 0x16C70: writes 1-based slot to BOTH -$5D42 and -$5D3F.
+ * OP_15 member-spec 9 @ 0x163CA reads -$5D42 first, falls back to -$5D3F.
+ * OP_15 entry also snapshots incoming cond into -$5D3F (overwrites slot copy). */
+#define MM2_GS_SELECTED_MEMBER  (-0x5D42)  /* byte  ($A2BE) primary selected slot 1..8 */
+#define MM2_GS_SAVED_COND_FLAG  (-0x5D3F)  /* byte  ($A2C1) OP_15 cond snapshot / select mirror */
+#define MM2_GS_PARTY_SELECT_CTX (-0x5D3F)  /* alias: same byte as SAVED_COND_FLAG */
 #define MM2_GS_FACING_INDEX     (-0x55D7)  /* byte  ($AA29) */
 #define MM2_GS_EVENT_BUSY_SENTINEL (-0x55C8)  /* byte  ($AA38) */
 #define MM2_GS_ATTRIB_ERA_GATE  (-0xA9F5)  /* byte  ($560B) */

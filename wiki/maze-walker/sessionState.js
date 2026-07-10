@@ -4,9 +4,6 @@
 import { MAGE_GUILD_MEMBER_MASK } from "./townTables.js";
 import { resolveMemberFieldOffset } from "./eventFieldMap.js";
 
-const GUILD_ENROLL_COST = 20;
-const BRAIN_DETOX_COST = 100;
-
 const TOWN_TRAIN_INDEX = { 0: 1, 1: 5, 2: 2, 3: 4, 4: 2 };
 const DONATION_GOLD = { 0: 20, 1: 250, 2: 40, 3: 120, 4: 40 };
 const DONATION_BITS = { 0: 1, 1: 2, 2: 4, 3: 8, 4: 16 };
@@ -133,41 +130,6 @@ export function applyInnRegistry(session, mapId) {
   for (const m of ensureParty(session)) {
     setMemberFieldByte(m, 0x0b, home);
   }
-}
-
-/**
- * OP_0E 0x0D guild enroll (eventApplyGuildEnroll): 20 gp party deduct, OR
- * record+0x79 per-town mask on all members, then home-town registry write.
- */
-export function applyGuildEnroll(session, mapId) {
-  const mask = MAGE_GUILD_MEMBER_MASK[mapId] ?? 0;
-  if (!mask) return { ok: false, reason: "badMap" };
-  if (sessionPartyGoldTotal(session) < GUILD_ENROLL_COST) {
-    return { ok: false, reason: "gold" };
-  }
-  sessionDeductGold(session, GUILD_ENROLL_COST);
-  for (const m of ensureParty(session)) {
-    setMemberFieldByte(m, 0x79, getMemberFieldByte(m, 0x79) | mask);
-  }
-  applyInnRegistry(session, mapId);
-  return { ok: true };
-}
-
-/** OP_0E 0x10 brain detox: 100 gp from selected member, clear roster+0x50 skills. */
-export function applyBrainDetox(session, memberSlot) {
-  const member = getPartyMember(session, memberSlot);
-  if ((member.gold | 0) < BRAIN_DETOX_COST) {
-    return { ok: false, reason: "gold" };
-  }
-  member.gold = (member.gold | 0) - BRAIN_DETOX_COST;
-  memberClearAllSkills(member);
-  syncSessionGoldFromParty(session);
-  return { ok: true };
-}
-
-/** Clear packed skill nibbles @ roster+0x50 (gameplay::rosterClearAllSkills). */
-export function memberClearAllSkills(member) {
-  member.skillPack = 0;
 }
 
 export function memberHasSkillId(member, skillId) {
@@ -354,6 +316,15 @@ export function sessionCountPartyNibbleMatches(session, id) {
     const packed = m.skillPack ?? 0;
     if ((packed & 0x0f) === want) count++;
     if (((packed >> 4) & 0x0f) === want) count++;
+  }
+  return count;
+}
+
+/** roster_count_living_chars @ 0x47A2 / OP_31 abort gate 0x47EC: (condition & 0xE0) == 0. */
+export function sessionCountLivingPartyMembers(session) {
+  let count = 0;
+  for (const m of ensureParty(session)) {
+    if (((m.condition ?? 0) & 0xe0) === 0) count++;
   }
   return count;
 }
@@ -568,9 +539,10 @@ export function sessionStoreVar(session, group, val) {
  * OP_15 (test) / OP_18 (masked write) on per-member roster fields.
  * @returns {boolean} cond result for test-only
  */
+/** OP_15/18 @ 0x16426 — member_spec 0=all (N..1), 1..8=one, 9=selected. */
 export function sessionApplyPartyByteOp(
   session,
-  count,
+  memberSpec,
   selector,
   val,
   { masked = false, andM = 0xff, orM = 0, testOnly = false } = {}
@@ -578,45 +550,48 @@ export function sessionApplyPartyByteOp(
   const off = resolveFieldOffset(selector);
   if (off == null) return false;
 
-  let members = count;
-  let selectedOnly = -1;
-  if (members === 0x09) {
-    selectedOnly = session.selectedMember ?? 0;
-    if (selectedOnly < 0) {
-      session.cond = 0;
-      return false;
-    }
-    members = 1;
-  } else if (members === 0 || members > 6) {
-    members = ensureParty(session).length;
+  const party = ensureParty(session);
+  const partyN = party.length;
+  session.cond = 0;
+
+  let spec = memberSpec & 0xff;
+  let effectiveOr = orM;
+  if (spec >= 0x80) {
+    effectiveOr = session.cond; /* incoming was cleared; bit7 path uses saved — approx */
+    spec &= 0x7f;
   }
 
-  let anyMatch = false;
-  const party = ensureParty(session);
-  for (let i = 0; i < members; i++) {
-    const partyIdx = selectedOnly >= 0 ? selectedOnly : i;
-    const member = party[partyIdx];
-    if (!member) continue;
+  const slots = [];
+  if (spec === 0) {
+    for (let m = partyN; m >= 1; m--) slots.push(m);
+  } else if (spec === 9) {
+    const sel = (session.selectedMember ?? 0) + 1;
+    if (sel >= 1 && sel <= partyN) slots.push(sel);
+  } else {
+    let one = spec;
+    if (one > partyN) one = 1;
+    if (one >= 1 && one <= partyN) slots.push(one);
+  }
 
+  let cond = 0;
+  for (const slot1 of slots) {
+    const member = party[slot1 - 1];
+    if (!member) continue;
     let byteVal = getMemberFieldByte(member, off);
-    if (testOnly) {
-      if ((byteVal & val) !== 0) anyMatch = true;
-      continue;
-    }
     if (masked) {
-      byteVal = (byteVal & andM) | orM;
+      byteVal = (byteVal & andM) | effectiveOr;
       setMemberFieldByte(member, off, byteVal);
+    } else if (testOnly) {
+      let piece = byteVal;
+      if (val !== 0) piece &= val;
+      cond |= piece;
     }
   }
   if (testOnly) {
-    session.cond = anyMatch ? 1 : 0;
-    return anyMatch;
+    session.cond = cond & 0xff;
+    return cond !== 0;
   }
-  if (masked) {
-    session.cond = 1;
-    return true;
-  }
-  return false;
+  return masked;
 }
 
 /** OP_1F / OP_20 gold or HP on stub party. */
@@ -647,11 +622,50 @@ export function sessionApplyPartyEffect(session, args, subtract = false) {
   }
 }
 
+export function sessionPartyGemsTotal(session) {
+  return ensureParty(session).reduce((sum, m) => sum + (m.gems | 0), 0);
+}
+
+/** OP_24 → 0x6ACE: deduct amount from party gold pool; remainder on first member. */
+export function sessionTryPayGold(session, amount) {
+  const need = amount | 0;
+  const party = ensureParty(session);
+  const total = sessionPartyGoldTotal(session);
+  if (total < need) return false;
+  let remain = total - need;
+  let pooled = false;
+  for (const m of party) {
+    m.gold = pooled ? 0 : remain;
+    pooled = true;
+    remain = 0;
+  }
+  syncSessionGoldFromParty(session);
+  return pooled || need === 0;
+}
+
+/** OP_25 → 0x6B9A: same for gems (+$5C). */
+export function sessionTryPayGems(session, amount) {
+  const need = amount | 0;
+  const party = ensureParty(session);
+  let total = 0;
+  for (const m of party) total += m.gems | 0;
+  /* Also honor session.gems aggregate if members lack per-char gems. */
+  if (total === 0 && (session.gems | 0) > 0) total = session.gems | 0;
+  if (total < need) return false;
+  let remain = total - need;
+  let pooled = false;
+  for (const m of party) {
+    m.gems = pooled ? 0 : remain;
+    pooled = true;
+    remain = 0;
+  }
+  session.gems = party.reduce((s, m) => s + (m.gems | 0), 0);
+  return pooled || need === 0;
+}
+
+/** @deprecated OP_25 is gems try-pay, not ticket/key codes. */
 export function sessionCheckCode16(session, code) {
-  if (code === 0) return true;
-  if (code <= 3) return sessionHasItem(session, 208 + code, false);
-  if (code >= 0x10 && code <= 0x13) return sessionHasItem(session, 0x70 + code, false);
-  return false;
+  return sessionTryPayGems(session, code);
 }
 
 export function sessionClearTileFlag(session, screenId, x, y, maps) {

@@ -84,7 +84,7 @@ public:
 
 private:
     enum class Kind : uint8_t { None, Temple, Training, Smith, MageGuild, Tavern };
-    enum class Phase : uint8_t { Menu, SmithItems, Denied, TavernFood, TavernDrink, TavernRumor };
+    enum class Phase : uint8_t { Menu, SmithItems, Denied, TavernFood, TavernBoost, TavernRumor };
     enum class SmithMode : uint8_t { Buy, Sell, Identify };
 
     void applyTempleAndReturn(int party_slot);
@@ -93,6 +93,8 @@ private:
     void applySmithSellAndReturn(int party_slot);
     void applySmithIdentifyAndReturn(int party_slot);
     void applyTavernFeedingFrenzy();
+    void applyTavernStatBoost(int slot);
+    void applyTavernSpecialty(int food_idx);
     void applyGuildBuyAndReturn(int party_slot);
     void showActiveMemberGold();
     void buildSmithView();

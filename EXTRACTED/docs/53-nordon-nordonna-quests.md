@@ -13,8 +13,8 @@ Cross-refs: [`events/loc_60_quest_nordon_nordonna_corak.md`](events/loc_60_quest
 
 | Mechanism | Tile (FAQ x,y) | event.dat | Selector |
 |-----------|----------------|-----------|----------|
-| **Nordon goblet quest** | **`(10,2)/W`** | loc 00 **event 30** | **`OP_0E 0x0A`** (`goblet_quest` → `0xD634`) |
-| **Nordonna hireling quest** | **`(1,2)`** | overlay only | quest engine + loc 60 str[16–20] |
+| **Nordon goblet quest** | **`(10,2)/W`** | loc 00 **event 30** | **`OP_0E 0x0A`** (default-range → loc 60; **not** `0xD634`) |
+| **Nordonna hireling quest** | **`(1,2)`** | loc 00 **event 31** | **`OP_0E 0x0B`** + loc 60 str[16–20] |
 | **Feldecarb farthing flick** | **`(15,15)`** | loc 00 **event 17** | **`OP_0E 0x0E`** (default-range → string bank str[23]) |
 | **Arena Games** | **`(2,13)`** | loc 00 event 09 | **`OP_0E 0x08`** (tickets `0xD0`–`0xD3`) |
 
@@ -26,7 +26,10 @@ FAQ coordinates use **(x,y)**; event.dat trigger tables use **(y,x)** — e.g. F
 
 ## 2. String bank (event.dat location 60)
 
-Decoder location **60** is a **`string_bank`** only — no executable script segments.
+Decoder location **60** is labeled **`string_bank`**, but the default-range path
+does **not** index the prose string table. ASM `pool_seek` from `parse_pos=2`
+finds real bytecode at qid **2 / 3 / 6** (Nordon / Nordonna / Feldecarb); readable
+strings sit after the LE anchor `0x00FF`.
 
 | str | Speaker / use | Text (abbrev) |
 |-----|---------------|---------------|
@@ -70,7 +73,9 @@ flowchart TD
 3. **`(10,2)` again** — return goblet to **Nordon** (str[11]), **not** Feldecarb Fountain.
 4. Nordon sends you to Nordonna (str[12]).
 
-**Port status:** intro str[9] wired in `EventTownServices.cpp` `case 0x0A`; full `0xD634` quest state deferred.
+**Port status:** `OP_0E 0x0A` → `runDefaultRangeOverlay` loc 60 **qid 2** (no FAQ stub).
+Quest bits live on field selector **`0x76` → roster `+$7B`**. **Correction:**
+`-$7DAC`→`0xD634` is selector **`0x7F`** combat setup, not Nordon.
 
 ### 3.2 Nordonna — hirelings Sir Hyron (A) and Drog (B)
 
@@ -78,15 +83,17 @@ flowchart TD
 2. **Rescue** — Cavern loc 17 **`(15,0)`** event 04: sons flee + roster **`$76`** (`or=0x0A`).
 3. **Hire at Middlegate Inn** — str[20]; hirelings **A** (Sir Hyron) and **B** (Drog).
 
-**Port status:** overlay at `(1,2)` and inn unlock **deferred**.
+**Port status:** event 31 `OP_0E 0x0B` → loc 60 **qid 3** VM (gates on sel `0x76` /
+`+$7B`; sons rescue `or=0x0A`). Inn hireling roster unlock still deferred.
 
 ### 3.3 Feldecarb Fountain — farthing (late game)
 
 **Only after** Nordonna's str[20] hint (and typically all temple donations — `A4-$799E == 0x1F`).
 
 - **Tile:** Middlegate **`(15,15)`** — loc 00 **event 17**: **`OP_0E 0x0E`**
-- **Prompt:** loc 60 str[23] (wired in `EventTownServices.cpp` `default:` when `sel == 0x0E`)
-- **Item:** **Fe Farthing** (item **212** / `0xD4`); reward str[24] castle key
+- **Prompt:** loc 60 str[23] (wired in `EventTownServices.cpp` when `sel == 0x0E`)
+- **Item:** **Fe Farthing** (item **212** / `0xD4`); reward str[24] castle key **`0xD5`**
+- **Port:** `OP_0E 0x0E` → loc 60 **qid 6** VM (`OP_28` farthing → `OP_19` castle key)
 - **This is not** Nordon and **not** goblet turn-in
 
 ---
@@ -96,7 +103,7 @@ flowchart TD
 | Tile (x,y) | Event | Mechanism |
 |------------|-------|-----------|
 | `(10,2)` Nordon | 30 | `OP_0B` + **`OP_0E 0x0A`** |
-| `(1,2)` Nordonna | — | Quest overlay + loc 60 strings |
+| `(1,2)` Nordonna | 31 | `OP_0E 0x0B` + loc 60 strings |
 | `(15,15)` Feldecarb | 17 | **`OP_0E 0x0E`** |
 | `(2,13)` Arena | 09 | `OP_0E 0x08` |
 | Cavern `(7,0)` goblet | loc **17** evt 03 | `OP_19` item `0xE0` |
@@ -108,11 +115,11 @@ flowchart TD
 
 | Step | C++ `game/` | Wiki `eventVm.js` |
 |------|-------------|-------------------|
-| Nordon `(10,2)` intro | **`case 0x0A`** str[9] | **`sel 0x0A`** stub dialogue |
+| Nordon `(10,2)` | loc 60 **qid 2** overlay | same via `runDefaultRangeOverlay` |
 | Goblet pickup `(7,0)` | `OP_19` | Same VM |
-| Return goblet / rewards | **Deferred** (`0xD634`) | Stub only |
-| Nordonna `(1,2)` | **Deferred** (overlay) | Overlay stub |
-| Feldecarb `(15,15)` | **`sel 0x0E`** str[23] intro | **`sel 0x0E`** stub |
+| Return goblet / rewards | loc 60 qid 2 (sel `0x76` / `+$7B`) | same |
+| Nordonna `(1,2)` | loc 60 **qid 3** | same |
+| Feldecarb `(15,15)` | loc 60 **qid 6** | same |
 | Inn hirelings A+B | **Deferred** | **Not wired** |
 
 **Bug fixed (2026-07):** `case 0x0A` had been wired to Feldecarb str[23], so Nordon's portrait showed the fountain farthing prompt — wrong handler for the selector.

@@ -24,16 +24,12 @@ class Rng;
 
 namespace mm2::events {
 
-/* Temple menu (handler 0x1D208). Option set as traced: per-character HP/condition
- * restore (heal), donation (doc 28 §5.2), and cleric spell purchase (menu D/E/F,
- * 0x1DAC6 cost decode -> shared spell-buy leaf 0x1D872 -> townSvcBuySpell). No
- * guild-membership gate was found in the traced temple ASM (unlike the mage
- * guild's 0x1E410 — see TownServiceTransactions.h). */
+/* Temple menu (OP_0E 0x04 → -$7D16 → shell 0x1DD8E, keys 0x1E0AA). */
 enum class TempleOption : uint8_t {
-    Heal = 0,           /* 0x1D716: pay heal cost, restore HP + clear condition */
-    RestoreCondition,   /* clr.b $26 only (0x1D736) */
-    Donate,             /* 0x1CA2E/§5.2: pay donation_gold, set quest bit */
-    BuySpell,           /* menu D/E/F: townServiceContext-selected slot 0..2 */
+    Heal = 0,             /* A: 0x1D716 heal HP + clr $26 */
+    RestoreAlignment,     /* B: 0x1D758 +$0D → +$6A */
+    Donate,               /* C: 0x1D796 A4-$6714×100 + quest bit */
+    BuySpell,             /* D/E/F: 0x1D872 cleric spell */
     Exit,
 };
 
@@ -71,32 +67,41 @@ struct SmithItemView {
 };
 
 /* --------------------------------------------------------------------------
- * Pub / tavern (OP_0E 0x03, handler 0x1d208).
+ * Pub / tavern (OP_0E 0x03, handler 0x1d208 / jump table 0x1d650).
  *
- * The original engine shows the per-town NPC greeting (tavernIntro, str.dat
- * ~88-107) then offers a top-level menu A-E.  The food/drink effects
- * (food-satiation byte +$78, mode bit +$7C, stat bonuses) are NOT fully
- * ASM-traced yet; this driver shows the faithful A-E menu and sub-menus and
- * delegates effect application back to ITownServiceUi via reportTavern* hooks.
- * No gold is deducted by the driver (cost path 0x18EC0/0x18F78 is deferred).
+ * ASM keys A–E (0x1D58E..):
+ *   A 0x1CA2E Feeding frenzy
+ *   B 0x1CAC4 Stat-boost submenu (A4-$580E / A4-$6738) — NOT drinks
+ *   C 0x1CD2E Food/specialties (A4-$6760 prices + A4-$786C → +$76)
+ *   D 0x1CFCA Tip bartender
+ *   E 0x1D0B4 Rumors
+ * Drinks live on selector 0xCA → 0x18F78 / 0x019030 (+$78 encoding), not key B.
  * -------------------------------------------------------------------------- */
 enum class TavernOption : uint8_t {
-    FeedingFrenzy = 0,  /* A) Feeding frenzy (all you can carry) */
-    Drink,              /* B) Have a drink */
-    Specialties,        /* C) Specialties */
-    Tip,                /* D) Tip the bartender */
-    Rumors,             /* E) Listen for rumors */
+    FeedingFrenzy = 0, /* A) Feeding frenzy (all you can carry) */
+    StatBoost,         /* B) Buy (A-F) — A4-$6738 costs / 0x1C7EC apply */
+    Specialties,       /* C) Specialties — A4-$6760 + meal effect */
+    Tip,               /* D) Tip the bartender */
+    Rumors,            /* E) Listen for rumors */
     Exit,
 };
 
-/* Drink menu items (str.dat ~208-213, same for all towns). */
+/* Drink menu items (str.dat ~208-213) — used by selector 0xCA encode path, not
+ * tavern key B. Kept for UI that still surfaces drinks via that leaf. */
 struct TavernDrinkView {
-    const char *label;  /* "Orc Beer", "Straight shot", ... */
+    const char *label; /* "Orc Beer", "Straight shot", ... */
 };
 
-/* Food options for one town (A/B/C). */
+/* Stat-boost submenu (tavern B @ 0x1CAC4): six A–F options, costs A4-$6738. */
+struct TavernStatBoostView {
+    const char *label; /* presentation caption (A4-$580E); FAQ-ish until decoded */
+    uint16_t cost;     /* A4-$6738 BE u16 */
+};
+
+/* Food options for one town (A/B/C) — specialties menu C. */
 struct TavernFoodView {
     const char *options[3]; /* A, B, C */
+    uint16_t costs[3];      /* A4-$6760 BE u16 */
 };
 
 /* Max entries per town in each pub string pool.
@@ -105,19 +110,19 @@ struct TavernFoodView {
  * The day-based selector (0x1c962) returns 0, 1, or 3, so only entry pairs
  * {0,1}, {2,3} and {6,7} are ever displayed; entries 4 and 5 are unused. */
 static const int kPubRumorCount = 8; /* entries in the RUMOR pool (E) per town */
-static const int kPubTipCount   = 8; /* entries in the TIP pool   (D) per town */
-/* Max drinks on the drink menu. */
+static const int kPubTipCount = 8;   /* entries in the TIP pool   (D) per town */
 static const int kPubDrinkCount = 6;
-/* Max food options per town. */
 static const int kPubFoodOptions = 3;
+static const int kPubStatBoostCount = 6;
 
-/* Per-location rumor/tip texts, food menu, and drink menu.
+/* Per-location rumor/tip texts, food menu, and drink/stat-boost menus.
  * Filled by townSvcPubTables(). */
 struct TavernMenuData {
     const char *rumors[kPubRumorCount]; /* E "Listen for rumors"  (A4-$594E) */
     const char *tips[kPubTipCount];     /* D "Tip the bartender"  (A4-$58AE) */
     TavernFoodView food;
     TavernDrinkView drinks[kPubDrinkCount];
+    TavernStatBoostView boosts[kPubStatBoostCount];
 };
 
 /* Swappable interaction backend. Return false from a choose/select call to leave
@@ -164,20 +169,23 @@ public:
     }
 
     virtual void reportHeal(const TownSvcHealResult &) {}
+    virtual void reportAlign(const TownSvcAlignResult &) {}
     virtual void reportTrain(const TownSvcTrainResult &) {}
     virtual void reportDonate(const TownSvcDonateResult &) {}
     virtual void reportSmithBuy(const TownSvcBuyResult &) {}
     virtual void reportBuyRejected(const TownSvcBuyResult &) {}
     virtual void reportNotEnoughGold() {}
 
-    /* Pub / tavern (0x1D208). Return false from chooseTavernOption to exit the
-     * top-level A-E menu. chooseTavernDrink returns the drink index (0-5 = A-F)
-     * or returns false to go back. chooseTavernFood returns the food index (0-2 =
-     * A-C) or returns false to go back. These are called synchronously by
-     * townSvcRunTavern; a multi-frame PlayTownServiceUi implementation captures
-     * the context and returns false immediately, just as for other services. */
+    /* Pub / tavern (0x1D208). chooseTavernStatBoost: A–F slot 0..5 (key B).
+     * chooseTavernFood: specialties A–C (key C). chooseTavernDrink retained for
+     * selector-0xCA encode UI if bound separately. */
     virtual bool chooseTavernOption(const TownServiceContext &, const TavernMenuData &,
                                     TavernOption & /*out*/)
+    {
+        return false;
+    }
+    virtual bool chooseTavernStatBoost(const TownServiceContext &, const TavernMenuData &,
+                                       int & /*out_slot*/)
     {
         return false;
     }
@@ -191,14 +199,12 @@ public:
     {
         return false;
     }
-    /* Called after the user tips (D): show the tip text the bartender whispers.
-     * Uses the separate TIP pool (A4-$58AE), distinct from the RUMOR pool (E). */
     virtual void reportTavernTip(const TownServiceContext &, const char * /*tip*/) {}
-    /* Called after a rumor is selected (E): show the rumor text. */
     virtual void reportTavernRumor(const TownServiceContext &, const char * /*rumor*/) {}
-    /* Called after food/drink selection; effects not yet applied by driver. */
     virtual void reportTavernFood(const TownServiceContext &, int /*food_idx*/) {}
     virtual void reportTavernDrink(const TownServiceContext &, int /*drink_idx*/) {}
+    virtual void reportTavernStatBoost(const TownSvcStatBoostResult &) {}
+    virtual void reportTavernSpecialty(const TownSvcSpecialtyResult &) {}
 };
 
 /* Resolve a party slot (0..7) to its mutable roster record, or nullptr. */

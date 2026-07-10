@@ -254,6 +254,14 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     roster_ = roster;
     launch_ = launch;
 
+    /* Amiga seeds A4-$60E2 via 0x2407C; a fixed ctor seed made every launch
+     * replay the same encounter/step-random sequence. Mix VBlank clock. */
+    {
+        const uint32_t ticks = platform::nowTicks();
+        const uint32_t seed = (ticks ? ticks : 1u) ^ 0xA5A5A5A5u ^ (start_flags * 0x9E3779B9u);
+        rng_.reseed(seed ? seed : 1u);
+    }
+
     /* Stock roster.dat keeps inn-stored starters at hp_current=0 with condition
      * bit6 (0x40 unconscious). The party strip draws +$5E (hp_max), so they look
      * healthy, but encounter_xp_budget_init @ 0x11E58 sums +$74 and the combat
@@ -753,9 +761,18 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
         }
         markDirty();
         break;
-    case gameplay::PlaySessionAction::Search:
-        showStatusMessage("Search (GAP $4800 / 0x1B19C).");
+    case gameplay::PlaySessionAction::Search: {
+        /* Key S @ 0x4800 → -$7D1C → 0x1B19C. State port: distribute found-item
+         * buffer; full Search window UI deferred. */
+        char buf[96];
+        if (events::eventVmSearchPayoff(gs_.a4(), &roster_, &launch_, buf, sizeof(buf))) {
+            showStatusMessage(buf);
+        } else {
+            showStatusMessage("Nothing Here!");
+        }
+        markDirty();
         break;
+    }
     case gameplay::PlaySessionAction::Unlock:
         handleUnlockDoor();
         break;

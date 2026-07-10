@@ -44,7 +44,7 @@ Chained subtraction on the selector byte:
 
 | Selector                                             | Name (decoder)         | Handler                          | Role                                      |
 | ---------------------------------------------------- | ---------------------- | -------------------------------- | ----------------------------------------- |
-| `0x01`                                               | `open_inn_lodging`     | `0x1A132`                        | Inn rest / roster dismiss                 |
+| `0x01`                                               | `open_inn_lodging`     | `0x1A132`                        | Inn **registry** y/n (home-town write); rest is world Rest @ `0x19E20` |
 | `0x02`                                               | `open_training`        | `-$7CD4`                         | Training (level-up from XP)               |
 | `0x03`                                               | `open_tavern_food`     | `0x1D208`                        | Pub / food / drinks / rumors              |
 | `0x04`                                               | `open_temple`          | `-$7D16`                         | Temple services + donations               |
@@ -52,7 +52,7 @@ Chained subtraction on the selector byte:
 | `0x06`                                               | `open_blacksmith_shop` | `0x1C54A`                        | Blacksmith (weapons/armor/specials)       |
 | `0x07`                                               | `open_general_store`   | `-$7DB8` → `0xA62C`              | General store (Middlegate m11, Vulcania k6 only) |
 | `0x08`                                               | `open_arena_shop`      | `-$7DBE` → `0x9D76`              | **Arena Games ticket-combat-reward engine** (byte-verified 2026-07 — see correction below; this is the ONLY path into `0x9D76`) |
-| `0x0A`                                               | `goblet_quest`         | `-$7DAC` → `0xD634`           | **Nordon goblet quest** @ Middlegate `(10,2)/W` (event 30, loc 60 str[9–15]) — **not** Feldecarb |
+| `0x0A`                                               | Nordon (default-range) | `0x15EDC` → loc 60            | **Nordon goblet** @ `(10,2)/W` (event 30, loc 60 str[9–15]). **Not** `-$7DAC`→`0xD634` (that is sel `0x7F` combat) |
 | `0x0D`                                               | `enroll_mages_guild`   | `-$7DA0` → `0xD89C` (+ `$1A1F8`?) | Guild membership (20gp, shared string bank str[21]) |
 | `0x64`, `0x7E`–`0x83`, `0xC9`–`0xCF`, `0xE2`, `0xFD` | specials               | various                          | Portals / quests                          |
 | *default*                                            | (event-loader reinvoke) | `0x15EDC` → `-$7DFA` → `0x92F2`  | Selector binned to category `0x3C`–`0x46`, then re-enters `event_dat_loader` (NOT the arena engine — see correction below) |
@@ -153,37 +153,53 @@ faithful interactive menus for temple, training, smith, mage guild, and tavern
 (see §1.4.3). Without a UI backend, each selector shows the real `str.dat` intro
 (or OP_0B sign title) and defers the engine menu. Training/healing cost helpers
 (`eventVmTrainingCostPerChar` / `eventVmHealingCostPerChar`) are implemented and
-unit-tested; dead (×10) / eradicated (×100) healing multipliers remain a **known
-gap**.
+unit-tested. Temple heal cost builder `0x1DCA2` (condition `$FF`→×1000 base,
+`≥$80`→×100, else ×10) is ported via `townSvcTempleHealCost`.
 
-### 1.4.1 Temple handler menu model (`-$7D16` → menu shell @ `0x1D650`, ASM-traced)
+### 1.4.1 Temple vs tavern menus (corrected 2026-07)
 
-> **Note:** selector `0x03` (tavern) enters static handler **`0x1D208`**; selector
-> `0x04` (temple) enters **`-$7D16`**. The key loop traced below (`0x1D650` /
-> `0x1D674`) is the temple menu shell; pub uses the same handler family at
-> `0x1D208` with different leaf dispatch.
+> **Correction:** the jump table @ **`0x1D650`** lives inside **`0x1D208`**, which
+> `OP_0E` selector **`0x03`** (tavern) calls. Temple is **`OP_0E 0x04` → `-$7D16`**
+> → per-member shell **`0x1DD8E`** with key dispatch **`0x1E0AA`**. An earlier draft
+> of this section mislabeled the tavern table as the temple menu.
 
-The temple open handler builds RNG caption pointer tables (`A4-$59EE` … `-$57F6`
-via `-$7DE2`) then enters a key loop. The **key→leaf** dispatch is a fixed jump
-table @ **`0x1D650`** (base `0x1D674`), `key − 'A'` in `0..6`:
+#### Temple (`OP_0E 0x04` → `-$7D16` → `0x1DD8E` / keys `0x1E0AA`)
 
-| key | jump target | leaf handler | traced behavior |
-| --- | ----------- | ------------ | ---------------- |
-| A   | `0x1D58E`   | `0x1CA2E`    | pay `A4-$6742[map]`, top each member's food (`record+0x25`) to `0x28` |
-| B   | `0x1D59C`   | `0x1CAC4`    | per-member restore loop (cleric/restore caption set `-$580E`) |
-| C   | `0x1D5AE`   | `0x1CD2E`    | per-member restore loop (alt field) |
-| D   | `0x1D5C0`   | `0x1CFCA`    | cleric-spell / restore leaf |
-| E   | `0x1D5CE`   | `0x1D0B4`    | cleric-spell / restore leaf |
-| F   | `0x1D5F8`   | (default)    | member-select digit fall-through |
-| G   | `0x1D5DC`   | `0x1C9C0(0)` | "Gather Gold" — refresh gold display (deduct 0), select member `-$7E0C` |
+| key | leaf | traced behavior |
+| --- | ---- | ---------------- |
+| A   | `0x1D716` | Heal: gold vs runtime cost (`0x1DCA2` → `A4-$56BE`), then `0x1DD48` HP restore + `clr.b $26` |
+| B   | `0x1D758` | Restore alignment: gold vs `0x1DC3A` cost, then `move.b $d,$6a` (current → base) |
+| C   | `0x1D796` | Donate: gold vs `A4-$6714[map]×100` (`0x1DC1A`), OR `A4-$66B1[map]` into `A4-$799E` |
+| D/E/F | `0x1D872` | Cleric spell buy (`0x1DAC6` prices from `A4-$66F6`) |
+| G   | `0x1D90C(0)` | Gather Gold — refresh display (deduct 0) |
 
-Persistent command line strings (literal pool `0x1D68C`+): `"G-Gather Gold"`
-(`0x1D699`), `"#-Other Char"` (`0x1D6A7`), `"Select (A-E)"` (`0x1D6B4`). The
-six **displayed** option captions are RNG-selected per open (flavor text), so the
-manual's A) Restore Cond / B) Restore Algn / C) Donations labels (doc §5) are the
-*player-facing* names; the *internal* leaf each key triggers is the table above.
+**Temple cost scale `A4-$6714`:** BE u16 `[1, 5, 2, 3, 2]` by map → donate GP
+`100/500/200/300/200`. Heal/align multiply this scale by level and a condition
+base (`0x1DCA2`: `$FF`→1000, `≥$80`→100, else 10 when afflicted/HP low).
 
-**Heal/restore leaf (`0x1D716`, used by the restore paths):** gold check `0x1D90C`
+Player-facing FAQ labels (A Restore Cond / B Restore Algn / C Donations / D–F
+spells) match this temple dispatch.
+
+#### Tavern (`OP_0E 0x03` → `0x1D208` / jump table `0x1D650`)
+
+| key | leaf | traced behavior |
+| --- | ---- | ---------------- |
+| A   | `0x1CA2E` | Feeding frenzy: pay `A4-$6742[map]`, top party food `+$25` to `0x28` |
+| B   | `0x1CAC4` | Stat-boost submenu (captions `A4-$580E`, costs `A4-$6738`) — **not** drinks |
+| C   | `0x1CD2E` | Food/specialties (`A4-$6760` prices → `0x1C8D4` OR into `+$76`) |
+| D   | `0x1CFCA` | Tip bartender (1 gp + tip pool `A4-$58AE`) |
+| E   | `0x1D0B4` | Rumors (`A4-$594E`) |
+| G   | `0x1C9C0(0)` | Gather Gold |
+
+**Ported (2026-07):** B = `townSvcTavernStatBoost` / PlayTownServiceUi boost menu;
+C = `townSvcTavernSpecialty` + `townSvcFoodEncodePurchase` (`0x18EC0`/`0x019030` →
+`+$78` / `+$7C` bit0). Drinks remain on selector **`0xCA`** (`townSvcDrinkEncodePurchase`),
+not tavern key B.
+
+Persistent footer strings (literal pool `0x1D68C`+): `"G-Gather Gold"`,
+`"#-Other Char"`, `"Select (A-E)"`.
+
+**Heal/restore leaf (`0x1D716`, temple A):** gold check `0x1D90C`
 (per-char `record+0x66` ≥ cost) → on success `0x1DD48` (HP restore) + `clr.b $26`
 (condition). HP restore (`0x1DD48`): if `record+$5E` (work max) < `record+$60`
 (permanent max), set `$5E` and `$74` (current HP) to `$60`.
@@ -548,10 +564,15 @@ On successful donation (`0x1D796`, after `**0x1D90C**` gold check passes):
 bit_mask = A4-$66B1[ A4-$79F2 ]          ; u8 per town 0..4
 A4-$799E |= bit_mask
 if A4-$799E == 0x1F:                       ; all 5 temple bits
-    trigger reward sequence (sets A4-$794C, A4-$3F1C, clears A4-$799E)
-    increment stat A4-$5770
+    move.b #$FE, A4-$794C                  ; auto-Search pending
+    move.b #$D4, A4-$3F1C                  ; Fe Farthing in found-item id[0]
+    clr.b A4-$799E
+    ; blessed-buff block A4-$79AB..-$799F + addq -$5770 — UI/presentation stub
 RNG: engine query -$7BB4(100,1); if result > 0x5A → "Today you are blessed!" buff path
 ```
+
+**Ported:** buffer/sentinel writes (`townSvcTempleDonate` → `reward_queued`).
+Blessed-buff caption path still deferred.
 
 `**A4-$66B1**`: 5-byte table in the data hunk (same bytes as master copy @
 `**0x2637C**` first five). **Donation GP** and **quest bit** are separate from
@@ -596,8 +617,10 @@ rumor pool (below), not a dedicated quest opcode.
 **Intro (loc 60 str[9], wired in `EventTownServices.cpp` `case 0x0A`):**
 *"The humble wizard Nordon asks, \"Will you do me a service (y/n)?\""*
 
-**Handler:** `-$7DAC` → `0xD634` (decoder name `goblet_quest`). **Known gap:** accept /
-return-goblet / visit-Nordonna branches inside `0xD634` not yet ported.
+**Handler:** default-range bin (`0x15EDC` → category `0x3C` / loc 60). Older docs
+misnamed `-$7DAC`→`0xD634` as Nordon; ASM shows that thunk is selector **`0x7F`**
+(combat encounter setup). **Ported:** Y → quest brief or goblet turn-in (XP + Eagle
+Eye + found-item gold). Nordonna gate / quest flags still deferred.
 
 **Goblet pickup:** Middlegate Cavern loc 17 `(7,0)` → item **224** / `0xE0`. Return to
 **Nordon**, not Feldecarb Fountain. Full chain: [`53-nordon-nordonna-quests.md`](53-nordon-nordonna-quests.md).
@@ -965,12 +988,12 @@ Regenerate: `python tools/dump_shop_tables.py --json EXTRACTED/shop_tables.json`
 
 | Table                | Location                                        | Values (town 0→4)          |
 | -------------------- | ----------------------------------------------- | -------------------------- |
-| Temple donation GP   | `**A4-$6742`**                                  | 20, 250, 40, 120, 40       |
+| Feeding-frenzy GP    | `**A4-$6742**` (tavern A @ `0x1CA2E`)           | 20, 250, 40, 120, 40       |
 | Temple quest bit     | `**A4-$66B1**` (= master `**0x2637C**` first 5) | 1, 2, 4, 8, 16             |
 | Training stat +      | `**A4-$6720**` (by **map** 0→4)                 | 5, 20, 10, 10, 3           |
 | Training stat cap    | `**A4-$671A`** (by **map** 0→4)                 | 100, 100, 100, 100, 50     |
 | Training town index  | FAQ §3-6 (not map order)                        | 1, 5, 2, 4, 2              |
-| Temple donation ×100 | `**A4-$6714`** (by **map** 0→4)                 | 1, 5, 2, 3, 2 → GP 100…500 |
+| Temple cost scale    | `**A4-$6714**` (by **map** 0→4)                 | 1, 5, 2, 3, 2 → donate GP 100…500 |
 
 
 ### 13.2 Training + Healing closed-form formulas (FAQ §3-6)
@@ -978,7 +1001,7 @@ Regenerate: `python tools/dump_shop_tables.py --json EXTRACTED/shop_tables.json`
 **Training cost:** `level × training_town_index × 50`. Indices:
 **1** Middlegate, **2** Sandsobar & Tundara, **4** Vulcania, **5** Atlantium.
 
-**Healing cost:** `level × training_town_index × 10`  (same town index as training).
+**Healing cost (healthy):** `level × A4-$6714 × 10` (temple scale; Vulcania=3, not training index 4).
 
 - ×10 multiplier when character is **dead**: `level × index × 100`
 - ×100 multiplier when **eradicated**: `level × index × 1,000`

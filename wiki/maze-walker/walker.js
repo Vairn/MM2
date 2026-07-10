@@ -42,7 +42,7 @@ import {
   drawMinimapAmbient,
   formatEventScriptFlow,
 } from "./ui.js";
-import { runEventScript, runQuestOverlay, runTileAmbientEncounter } from "./eventVm.js";
+import { runEventScript, runTileAmbientEncounter } from "./eventVm.js";
 import {
   createSessionState,
   formatSessionPartyPanel,
@@ -966,12 +966,6 @@ function draw() {
     } else if (collisionAmbientPositions(sc).has(pos)) {
       eventText = "Tile-flag fight — random monsters (collision 0x80, no script)";
       if (!standingEventHint) standingEventHint = "Tile-flag fight";
-    } else {
-      const overlayHint = overlayQuestHint(state.screen, pos);
-      if (overlayHint) {
-        eventText = `${overlayHint}\n(quest overlay — no event.dat triplet; doc 53)`;
-        standingEventHint = overlayHint;
-      }
     }
   }
   eventScriptEl.textContent = eventText;
@@ -1148,15 +1142,6 @@ let viewportOverlay = null;
 /** @type {string[]} */
 let lastEventNotes = [];
 
-/** Middlegate Nordonna overlay @ (1,2) — no event.dat triplet (doc 53). */
-const OVERLAY_QUEST_TILES = new Set([(1 << 4) | 2]);
-
-function overlayQuestHint(screenId, pos) {
-  if (screenId !== 0 || !OVERLAY_QUEST_TILES.has(pos)) return null;
-  if (pos === (1 << 4) | 2) return "Nordonna — hireling quest (overlay)";
-  return null;
-}
-
 function buildEventVmCtx() {
   return {
     screenId: state.screen,
@@ -1227,21 +1212,6 @@ async function runEvent(evtData, strings) {
   }
 }
 
-async function runOverlayQuest() {
-  isEventRunning = true;
-  try {
-    const result = await runQuestOverlay(buildEventVmCtx());
-    if (!result) return;
-    lastEventNotes = result.notes;
-    if (result.notes.length) {
-      statusEl.textContent = result.notes[result.notes.length - 1];
-    }
-    draw();
-  } finally {
-    isEventRunning = false;
-  }
-}
-
 async function runTileAmbientFight() {
   isEventRunning = true;
   try {
@@ -1261,12 +1231,6 @@ function checkEvents() {
   if (!maps) return;
   const sc = maps.screens[state.screen];
   const pos = (state.y << 4) | state.x;
-
-  const overlayHint = overlayQuestHint(state.screen, pos);
-  if (overlayHint) {
-    setTimeout(() => runOverlayQuest(), 10);
-    return;
-  }
 
   if (sc.events) {
     for (const [, evtData] of Object.entries(sc.events)) {
@@ -1443,6 +1407,7 @@ async function init() {
     overlays = data.overlays ?? {};
     if (manifest.font) initFont(manifest.font);
     session = createSessionState({ manifest });
+    exploreRng.reseed((Date.now() >>> 0) ^ 0xa5a5a5a5);
     if (manifest.defaultParty?.members?.length) {
       statusEl.textContent = `Party loaded from roster (${manifest.defaultParty.partyCount} members)`;
     }

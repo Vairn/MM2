@@ -413,29 +413,40 @@ void PlayTownServiceUi::applyTempleAndReturn(int party_slot)
 
     switch (temple_opt_) {
     case mm2::events::TempleOption::Heal: {
-        const uint32_t cost = mm2::events::townSvcHealingCost(rec->level, ctx_.map_id);
+        const uint32_t cost = mm2::events::townSvcTempleHealCost(*rec, ctx_.map_id);
         const mm2::events::TownSvcHealResult r = mm2::events::townSvcHeal(*rec, cost);
-        if (!r.paid) {
+        if (cost > 0 && !r.paid) {
             std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, cost);
+        } else if (cost == 0) {
+            std::snprintf(status_, sizeof(status_), "%s needs no healing.", name);
         } else {
             std::snprintf(status_, sizeof(status_), "%s healed for %u gp.", name, r.cost);
         }
         break;
     }
-    case mm2::events::TempleOption::RestoreCondition:
-        mm2::events::townSvcRestoreCondition(*rec);
-        std::snprintf(status_, sizeof(status_), "%s's condition restored.", name);
+    case mm2::events::TempleOption::RestoreAlignment: {
+        const uint32_t cost = mm2::events::townSvcTempleAlignCost(*rec, ctx_.map_id);
+        const mm2::events::TownSvcAlignResult r =
+            mm2::events::townSvcRestoreAlignment(*rec, cost);
+        if (cost > 0 && !r.paid) {
+            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, cost);
+        } else if (!r.restored && cost == 0) {
+            std::snprintf(status_, sizeof(status_), "%s's alignment is already true.", name);
+        } else {
+            std::snprintf(status_, sizeof(status_), "%s's alignment restored (%u gp).", name,
+                          r.cost);
+        }
         break;
+    }
     case mm2::events::TempleOption::Donate: {
-        Mm2TownCommerce town{};
-        const uint32_t cost = mm2_town_commerce(ctx_.map_id, &town) ? town.donation_gold : 0u;
+        const uint32_t cost = mm2_town_temple_donate_cost(ctx_.map_id);
         const mm2::events::TownSvcDonateResult r =
             mm2::events::townSvcTempleDonate(ctx_.a4, *rec, ctx_.map_id);
         if (!r.paid) {
             std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, cost);
         } else if (r.all_temples_donated) {
-            std::snprintf(status_, sizeof(status_), "%s donated %u gp. All temples blessed!", name,
-                          r.cost);
+            std::snprintf(status_, sizeof(status_),
+                          "%s donated %u gp. All temples — Fe Farthing queued!", name, r.cost);
         } else {
             std::snprintf(status_, sizeof(status_), "%s donated %u gp.", name, r.cost);
         }
@@ -506,7 +517,8 @@ void PlayTownServiceUi::applyTrainingAndReturn(int party_slot)
     }
     char name[20];
     mm2_roster_name_to_cstr(rec, name, sizeof(name));
-    const mm2::events::TownSvcTrainResult r = mm2::events::townSvcTrainLevelUp(*rec, ctx_.map_id);
+    const mm2::events::TownSvcTrainResult r =
+        mm2::events::townSvcTrainLevelUp(*rec, ctx_.map_id, ctx_.rng);
     if (!r.eligible) {
         /* XP gate (no charge): faithful to the engine charging nothing when the
          * character lacks the experience for the next level. */
@@ -654,6 +666,56 @@ void PlayTownServiceUi::applyTavernFeedingFrenzy()
     phase_ = Phase::Menu;
 }
 
+void PlayTownServiceUi::applyTavernStatBoost(int slot)
+{
+    Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
+    if (!rec || slot < 0 || slot >= mm2::events::kPubStatBoostCount) {
+        return;
+    }
+    char name[20];
+    mm2_roster_name_to_cstr(rec, name, sizeof(name));
+    const mm2::events::TownSvcStatBoostResult r =
+        mm2::events::townSvcTavernStatBoost(*rec, slot, ctx_.map_id, ctx_.rng);
+    const char *label = tavern_data_.boosts[slot].label;
+    if (!r.paid) {
+        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name,
+                      tavern_data_.boosts[slot].cost);
+    } else if (r.sick) {
+        std::snprintf(status_, sizeof(status_), "%s bought %s — you feel sick!", name,
+                      label ? label : "boost");
+    } else {
+        std::snprintf(status_, sizeof(status_), "%s bought %s (%u gp).", name,
+                      label ? label : "boost", r.cost);
+    }
+    phase_ = Phase::Menu;
+}
+
+void PlayTownServiceUi::applyTavernSpecialty(int food_idx)
+{
+    Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
+    if (!rec || food_idx < 0 || food_idx >= mm2::events::kPubFoodOptions) {
+        return;
+    }
+    char name[20];
+    mm2_roster_name_to_cstr(rec, name, sizeof(name));
+    const mm2::events::TownSvcSpecialtyResult r =
+        mm2::events::townSvcTavernSpecialty(*rec, ctx_.map_id, food_idx, ctx_.rng);
+    const char *food = tavern_data_.food.options[food_idx];
+    if (!r.paid) {
+        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, r.cost);
+    } else {
+        (void)mm2::events::townSvcFoodEncodePurchase(ctx_.roster, ctx_.launch, food_idx, ctx_.rng);
+        if (r.sick) {
+            std::snprintf(status_, sizeof(status_), "%s: %s — you feel sick!", name,
+                          food ? food : "meal");
+        } else {
+            std::snprintf(status_, sizeof(status_), "%s ordered %s (%u gp).", name,
+                          food ? food : "meal", r.cost);
+        }
+    }
+    phase_ = Phase::Menu;
+}
+
 void PlayTownServiceUi::handleKey(char ch, bool escape)
 {
     if (!active_) {
@@ -678,7 +740,7 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
             close();
             break;
         case Phase::TavernFood:
-        case Phase::TavernDrink:
+        case Phase::TavernBoost:
         case Phase::TavernRumor:
             phase_ = Phase::Menu;
             status_[0] = '\0';
@@ -705,7 +767,7 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
         case Phase::Menu:
         case Phase::SmithItems:
         case Phase::TavernFood:
-        case Phase::TavernDrink:
+        case Phase::TavernBoost:
         case Phase::TavernRumor:
             cycleActiveMember(active_member_, ctx_);
             status_[0] = '\0';
@@ -729,7 +791,7 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
                 temple_opt_ = mm2::events::TempleOption::Heal;
                 applyTempleAndReturn(active_member_);
             } else if (ch == 'B') {
-                temple_opt_ = mm2::events::TempleOption::RestoreCondition;
+                temple_opt_ = mm2::events::TempleOption::RestoreAlignment;
                 applyTempleAndReturn(active_member_);
             } else if (ch == 'C') {
                 temple_opt_ = mm2::events::TempleOption::Donate;
@@ -771,8 +833,9 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
             if (ch == 'A') {
                 applyTavernFeedingFrenzy();
             } else if (ch == 'B') {
-                tavern_opt_ = mm2::events::TavernOption::Drink;
-                phase_ = Phase::TavernDrink;
+                /* ASM 0x1CAC4 — stat-boost submenu, NOT drinks. */
+                tavern_opt_ = mm2::events::TavernOption::StatBoost;
+                phase_ = Phase::TavernBoost;
             } else if (ch == 'C') {
                 tavern_opt_ = mm2::events::TavernOption::Specialties;
                 phase_ = Phase::TavernFood;
@@ -821,43 +884,13 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
 
     case Phase::TavernFood:
         if (ch >= 'A' && ch < char('A' + mm2::events::kPubFoodOptions)) {
-            const int idx = ch - 'A';
-            const char *food = tavern_data_.food.options[idx];
-            std::snprintf(status_, sizeof(status_), "%s",
-                          food ? food : "Bon appetit!");
-            /* Food stat effect (roster +$78 food byte) is deferred — not yet
-             * traced from 0x18EC0/0x019030. Show the selection and go back. */
-            phase_ = Phase::Menu;
+            applyTavernSpecialty(ch - 'A');
         }
         break;
 
-    case Phase::TavernDrink:
-        if (ch >= 'A' && ch < char('A' + mm2::events::kPubDrinkCount)) {
-            const int idx = ch - 'A';
-            const char *drink = tavern_data_.drinks[idx].label;
-            /* Mark A4-$71DC = 0xFD: drink bought, enables rumor cycling (ASM
-             * 0x97FC checks this flag when the rumor list is exhausted). */
-            if (ctx_.a4) {
-                mm2_gs_set_u8(ctx_.a4, -0x71DC, 0xFD);
-            }
-            /* 0x19D64: sick roll — rng(1,50)==2 (2% chance, same leaf as rest ambush). */
-            const bool sick = ctx_.rng && ctx_.rng->range(1, 50) == 2;
-            if (sick) {
-                /* bset #4, $26(rec) for each living party member (condition < 0x80). */
-                if (ctx_.launch) {
-                    for (int i = 0; i < ctx_.launch->party_count; ++i) {
-                        Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, i);
-                        if (rec && rec->condition < 0x80) {
-                            rec->condition |= 0x10; /* drunk/sick bit (0x19DD4) */
-                        }
-                    }
-                }
-                std::snprintf(status_, sizeof(status_), "You feel sick!");
-            } else {
-                std::snprintf(status_, sizeof(status_), "Enjoy your %s!",
-                              drink ? drink : "drink");
-            }
-            phase_ = Phase::Menu;
+    case Phase::TavernBoost:
+        if (ch >= 'A' && ch < char('A' + mm2::events::kPubStatBoostCount)) {
+            applyTavernStatBoost(ch - 'A');
         }
         break;
 
@@ -937,21 +970,22 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
         for (int i = 0; i < mm2::events::kPubFoodOptions; ++i) {
             char line[48];
             const char *food = tavern_data_.food.options[i];
-            std::snprintf(line, sizeof(line), "%c) %s", char('A' + i), food ? food : "---");
+            std::snprintf(line, sizeof(line), "%c) %s (%u gp)", char('A' + i),
+                          food ? food : "---", tavern_data_.food.costs[i]);
             row = drawMultiline(c, row, kOptCol, line);
         }
         drawEscFooter(c);
         return;
     }
 
-    if (phase_ == Phase::TavernDrink) {
+    if (phase_ == Phase::TavernBoost) {
         drawLeftChrome(c);
         int row = kBandRowFirst;
-        for (int i = 0; i < mm2::events::kPubDrinkCount; ++i) {
+        for (int i = 0; i < mm2::events::kPubStatBoostCount; ++i) {
             char line[48];
-            const char *drink = tavern_data_.drinks[i].label;
-            std::snprintf(line, sizeof(line), "%c) %-14s - ", char('A' + i),
-                          drink ? drink : "");
+            const char *lab = tavern_data_.boosts[i].label;
+            std::snprintf(line, sizeof(line), "%c) %-14s %u gp", char('A' + i),
+                          lab ? lab : "---", tavern_data_.boosts[i].cost);
             drawCell(c, row++, kOptCol, line);
         }
         drawEscFooter(c);
@@ -1017,7 +1051,7 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
         } else if (kind_ == Kind::Tavern) {
             drawCell(c, kBandRowFirst, kOptCol, "A) Feeding frenzy (all");
             drawCell(c, kBandRowFirst + 1, kOptCol, "   you can carry");
-            drawCell(c, kBandRowFirst + 2, kOptCol, "B) Have a drink");
+            drawCell(c, kBandRowFirst + 2, kOptCol, "B) Buy (stat boost)");
             drawCell(c, kBandRowFirst + 3, kOptCol, "C) Specialties");
             drawCell(c, kBandRowFirst + 4, kOptCol, "D) Tip the bartender");
             drawCell(c, kBandRowFirst + 5, kOptCol, "E) Listen for rumors");

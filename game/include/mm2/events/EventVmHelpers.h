@@ -62,8 +62,23 @@ uint32_t eventVmPartyGoldTotal(const uint8_t *a4, const Mm2RosterFile *roster,
 int eventVmCountPartyNibbleMatches(const uint8_t *a4, const Mm2RosterFile *roster,
                                    const Mm2PartyLaunch *launch, uint8_t id);
 
+/** roster_count_living_chars @ 0x47A2: count party slots with (condition & 0xE0)==0.
+ *  OP_31 abort gate `-$7F14`→`0x47EC` returns nonzero (→ SCRIPT_ABORT) when this is 0. */
+int eventVmCountLivingPartyMembers(const uint8_t *a4, const Mm2RosterFile *roster,
+                                   const Mm2PartyLaunch *launch);
+
+/** OP_19 backpack place: first empty +$3A slot, else found-item overflow. Returns true
+ *  when placed on a member (cond=1 path). */
+bool eventVmPartyGiveItem(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                          uint8_t item_id, uint8_t charges, uint8_t flags);
+
+/** Scan equipped+backpack. `consume` removes from first match (either bank). */
 bool eventVmPartyHasItem(const uint8_t *a4, const Mm2RosterFile *roster,
                          const Mm2PartyLaunch *launch, uint8_t item_id, bool consume);
+
+/** OP_28 @ 0x16C86: backpack-only (+$3A) scan; always consumes on hit → cond. */
+bool eventVmPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                     uint8_t item_id);
 
 void eventVmClearTileEventFlag(uint8_t *a4, int y, int x);
 
@@ -74,12 +89,28 @@ void eventVmConsumeTileEncounterFlag(uint8_t *a4, world::MapWorld &world, int y,
 void eventVmPatchMapTile(world::MapWorld &world, int y, int x, uint8_t visual,
                          uint8_t collision);
 
-/** OP_15/18 party field op. `selector` is the raw script field-selector byte
- * (0x00..0x7F); it is translated to the real record byte offset via the ROM
- * field map (EventFieldMap.h), NOT used directly as an offset. */
-void eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
-                             uint8_t count, uint8_t selector, uint8_t val, bool masked,
-                             uint8_t and_m, uint8_t or_m, bool test_only, bool *out_cond);
+/** OP_15/18 @ 0x16426. `member_spec` is the first script byte (0=all, 1..8=one,
+ *  9=selected). `selector` maps via EventFieldMap.h. Test mode (OP_15) ORs
+ *  field/(field&val) into COND_FLAG; masked mode (OP_18) writes (f&and)|or.
+ *  Returns the final COND_FLAG byte (test) or 0 (masked). */
+uint8_t eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                uint8_t member_spec, uint8_t selector, uint8_t val, bool masked,
+                                uint8_t and_m, uint8_t or_m);
+
+/** OP_31 → 0x4952 with out-flags=0 (ASM call pattern from 0x170BC): subtract
+ *  `damage` from roster +$5E (working HP word). Skips if +$26 >= 0x80. On
+ *  lethal: bset bit6 on +$26; if bit6 already set → +$26=0x81; clear +$5E. */
+void eventVmApplyOp31Damage(Mm2RosterRecord *rec, uint16_t damage);
+
+/** OP_31 member-spec resolution + per-target 0x4952 (out-flags zeroed). */
+void eventVmOp31IterateDamage(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                              uint8_t member_spec, uint16_t damage);
+
+/** Search key @ 0x4800 → 0x1B19C: if found-item buffer has loot, distribute
+ *  gold/gems/items to the party and clear the buffer. Returns true when loot
+ *  was present (caller shows "The Party Has found:" / "Nothing Here!"). */
+bool eventVmSearchPayoff(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                         char *msg, size_t msg_cap);
 
 bool eventVmCheckOp30Password(const uint8_t *input_buf, const uint8_t *expected,
                               size_t expected_len);
@@ -95,9 +126,15 @@ void eventVmApplyTreasure(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaun
 /** OP_0D engine_call index → side effects (0x09 = refresh hooks). */
 void eventVmExecEngineCall(uint8_t *a4, uint8_t index, world::MapWorld *world);
 
-/** OP_25 non-gold code check (tickets 208–211, keys 112–114, flags). */
-bool eventVmCheckCode16(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
-                        uint16_t code);
+/** OP_24 @ 0x16B54 → -$7E6C → 0x6ACE: if party gold (sum +$66 over slots with
+ *  roster index < 0x18) >= amount, deduct amount and pool the remainder onto
+ *  the first eligible member (others cleared). Returns true on success. */
+bool eventVmPartyTryPayGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                            uint32_t amount);
+
+/** OP_25 @ 0x16B82 → -$7E66 → 0x6B9A: same pool/deduct for gems (+$5C, u16). */
+bool eventVmPartyTryPayGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                            uint16_t amount);
 
 /* ---------------------------------------------------------------------------
  * Arena Games ticket-combat engine (ASM 0x9D76). CORRECTED 2026-07: this

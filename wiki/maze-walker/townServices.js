@@ -5,7 +5,6 @@ import { arenaGoldReward, arenaMonsterType } from "./selectorBin.js";
 
 import {
   townCommerce,
-  healingCost,
   trainingCost,
   classXpForLevel,
   classHpPerLevel,
@@ -19,9 +18,11 @@ import {
   TEMPLE_DONATION_ALL_BITS,
   pubFoodMenu,
   mageGuildStock,
+  templeSpellStock,
   portalAt,
   TOWN_NAMES,
   PUB_DRINKS,
+  templeDonateCost,
 } from "./townTables.js";
 
 import {
@@ -35,15 +36,11 @@ import {
   memberSpellKnown,
   memberGrantSpell,
   memberGuildMember,
-  applyGuildEnroll,
-  applyBrainDetox,
   applyInnRegistry,
   findArenaTicket,
   consumeArenaTicket,
   ARENA_TICKET_COLOR_NAMES,
 } from "./sessionState.js";
-
-import { applySkillBuy } from "./skillBuy.js";
 
 /** @param {object} member @param {number} amount */
 function charGoldDeduct(member, amount) {
@@ -68,14 +65,57 @@ export function svcRestoreCondition(member) {
   member.condition = 0;
 }
 
+/** Temple heal cost 0x1DCA2: base by condition, ×level ×A4-$6714. */
+export function templeHealCost(member, mapId) {
+  const town = townCommerce(mapId);
+  const scale = town.temple_cost_index | 0;
+  const cond = member.condition | 0;
+  let base = 0;
+  if (cond === 0xff) base = 1000;
+  else if (cond >= 0x80) base = 100;
+  else if (cond !== 0 || (member.hpMax | 0) < (member.hpAux | member.hpMax | 0)) base = 10;
+  else return 0;
+  let cost = base;
+  const level = member.level | 0;
+  if (level) cost *= level;
+  return cost * scale;
+}
+
+/** Temple align cost 0x1DC3A: 0 if matched; else 100×level×$6714. */
+export function templeAlignCost(member, mapId) {
+  const cur = member.alignment ?? member.alignmentCurrent ?? 0;
+  const baseAlign = member.alignmentBase ?? cur;
+  if (cur === baseAlign) return 0;
+  const town = townCommerce(mapId);
+  let cost = 100;
+  const level = member.level | 0;
+  if (level) cost *= level;
+  return cost * (town.temple_cost_index | 0);
+}
+
+export function svcRestoreAlignment(member, cost) {
+  const r = { paid: false, cost: cost | 0, restored: false };
+  if ((cost | 0) > 0 && !charGoldDeduct(member, cost)) {
+    r.cost = 0;
+    return r;
+  }
+  const cur = member.alignment ?? member.alignmentCurrent ?? 0;
+  member.alignmentBase = cur;
+  member.alignment = cur;
+  r.paid = true;
+  r.restored = true;
+  return r;
+}
+
 /** @param {object} member @param {number} cost */
 export function svcHeal(member, cost) {
   const r = { paid: false, cost: cost | 0, hpRestored: false };
-  if (!charGoldDeduct(member, cost)) {
+  if ((cost | 0) > 0 && !charGoldDeduct(member, cost)) {
     r.cost = 0;
     return r;
   }
   r.paid = true;
+  if ((cost | 0) === 0) return r;
   r.hpRestored = restoreHp(member);
   svcRestoreCondition(member);
   return r;
@@ -84,14 +124,23 @@ export function svcHeal(member, cost) {
 /** @param {object} session @param {object} member @param {number} mapId */
 export function svcTempleDonate(session, member, mapId) {
   const town = townCommerce(mapId);
-  const r = { paid: false, cost: town.donation_gold, allTemples: false };
-  if (!charGoldDeduct(member, town.donation_gold)) {
+  const cost = templeDonateCost(mapId);
+  const r = { paid: false, cost, allTemples: false };
+  if (!charGoldDeduct(member, cost)) {
     r.cost = 0;
     return r;
   }
   r.paid = true;
   session.questDonationBits = (session.questDonationBits | town.donation_quest_bit) & 0xff;
-  r.allTemples = session.questDonationBits === TEMPLE_DONATION_ALL_BITS;
+  r.allTemples = (session.questDonationBits & TEMPLE_DONATION_ALL_BITS) === TEMPLE_DONATION_ALL_BITS;
+  /* 0x1D7E8: sentinel $FE + item 0xD4 in found buffer; clr donation bits. */
+  if (r.allTemples) {
+    session.foundItemSentinel = 0xfe;
+    session.foundItemIds = session.foundItemIds || [0, 0, 0];
+    session.foundItemIds[0] = 0xd4;
+    session.questDonationBits = 0;
+    r.rewardQueued = true;
+  }
   return r;
 }
 
@@ -127,7 +176,12 @@ export function svcTrainLevelUp(member, mapId) {
   }
   r.paid = true;
   member.level = next;
-  const hpGain = classHpPerLevel(member.classId) + attrBonus(member.endurance);
+  /* doc-32 average + confirmed 0x9BCA RNG addend (calendar mode / HP write deferred). */
+  let hpGain = classHpPerLevel(member.classId) + attrBonus(member.endurance);
+  const roll = Math.floor(Math.random() * 0x6d) + 1;
+  const addend = Math.floor(roll / 10) & 0xff;
+  if (addend !== 5) hpGain += addend;
+  if (hpGain < 1) hpGain = 1;
   member.hpAux += hpGain;
   member.hpMax = member.hpAux;
   member.hpCurrent = member.hpAux;
@@ -200,35 +254,65 @@ function afterTxn(ctx) {
 export async function runTempleService(ctx) {
   const { screenId, session, waitForSpace, promptMenuKey, note, sprite, title } = ctx;
   const town = townCommerce(screenId);
+  const spells = templeSpellStock(screenId);
 
   while (true) {
-    const donateGp = town.donation_gold;
+    const donateGp = templeDonateCost(screenId);
     const donated = (session.questDonationBits & town.donation_quest_bit) !== 0;
+    const spellLines = spells.map(
+      (s, i) => `${String.fromCharCode(68 + i)}) ${s.label} — ${s.gold} gp`
+    );
     const text = [
       title,
       partyRosterLines(session),
       "",
-      "A) Heal (HP + condition) — level×town×10 gp",
-      "B) Restore Condition (free)",
+      "A) Restore Cond (heal HP + clear condition)",
+      "B) Restore Algn (current → base)",
       "C) Donations",
       `   ${donateGp} gp${donated ? " (already donated here)" : ""}`,
+      ...spellLines,
       "",
-      "A/B/C — 0 or Esc to leave",
+      "A–F — 0 or Esc to leave",
     ].join("\n");
 
-    const key = await promptMenuKey(text, "abc0", sprite, 0x0e);
+    const key = await promptMenuKey(text, "abcdef0", sprite, 0x0e);
     if (!key || key === "0") break;
+
+    if (key >= "d" && key <= "f") {
+      const spellSlot = key.charCodeAt(0) - 100;
+      const slot = await promptSelectMember(ctx);
+      if (slot == null) continue;
+      const member = getPartyMember(session, slot);
+      const sp = spells[spellSlot];
+      if (!sp?.gold) {
+        await waitForSpace("That spell is not for sale.", sprite, 0x0e);
+        continue;
+      }
+      const r = svcGuildBuySpell(member, sp.flat, sp.gold);
+      if (r.reject === "gold") {
+        await waitForSpace("Not enough gold!", sprite, 0x0e);
+      } else if (r.bought) {
+        await waitForSpace(`${member.name} learned ${sp.label}. −${r.price} gp`, sprite, 0x0e);
+        note(`Temple spell ${sp.label} −${r.price} gp`);
+      } else {
+        await waitForSpace("Could not learn that spell.", sprite, 0x0e);
+      }
+      afterTxn(ctx);
+      continue;
+    }
 
     const slot = await promptSelectMember(ctx);
     if (slot == null) continue;
     const member = getPartyMember(session, slot);
 
     if (key === "a") {
-      const healGp = healingCost(member.level, town.training_town_index);
+      const healGp = templeHealCost(member, screenId);
       const r = svcHeal(member, healGp);
-      if (!r.paid) {
+      if (healGp > 0 && !r.paid) {
         await waitForSpace("Not enough gold!", sprite, 0x0e);
         note(`Temple: ${member.name} heal failed (gold)`);
+      } else if (healGp === 0) {
+        await waitForSpace(`${member.name} needs no healing.`, sprite, 0x0e);
       } else {
         await waitForSpace(
           `${member.name} healed for ${r.cost} gp.\n${memberSummary(member)}`,
@@ -238,9 +322,20 @@ export async function runTempleService(ctx) {
         note(`Temple heal ${member.name} −${r.cost} gp`);
       }
     } else if (key === "b") {
-      svcRestoreCondition(member);
-      await waitForSpace(`${member.name}: condition cleared.\n${memberSummary(member)}`, sprite, 0x0e);
-      note(`Temple: restore condition ${member.name}`);
+      const alignGp = templeAlignCost(member, screenId);
+      const r = svcRestoreAlignment(member, alignGp);
+      if (alignGp > 0 && !r.paid) {
+        await waitForSpace("Not enough gold!", sprite, 0x0e);
+      } else if (!r.restored && alignGp === 0) {
+        await waitForSpace(`${member.name}'s alignment is already true.`, sprite, 0x0e);
+      } else {
+        await waitForSpace(
+          `${member.name}: alignment restored (−${r.cost} gp).\n${memberSummary(member)}`,
+          sprite,
+          0x0e
+        );
+        note(`Temple align ${member.name} −${r.cost} gp`);
+      }
     } else if (key === "c") {
       if (donated) {
         await waitForSpace("You have already donated here.", sprite, 0x0e);
@@ -404,9 +499,142 @@ export function svcPubBuyFood(member, mapId, menuIdx) {
   if (!meal) return { paid: false, cost: 0 };
   const cost = meal.gold | 0;
   if (!charGoldDeduct(member, cost)) return { paid: false, cost: 0 };
-  member.pubMeal = ((mapId & 0x0f) << 4) | ((menuIdx + 1) & 0x0f);
-  member.food = Math.min(0x28, (member.food | 0) + 10);
-  return { paid: true, cost, meal };
+  /* 0x1C8D4: OR A4-$786C mask into +$76 (temp_score_word). */
+  const masks = [
+    [1, 2, 4],
+    [4096, 8192, 16384],
+    [64, 128, 256],
+    [512, 1024, 2048],
+    [8, 16, 32],
+  ];
+  const town = mapId >= 0 && mapId < 5 ? mapId : 0;
+  member.tempScoreWord = ((member.tempScoreWord | 0) | (masks[town][menuIdx] | 0)) & 0xffff;
+  /* 0x18EC0 encode → +$78; +$7C bit0 clear (food). No invented meal→tile coords. */
+  const tiers = [
+    [56, 24, 13, 6, 3, 8, 2, 1],
+    [66, 29, 6, 7, 7, 15, 2, 1],
+    [37, 12, 7, 10, 2, 5, 1, 1],
+  ];
+  const addends = [
+    [1, 66, 92, 115, 127, 155],
+    [25, 79, 98, 118, 135, 157],
+    [54, 85, 105, 125, 150, 159],
+  ];
+  const t = tiers[menuIdx];
+  let enc = (Math.floor(Math.random() * t[0]) + 1) - 1;
+  if (enc < 0) enc = 0;
+  let i = 1;
+  for (; i < 7; i++) {
+    if (enc < t[i]) break;
+    enc = (enc - t[i + 1]) & 0xff;
+  }
+  i -= 1;
+  if (i < 0) i = 0;
+  if (i > 5) i = 5;
+  enc = (enc + addends[menuIdx][i]) & 0xff;
+  member.scriptWorkFlag = enc;
+  member.pubMeal = enc;
+  if (member.rawBytes) {
+    member.rawBytes[0x78] = enc;
+    member.rawBytes[0x7c] = (member.rawBytes[0x7c] & 0xfe);
+  }
+  return { paid: true, cost, meal, encoding: enc };
+}
+
+/** Tavern B @ 0x1CAC4 — A–F costs A4-$6738; apply base-stat bump (0x1C7EC family). */
+const STAT_BOOST = [
+  { key: "might", cost: 5, label: "Might" },
+  { key: "accuracy", cost: 5, label: "Accuracy" },
+  { key: "personality", cost: 20, label: "Personality" },
+  { key: "intelligence", cost: 20, label: "Intelligence" },
+  { key: "level", cost: 50, label: "Level" },
+  { key: "spellLevel", cost: 100, label: "Spell Level" },
+];
+
+export function svcTavernStatBoost(member, slot, mapId) {
+  const row = STAT_BOOST[slot];
+  if (!row) return { paid: false, cost: 0 };
+  if ((member.condition | 0) !== 0) return { paid: false, cost: row.cost, ok: false };
+  if (!charGoldDeduct(member, row.cost)) return { paid: false, cost: 0 };
+  const town = townCommerce(mapId);
+  const add = town.stat_train_add | 0;
+  const cap = town.stat_train_cap | 0;
+  if (row.key === "level" || row.key === "spellLevel") {
+    member[row.key] = Math.min(255, (member[row.key] | 0) + add);
+  } else {
+    const baseKey = row.key;
+    let v = (member[baseKey] | 0) + add;
+    if (v < cap && v >= add) member[baseKey] = v;
+  }
+  if ((member.speed | 0) >= 2) member.speed = (member.speed | 0) - 2;
+  const endHi = (member.endurance | 0) + 10;
+  const sick = Math.floor(Math.random() * Math.max(1, endHi)) + 1 === 2;
+  if (sick) member.condition = (member.condition | 0) | 0x08;
+  return { paid: true, cost: row.cost, sick, label: row.label, ok: true };
+}
+
+/** @param {object} member @param {number} amount */
+function satSubByte(member, key, amount) {
+  const n = amount | 0;
+  let v = member[key] | 0;
+  if (v < n) v = 0;
+  else v -= n;
+  member[key] = v;
+}
+
+/** General store 0xA3AE jump table — saturate-subtract per skill nibble (ASM). */
+function generalStoreApplySkillNibble(member, skillId) {
+  switch (skillId & 0x0f) {
+    case 1:
+      satSubByte(member, "accuracy", 5);
+      break;
+    case 2:
+      satSubByte(member, "speed", 5);
+      break;
+    case 5:
+      satSubByte(member, "personality", 5);
+      break;
+    case 6:
+      satSubByte(member, "luck", 5);
+      break;
+    case 7:
+      satSubByte(member, "might", 5);
+      break;
+    case 8:
+      for (const k of ["might", "intelligence", "personality", "speed", "accuracy", "luck", "endurance"]) {
+        satSubByte(member, k, 1);
+      }
+      break;
+    case 9:
+      satSubByte(member, "intelligence", 5);
+      break;
+    case 14:
+      satSubByte(member, "age", 15);
+      break;
+    case 15:
+      satSubByte(member, "endurance", 5);
+      break;
+    default:
+      break;
+  }
+}
+
+/**
+ * General store convert leaf 0xA62C: 100gp + apply both +$50 nibbles via 0xA3AE, clear pack.
+ * @param {object} member
+ */
+export function svcGeneralStoreConvert(member) {
+  const pack = (member.skillPack ?? 0) & 0xff;
+  if (pack === 0) {
+    return { converted: false, paid: false, message: "The secondary skills are gone." };
+  }
+  if (!charGoldDeduct(member, 100)) {
+    return { converted: false, paid: false, message: "Sorry, you must have 100 gold." };
+  }
+  generalStoreApplySkillNibble(member, pack & 0x0f);
+  generalStoreApplySkillNibble(member, (pack >> 4) & 0x0f);
+  member.skillPack = 0;
+  return { converted: true, paid: true, message: "The secondary skills are gone." };
 }
 
 /** @param {object} member @param {number} drinkIdx */
@@ -414,9 +642,25 @@ export function svcPubBuyDrink(member, drinkIdx, drinks) {
   const row = drinks[drinkIdx];
   if (!row) return { paid: false, cost: 0 };
   const cost = row.gold | 0;
-  if (!charGoldDeduct(member, cost)) return { paid: false, cost: 0 };
-  const sick = Math.random() < 0.04;
-  return { paid: true, cost, sick, name: row.name };
+  if (cost > 0 && !charGoldDeduct(member, cost)) return { paid: false, cost: 0 };
+  /* ASM-family RNG(1,50)==2 → sick; FAQ bonuses when not sick (VM handlers untraced). */
+  const sick = Math.floor(Math.random() * 50) + 1 === 2;
+  if (sick) {
+    return { paid: true, cost, sick: true, name: row.name };
+  }
+  const add = (k, n) => {
+    member[k] = Math.min(255, ((member[k] | 0) + n) | 0);
+  };
+  switch (drinkIdx) {
+    case 0: add("might", 5); break;
+    case 1: add("accuracy", 20); break;
+    case 2: add("personality", 10); break;
+    case 3: add("intelligence", 10); break;
+    case 4: add("level", 3); break;
+    case 5: add("spellLevel", 1); break;
+    default: break;
+  }
+  return { paid: true, cost, sick: false, name: row.name };
 }
 
 /**
@@ -445,67 +689,20 @@ export function svcGuildBuySpell(member, flatIndex, price) {
 
 /** @param {object} ctx */
 export async function runInnService(ctx) {
-  const { screenId, session, waitForSpace, promptMenuKey, note, sprite, title } = ctx;
-  const town = townCommerce(screenId);
-
-  while (true) {
-    const text = [
-      title,
-      partyRosterLines(session),
-      "",
-      "A) Rest whole party (healing cost × each member)",
-      "B) Rest one member",
-      "(HP/SP to max; day +1; condition unchanged)",
-      "",
-      "A/B — 0 or Esc to leave",
-    ].join("\n");
-
-    const key = await promptMenuKey(text, "ab0", sprite, 0x0e);
-    if (!key || key === "0") break;
-
-    if (key === "a") {
-      let total = 0;
-      for (const m of ensureParty(session)) {
-        total += healingCost(m.level, town.training_town_index);
-      }
-      const payer = getPartyMember(session, 0);
-      if ((payer.gold | 0) < total) {
-        await waitForSpace(`Not enough gold! Need ${total} gp.`, sprite, 0x0e);
-        continue;
-      }
-      payer.gold -= total;
-      for (const m of ensureParty(session)) svcInnRest(m);
-      session.day = ((session.day | 0) + 1) % 180 || 1;
-      await waitForSpace(
-        `The party rests. −${total} gp from ${payer.name}.\nDay is now ${session.day}.`,
-        sprite,
-        0x0e
-      );
-      note(`Inn party rest −${total} gp, day=${session.day}`);
-    } else {
-      const slot = await promptSelectMember(ctx);
-      if (slot == null) continue;
-      const member = getPartyMember(session, slot);
-      const cost = healingCost(member.level, town.training_town_index);
-      if (!charGoldDeduct(member, cost)) {
-        await waitForSpace("Not enough gold!", sprite, 0x0e);
-        continue;
-      }
-      svcInnRest(member);
-      session.day = ((session.day | 0) + 1) % 180 || 1;
-      await waitForSpace(
-        `${member.name} rests for ${cost} gp.\nDay is now ${session.day}.\n${memberSummary(member)}`,
-        sprite,
-        0x0e
-      );
-      note(`Inn rest ${member.name} −${cost} gp`);
-    }
-    afterTxn(ctx);
-  }
+  /* ASM: inn OP_0E 0x01 is registry only (0x1A1B2); rest is world R @ 0x19E20. */
+  const { waitForSpace, note, sprite, title } = ctx;
+  await waitForSpace(
+    `${title}\nSigned the registry.\n(Rest with R in exploration — 0x19E20)`,
+    sprite,
+    0x0e
+  );
+  note("Inn: registry complete (rest is world Rest key)");
 }
 
 /** @param {object} ctx */
 export async function runTavernService(ctx) {
+  /* OP_0E 0x03 → 0x1D208 / 0x1D650: A frenzy, B stat-boost, C specialties, D tip, E rumors.
+   * Drinks are selector 0xCA (0x18F78), not key B. */
   const { screenId, session, waitForSpace, promptMenuKey, note, sprite, title } = ctx;
   const food = pubFoodMenu(screenId);
 
@@ -514,9 +711,11 @@ export async function runTavernService(ctx) {
       title,
       partyRosterLines(session),
       "",
-      "A/B/C) Order entree (fixed gp from A4-$6760 table)",
-      "D) Drinks menu",
-      "E) Listen for rumors (display only)",
+      "A) Feeding frenzy (all you can carry)",
+      "B) Buy (stat boost A–F)",
+      "C) Specialties (food A–C)",
+      "D) Tip the bartender",
+      "E) Listen for rumors",
       "",
       "A–E — 0 or Esc to leave",
     ].join("\n");
@@ -533,46 +732,78 @@ export async function runTavernService(ctx) {
     }
 
     if (key === "d") {
-      const lines = ["Drinks:", partyRosterLines(session), ""];
-      PUB_DRINKS.forEach((d, i) => lines.push(`${i + 1}) ${d.name} — ${d.gold} gp`));
-      lines.push("", "1–6 pick drink — 0 back");
-      const pick = await promptMenuKey(lines.join("\n"), "1234560", sprite, 0x0e);
-      if (!pick || pick === "0") continue;
+      await waitForSpace("Thank you -\nPlease come again\n(Tip pool A4-$58AE)", sprite, 0x0e);
+      continue;
+    }
+
+    if (key === "a") {
       const slot = await promptSelectMember(ctx);
       if (slot == null) continue;
       const member = getPartyMember(session, slot);
-      const r = svcPubBuyDrink(member, parseInt(pick, 10) - 1, PUB_DRINKS);
-      if (!r.paid) {
+      const town = townCommerce(screenId);
+      const cost = town.feeding_frenzy_gold | 0;
+      if (!charGoldDeduct(member, cost)) {
         await waitForSpace("Not enough gold!", sprite, 0x0e);
-      } else if (r.sick) {
-        await waitForSpace(`${member.name} got sick!\n(ASM 0x19B28 stat reset — not simulated)`, sprite, 0x0e);
-        note(`Tavern drink ${r.name}: sick roll`);
       } else {
-        await waitForSpace(`${member.name} enjoyed ${r.name}. −${r.cost} gp`, sprite, 0x0e);
-        note(`Tavern drink ${r.name} −${r.cost} gp`);
+        for (const m of ensureParty(session)) {
+          if ((m.food | 0) < 0x28) m.food = 0x28;
+        }
+        await waitForSpace(`${member.name}: party fed to 40 (−${cost} gp)`, sprite, 0x0e);
+        note(`Tavern feeding frenzy −${cost} gp`);
       }
       afterTxn(ctx);
       continue;
     }
 
-    const menuIdx = { a: 0, b: 1, c: 2 }[key];
-    if (menuIdx == null || !food[menuIdx]) continue;
-    const meal = food[menuIdx];
-    const slot = await promptSelectMember(ctx);
-    if (slot == null) continue;
-    const member = getPartyMember(session, slot);
-    const r = svcPubBuyFood(member, screenId, menuIdx);
-    if (!r.paid) {
-      await waitForSpace("Not enough gold!", sprite, 0x0e);
-    } else {
-      await waitForSpace(
-        `${member.name} ordered ${meal.text}.\n−${r.cost} gp  (pubMeal=0x${(member.pubMeal & 0xff).toString(16)})`,
-        sprite,
-        0x0e
-      );
-      note(`Tavern meal ${meal.text} −${r.cost} gp`);
+    if (key === "b") {
+      const lines = ["Buy (A4-$6738):", partyRosterLines(session), ""];
+      STAT_BOOST.forEach((d, i) => lines.push(`${i + 1}) ${d.label} — ${d.cost} gp`));
+      lines.push("", "1–6 pick — 0 back");
+      const pick = await promptMenuKey(lines.join("\n"), "1234560", sprite, 0x0e);
+      if (!pick || pick === "0") continue;
+      const slot = await promptSelectMember(ctx);
+      if (slot == null) continue;
+      const member = getPartyMember(session, slot);
+      const r = svcTavernStatBoost(member, parseInt(pick, 10) - 1, screenId);
+      if (!r.paid) {
+        await waitForSpace("Not enough gold / afflicted!", sprite, 0x0e);
+      } else if (r.sick) {
+        await waitForSpace(`${member.name}: ${r.label} — you feel sick!`, sprite, 0x0e);
+        note(`Tavern boost ${r.label}: sick`);
+      } else {
+        await waitForSpace(`${member.name} bought ${r.label} (−${r.cost} gp).`, sprite, 0x0e);
+        note(`Tavern boost ${r.label} −${r.cost} gp`);
+      }
+      afterTxn(ctx);
+      continue;
     }
-    afterTxn(ctx);
+
+    if (key === "c") {
+      const lines = ["Specialties:", partyRosterLines(session), ""];
+      food.forEach((m, i) => lines.push(`${String.fromCharCode(65 + i)}) ${m.text} — ${m.gold} gp`));
+      lines.push("", "A–C — 0 back");
+      const pick = await promptMenuKey(lines.join("\n"), "abc0", sprite, 0x0e);
+      if (!pick || pick === "0") continue;
+      const menuIdx = { a: 0, b: 1, c: 2 }[pick];
+      if (menuIdx == null || !food[menuIdx]) continue;
+      const meal = food[menuIdx];
+      const slot = await promptSelectMember(ctx);
+      if (slot == null) continue;
+      const member = getPartyMember(session, slot);
+      const r = svcPubBuyFood(member, screenId, menuIdx);
+      if (!r.paid) {
+        await waitForSpace("Not enough gold!", sprite, 0x0e);
+      } else {
+        await waitForSpace(
+          `${member.name} ordered ${meal.text}.\n−${r.cost} gp  (+$78=0x${(r.encoding & 0xff).toString(16)})`,
+          sprite,
+          0x0e
+        );
+        note(`Tavern meal ${meal.text} −${r.cost} gp enc=${r.encoding}`);
+      }
+      afterTxn(ctx);
+      continue;
+    }
   }
 }
 
@@ -637,87 +868,6 @@ export async function runGuildService(ctx) {
     }
     afterTxn(ctx);
   }
-}
-
-/**
- * OP_0E 0x0D guild enroll transaction (eventApplyGuildEnroll) — called after
- * the shared-string-bank intro y/n in eventVm.js.
- * @param {object} ctx
- */
-export async function runGuildEnrollTransaction(ctx) {
-  const { screenId, session, waitForSpace, note, sprite, title } = ctx;
-  const townName = TOWN_NAMES[screenId] ?? "Town";
-  const r = applyGuildEnroll(session, screenId);
-  if (!r.ok) {
-    await waitForSpace("Not enough gold!", sprite, 0x0e);
-    note("Guild enroll failed (insufficient gold)");
-    return;
-  }
-  await waitForSpace(
-    `Enrolled in the ${townName} mage guild!\n−20 gp  Home town set.\n(record+0x79 membership bit set)`,
-    sprite,
-    0x0e
-  );
-  note(`Guild enroll @ ${townName} (−20 gp, +0x79 mask, registry)`);
-  ctx.onSessionChange?.(session);
-}
-
-/**
- * OP_0E 0x10 brain detox @ Middlegate — member select after intro y/n.
- * @param {object} ctx
- */
-export async function runBrainDetoxService(ctx) {
-  const { session, waitForSpace, note, sprite, title } = ctx;
-  const slot = await promptSelectMember(ctx);
-  if (slot == null) {
-    note("Brain detox cancelled");
-    return;
-  }
-  const member = getPartyMember(session, slot);
-  const r = applyBrainDetox(session, slot);
-  if (!r.ok) {
-    await waitForSpace("Not enough gold!", sprite, 0x0e);
-    note(`Brain detox: ${member.name} insufficient gold`);
-    return;
-  }
-  await waitForSpace(
-    `${member.name} cleansed of all secondary skills.\n−100 gp\n${memberSummary(member)}`,
-    sprite,
-    0x0e
-  );
-  note(`Brain detox ${member.name} −100 gp, skill pack cleared`);
-  ctx.onSessionChange?.(session);
-}
-
-/** OP_0E default-range skill vendor transaction (eventApplySkillBuy). */
-export async function runSkillBuyTransaction(ctx, offer) {
-  const { session, waitForSpace, note, sprite, title } = ctx;
-  let slot = session.selectedMember ?? 0;
-  if (!offer.memberAlreadySelected) {
-    const picked = await promptSelectMember(ctx);
-    if (picked == null) {
-      note(`Skill buy 0x${offer.execSelector.toString(16)} cancelled`);
-      return;
-    }
-    slot = picked;
-  }
-  const r = applySkillBuy(session, slot, offer.skillId, offer.goldCost);
-  if (!r.ok) {
-    if (r.reason === "full") {
-      await waitForSpace("You already have two skills!", sprite, 0x0e);
-    } else {
-      await waitForSpace("Not enough gold!", sprite, 0x0e);
-    }
-    note(`Skill buy failed (${r.reason})`);
-    return;
-  }
-  await waitForSpace(
-    `${title}\n\nSkill #${offer.skillId} granted to party member ${slot + 1}.\n(${offer.goldCost} gp checked — bytecode does not deduct)`,
-    sprite,
-    0x0e
-  );
-  note(`Skill buy 0x${offer.execSelector.toString(16)} skill=${offer.skillId}`);
-  ctx.onSessionChange?.(session);
 }
 
 /** Inn registry write after exe innkeeper greet y/n (eventInnApplyRegistry). */
