@@ -795,6 +795,8 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
             search_identify_rating_ = prep.rating;
             search_identify_pick_member_ = false;
             search_identify_find_traps_ = false;
+            std::snprintf(search_identify_container_, sizeof(search_identify_container_), "%s",
+                          prep.container_name);
             std::snprintf(status_message_, sizeof(status_message_), "%s", prep.msg);
             overlay_ = PlayOverlay::SearchIdentify;
         } else {
@@ -1228,9 +1230,10 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
             if (keys.escape || ch == 27) {
                 search_identify_pick_member_ = false;
                 std::snprintf(status_message_, sizeof(status_message_),
-                              "The Party Has found:\nTreasure!\n(rating %u)\n"
-                              "1) Open It  2) Find Trap\n3) Detect Magic  4) Leave",
-                              static_cast<unsigned>(search_identify_rating_));
+                              "Search...\nThe Party Has found a:\nTreasure!\n%s\n"
+                              "1) Open It\n2) Find Trap\n3) Detect Magic\n4) Leave it",
+                              search_identify_container_[0] ? search_identify_container_
+                                                            : "Treasure!");
                 markDirty();
                 return;
             }
@@ -1270,7 +1273,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
             search_identify_find_traps_ = (ch == '2');
             search_identify_pick_member_ = true;
             std::snprintf(status_message_, sizeof(status_message_),
-                          "Who tries (1-%d)?", launch_.party_count);
+                          "Who Will Try (1 - %d) ", launch_.party_count);
             markDirty();
             return;
         }
@@ -1278,7 +1281,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
             char det[96];
             events::eventVmSearchDetectMagic(gs_.a4(), search_identify_rating_, det, sizeof(det));
             std::snprintf(status_message_, sizeof(status_message_),
-                          "%s\n1) Open  2) Find  3) Detect  4) Leave", det);
+                          "%s\n1) Open It\n2) Find Trap\n3) Detect Magic\n4) Leave it", det);
             markDirty();
             return;
         }
@@ -1376,7 +1379,38 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         return;
     }
 
+    if (overlay_ == PlayOverlay::None && !combat_.active() && combat_.sheetCastPending()) {
+        if (keys.escape) {
+            combat_.tickSheetCastAux(gs_, 0x1B);
+            markDirty();
+            return;
+        }
+        const char ch = static_cast<char>(keys.last_ascii);
+        if (ch != 0) {
+            combat_.tickSheetCastAux(gs_, ch);
+            markDirty();
+        }
+        return;
+    }
+
     if (overlay_ == PlayOverlay::CharacterSheet) {
+        if (combat_.sheetCastPending()) {
+            if (keys.escape) {
+                combat_.tickSheetCastAux(gs_, 0x1B);
+                markDirty();
+                return;
+            }
+            const char ch = static_cast<char>(keys.last_ascii);
+            if (ch != 0) {
+                combat_.tickSheetCastAux(gs_, ch);
+                if (combat_.statusLine()[0]) {
+                    std::snprintf(sheet_session_.status_line, sizeof(sheet_session_.status_line), "%s",
+                                  combat_.statusLine());
+                }
+                markDirty();
+            }
+            return;
+        }
         if (keys.escape) {
             if (gameplay::sheetSubModeBlocksCharacterSwitch(sheet_session_.sub_mode)) {
                 sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
@@ -1422,8 +1456,29 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         }
 
         const Mm2ItemsFile *items_ptr = has_items_ ? &items_ : nullptr;
+        const int cast_before = sheet_session_.cast_spell_flat;
+        const int use_before = sheet_session_.pending_use_slot;
         const gameplay::SheetKeyOutcome outcome =
             ingame_sheet_.handleKey(ch, sheet_session_, roster_, launch_, items_ptr, combat_character_sheet_);
+        if (sheet_session_.cast_spell_flat >= 0 && sheet_session_.cast_spell_flat != cast_before) {
+            combat_.castSpellFromSheet(gs_, sheet_session_.party_slot, sheet_session_.cast_spell_flat);
+            sheet_session_.cast_spell_flat = -1;
+            if (combat_.statusLine()[0]) {
+                std::snprintf(sheet_session_.status_line, sizeof(sheet_session_.status_line), "%s",
+                              combat_.statusLine());
+            }
+        }
+        if (sheet_session_.pending_use_slot >= 0 && sheet_session_.pending_use_slot != use_before) {
+            const int u = sheet_session_.pending_use_slot;
+            sheet_session_.pending_use_slot = -1;
+            const bool backpack = u >= 6;
+            const int slot = backpack ? u - 6 : u;
+            combat_.applyItemUse(gs_, sheet_session_.party_slot, backpack, slot);
+            if (combat_.statusLine()[0]) {
+                std::snprintf(sheet_session_.status_line, sizeof(sheet_session_.status_line), "%s",
+                              combat_.statusLine());
+            }
+        }
         if (outcome == gameplay::SheetKeyOutcome::Close) {
             overlay_ = PlayOverlay::None;
             combat_character_sheet_ = false;
@@ -1785,6 +1840,8 @@ void GameSession::tick(const platform::KeyState &keys)
             search_identify_rating_ = prep.rating;
             search_identify_pick_member_ = false;
             search_identify_find_traps_ = false;
+            std::snprintf(search_identify_container_, sizeof(search_identify_container_), "%s",
+                          prep.container_name);
             std::snprintf(status_message_, sizeof(status_message_), "%s", prep.msg);
             overlay_ = PlayOverlay::SearchIdentify;
         } else if (prep.msg[0]) {
@@ -2181,11 +2238,11 @@ void GameSession::renderOverlays()
         compositor_.drawText(8, 18 * 8, "(ESC to dismiss)", 180, 180, 180, 255);
         break;
     case PlayOverlay::SearchIdentify: {
-        /* Identify menu @ 0x1B3F2 — multi-line console band. */
-        gfx::fillCellRect(compositor_, 1, 0x11, 38, 6);
+        /* Identify menu @ 0x1B3F2 — multi-line console band (Search… + 4 options). */
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 8);
         int row = 0x11;
         const char *p = status_message_;
-        while (*p && row <= 0x16) {
+        while (*p && row <= 0x18) {
             char line[40];
             int n = 0;
             while (*p && *p != '\n' && n < 38) {

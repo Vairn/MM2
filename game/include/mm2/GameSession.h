@@ -197,6 +197,7 @@ private:
     char status_message_[160] = {};
     /** Long-path Search Identify @ 0x1B3F2: rating from 0x1B270; phase for member pick. */
     uint8_t search_identify_rating_ = 0;
+    char search_identify_container_[24]{};
     bool search_identify_pick_member_ = false;
     bool search_identify_find_traps_ = false;
 

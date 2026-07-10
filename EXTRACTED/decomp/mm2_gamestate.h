@@ -84,13 +84,42 @@
 #define MM2_GS_MONSTER_AC_BIT6  (-0x11AB)  /* byte  ($EE55) AC bit6 (0x4C8E) */
 #define MM2_GS_MONSTER_AC_BIT7  (-0x11AC)  /* byte  ($EE54) AC bit7 (0x4C8E) */
 #define MM2_GS_MONSTER_AC       (-0x11B4)  /* byte  ($EE4C) AC low5+1 (×10 if bit5) @ 0x4F0A */
+#define MM2_GS_MONSTER_SWINGS   (-0x11B2)  /* byte  ($EE4E) speed2 low4+1 @ 0x4EAE */
+#define MM2_GS_MONSTER_DMG_SIDES (-0x11B3) /* byte  ($EE4D) damage low5+1 (×10 if bit5) @ 0x4F52 */
+#define MM2_GS_MONSTER_HIT_TBL  (-0x6F16)  /* byte[16] ($90EA) type>>4 → to-hit chance @ 0x104B2 */
+#define MM2_GS_COMBAT_TARGET_SLOT (-0x04F8) /* byte ($FB08) party slot under attack @ 0x103BA */
+#define MM2_GS_LLOYD_SCREEN     (-0x7998)  /* byte  ($8668) Lloyd's Beacon screen @ 0xAB4C */
+#define MM2_GS_LLOYD_COORD      (-0x7997)  /* byte  ($8669) Lloyd's Beacon (Y<<4)|X @ 0xAB62 */
+#define MM2_GS_FLY_SCREEN_TBL   (-0x7120)  /* byte[20] ($8EE0) Fly sector→screen @ 0xACE4 */
 /* 0x1086E bank @ -$11AA[mode_d-1]: dmg.b6, dmg.b7, spd2.b6, spd2.b7, mres.b1, mres.b0, mres.b2 */
 #define MM2_GS_MONSTER_FLAG_BASE (-0x11AA) /* byte[] ($EE56) */
 #define MM2_GS_HP_APPLY         (-0x0F0C)  /* word  ($F0F2) 0x10ED4 damage scratch */
 #define MM2_GS_CUR_MON_SLOT     (-0x051D)  /* byte  ($FAE3) current monster slot (0x10894) */
-#define MM2_GS_BLESS_COUNTER    (-0x799D)  /* byte  ($8663) Bless addq @ 0xBFFC (also INPUT_STATE[0]) */
-#define MM2_GS_SHIELD_COUNTER   (-0x799B)  /* byte  ($8665) Shield addq @ 0xBB9C */
-#define MM2_GS_POWER_SHIELD_CTR (-0x799A)  /* byte  ($8666) Power Shield addq @ 0xBEFA */
+#define MM2_GS_BLESS_COUNTER    (-0x799D)  /* byte  ($8663) Bless addq @ 0xBFC4 */
+#define MM2_GS_INVIS_COUNTER    (-0x799C)  /* byte  ($8664) Invisibility addq @ 0xB9C4 */
+#define MM2_GS_SHIELD_COUNTER   (-0x799B)  /* byte  ($8665) Shield addq @ 0xBB5C; half dmg @ 0xFD48 */
+#define MM2_GS_POWER_SHIELD_CTR (-0x799A)  /* byte  ($8666) Power Shield addq @ 0xBEC8; half @ 0xFD2C */
+#define MM2_GS_HOLY_BONUS_CTR   (-0x7999)  /* byte  ($8667) Holy Bonus add @ 0xC320 */
+#define MM2_GS_ATTRIB_RECALL_COORD (-0x5604) /* byte ($A9FC) attrib+0x16 packed YX; Surface @ 0xB2B2 */
+#define MM2_GS_ATTRIB_RECALL_SCREEN (-0x5602) /* byte ($A9FE) attrib+0x18 dest screen; Surface */
+#define MM2_GS_MONSTER_PABIL    (-0x11BC)  /* byte  ($EE44) Pabil&$1F @ 0x4DFA */
+#define MM2_GS_MONSTER_PABIL_CHANCE (-0x11BB) /* byte ($EE45) group-special chance @ 0x4E14 */
+#define MM2_GS_MONSTER_CHARGE_INIT (-0x11BA) /* byte ($EE46) (spd2>>4)+1 @ 0x4EB8; → -$503 */
+#define MM2_GS_MONSTER_SABIL    (-0x11B9)  /* byte  ($EE47) Sabil&$1F @ 0x4E50 */
+#define MM2_GS_MONSTER_ARCHER   (-0x11AE)  /* byte  ($EE52) Sabil bit6 @ 0x4E38 */
+#define MM2_GS_PABIL_CHANCE_TBL (-0x7464)  /* byte[] ($8B9C) Pabil tier → chance @ 0x4E10 */
+#define MM2_GS_MONSTER_SPECIAL_CHARGES (-0x503) /* byte[11] ($7AFB) special uses left @ 0x105B6 */
+#define MM2_GS_MONSTER_TURN_SLOT (-0x4F7) /* byte ($FB09) active monster slot @ 0x1065A */
+#define MM2_GS_PABIL_RESIST_A   (-0x666A)  /* byte[32] → -$5630 @ 0x1FB5C */
+#define MM2_GS_PABIL_RESIST_B   (-0x664A)  /* byte[32] → -$562F @ 0x1FB6C */
+#define MM2_GS_PABIL_RESIST_C   (-0x662A)  /* byte[32] −$11 → -$562E @ 0x1FB7C */
+#define MM2_GS_PABIL_TARGET_ORD (-0x65FE)  /* byte[32] multi-hit order @ 0x1F4F8 */
+#define MM2_GS_RESIST_FLAG_A    (-0x5630)  /* byte ($A9D0) 0x1FB4E resist scratch */
+#define MM2_GS_RESIST_FLAG_B    (-0x562F)  /* byte ($A9D1) */
+#define MM2_GS_RESIST_FLAG_C    (-0x562E)  /* byte ($A9D2) */
+#define MM2_GS_LUCK_THRESH_TBL  (-0x7486)  /* byte[] ($8B7A) 0x4442 luck→bonus */
+#define MM2_GS_RESIST_BUFF_A    (-0x79AA)  /* byte ($8656) added to +$16 in 0x4952 */
+#define MM2_GS_RESIST_BUFF_C    (-0x79A9)  /* byte ($8657) added in 0x4952 flag-C */
 #define MM2_GS_TIME_DISTORT     (-0x0523)  /* byte  ($FADD) Time Distortion addq @ 0xBBCE */
 #define MM2_GS_ENTRAPMENT       (-0x0522)  /* byte  ($FADE) Entrapment addq @ 0xBD00 */
 #define MM2_GS_HOLY_WORD_GATE   (-0x0520)  /* byte  ($FAE0) Holy Word sets #1 @ 0xC756 */
@@ -160,6 +189,8 @@
 #define MM2_GS_PICKER_TIER_MOD      (-0x6FC2)  /* byte  ($903E) = max(party level)/2, added to tier roll */
 #define MM2_GS_PICKER_DONE          (-0x6FC1)  /* byte  ($903F) picker loop done flag (budget/gate exhausted) */
 #define MM2_GS_MONSTER_FRIEND_COUNT (-0x11B7)  /* byte  ($6E47) picked monster's "friend count" (set by -$7EF6) */
+#define MM2_GS_MONSTER_MULTIPLIES (-0x11A1) /* byte ($EE5F) Oabil bit7 @ 0x4E66; gate 0x10082 */
+#define MM2_GS_ADDS_FRIENDS_LATCH (-0x5E4B) /* byte ($21B5) once-per-fight adds-friends @ 0x100E8 */
 /* ---- Found-item / treasure-reward buffer (OP_2A @ 0x16D16, OP_19 overflow @ 0x16618) ----
  *
  * A 16-byte shared "pending loot" buffer in the A4 block. It is filled by event

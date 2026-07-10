@@ -36,6 +36,7 @@ struct CombatPanelView {
     bool show_cast_number = false;     /* 0x79EE "Number: " after level digit */
     bool show_cast_target = false;     /* 0xD43C "Which monster?" + A–J */
     bool show_party_pick = false;      /* 0xD2EA "On whom (1-N)?" */
+    bool show_item_pick = false;       /* 0xB56E "A-F" / Use 1-6/A-F */
     int cast_level = 0;                /* echoed after level accepted */
     bool label_monster_slots = false;  /* A–J prefixes (round loop only) */
     /* Command capability flags for the active character (0x11866):

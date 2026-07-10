@@ -1165,6 +1165,10 @@ bool EventRuntime::runDefaultRangeOverlay(GameStateView &gs, world::MapWorld &wo
         ::memcpy(saved_work_buf_, work_buf_, sizeof(saved_work_buf_));
     }
 
+    /* 0x160A2: temporarily write category into -$79F2 while loader runs. */
+    const uint8_t saved_screen = gs.screenId();
+    gs.setScreenId(category);
+
     const size_t copy_len =
         overlay->raw_len < MM2_GS_EVENT_WORK_SIZE ? overlay->raw_len : MM2_GS_EVENT_WORK_SIZE;
     ::memcpy(work_buf_, overlay->raw, copy_len);
@@ -1173,6 +1177,7 @@ bool EventRuntime::runDefaultRangeOverlay(GameStateView &gs, world::MapWorld &wo
     }
     ::memcpy(gs.a4() + MM2_GS_EVENT_WORK_BUF, work_buf_, MM2_GS_EVENT_WORK_SIZE);
 
+    gs.setScreenId(saved_screen);
     location_id_ = category;
     loc_ = overlay;
     mm2_gs_set_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID, index);
@@ -1361,6 +1366,33 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
         }
         text_.clearSpacePrompt();
         wait_ = EventVmWait::None;
+        if (pending_slide_trap_halve_) {
+            pending_slide_trap_halve_ = false;
+            /* 0xD75C..0xD87C: halve base stats / sp_max / level / spell_level. */
+            if (roster_ && launch_) {
+                for (int i = 0; i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                    const int ridx = launch_->roster_slots[i];
+                    if (ridx < 0 || ridx >= MM2_ROSTER_RECORD_COUNT) {
+                        continue;
+                    }
+                    auto *raw = reinterpret_cast<uint8_t *>(&roster_->records[ridx]);
+                    raw[0x6A] = static_cast<uint8_t>(raw[0x6A] / 2);
+                    raw[0x6B] = static_cast<uint8_t>(raw[0x6B] / 2);
+                    raw[0x6C] = static_cast<uint8_t>(raw[0x6C] / 2);
+                    raw[0x6D] = static_cast<uint8_t>(raw[0x6D] / 2);
+                    raw[0x6E] = static_cast<uint8_t>(raw[0x6E] / 2);
+                    raw[0x6F] = static_cast<uint8_t>(raw[0x6F] / 2);
+                    raw[0x70] = static_cast<uint8_t>(raw[0x70] / 2);
+                    raw[0x71] = static_cast<uint8_t>(raw[0x71] / 2);
+                    raw[0x72] = static_cast<uint8_t>(raw[0x72] / 2);
+                    raw[0x73] = static_cast<uint8_t>(raw[0x73] / 2);
+                    const uint16_t sp = static_cast<uint16_t>(raw[0x58] | (raw[0x59] << 8));
+                    const uint16_t sp2 = static_cast<uint16_t>(sp / 2);
+                    raw[0x58] = static_cast<uint8_t>(sp2 & 0xFF);
+                    raw[0x59] = static_cast<uint8_t>((sp2 >> 8) & 0xFF);
+                }
+            }
+        }
         if (script_active_) {
             runVmLoop(gs, world);
         }
@@ -1525,7 +1557,55 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
         return true;
     }
 
+    if (wait_ == EventVmWait::HexDigit) {
+        /* OP_0E 0x7E @ 0xD5D0 / 0xD5FA: -$7F8C digit; reject > $F. */
+        int digit = -1;
+        const char ch = keys.last_ascii;
+        if (ch >= '0' && ch <= '9') {
+            digit = ch - '0';
+        } else if (ch >= 'a' && ch <= 'f') {
+            digit = 10 + (ch - 'a');
+        } else if (ch >= 'A' && ch <= 'F') {
+            digit = 10 + (ch - 'A');
+        }
+        if (digit < 0 || digit > 0xF) {
+            return true;
+        }
+        if (pending_free_teleport_stage_ == 1) {
+            pending_free_teleport_x_ = static_cast<uint8_t>(digit);
+            pending_free_teleport_stage_ = 2;
+            text_.showOp02("What is the magical location:\n       Y ( 0-15 ) ?", 19);
+            return true;
+        }
+        if (pending_free_teleport_stage_ == 2) {
+            pending_free_teleport_stage_ = 0;
+            gs.setCoordX(pending_free_teleport_x_);
+            gs.setCoordY(static_cast<uint8_t>(digit));
+            mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+            screen_changed_ = true;
+            wait_ = EventVmWait::None;
+            if (script_active_) {
+                runVmLoop(gs, world);
+            }
+            return script_active_ || wait_ != EventVmWait::None;
+        }
+        wait_ = EventVmWait::None;
+        if (script_active_) {
+            runVmLoop(gs, world);
+        }
+        return script_active_ || wait_ != EventVmWait::None;
+    }
+
     return false;
+}
+
+void EventRuntime::armFreeTeleportUi()
+{
+    /* 0xD576: four prompt lines; remake hosts X then Y. */
+    pending_free_teleport_stage_ = 1;
+    pending_free_teleport_x_ = 0;
+    text_.showOp02("What is the magical location:\n       X ( 0-15 ) ?", 19);
+    wait_ = EventVmWait::HexDigit;
 }
 
 }  // namespace mm2::events

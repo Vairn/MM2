@@ -7,6 +7,8 @@
 #include "mm2/gameplay/SpellBook.h"
 #include "mm2_create_character.h"
 
+#include <cstring>
+
 namespace mm2::combat {
 
 namespace {
@@ -21,9 +23,8 @@ int decodeMonsterSpeed(const Mm2MonsterRecord &rec)
     return (b & 0x0F) + 1;
 }
 
-/* doc 16: byte 0x17 damage = low5+1, x10 if bit5, capped 250. Used as the
- * ceiling of a simplified rng(1,max) melee roll (0xCD90/0x10118 exact
- * formula not traced — doc 17 open item). */
+/* doc 16: byte 0x17 damage = low5+1, x10 if bit5, capped 250. Used by
+ * 0x4C8E → -$11B3 (monster melee sides @ 0x10478). */
 int decodeMonsterMaxDamage(const Mm2MonsterRecord &rec)
 {
     const uint8_t b = rec.fields[MM2_MON_OFF_DAMAGE - MM2_MONSTER_NAME_SIZE];
@@ -209,6 +210,7 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
     mm2_gs_set_u8(gs.a4(), MM2_GS_LOOT_ITEM_TIER, 0);    /* 0x12C84 */
     mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_FLEE_PRINT, 0);
     mm2_gs_set_u8(gs.a4(), MM2_GS_ERADICATE_SKIP_PRINT, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ADDS_FRIENDS_LATCH, 0); /* 0x12C94 */
     msg_queue_len_ = 0;
     msg_queue_idx_ = 0;
     outcome_ = CombatOutcome::None;
@@ -219,6 +221,25 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
     surprise_mode_ = 0;
     seedCombatStaticTables(gs);
     syncMonsterSlotsToGs(gs);
+    /* 0x11C82/0x11C2C: seed -$503[slot] from -$11BA after 0x4C8E unpack. */
+    for (int i = 0; i < MM2_GS_MONSTER_BATTLE_SLOTS; ++i) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + i, 0);
+    }
+    for (int i = 0; i < slot_count; ++i) {
+        if (!slots_[i].alive) {
+            continue;
+        }
+        loadMonsterCombatGlobals(gs, i);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + i,
+                      mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_CHARGE_INIT));
+    }
+    if (launch_) {
+        mm2_gs_set_u16(gs.a4(), MM2_GS_PARTY_COUNT, static_cast<uint16_t>(launch_->party_count));
+        for (int i = 0; i < launch_->party_count && i < MM2_GS_PARTY_SIZE; ++i) {
+            mm2_gs_set_u16(gs.a4(), MM2_GS_ROSTER_INDEX_TBL + i * 2,
+                           static_cast<uint16_t>(launch_->roster_slots[i]));
+        }
+    }
 
     beginEncounterUi(gs, world);
     return true;
@@ -506,14 +527,31 @@ void CombatSession::resolveBribeTry(GameStateView &gs)
     state_ = CombatState::AwaitingPartyOptions;
 }
 
+void CombatSession::beginActionAck(GameStateView &gs)
+{
+    /* 0x132E6: d0 = DELAY(-$79AD)*$19 + 1; jsr -$7E84 timed wait. */
+    const int delay = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_DELAY));
+    ack_frames_left_ = delay * 0x19 + 1;
+    state_ = CombatState::AwaitingActionAck;
+}
+
 bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const platform::KeyState &keys)
 {
     if (state_ == CombatState::AwaitingActionAck) {
-        if (keys.last_ascii == 0) {
-            return false;
+        const bool keyed = keys.last_ascii != 0;
+        if (!keyed) {
+            if (ack_frames_left_ > 0) {
+                --ack_frames_left_;
+            }
+            if (ack_frames_left_ > 0) {
+                return false;
+            }
         }
+        ack_frames_left_ = 0;
         /* 0x132E6 host: pace multi-target spell lines one ack each. */
         if (advanceCombatMessageQueue()) {
+            const int delay = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_DELAY));
+            ack_frames_left_ = delay * 0x19 + 1;
             return false;
         }
         runUntilDecisionOrEnd(gs, world);
@@ -584,7 +622,8 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
             return false;
         }
         if (state_ == CombatState::AwaitingCastLevel || state_ == CombatState::AwaitingCastNumber ||
-            state_ == CombatState::AwaitingCastTarget || state_ == CombatState::AwaitingPartyPick) {
+            state_ == CombatState::AwaitingCastTarget || state_ == CombatState::AwaitingPartyPick ||
+            state_ == CombatState::AwaitingItemPick) {
             return false;
         }
         if (state_ == CombatState::AwaitingActionAck) {
@@ -625,12 +664,39 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
         }
         if (keys.escape || ch == 0x1B) {
             pending_cast_flat_ = -1;
+            pending_cast_school_ = -1;
+            cast_aux_ = -1;
             mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 0);
             state_ = CombatState::AwaitingCommand;
             setStatus("");
             return false;
         }
         if (!tickPartyPick(gs, ch)) {
+            return false;
+        }
+        if (state_ == CombatState::AwaitingActionAck) {
+            party_acted_[active_party_slot_] = true;
+            active_party_slot_ = -1;
+        }
+        return false;
+    }
+
+    if (state_ == CombatState::AwaitingItemPick) {
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (ch == 0 && !keys.escape) {
+            return false;
+        }
+        if (keys.escape || ch == 0x1B) {
+            pending_cast_flat_ = -1;
+            pending_cast_school_ = -1;
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 0);
+            mm2_gs_set_u16(gs.a4(), -0x3F0A, 0);
+            mm2_gs_set_u16(gs.a4(), -0x3F08, 0);
+            state_ = CombatState::AwaitingCommand;
+            setStatus("");
+            return false;
+        }
+        if (!tickItemPick(gs, ch)) {
             return false;
         }
         if (state_ == CombatState::AwaitingActionAck) {
@@ -670,6 +736,12 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
         }
         beginCastPicker();
         return false;
+    case 'U':
+        /* Combat use @ 0x133EC → same charge/effect path as explore 0xE94A. */
+        pending_cast_flat_ = -2;
+        state_ = CombatState::AwaitingItemPick;
+        std::snprintf(status_line_, sizeof(status_line_), "Use which (1-6/A-F)?");
+        return false;
     case 'B':
         resolvePlayerBlock();
         break;
@@ -686,7 +758,7 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
 
     party_acted_[active_party_slot_] = true;
     active_party_slot_ = -1;
-    state_ = CombatState::AwaitingActionAck;
+    beginActionAck(gs);
     return false;
 }
 
@@ -767,7 +839,7 @@ void CombatSession::runUntilDecisionOrEnd(GameStateView &gs, const world::MapWor
         if (checkOutcome(gs, world)) {
             return;
         }
-        state_ = CombatState::AwaitingActionAck;
+        beginActionAck(gs);
         return;
     }
 }
@@ -810,9 +882,10 @@ bool CombatSession::tickCastPicker(GameStateView &gs, char key)
     }
     resolvePlayerCast(gs, flat);
     cast_level_ = 0;
-    /* resolvePlayerCast may enter AwaitingCastTarget / AwaitingPartyPick; otherwise ack. */
-    if (state_ != CombatState::AwaitingCastTarget && state_ != CombatState::AwaitingPartyPick) {
-        state_ = CombatState::AwaitingActionAck;
+    /* resolvePlayerCast may enter target/party/item pick; otherwise ack. */
+    if (state_ != CombatState::AwaitingCastTarget && state_ != CombatState::AwaitingPartyPick &&
+        state_ != CombatState::AwaitingItemPick) {
+        beginActionAck(gs);
     }
     return true;
 }
@@ -824,16 +897,22 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
     char name[MM2_ROSTER_NAME_SIZE + 1];
     mm2_roster_name_to_cstr(&caster, name, sizeof(name));
 
-    const gameplay::SpellSchool school = gameplay::spellSchoolForClass(caster.class_id);
+    gameplay::SpellSchool school = gameplay::spellSchoolForClass(caster.class_id);
+    if (force_cast_school_ == 0) {
+        school = gameplay::SpellSchool::Sorcerer;
+    } else if (force_cast_school_ == 1) {
+        school = gameplay::SpellSchool::Cleric;
+    }
     const gameplay::SpellMeta *table = gameplay::schoolSpellTable(school);
     const gameplay::SpellMeta *meta =
         (table && flat0 >= 0 && flat0 < gameplay::kSpellsPerSchool) ? &table[flat0] : nullptr;
     const char *spell_name = meta ? meta->name : "?";
 
-    /* Cost staging → 0x6DC6: A4-$3F0A SP, A4-$3F08 gems; clr both; may set -$79E8. */
+    /* Cost staging → 0x6DC6: A4-$3F0A SP, A4-$3F08 gems; clr both; may set -$79E8.
+     * Item-use F470 sets -$3F0C and skips the deduct (host mirrors via skip_cast_cost_). */
     uint16_t sp_cost = 0;
     uint16_t gem_cost = 0;
-    if (meta) {
+    if (meta && !skip_cast_cost_) {
         sp_cost = meta->sp;
         if (meta->per_level) {
             sp_cost = static_cast<uint16_t>(sp_cost * (caster.level > 0 ? caster.level : 1));
@@ -843,13 +922,15 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
     mm2_gs_set_u16(gs.a4(), -0x3F0A, sp_cost);
     mm2_gs_set_u16(gs.a4(), -0x3F08, gem_cost);
     /* 0x6DC6: always sub gems from +$5C; SP from +$58 only if enough. */
-    if (caster.gems >= gem_cost) {
-        caster.gems = static_cast<uint16_t>(caster.gems - gem_cost);
-    } else {
-        caster.gems = 0;
-    }
-    if (caster.sp_current >= sp_cost) {
-        caster.sp_current = static_cast<uint16_t>(caster.sp_current - sp_cost);
+    if (!skip_cast_cost_) {
+        if (caster.gems >= gem_cost) {
+            caster.gems = static_cast<uint16_t>(caster.gems - gem_cost);
+        } else {
+            caster.gems = 0;
+        }
+        if (caster.sp_current >= sp_cost) {
+            caster.sp_current = static_cast<uint16_t>(caster.sp_current - sp_cost);
+        }
     }
     mm2_gs_set_u16(gs.a4(), -0x3F0A, 0);
     mm2_gs_set_u16(gs.a4(), -0x3F08, 0);
@@ -886,7 +967,37 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
     };
 
     if (meta && school == gameplay::SpellSchool::Sorcerer) {
-        if (flat0 == 4) { /* S1/5 Light @ 0xA8D8 */
+        if (flat0 == 0) { /* S1/1 Awaken @ 0xC740 (shared) */
+            for (int p = 0; p < launch_->party_count && p < MM2_GS_PARTY_SIZE; ++p) {
+                const int ri = rosterIndexForPartySlot(p);
+                if (ri < 0) {
+                    continue;
+                }
+                Mm2RosterRecord &r = roster_->records[ri];
+                if (r.condition < 0x80) {
+                    r.condition = static_cast<uint8_t>(r.condition & 0x6F);
+                }
+            }
+            mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
+            effect = true;
+        } else if (flat0 == 1) { /* S1/2 Detect Magic @ 0xA812: Charges: A-n … F-n */
+            char line[160];
+            int n = std::snprintf(line, sizeof(line), "Charges:");
+            for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS && n > 0 && n < static_cast<int>(sizeof(line) - 8); ++i) {
+                n += std::snprintf(line + n, sizeof(line) - static_cast<size_t>(n), " %c-%u",
+                                   static_cast<char>('A' + i),
+                                   static_cast<unsigned>(caster.backpack_charges[i]));
+            }
+            std::snprintf(status_line_, sizeof(status_line_), "%s", line);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+            return;
+        } else if (flat0 == 5) { /* S1/6 Location host */
+            std::snprintf(status_line_, sizeof(status_line_), "Location: map %u at (%u,%u).",
+                          static_cast<unsigned>(gs.screenId()), static_cast<unsigned>(gs.coordX()),
+                          static_cast<unsigned>(gs.coordY()));
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+            return;
+        } else if (flat0 == 4) { /* S1/5 Light @ 0xA8D8 */
             uint8_t light = mm2_gs_u8(gs.a4(), MM2_GS_LIGHT_FACTOR);
             if (light < 0xFE) {
                 mm2_gs_set_u8(gs.a4(), MM2_GS_LIGHT_FACTOR, static_cast<uint8_t>(light + 1));
@@ -900,6 +1011,56 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
         } else if (flat0 == 11) { /* S2/5 Levitate @ 0xAAAE */
             addq_flag(MM2_GS_LEVITATE_FLAG);
             effect = true;
+        } else if (flat0 == 10) { /* S2/4 Jump @ 0xAFFA: 0x5692 facing step */
+            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x20) != 0) {
+                std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            int8_t dx = 0, dy = 0;
+            facingDelta5692(gs, dx, dy);
+            gs.setCoordX(static_cast<uint8_t>((gs.coordX() + dx) & 0x0F));
+            gs.setCoordY(static_cast<uint8_t>((gs.coordY() + dy) & 0x0F));
+            mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+            mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+            effect = true;
+        } else if (flat0 == 12) { /* S2/6 Lloyd's Beacon @ 0xAADC */
+            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x40) != 0) {
+                std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "1-Set 2-Recall?");
+            return;
+        } else if (flat0 == 13) { /* S2/7 Protection from Magic @ 0xC7A2 */
+            const uint8_t lv = caster.level > 0 ? caster.level : 1;
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MAGIC_PROTECT, static_cast<uint8_t>(lv + 0x0A));
+            mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+            mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+            effect = true;
+        } else if (flat0 == 15) { /* S3/2 Fly @ 0xABCC */
+            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x40) != 0) {
+                std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            cast_aux_ = -1;
+            beginPartyPickCast(gs, flat0, "Fly to (A-E)?");
+            return;
+        } else if (flat0 == 16) { /* S3/3 Invisibility @ 0xB9C4 → -$799C */
+            uint8_t v = mm2_gs_u8(gs.a4(), MM2_GS_INVIS_COUNTER);
+            if (v < 0xFF) {
+                mm2_gs_set_u8(gs.a4(), MM2_GS_INVIS_COUNTER, static_cast<uint8_t>(v + 1));
+            }
+            effect = true;
+        } else if (flat0 == 30) { /* S5/5 Teleport @ 0xADD6 */
+            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x10) != 0) {
+                std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "Teleport (1-9)?");
+            return;
         } else if (flat0 == 19) { /* S3/6 Wizard Eye @ 0xAD1C */
             add_eye(MM2_GS_WIZARD_EYE_TIMER);
             effect = true;
@@ -933,14 +1094,108 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 mm2_gs_set_u8(gs.a4(), MM2_GS_POWER_SHIELD_CTR, static_cast<uint8_t>(v + 1));
             }
             effect = true;
+        } else if (flat0 == 34) { /* S6/4 Recharge Item @ 0xAEAC */
+            beginItemPickCast(gs, flat0, "Recharge which (A-F)?");
+            return;
+        } else if (flat0 == 37) { /* S7/2 Duplication @ 0xAF02 */
+            beginItemPickCast(gs, flat0, "Duplicate which (A-F)?");
+            return;
+        } else if (flat0 == 38) { /* S7/3 Etherealize @ 0xAFFA: Jump-equivalent facing step */
+            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x20) != 0) {
+                std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            int8_t dx = 0, dy = 0;
+            facingDelta5692(gs, dx, dy);
+            gs.setCoordX(static_cast<uint8_t>((gs.coordX() + dx) & 0x0F));
+            gs.setCoordY(static_cast<uint8_t>((gs.coordY() + dy) & 0x0F));
+            mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+            mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+            effect = true;
+        } else if (flat0 == 47) { /* S9/4 Enchant Item @ 0xB050 */
+            beginItemPickCast(gs, flat0, "Enchant which (A-F)?");
+            return;
         }
     } else if (meta && school == gameplay::SpellSchool::Cleric) {
-        if (flat0 == 2) { /* C1/3 Bless @ 0xBFEC */
+        if (flat0 == 1) { /* C1/2 Awaken @ 0xC740 */
+            for (int p = 0; p < launch_->party_count && p < MM2_GS_PARTY_SIZE; ++p) {
+                const int ri = rosterIndexForPartySlot(p);
+                if (ri < 0) {
+                    continue;
+                }
+                Mm2RosterRecord &r = roster_->records[ri];
+                if (r.condition < 0x80) {
+                    r.condition = static_cast<uint8_t>(r.condition & 0x6F);
+                }
+            }
+            mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
+            effect = true;
+        } else if (flat0 == 2) { /* C1/3 Bless @ 0xBFEC */
             uint8_t v = mm2_gs_u8(gs.a4(), MM2_GS_BLESS_COUNTER);
             if (v < 0xFF) {
                 mm2_gs_set_u8(gs.a4(), MM2_GS_BLESS_COUNTER, static_cast<uint8_t>(v + 1));
             }
             effect = true;
+        } else if (flat0 == 3) { /* C1/4 First Aid @ 0xC7D0 */
+            if (launch_->party_count <= 1) {
+                applyHealCa58(gs, 0, 8, spell_name);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 5) { /* C1/6 Power Cure @ 0xC7E2 */
+            if (launch_->party_count <= 1) {
+                uint16_t heal = 0;
+                const int lv = caster.level > 0 ? static_cast<int>(caster.level) : 1;
+                for (int i = 0; i < lv; ++i) {
+                    heal = static_cast<uint16_t>(heal + (rng_ ? rng_->range(1, 10) : 1));
+                }
+                applyHealCa58(gs, 0, heal, spell_name);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 7) { /* C2/1 Cure Wounds @ 0xC822 */
+            if (launch_->party_count <= 1) {
+                applyHealCa58(gs, 0, 15, spell_name);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 16) { /* C3/3 Cure Poison @ 0xC862 */
+            if (launch_->party_count <= 1) {
+                applyCureMaskToPartySlot(gs, 0, 0x77, false, spell_name);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 22) { /* C4/3 Cure Disease @ 0xC8BC */
+            if (launch_->party_count <= 1) {
+                applyCureMaskToPartySlot(gs, 0, 0x7B, false, spell_name);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 11) { /* C2/5 Protection From Elements @ 0xC834 */
+            const uint8_t lv = caster.level > 0 ? caster.level : 1;
+            mm2_gs_set_u8(gs.a4(), MM2_GS_FORCES_PROTECT, static_cast<uint8_t>(lv + 0x14));
+            mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+            mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+            effect = true;
+        } else if (flat0 == 30) { /* C5/5 Remove Condition @ 0xC916 */
+            if (launch_->party_count <= 1) {
+                applyCureMaskToPartySlot(gs, 0, 0x00, true, spell_name);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
         } else if (flat0 == 4) { /* C1/5 Light @ 0xA8D8 family */
             uint8_t light = mm2_gs_u8(gs.a4(), MM2_GS_LIGHT_FACTOR);
             if (light < 0xFE) {
@@ -1002,12 +1257,89 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
             } else {
-                pending_cast_flat_ = flat0;
-                state_ = CombatState::AwaitingPartyPick;
-                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 0);
-                std::snprintf(status_line_, sizeof(status_line_), "On whom (1-%d)?", pc);
+                beginPartyPickCast(gs, flat0, "On whom");
                 return;
             }
+        } else if (flat0 == 9) { /* C2/3 Nature's Gate @ 0xB0EA */
+            int fail = 0;
+            if ((mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) & 0x40) != 0) {
+                ++fail;
+            }
+            if (mm2_gs_u16(gs.a4(), MM2_GS_ERA) != 9) {
+                ++fail;
+            }
+            if (fail == 0) {
+                /* Day[era9] at -$79CC; odd → walk month_tbl; even → tier 12. */
+                const uint16_t day = mm2_gs_u16(gs.a4(), MM2_GS_DAY + 9 * 2);
+                static const uint16_t kMonth[13] = {20, 40, 60, 80, 93, 94, 100, 120, 130, 140, 150, 181, 255};
+                static const uint8_t kSeasonA[13] = {11, 14, 33, 9, 37, 8, 37, 6, 14, 39, 8, 11, 11};
+                static const uint8_t kSeasonB[13] = {0xB5, 0x61, 0x74, 0x2C, 0x55, 0x65, 0x55,
+                                                    0xD4, 0x0F, 0x73, 0xEC, 0x37, 0xB8};
+                int tier = 12;
+                if ((day & 1) != 0) {
+                    tier = 0;
+                    while (tier < 13 && day >= kMonth[tier]) {
+                        ++tier;
+                    }
+                }
+                if (day >= 0x96) {
+                    mm2_gs_set_u16(gs.a4(), MM2_GS_ERA, 8);
+                    tier = 11;
+                }
+                if (tier > 12) {
+                    tier = 12;
+                }
+                gs.setScreenId(kSeasonA[tier]);
+                const uint8_t packed = kSeasonB[tier];
+                gs.setCoordX(static_cast<uint8_t>(packed & 0x0F));
+                gs.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
+                mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 1);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+                effect = true;
+            } else {
+                std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+        } else if (flat0 == 23) { /* C4/4 Restore Alignment @ 0xB26A: +$0D → +$6A */
+            if (launch_->party_count <= 1) {
+                applyRestoreAlignmentToPartySlot(gs, 0);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 24) { /* C4/5 Surface @ 0xB2B2 */
+            int fail = 0;
+            if ((mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) & 0x40) != 0) {
+                ++fail;
+            }
+            const uint8_t packed = mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_RECALL_COORD);
+            if (packed == 0) {
+                ++fail;
+            }
+            if (fail == 0) {
+                gs.setCoordX(static_cast<uint8_t>(packed & 0x0F));
+                gs.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
+                gs.setScreenId(mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_RECALL_SCREEN));
+                mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+                effect = true;
+            } else {
+                std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+        } else if (flat0 == 25) { /* C4/6 Holy Bonus @ 0xC308: add level>>1 to -$7999 */
+            const int ri = rosterIndexForPartySlot(active_party_slot_);
+            const int lv = (ri >= 0 && roster_->records[ri].level > 0)
+                               ? static_cast<int>(roster_->records[ri].level)
+                               : 1;
+            const uint8_t add = static_cast<uint8_t>(lv >> 1);
+            const uint8_t cur = mm2_gs_u8(gs.a4(), MM2_GS_HOLY_BONUS_CTR);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_HOLY_BONUS_CTR,
+                          static_cast<uint8_t>(cur > 0xFF - add ? 0xFF : cur + add));
+            effect = true;
         } else if (flat0 == 28) { /* C5/3 Frenzy @ 0xC3AE → 0xD2EA */
             if (mm2_gs_u8(gs.a4(), MM2_GS_FRENZY_LATCH) != 0) {
                 std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
@@ -1020,10 +1352,50 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
             }
-            pending_cast_flat_ = flat0;
-            state_ = CombatState::AwaitingPartyPick;
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 0);
-            std::snprintf(status_line_, sizeof(status_line_), "On whom (1-%d)?", pc);
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 32) { /* C6/2 Rejuvenate @ 0xB332 */
+            if (launch_->party_count <= 1) {
+                applyRejuvenateToPartySlot(gs, 0);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 39) { /* C7/4 Raise Dead @ 0xB492 */
+            if (launch_->party_count <= 1) {
+                applyRaiseDeadToPartySlot(gs, 0);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 33) { /* C6/3 Stone to Flesh @ 0xC96E */
+            if (launch_->party_count <= 1) {
+                applyStoneToFleshToPartySlot(gs, 0);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 43) { /* C8/4 Town Portal @ 0xB3E6 */
+            if ((mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) & 0x40) != 0) {
+                std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "Town (1-5)?");
+            return;
+        } else if (flat0 == 46) { /* C9/3 Resurrection @ 0xC9B6 */
+            if (launch_->party_count <= 1) {
+                applyResurrectionToPartySlot(gs, 0);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+                return;
+            }
+            beginPartyPickCast(gs, flat0, "On whom");
+            return;
+        } else if (flat0 == 47) { /* C9/4 Uncurse Item @ 0xB524 */
+            beginItemPickCast(gs, flat0, "Uncurse which (A-F)?");
             return;
         } else if (flat0 == 44) { /* C9/1 Divine Intervention @ 0xC6D6 */
             if (mm2_gs_u8(gs.a4(), -0x51A) == 0) {
@@ -1062,7 +1434,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
     /* Combat-only stubs needing 0xD464 monster letter (CAST='C' damage/status). */
     static const uint8_t kSorcCombat[] = {2,  3,  6,  8,  9,  14, 17, 18, 20, 21, 22,
                                           26, 27, 28, 31, 33, 35, 36, 39, 40, 41, 42, 44, 45, 46};
-    static const uint8_t kClerCombat[] = {0,  10, 12, 13, 14, 17, 20, 26, 27, 29, 36, 37, 38, 40, 42};
+    static const uint8_t kClerCombat[] = {0,  10, 12, 13, 14, 17, 20, 26, 27, 29, 34, 36, 37, 38, 40, 42};
     bool combat_target = false;
     if (school == gameplay::SpellSchool::Sorcerer) {
         for (uint8_t f : kSorcCombat) {
@@ -1112,28 +1484,761 @@ bool CombatSession::tickCastTarget(GameStateView &gs, char key)
     const int flat = pending_cast_flat_;
     applyCastToMonsterTarget(gs, slot, flat);
     pending_cast_flat_ = -1;
-    state_ = CombatState::AwaitingActionAck;
+    beginActionAck(gs);
     return true;
 }
 
 bool CombatSession::tickPartyPick(GameStateView &gs, char key)
 {
-    /* 0xD2EA / 0xD312: '1'..party_count → party slot index. */
+    const int flat = pending_cast_flat_;
     const int pc = launch_ ? launch_->party_count : 0;
+    const char uk = static_cast<char>(std::toupper(static_cast<unsigned char>(key)));
+
+    /* S2/6 Lloyd @ 0xAADC: '1' set, else recall. */
+    if (pending_cast_school_ == 0 && flat == 12) {
+        if (key == '1') {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_LLOYD_SCREEN, gs.screenId());
+            mm2_gs_set_u8(gs.a4(), MM2_GS_LLOYD_COORD,
+                          static_cast<uint8_t>((gs.coordY() << 4) | (gs.coordX() & 0x0F)));
+            std::snprintf(status_line_, sizeof(status_line_), "Beacon set.");
+        } else if (key == '2') {
+            gs.setScreenId(mm2_gs_u8(gs.a4(), MM2_GS_LLOYD_SCREEN));
+            const uint8_t packed = mm2_gs_u8(gs.a4(), MM2_GS_LLOYD_COORD);
+            gs.setCoordX(static_cast<uint8_t>(packed & 0x0F));
+            gs.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
+            mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
+            mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+            std::snprintf(status_line_, sizeof(status_line_), "Beacon recalled.");
+        } else {
+            return false;
+        }
+        pending_cast_flat_ = -1;
+        pending_cast_school_ = -1;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+        beginActionAck(gs);
+        return true;
+    }
+
+    /* S5/5 Teleport @ 0xADD6: digit steps via 0x5692. */
+    if (pending_cast_school_ == 0 && flat == 30) {
+        if (key < '1' || key > '9') {
+            return false;
+        }
+        int steps = key - '0';
+        int8_t dx = 0, dy = 0;
+        facingDelta5692(gs, dx, dy);
+        while (steps-- > 0) {
+            gs.setCoordX(static_cast<uint8_t>((gs.coordX() + dx) & 0x0F));
+            gs.setCoordY(static_cast<uint8_t>((gs.coordY() + dy) & 0x0F));
+        }
+        mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+        mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+        pending_cast_flat_ = -1;
+        pending_cast_school_ = -1;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+        std::snprintf(status_line_, sizeof(status_line_), "Teleport.");
+        beginActionAck(gs);
+        return true;
+    }
+
+    /* S3/2 Fly @ 0xABCC: A-E then 1-4. */
+    if (pending_cast_school_ == 0 && flat == 15) {
+        if (cast_aux_ < 0) {
+            if (uk < 'A' || uk > 'E') {
+                return false;
+            }
+            cast_aux_ = uk - 'A';
+            std::snprintf(status_line_, sizeof(status_line_), "(1-4)?");
+            return true; /* stay in pick */
+        }
+        if (key < '1' || key > '4') {
+            return false;
+        }
+        const int row = key - '1';
+        const int idx = cast_aux_ * 4 + row;
+        gs.setCoordY(0xFF);
+        gs.setCoordX(0xFF);
+        gs.setScreenId(mm2_gs_u8(gs.a4(), MM2_GS_FLY_SCREEN_TBL + idx));
+        mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
+        mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+        cast_aux_ = -1;
+        pending_cast_flat_ = -1;
+        pending_cast_school_ = -1;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+        std::snprintf(status_line_, sizeof(status_line_), "Fly.");
+        beginActionAck(gs);
+        return true;
+    }
+
+    /* C8/4 Town Portal @ 0xB3E6: digit 1-5 → screen 0..4, coords $FF. */
+    if (pending_cast_school_ == 1 && flat == 43) {
+        if (key < '1' || key > '5') {
+            return false;
+        }
+        gs.setScreenId(static_cast<uint8_t>(key - '1'));
+        gs.setCoordX(0xFF);
+        gs.setCoordY(0xFF);
+        mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
+        mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+        pending_cast_flat_ = -1;
+        pending_cast_school_ = -1;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+        std::snprintf(status_line_, sizeof(status_line_), "Town Portal.");
+        beginActionAck(gs);
+        return true;
+    }
+
+    /* 0xD2EA / 0xD312: '1'..party_count → party slot index. */
     if (key < '1' || key > static_cast<char>('0' + pc)) {
         return false;
     }
     const int party_slot = key - '1';
-    const int flat = pending_cast_flat_;
     pending_cast_flat_ = -1;
+    pending_cast_school_ = -1;
     mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
     if (flat == 8) {
         applyHeroismToPartySlot(gs, party_slot);
     } else if (flat == 28) {
         applyFrenzyToPartySlot(gs, party_slot);
+    } else if (flat == 3) {
+        applyHealCa58(gs, party_slot, 8, "First Aid");
+    } else if (flat == 5) {
+        const int idx = rosterIndexForPartySlot(active_party_slot_);
+        const int lv = (idx >= 0 && roster_->records[idx].level > 0)
+                           ? static_cast<int>(roster_->records[idx].level)
+                           : 1;
+        uint16_t heal = 0;
+        for (int i = 0; i < lv; ++i) {
+            heal = static_cast<uint16_t>(heal + (rng_ ? rng_->range(1, 10) : 1));
+        }
+        applyHealCa58(gs, party_slot, heal, "Power Cure");
+    } else if (flat == 7) {
+        applyHealCa58(gs, party_slot, 15, "Cure Wounds");
+    } else if (flat == 16) {
+        applyCureMaskToPartySlot(gs, party_slot, 0x77, false, "Cure Poison");
+    } else if (flat == 22) {
+        applyCureMaskToPartySlot(gs, party_slot, 0x7B, false, "Cure Disease");
+    } else if (flat == 30) {
+        applyCureMaskToPartySlot(gs, party_slot, 0x00, true, "Remove Condition");
+    } else if (flat == 23) {
+        applyRestoreAlignmentToPartySlot(gs, party_slot);
+    } else if (flat == 32) {
+        applyRejuvenateToPartySlot(gs, party_slot);
+    } else if (flat == 39) {
+        applyRaiseDeadToPartySlot(gs, party_slot);
+    } else if (flat == 33) {
+        applyStoneToFleshToPartySlot(gs, party_slot);
+    } else if (flat == 46) {
+        applyResurrectionToPartySlot(gs, party_slot);
     }
-    state_ = CombatState::AwaitingActionAck;
+    beginActionAck(gs);
     return true;
+}
+
+void CombatSession::beginPartyPickCast(GameStateView &gs, int flat0, const char *prompt)
+{
+    pending_cast_flat_ = flat0;
+    pending_cast_school_ = 0;
+    if (force_cast_school_ == 1) {
+        pending_cast_school_ = 1;
+    } else if (force_cast_school_ == 0) {
+        pending_cast_school_ = 0;
+    } else {
+        const int ri = rosterIndexForPartySlot(active_party_slot_);
+        if (ri >= 0 &&
+            gameplay::spellSchoolForClass(roster_->records[ri].class_id) ==
+                gameplay::SpellSchool::Cleric) {
+            pending_cast_school_ = 1;
+        }
+    }
+    state_ = CombatState::AwaitingPartyPick;
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 0);
+    const int pc = launch_ ? launch_->party_count : 1;
+    if (prompt && std::strcmp(prompt, "On whom") == 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "On whom (1-%d)?", pc);
+    } else if (prompt) {
+        std::snprintf(status_line_, sizeof(status_line_), "%s", prompt);
+    }
+}
+
+void CombatSession::beginItemPickCast(GameStateView &gs, int flat0, const char *prompt)
+{
+    pending_cast_flat_ = flat0;
+    pending_cast_school_ = 0;
+    if (force_cast_school_ == 1) {
+        pending_cast_school_ = 1;
+    } else if (force_cast_school_ != 0) {
+        const int ri = rosterIndexForPartySlot(active_party_slot_);
+        if (ri >= 0 &&
+            gameplay::spellSchoolForClass(roster_->records[ri].class_id) ==
+                gameplay::SpellSchool::Cleric) {
+            pending_cast_school_ = 1;
+        }
+    }
+    state_ = CombatState::AwaitingItemPick;
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 0);
+    if (prompt) {
+        std::snprintf(status_line_, sizeof(status_line_), "%s", prompt);
+    }
+}
+
+bool CombatSession::tickItemPick(GameStateView &gs, char key)
+{
+    const int flat = pending_cast_flat_;
+    const char uk = static_cast<char>(std::toupper(static_cast<unsigned char>(key)));
+
+    /* Combat/sheet Use pick: 1-6 equip, A-F backpack. */
+    if (flat == -2) {
+        bool backpack = false;
+        int slot = -1;
+        if (key >= '1' && key <= '6') {
+            slot = key - '1';
+            backpack = false;
+        } else if (uk >= 'A' && uk <= 'F') {
+            slot = uk - 'A';
+            backpack = true;
+        } else {
+            return false;
+        }
+        pending_cast_flat_ = -1;
+        const bool ok = applyItemUse(gs, active_party_slot_, backpack, slot);
+        if (!ok) {
+            beginActionAck(gs);
+            return true;
+        }
+        if (state_ == CombatState::AwaitingPartyPick || state_ == CombatState::AwaitingItemPick ||
+            state_ == CombatState::AwaitingCastTarget) {
+            return true;
+        }
+        beginActionAck(gs);
+        return true;
+    }
+
+    if (uk < 'A' || uk > 'F') {
+        return false;
+    }
+    const int pack_slot = uk - 'A';
+    const int ri = rosterIndexForPartySlot(active_party_slot_);
+    if (ri < 0 || roster_->records[ri].backpack_id[pack_slot] == 0) {
+        return false; /* 0xB56E: empty slot rejected, re-prompt */
+    }
+    const int school = pending_cast_school_;
+    pending_cast_flat_ = -1;
+    pending_cast_school_ = -1;
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
+    if (flat == 34) {
+        applyRechargeToBackpackSlot(gs, pack_slot);
+    } else if (flat == 37) {
+        applyDuplicationFromBackpackSlot(gs, pack_slot);
+    } else if (flat == 47 && school == 0) {
+        applyEnchantToBackpackSlot(gs, pack_slot);
+    } else if (flat == 47) {
+        applyUncurseToBackpackSlot(gs, pack_slot);
+    }
+    beginActionAck(gs);
+    return true;
+}
+
+void CombatSession::applyRechargeToBackpackSlot(GameStateView &gs, int pack_slot)
+{
+    (void)gs;
+    const int ri = rosterIndexForPartySlot(active_party_slot_);
+    if (ri < 0 || pack_slot < 0 || pack_slot >= MM2_ROSTER_ITEM_SLOTS) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &rec = roster_->records[ri];
+    if (rec.backpack_charges[pack_slot] == 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    const int add = rng_ ? rng_->range(1, 6) : 1;
+    const int sum = static_cast<int>(rec.backpack_charges[pack_slot]) + add;
+    rec.backpack_charges[pack_slot] = static_cast<uint8_t>(sum > 255 ? 255 : sum);
+    std::snprintf(status_line_, sizeof(status_line_), "Recharged +%d.", add);
+}
+
+void CombatSession::applyDuplicationFromBackpackSlot(GameStateView &gs, int pack_slot)
+{
+    (void)gs;
+    const int ri = rosterIndexForPartySlot(active_party_slot_);
+    if (ri < 0 || pack_slot < 0 || pack_slot >= MM2_ROSTER_ITEM_SLOTS) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &rec = roster_->records[ri];
+    const uint8_t id = rec.backpack_id[pack_slot];
+    if (id == 0 || id >= 0xD0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    int empty = -1;
+    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
+        if (rec.backpack_id[i] == 0) {
+            empty = i;
+            break;
+        }
+    }
+    if (empty < 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    rec.backpack_id[empty] = id;
+    rec.backpack_charges[empty] = rec.backpack_charges[pack_slot];
+    rec.backpack_flags[empty] = rec.backpack_flags[pack_slot];
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
+    std::snprintf(status_line_, sizeof(status_line_), "Duplicated.");
+}
+
+void CombatSession::applyEnchantToBackpackSlot(GameStateView &gs, int pack_slot)
+{
+    (void)gs;
+    const int ri = rosterIndexForPartySlot(active_party_slot_);
+    if (ri < 0 || pack_slot < 0 || pack_slot >= MM2_ROSTER_ITEM_SLOTS) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &rec = roster_->records[ri];
+    const uint8_t flags = rec.backpack_flags[pack_slot];
+    const uint8_t hi = static_cast<uint8_t>(flags & 0xC0);
+    uint8_t plus = static_cast<uint8_t>(flags & 0x3F);
+    /* Cost gate: plus*$32 vs +$58 (sp_max). No gem deduct in stub beyond cast meta. */
+    const uint16_t need = static_cast<uint16_t>(static_cast<uint16_t>(plus) * 0x32);
+    if (rec.sp_max < need) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    if (plus <= 0x3F) {
+        plus = static_cast<uint8_t>(plus + 1);
+    }
+    rec.backpack_flags[pack_slot] = static_cast<uint8_t>(hi | plus);
+    std::snprintf(status_line_, sizeof(status_line_), "Enchanted.");
+}
+
+void CombatSession::applyUncurseToBackpackSlot(GameStateView &gs, int pack_slot)
+{
+    (void)gs;
+    const int ri = rosterIndexForPartySlot(active_party_slot_);
+    if (ri < 0 || pack_slot < 0 || pack_slot >= MM2_ROSTER_ITEM_SLOTS) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &rec = roster_->records[ri];
+    if (rec.backpack_charges[pack_slot] == 0xFF) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    rec.backpack_charges[pack_slot] = 1;
+    std::snprintf(status_line_, sizeof(status_line_), "Uncursed.");
+}
+
+void CombatSession::applyStoneToFleshToPartySlot(GameStateView &gs, int party_slot)
+{
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &tgt = roster_->records[ri];
+    if (tgt.condition != 0x82) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    tgt.condition = 0;
+    if (party_slot == 0) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
+    }
+    char tname[MM2_ROSTER_NAME_SIZE + 1];
+    mm2_roster_name_to_cstr(&tgt, tname, sizeof(tname));
+    std::snprintf(status_line_, sizeof(status_line_), "Stone to Flesh: %s.", tname);
+}
+
+void CombatSession::applyResurrectionToPartySlot(GameStateView &gs, int party_slot)
+{
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &tgt = roster_->records[ri];
+    if (tgt.condition != 0x81) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    /* $4c60 age+1 caster and target. */
+    const int cri = rosterIndexForPartySlot(active_party_slot_);
+    if (cri >= 0) {
+        uint16_t ca = static_cast<uint16_t>(roster_->records[cri].age + 1);
+        if (ca > 0xC8) {
+            ca = 0xC8;
+        }
+        roster_->records[cri].age = static_cast<uint8_t>(ca);
+    }
+    {
+        uint16_t ta = static_cast<uint16_t>(tgt.age + 1);
+        if (ta > 0xC8) {
+            ta = 0xC8;
+        }
+        tgt.age = static_cast<uint8_t>(ta);
+    }
+    const int roll = rng_ ? rng_->range(1, 100) : 50;
+    if (roll >= 11) {
+        tgt.condition = 0;
+        /* ASM writes #$1 to +$5E — codec hp_max @ $5E; heal path uses hp_current. */
+        tgt.hp_current = 1;
+        char tname[MM2_ROSTER_NAME_SIZE + 1];
+        mm2_roster_name_to_cstr(&tgt, tname, sizeof(tname));
+        std::snprintf(status_line_, sizeof(status_line_), "Resurrection: %s.", tname);
+        if (party_slot == 0) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
+        }
+        return;
+    }
+    if (roll == 10) {
+        tgt.condition = 0xFF;
+    }
+    std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+}
+
+void CombatSession::castSpellFromSheet(GameStateView &gs, int party_slot, int flat0)
+{
+    if (!roster_ || !launch_ || party_slot < 0 || party_slot >= launch_->party_count) {
+        return;
+    }
+    exploration_cast_ = (state_ == CombatState::Inactive);
+    active_party_slot_ = party_slot;
+    force_cast_school_ = -1;
+    skip_cast_cost_ = false;
+    if (exploration_cast_) {
+        state_ = CombatState::AwaitingCommand; /* allow resolve to enter pick states */
+    }
+    resolvePlayerCast(gs, flat0);
+    if (exploration_cast_) {
+        if (state_ == CombatState::AwaitingActionAck || state_ == CombatState::AwaitingCommand) {
+            state_ = CombatState::Inactive;
+            exploration_cast_ = false;
+        }
+        /* else leave AwaitingPartyPick / ItemPick / CastTarget for tickSheetCastAux */
+    }
+}
+
+bool CombatSession::tickSheetCastAux(GameStateView &gs, char key)
+{
+    if (!exploration_cast_) {
+        return false;
+    }
+    if (key == 0x1B) {
+        pending_cast_flat_ = -1;
+        pending_cast_school_ = -1;
+        cast_aux_ = -1;
+        force_cast_school_ = -1;
+        skip_cast_cost_ = false;
+        state_ = CombatState::Inactive;
+        exploration_cast_ = false;
+        setStatus("");
+        return true;
+    }
+    bool progressed = false;
+    if (state_ == CombatState::AwaitingPartyPick) {
+        progressed = tickPartyPick(gs, key);
+    } else if (state_ == CombatState::AwaitingItemPick) {
+        progressed = tickItemPick(gs, static_cast<char>(std::toupper(static_cast<unsigned char>(key))));
+    } else if (state_ == CombatState::AwaitingCastTarget) {
+        progressed = tickCastTarget(gs, static_cast<char>(std::toupper(static_cast<unsigned char>(key))));
+    }
+    if (state_ == CombatState::AwaitingActionAck || state_ == CombatState::AwaitingCommand) {
+        state_ = CombatState::Inactive;
+        exploration_cast_ = false;
+        force_cast_school_ = -1;
+        skip_cast_cost_ = false;
+        active_party_slot_ = -1;
+    }
+    return progressed;
+}
+
+bool CombatSession::applyItemUse(GameStateView &gs, int party_slot, bool backpack, int slot_index)
+{
+    if (!roster_ || !launch_ || !items_ || party_slot < 0 || party_slot >= launch_->party_count ||
+        slot_index < 0 || slot_index >= MM2_ROSTER_ITEM_SLOTS) {
+        std::snprintf(status_line_, sizeof(status_line_), "No power.");
+        return false;
+    }
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        return false;
+    }
+    Mm2RosterRecord &r = roster_->records[ri];
+    uint8_t item_id = 0;
+    uint8_t flags_before = 0;
+    if (backpack) {
+        item_id = r.backpack_id[slot_index];
+        flags_before = r.backpack_flags[slot_index];
+        if (item_id == 0 || item_id == 0xFF) {
+            std::snprintf(status_line_, sizeof(status_line_), "No power.");
+            return false;
+        }
+        if (r.backpack_charges[slot_index] == 0) {
+            std::snprintf(status_line_, sizeof(status_line_), "No charges.");
+            return false;
+        }
+        r.backpack_charges[slot_index] =
+            static_cast<uint8_t>(r.backpack_charges[slot_index] - 1);
+        if (r.backpack_charges[slot_index] == 0) {
+            r.backpack_id[slot_index] = 0xFF;
+            r.backpack_flags[slot_index] = 0;
+        }
+    } else {
+        item_id = r.equipped_id[slot_index];
+        flags_before = r.equipped_flags[slot_index];
+        if (item_id == 0) {
+            std::snprintf(status_line_, sizeof(status_line_), "No power.");
+            return false;
+        }
+        if (r.equipped_charges[slot_index] == 0) {
+            std::snprintf(status_line_, sizeof(status_line_), "No charges.");
+            return false;
+        }
+        /* Combat equip path decrements; explore 0xE8D8 does not. */
+        if (state_ != CombatState::Inactive && !exploration_cast_) {
+            r.equipped_charges[slot_index] =
+                static_cast<uint8_t>(r.equipped_charges[slot_index] - 1);
+            if (r.equipped_charges[slot_index] == 0) {
+                r.equipped_id[slot_index] = 0xFF;
+                r.equipped_flags[slot_index] = 0;
+            }
+        }
+    }
+    const Mm2ItemRecord *irec = mm2_items_lookup(items_, item_id);
+    if (!irec || irec->effect_byte == 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "No power.");
+        return false;
+    }
+    const uint8_t effect = irec->effect_byte;
+    active_party_slot_ = party_slot;
+    if (effect >= 0x80) {
+        const int code = static_cast<int>(effect & 0x7F) - 1;
+        if (code < 0) {
+            std::snprintf(status_line_, sizeof(status_line_), "No power.");
+            return false;
+        }
+        const int flat = code >= 0x30 ? code - 0x30 : code;
+        force_cast_school_ = code >= 0x30 ? 1 : 0;
+        skip_cast_cost_ = true;
+        const bool was_inactive = (state_ == CombatState::Inactive);
+        if (was_inactive) {
+            exploration_cast_ = true;
+            state_ = CombatState::AwaitingCommand;
+        }
+        resolvePlayerCast(gs, flat);
+        force_cast_school_ = -1;
+        skip_cast_cost_ = false;
+        if (was_inactive && exploration_cast_) {
+            if (state_ == CombatState::AwaitingActionAck || state_ == CombatState::AwaitingCommand) {
+                state_ = CombatState::Inactive;
+                exploration_cast_ = false;
+            }
+        }
+        return true;
+    }
+    /* 0xF4DE: amount = flags + lo nibble; kind = (effect>>4)&7. */
+    const uint8_t amount = static_cast<uint8_t>(flags_before + (effect & 0x0F));
+    const int kind = (effect >> 4) & 7;
+    uint8_t *dst = nullptr;
+    switch (kind) {
+    case 0:
+        dst = reinterpret_cast<uint8_t *>(&r.hp_current) + 1;
+        break;
+    case 1:
+        dst = &r.might_base;
+        break;
+    case 2:
+        dst = &r.speed_base;
+        break;
+    case 3:
+        dst = &r.accuracy_base;
+        break;
+    case 4:
+        dst = &r.alignment_base;
+        break;
+    case 5:
+        dst = &r.level;
+        break;
+    case 6:
+        dst = &r.spell_level;
+        break;
+    case 7:
+        dst = reinterpret_cast<uint8_t *>(&r.sp_max);
+        break;
+    default:
+        break;
+    }
+    if (dst) {
+        const int sum = static_cast<int>(*dst) + amount;
+        *dst = static_cast<uint8_t>(sum > 255 ? 255 : sum);
+    }
+    std::snprintf(status_line_, sizeof(status_line_), "Item used.");
+    return true;
+}
+
+void CombatSession::facingDelta5692(GameStateView &gs, int8_t &dx, int8_t &dy) const
+{
+    /* 0x5692: E→(+1,0) N→(0,+1) S→(0,-1) W→(-1,0). */
+    dx = 0;
+    dy = 0;
+    switch (gs.facingKey()) {
+        case 'E': dx = 1; break;
+        case 'N': dy = 1; break;
+        case 'S': dy = -1; break;
+        case 'W': dx = -1; break;
+        default: break;
+    }
+}
+
+void CombatSession::applyHealCa58(GameStateView &gs, int party_slot, uint16_t heal,
+                                  const char *spell_name)
+{
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &tgt = roster_->records[ri];
+    if (tgt.condition >= 0x80) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    tgt.condition = static_cast<uint8_t>(tgt.condition & 0x2F);
+    const uint32_t sum = static_cast<uint32_t>(tgt.hp_current) + heal;
+    tgt.hp_current = static_cast<uint16_t>(sum > tgt.hp_max ? tgt.hp_max : sum);
+    if (party_slot == 0) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
+    }
+    char tname[MM2_ROSTER_NAME_SIZE + 1];
+    mm2_roster_name_to_cstr(&tgt, tname, sizeof(tname));
+    std::snprintf(status_line_, sizeof(status_line_), "%s: %s +%u HP.", spell_name, tname,
+                  static_cast<unsigned>(heal));
+}
+
+void CombatSession::applyCureMaskToPartySlot(GameStateView &gs, int party_slot, uint8_t and_mask,
+                                             bool clear_all, const char *spell_name)
+{
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &tgt = roster_->records[ri];
+    if (tgt.condition >= 0x80 && !clear_all) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    if (clear_all) {
+        if (tgt.condition >= 0x80) {
+            std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+            return;
+        }
+        tgt.condition = 0;
+    } else {
+        tgt.condition = static_cast<uint8_t>(tgt.condition & and_mask);
+    }
+    if (party_slot == 0) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
+    }
+    char tname[MM2_ROSTER_NAME_SIZE + 1];
+    mm2_roster_name_to_cstr(&tgt, tname, sizeof(tname));
+    std::snprintf(status_line_, sizeof(status_line_), "%s: %s.", spell_name, tname);
+}
+
+void CombatSession::applyRestoreAlignmentToPartySlot(GameStateView &gs, int party_slot)
+{
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &tgt = roster_->records[ri];
+    /* 0xB294: move.b $d(a0), $6a(a1) — current → base (temple same). */
+    tgt.alignment_base = tgt.alignment_current;
+    if (party_slot == active_party_slot_) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
+    }
+    char tname[MM2_ROSTER_NAME_SIZE + 1];
+    mm2_roster_name_to_cstr(&tgt, tname, sizeof(tname));
+    std::snprintf(status_line_, sizeof(status_line_), "Restore Alignment: %s.", tname);
+}
+
+void CombatSession::applyRejuvenateToPartySlot(GameStateView &gs, int party_slot)
+{
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &tgt = roster_->records[ri];
+    const int delta = rng_ ? rng_->range(1, 10) : 1;
+    const int roll = rng_ ? rng_->range(1, 100) : 1;
+    /* Success only if roll < 50 and age >= 18: subtract delta. Else $4c60 add + fail. */
+    if (roll < 50 && tgt.age >= 0x12) {
+        if (tgt.age > static_cast<uint8_t>(delta)) {
+            tgt.age = static_cast<uint8_t>(tgt.age - delta);
+        } else {
+            tgt.age = 0;
+        }
+        char tname[MM2_ROSTER_NAME_SIZE + 1];
+        mm2_roster_name_to_cstr(&tgt, tname, sizeof(tname));
+        std::snprintf(status_line_, sizeof(status_line_), "Rejuvenate: %s (-%d yr).", tname, delta);
+    } else {
+        uint16_t age = static_cast<uint16_t>(tgt.age + delta);
+        if (age > 0xC8) {
+            age = 0xC8;
+        }
+        tgt.age = static_cast<uint8_t>(age);
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+    }
+    (void)gs;
+}
+
+void CombatSession::applyRaiseDeadToPartySlot(GameStateView &gs, int party_slot)
+{
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    Mm2RosterRecord &tgt = roster_->records[ri];
+    if (tgt.condition < 0x80) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    /* $4c60: caster age+1, target age+5, clamp 200. */
+    const int cri = rosterIndexForPartySlot(active_party_slot_);
+    if (cri >= 0) {
+        uint16_t ca = static_cast<uint16_t>(roster_->records[cri].age + 1);
+        if (ca > 0xC8) {
+            ca = 0xC8;
+        }
+        roster_->records[cri].age = static_cast<uint8_t>(ca);
+    }
+    {
+        uint16_t ta = static_cast<uint16_t>(tgt.age + 5);
+        if (ta > 0xC8) {
+            ta = 0xC8;
+        }
+        tgt.age = static_cast<uint8_t>(ta);
+    }
+    if (tgt.endurance_current == 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
+        return;
+    }
+    tgt.endurance_current = static_cast<uint8_t>(tgt.endurance_current - 1);
+    tgt.endurance_base = tgt.endurance_current;
+    tgt.condition = 0;
+    if (party_slot == active_party_slot_) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
+    }
+    char tname[MM2_ROSTER_NAME_SIZE + 1];
+    mm2_roster_name_to_cstr(&tgt, tname, sizeof(tname));
+    std::snprintf(status_line_, sizeof(status_line_), "Raise Dead: %s.", tname);
 }
 
 void CombatSession::applyHeroismToPartySlot(GameStateView &gs, int party_slot)
@@ -1268,6 +2373,25 @@ void CombatSession::seedCombatStaticTables(GameStateView &gs)
     /* A4-$6F3E / -$6F36: class → to-hit level divisor / swing-count divisor. */
     static const uint8_t kHitDiv[8] = {1, 1, 1, 3, 4, 2, 2, 1};
     static const uint8_t kSwingDiv[8] = {4, 4, 5, 7, 10, 5, 5, 4};
+    /* A4-$6F16: monster type>>4 → to-hit chance (data @ 0x10E8). */
+    static const uint8_t kMonHit[16] = {40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100, 120, 150, 250, 100, 200};
+    /* Fly sector→screen @ data 0xECE (A4-$7120 host); col*4+row. */
+    static const uint8_t kFlyScreens[20] = {5,  9,  12, 15, 6,  10, 13, 16, 7,  11,
+                                           14, 38, 8,  34, 36, 39, 33, 35, 37, 40};
+    /* A4-$7464: Pabil high-nibble index → special chance (data @ 0xB9A). */
+    static const uint8_t kPabilChance[16] = {0, 10, 20, 35, 50, 75, 90, 100, 1, 1, 1, 1, 0, 1, 1, 15};
+    /* A4-$666A/-$664A/-$662A/-$65FE: 0x1FB4E resist + multi-hit order (data @ 0x1994). */
+    static const uint8_t kPabilResA[32] = {1, 1, 99, 1, 1, 1, 1, 1, 1, 1, 1, 99, 99, 99, 1, 0,
+                                          1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0};
+    static const uint8_t kPabilResB[32] = {0, 0, 99, 0, 0, 0, 0, 0, 0, 0, 1, 99, 99, 99, 1, 1,
+                                          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0};
+    static const uint8_t kPabilResC[32] = {28, 29, 99, 23, 24, 25, 26, 28, 29, 26, 21, 99, 99, 99, 26, 26,
+                                          21, 24, 23, 0,  26, 24, 0,  23, 26, 0,  23, 0,  0,  31, 28, 0};
+    static const uint8_t kPabilOrd[32] = {0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0,
+                                         0, 2, 4, 6, 1, 3, 5, 7, 1, 3, 5, 7, 0, 2, 4, 6};
+    /* A4-$7486: 0x4442 luck thresholds (data @ 0xB78). */
+    static const uint8_t kLuckThresh[23] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45, 60,
+                                           75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
     for (int i = 0; i < 8; ++i) {
         mm2_gs_set_u8(gs.a4(), MM2_GS_STATUS_BIT_TBL + i, kStatusBits[i]);
         mm2_gs_set_u8(gs.a4(), MM2_GS_MRES_CHANCE_TBL + i, kMresChance[i]);
@@ -1276,6 +2400,22 @@ void CombatSession::seedCombatStaticTables(GameStateView &gs)
     }
     for (int i = 0; i < 4; ++i) {
         mm2_gs_set_u8(gs.a4(), -0x6F1A + i, kFleeChance[i]);
+    }
+    for (int i = 0; i < 16; ++i) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_HIT_TBL + i, kMonHit[i]);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PABIL_CHANCE_TBL + i, kPabilChance[i]);
+    }
+    for (int i = 0; i < 20; ++i) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_FLY_SCREEN_TBL + i, kFlyScreens[i]);
+    }
+    for (int i = 0; i < 32; ++i) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PABIL_RESIST_A + i, kPabilResA[i]);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PABIL_RESIST_B + i, kPabilResB[i]);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PABIL_RESIST_C + i, kPabilResC[i]);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PABIL_TARGET_ORD + i, kPabilOrd[i]);
+    }
+    for (int i = 0; i < 23; ++i) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_LUCK_THRESH_TBL + i, kLuckThresh[i]);
     }
 }
 
@@ -1308,12 +2448,32 @@ void CombatSession::loadMonsterCombatGlobals(GameStateView &gs, int slot)
     mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_AC_BIT6, 0);
     mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_AC_BIT7, 0);
     mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_AC, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SWINGS, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_DMG_SIDES, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_PABIL, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_PABIL_CHANCE, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_CHARGE_INIT, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SABIL, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ARCHER, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_MULTIPLIES, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_FRIEND_COUNT, 0);
     if (slot < 0 || slot >= MM2_GS_MONSTER_BATTLE_SLOTS || !monsters_ || !slots_[slot].alive) {
         return;
     }
     const Mm2MonsterRecord &rec = monsters_->records[slots_[slot].type];
     Mm2MonsterAbilities ab{};
     mm2_monster_decode_abilities(&rec, &ab);
+    const uint8_t pabil = rec.fields[MM2_MON_OFF_PABIL - MM2_MONSTER_NAME_SIZE];
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_PABIL, static_cast<uint8_t>(pabil & 0x1F));
+    /* 0x4E0A: index = (Pabil&$E0)>>4 into -$7464. */
+    const uint8_t pch_idx = static_cast<uint8_t>((pabil & 0xE0) >> 4);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_PABIL_CHANCE,
+                  mm2_gs_u8(gs.a4(), MM2_GS_PABIL_CHANCE_TBL + pch_idx));
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SABIL, ab.single_effect);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ARCHER, ab.archer ? 1 : 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_MULTIPLIES, ab.multiplies ? 1 : 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_FRIEND_COUNT,
+                  static_cast<uint8_t>(MM2_MON_ADD_FRIENDS_COUNT(&ab)));
     const uint8_t ac = rec.fields[MM2_MON_OFF_AC - MM2_MONSTER_NAME_SIZE];
     const uint8_t dmg = rec.fields[MM2_MON_OFF_DAMAGE - MM2_MONSTER_NAME_SIZE];
     const uint8_t spd2 = rec.fields[MM2_MON_OFF_SPEED2 - MM2_MONSTER_NAME_SIZE];
@@ -1331,6 +2491,19 @@ void CombatSession::loadMonsterCombatGlobals(GameStateView &gs, int slot)
         ac_val = static_cast<uint8_t>(ac_val * 10);
     }
     mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_AC, ac_val);
+    /* 0x4EAE: swings = (spd2 low4)+1. 0x4F52: dmg sides = (dmg low5)+1; ×10 if bit5. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SWINGS, static_cast<uint8_t>((spd2 & 0x0F) + 1));
+    /* 0x4EB8: -$11BA = (spd2>>4)+1 — special-charge seed for -$503. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_CHARGE_INIT, static_cast<uint8_t>((spd2 >> 4) + 1));
+    uint8_t sides = static_cast<uint8_t>((dmg & 0x1F) + 1);
+    if (dmg & 0x20) {
+        if (sides > 0x19) {
+            sides = 0xFA;
+        } else {
+            sides = static_cast<uint8_t>(sides * 10);
+        }
+    }
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_DMG_SIDES, sides);
     /* -$11AA[0..6]: dmg.b6, dmg.b7, spd2.b6, spd2.b7, mres.b1, mres.b0, mres.b2 */
     if (dmg & 0x40) {
         mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_FLAG_BASE + 0, 1);
@@ -1941,6 +3114,7 @@ void CombatSession::applyCastToMonsterTarget(GameStateView &gs, int slot, int fl
         {26, 2, 0, 0, 7, 1, 1, 0},
         {27, 1, 33, 1, 7, 10, 0, 0},
         {29, 2, 0, 0, 5, 6, 1, 0},
+        {34, 2, 0, 0, 7, 1, 1, 1}, /* Water Encasement @ 0xC332: status 7, hits 1, mode_d 1 */
         {36, 2, 0, 0, 7, 4, 1, 0},
         {37, 1, 400, 255, 4, 1, 0, 0},
         {38, 1, 91, 1, 4, 10, 0, 0},
@@ -2210,33 +3384,856 @@ void CombatSession::resolveMonsterTurn(GameStateView &gs, int slot)
         }
     }
 
-    int candidates[MM2_GS_PARTY_SIZE];
-    int n = 0;
-    for (int i = 0; i < launch_->party_count && i < MM2_GS_PARTY_SIZE; ++i) {
-        if (partySlotAlive(i)) {
-            candidates[n++] = i;
+    loadMonsterCombatGlobals(gs, slot);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_CUR_MON_SLOT, static_cast<uint8_t>(slot));
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_TURN_SLOT, static_cast<uint8_t>(slot));
+
+    /* 0x10786 → 0x105B6 special gate → 0x10002 group / else melee/ranged/10118. */
+    if (monsterSpecialGate105B6(gs, slot)) {
+        const uint8_t pabil = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_PABIL);
+        if (pabil < 0x0F || pabil == 0x1D || pabil >= 0x1F) {
+            monsterGroupAttack10002(gs, slot);
+            return;
+        }
+        /* 0x107EE: status bit1 or tile -$55D6 bit1 → 0x1042C; else 0x10002. */
+        if ((slots_[slot].status & 0x02) != 0 ||
+            (mm2_gs_u8(gs.a4(), MM2_GS_TILE_RT_FLAGS) & 0x02) != 0) {
+            spellFailedBanner1042C(gs);
+            return;
+        }
+        monsterGroupAttack10002(gs, slot);
+        return;
+    }
+
+    const uint8_t melee_n = mm2_gs_u8(gs.a4(), -0x524);
+    if (static_cast<uint8_t>(slot) < melee_n) {
+        /* 0x1059E: clr ranged latch; 0x103BA target; 0x10478 damage. */
+        mm2_gs_set_u8(gs.a4(), -0x5E32, 0);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, 0);
+        const int target_slot = pickMonsterMeleeTarget103BA(gs);
+        if (target_slot < 0) {
+            return;
+        }
+        deliverMonsterHit10478(gs, slot, target_slot, mon_name);
+        return;
+    }
+    if (mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_ARCHER) != 0) {
+        const int roll = rng_ ? rng_->range(1, 0x64) : 0x64;
+        if (roll <= 0x50) {
+            monsterRangedAttack10584(gs, slot);
+            return;
         }
     }
-    if (n == 0) {
-        return; /* checkOutcome() ends combat on the next loop iteration. */
+    /* 0x10118: out-of-melee / archer-miss → advance swap if AC bit6. */
+    monsterAdvance10118(gs, slot);
+}
+
+void CombatSession::spellFailedBanner1042C(GameStateView &gs)
+{
+    /* 0x1042C: clr panel; print "*** Spell Failed ***"; delay; 0x132E6. */
+    std::snprintf(status_line_, sizeof(status_line_), "*** Spell Failed ***");
+    enqueueCombatMessage(status_line_);
+    beginActionAck(gs);
+}
+
+void CombatSession::monsterAdvance10118(GameStateView &gs, int slot)
+{
+    /* 0x10118: if current has -$11AB (AC bit6), swap with first melee-range
+     * slot that lacks it; print "advances!"; else fall through to ack. */
+    loadMonsterCombatGlobals(gs, slot);
+    if (mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_AC_BIT6) == 0) {
+        return;
     }
-    const int target_slot = candidates[rng_->range(0, n - 1)];
-    const int idx = rosterIndexForPartySlot(target_slot);
+    syncMonsterSlotsToGs(gs);
+    const uint8_t melee_n = mm2_gs_u8(gs.a4(), -0x524);
+    bool swapped = false;
+    for (int i = 0; i < static_cast<int>(melee_n) && i < MM2_GS_MONSTER_BATTLE_SLOTS; ++i) {
+        if (i == slot || !slots_[i].alive) {
+            continue;
+        }
+        loadMonsterCombatGlobals(gs, i);
+        if (mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_AC_BIT6) != 0) {
+            continue;
+        }
+        /* Swap parallel battle arrays + slots_[] between `slot` and `i`. */
+        const CombatMonster tmp = slots_[slot];
+        slots_[slot] = slots_[i];
+        slots_[i] = tmp;
+        const bool acted = monster_acted_[slot];
+        monster_acted_[slot] = monster_acted_[i];
+        monster_acted_[i] = acted;
+
+        const uint16_t hp_a = mm2_gs_u16(gs.a4(), MM2_GS_MONSTER_HP + slot * 2);
+        const uint16_t hp_b = mm2_gs_u16(gs.a4(), MM2_GS_MONSTER_HP + i * 2);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_MONSTER_HP + slot * 2, hp_b);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_MONSTER_HP + i * 2, hp_a);
+        const uint8_t st_a = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_STATUS + slot);
+        const uint8_t st_b = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_STATUS + i);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_STATUS + slot, st_b);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_STATUS + i, st_a);
+        const uint8_t sp_a = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SPEED + slot);
+        const uint8_t sp_b = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SPEED + i);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPEED + slot, sp_b);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPEED + i, sp_a);
+        const uint8_t ch_a = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + slot);
+        const uint8_t ch_b = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + i);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + slot, ch_b);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + i, ch_a);
+        const uint8_t ty_a = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + slot);
+        const uint8_t ty_b = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + i);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + slot, ty_b);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + i, ty_a);
+        if (slot < 10 && i < 10) {
+            const uint8_t ac_a = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_ACTED + slot);
+            const uint8_t ac_b = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_ACTED + i);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + slot, ac_b);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + i, ac_a);
+        }
+
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_TURN_SLOT, static_cast<uint8_t>(i));
+        mm2_gs_set_u8(gs.a4(), MM2_GS_CUR_MON_SLOT, static_cast<uint8_t>(i));
+        active_monster_slot_ = i;
+        char name[MM2_MONSTER_NAME_SIZE + 1];
+        mm2_monster_name_to_cstr(&monsters_->records[slots_[i].type], name, sizeof(name));
+        std::snprintf(status_line_, sizeof(status_line_), "%s advances!", name);
+        enqueueCombatMessage(status_line_);
+        beginActionAck(gs);
+        swapped = true;
+        break;
+    }
+    loadMonsterCombatGlobals(gs, active_monster_slot_ >= 0 ? active_monster_slot_ : slot);
+    if (!swapped) {
+        /* 0x1031A: jsr 0x10082 then 0x132E6. */
+        monsterWaitsOrAddsFriends10082(gs, slot);
+        beginActionAck(gs);
+    }
+}
+
+void CombatSession::monsterWaitsOrAddsFriends10082(GameStateView &gs, int slot)
+{
+    /* 0x10082: load globals; maybe grow live via multiply; print verb. */
+    loadMonsterCombatGlobals(gs, slot);
+    uint8_t added = 0;
+    if (mm2_gs_u8(gs.a4(), MM2_GS_ADDS_FRIENDS_LATCH) == 0 &&
+        mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_MULTIPLIES) != 0) {
+        const uint8_t live = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_COUNT);
+        const uint8_t mon_type = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + slot);
+        const uint8_t overflow = mm2_gs_u8(gs.a4(), MM2_GS_ENCOUNTER_OVERFLOW_TYPE);
+        if (live > 0x0A && live < 0x6E && mon_type == overflow) {
+            const uint8_t grown = static_cast<uint8_t>(live + (live - 0x0A));
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_COUNT, grown);
+            encounter_live_total_ = grown;
+            mm2_gs_set_u8(gs.a4(), MM2_GS_ADDS_FRIENDS_LATCH, 1);
+            added = 1;
+        }
+    }
+    char name[MM2_MONSTER_NAME_SIZE + 1];
+    mm2_monster_name_to_cstr(&monsters_->records[slots_[slot].type], name, sizeof(name));
+    if (added) {
+        std::snprintf(status_line_, sizeof(status_line_), "%s adds friends!", name);
+    } else {
+        std::snprintf(status_line_, sizeof(status_line_), "%s waits for opening!", name);
+    }
+    enqueueCombatMessage(status_line_);
+}
+
+bool CombatSession::monsterSpecialGate105B6(GameStateView &gs, int slot)
+{
+    /* 0x105B6: rng(1,100); status bit6 blocks; tst -$503[slot]; -$11BB >= roll; subq charge. */
+    const int roll = rng_ ? rng_->range(1, 0x64) : 0x64;
+    if (slot < 0 || slot >= MM2_GS_MONSTER_BATTLE_SLOTS) {
+        return false;
+    }
+    if ((slots_[slot].status & 0x40) != 0) {
+        return false;
+    }
+    const uint8_t charges = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + slot);
+    if (charges == 0) {
+        return false;
+    }
+    const uint8_t chance = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_PABIL_CHANCE);
+    if (chance < static_cast<uint8_t>(roll)) {
+        return false;
+    }
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + slot,
+                  static_cast<uint8_t>(charges - 1));
+    return true;
+}
+
+void CombatSession::deliverMonsterHit10478(GameStateView &gs, int mon_slot, int target_slot,
+                                           const char *mon_name)
+{
+    uint16_t dmg = monsterMeleeDamage10478(gs, mon_slot, target_slot);
+    if (party_blocking_[target_slot]) {
+        dmg = static_cast<uint16_t>(dmg / 2); /* 0x11B0A / 0x49BA block half */
+    }
+    if (mm2_gs_u8(gs.a4(), MM2_GS_POWER_SHIELD_CTR) != 0) {
+        dmg = static_cast<uint16_t>(dmg / 2);
+    }
+    if (mm2_gs_u8(gs.a4(), -0x5E32) == 0 && mm2_gs_u8(gs.a4(), MM2_GS_SHIELD_COUNTER) != 0) {
+        dmg = static_cast<uint16_t>(dmg / 2);
+    }
+    applyPartyDamage4AAA(gs, target_slot, dmg, mon_name);
+    if (dmg > 0) {
+        const int ri = rosterIndexForPartySlot(target_slot);
+        if (ri >= 0) {
+            char vname[MM2_ROSTER_NAME_SIZE + 1];
+            mm2_roster_name_to_cstr(&roster_->records[ri], vname, sizeof(vname));
+            appendSingleEffectFeea(gs, vname);
+        }
+    }
+}
+
+int CombatSession::pickMonsterRangedTarget10332(GameStateView &gs)
+{
+    /* 0x10332: rng(1,party)−1; skip cond>=$80; wrap; store -$4F8. */
+    const int pc = launch_ ? launch_->party_count : 0;
+    if (pc <= 0) {
+        return -1;
+    }
+    mm2_gs_set_u16(gs.a4(), MM2_GS_PARTY_COUNT, static_cast<uint16_t>(pc));
+    int cur = rng_ ? rng_->range(1, pc) - 1 : 0;
+    for (int tries = 0; tries < pc + 2; ++tries) {
+        if (cur < 0 || cur >= pc) {
+            cur = 0;
+        }
+        const int ri = rosterIndexForPartySlot(cur);
+        if (ri >= 0 && roster_->records[ri].condition < 0x80) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT, static_cast<uint8_t>(cur));
+            return cur;
+        }
+        ++cur;
+        if (cur >= pc) {
+            cur = 0;
+        }
+    }
+    return -1;
+}
+
+void CombatSession::monsterRangedAttack10584(GameStateView &gs, int slot)
+{
+    /* 0x10584: move.b #1,-$5E32; jsr 0x10332; clr -$53B; jsr 0x10478. */
+    char mon_name[MM2_MONSTER_NAME_SIZE + 1];
+    mm2_monster_name_to_cstr(&monsters_->records[slots_[slot].type], mon_name, sizeof(mon_name));
+    mm2_gs_set_u8(gs.a4(), -0x5E32, 1);
+    mm2_gs_set_u8(gs.a4(), -0x53B, 0);
+    const int target_slot = pickMonsterRangedTarget10332(gs);
+    if (target_slot < 0) {
+        return;
+    }
+    deliverMonsterHit10478(gs, slot, target_slot, mon_name);
+}
+
+void CombatSession::rollPabilDamage1F6DC(GameStateView &gs, int mon_slot, uint16_t sides)
+{
+    /* 0x1F6DC: rolls = type>>4; sum rng(1,sides); -$F0C = sum*2+1. */
+    const uint8_t mon_type = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + mon_slot);
+    const int rolls = static_cast<int>(mon_type >> 4);
+    uint16_t sum = 0;
+    const int hi = sides > 0 ? static_cast<int>(sides) : 1;
+    for (int i = 0; i < rolls; ++i) {
+        sum = static_cast<uint16_t>(sum + (rng_ ? rng_->range(1, hi) : 1));
+    }
+    mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, static_cast<uint16_t>(sum * 2u + 1u));
+}
+
+static uint16_t shieldHalvePartyDmg(uint8_t *a4, uint16_t dmg)
+{
+    if (mm2_gs_u8(a4, MM2_GS_POWER_SHIELD_CTR) != 0) {
+        dmg = static_cast<uint16_t>(dmg / 2);
+    }
+    if (mm2_gs_u8(a4, -0x5E32) == 0 && mm2_gs_u8(a4, MM2_GS_SHIELD_COUNTER) != 0) {
+        dmg = static_cast<uint16_t>(dmg / 2);
+    }
+    return dmg;
+}
+
+void CombatSession::applyPabilDamageSingle1F632(GameStateView &gs, const char *mon_name)
+{
+    /* 0x1F632: save -$4F8; pick living; 0x1F55E; restore. */
+    const uint8_t saved = mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT);
+    if (pickMonsterRangedTarget10332(gs) < 0) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT, saved);
+        return;
+    }
+    applyPabilDamage1F55E(gs, mon_name);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT, saved);
+}
+
+int CombatSession::luckBonus4442(GameStateView &gs, uint8_t luck) const
+{
+    /* 0x4442: result=$FD; while luck > -$7486[i] addq. */
+    int result = 0xFD;
+    for (int i = 0; i < 23; ++i) {
+        const uint8_t thr = mm2_gs_u8(gs.a4(), MM2_GS_LUCK_THRESH_TBL + i);
+        if (luck <= thr) {
+            break;
+        }
+        ++result;
+    }
+    return result;
+}
+
+int CombatSession::partyResistCheck7F0E(GameStateView &gs, int party_slot)
+{
+    /* 0x48BA / -$7F0E: rng(1,100); ≤5→0; ≥$5F→1; else luck+level vs roll. */
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        return 0;
+    }
+    const Mm2RosterRecord &rec = roster_->records[ri];
+    const int roll = rng_ ? rng_->range(1, 0x64) : 0x64;
+    if (roll <= 5) {
+        return 0;
+    }
+    if (roll >= 0x5F) {
+        return 1;
+    }
+    const uint8_t level = rec.level > 0 ? rec.level : 1;
+    int thr = luckBonus4442(gs, rec.luck_current) + static_cast<int>(level);
+    if (thr < static_cast<int>(level)) {
+        thr = 2;
+    }
+    return thr >= roll ? 1 : 0;
+}
+
+void CombatSession::partyResistFlags7D94(GameStateView &gs, int party_slot)
+{
+    /* 0x4952 resist prologue (flags at -$5630/2F/2E); may halve -$F0C. */
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        return;
+    }
+    const Mm2RosterRecord &rec = roster_->records[ri];
+    if (rec.condition >= 0x80) {
+        return;
+    }
+
+    uint8_t flag_b = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_B);
+    if (flag_b != 0) {
+        const int roll = rng_ ? rng_->range(1, 0x64) : 0x64;
+        const int thr = static_cast<int>(rec.thievery_percent) +
+                        static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_RESIST_BUFF_A));
+        if (thr >= roll) {
+            return; /* full immune path keeps flag_b */
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_B, 0);
+    }
+
+    uint8_t flag_a = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_A);
+    if (flag_a != 0) {
+        if (partyResistCheck7F0E(gs, party_slot) != 0) {
+            uint16_t dmg = mm2_gs_u16(gs.a4(), MM2_GS_HP_APPLY);
+            mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, static_cast<uint16_t>(dmg / 2));
+        } else {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_A, 0);
+        }
+    }
+
+    uint8_t flag_c = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_C);
+    if (flag_c == 3 || flag_c == 0xFF) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_C, 0);
+    } else if (flag_c != 0) {
+        int thr = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_RESIST_BUFF_C));
+        if (flag_c == 1) {
+            thr += rec.secondary_skills[0]; /* +$17 */
+        } else if (flag_c == 2) {
+            thr += rec.unknown_1a_20[2]; /* +$1C */
+        } else {
+            /* 0x4A44: *(party + flag_c + $11) */
+            const auto *raw = reinterpret_cast<const uint8_t *>(&rec);
+            const int off = static_cast<int>(flag_c) + 0x11;
+            if (off >= 0 && off < static_cast<int>(sizeof(Mm2RosterRecord))) {
+                thr += raw[off];
+            }
+        }
+        const int roll = rng_ ? rng_->range(1, 0x64) : 0x64;
+        if (thr >= roll) {
+            uint16_t dmg = mm2_gs_u16(gs.a4(), MM2_GS_HP_APPLY);
+            mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, static_cast<uint16_t>(dmg / 4));
+        } else {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_C, 0);
+        }
+    }
+}
+
+void CombatSession::applyPabilDamage1F55E(GameStateView &gs, const char *mon_name)
+{
+    /* 0x1F55E: -$7D94 resist; skip if -$562F; else apply (msg if A/C). */
+    const int target = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT));
+    const uint16_t saved = mm2_gs_u16(gs.a4(), MM2_GS_HP_APPLY);
+    partyResistFlags7D94(gs, target);
+    if (mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_B) != 0) {
+        mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, saved);
+        return; /* "is not affected" */
+    }
+    uint16_t dmg = mm2_gs_u16(gs.a4(), MM2_GS_HP_APPLY);
+    dmg = shieldHalvePartyDmg(gs.a4(), dmg);
+    applyPartyDamage4AAA(gs, target, dmg, mon_name);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, saved);
+}
+
+void CombatSession::applyPabilDamageMulti1F414(GameStateView &gs, const char *mon_name)
+{
+    /* 0x1F414: hit_count = rng(1,4)+3 − dead; walk -$65FE order; 0x1F55E each. */
+    const int pc = launch_ ? launch_->party_count : 0;
+    if (pc <= 0) {
+        return;
+    }
+    int dead = 0;
+    for (int i = 0; i < pc; ++i) {
+        const int ri = rosterIndexForPartySlot(i);
+        if (ri >= 0 && roster_->records[ri].condition >= 0x80) {
+            ++dead;
+        }
+    }
+    int hits = (rng_ ? rng_->range(1, 4) : 1) + 3 - dead;
+    if (hits > pc) {
+        hits = pc;
+    }
+    if (hits < 1) {
+        hits = 1;
+    }
+    const int roll = rng_ ? rng_->range(1, 0x64) : 1;
+    int base = 0;
+    if (roll >= 0x28) {
+        ++base;
+    }
+    if (roll >= 0x3C) {
+        ++base;
+    }
+    if (roll >= 0x50) {
+        ++base;
+    }
+    base *= 8;
+    if (base > 0x18) {
+        base = 0;
+    }
+    const uint8_t saved_ra = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_A);
+    const uint8_t saved_rb = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_B);
+    const uint8_t saved_rc = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_C);
+    for (int n = 0; n < hits; ++n) {
+        const uint8_t t = mm2_gs_u8(gs.a4(), MM2_GS_PABIL_TARGET_ORD + base + n);
+        if (t >= static_cast<uint8_t>(pc)) {
+            continue;
+        }
+        const int ri = rosterIndexForPartySlot(static_cast<int>(t));
+        if (ri < 0 || roster_->records[ri].condition >= 0x80) {
+            continue;
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT, t);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_A, saved_ra);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_B, saved_rb);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_C, saved_rc);
+        applyPabilDamage1F55E(gs, mon_name);
+    }
+}
+
+bool CombatSession::partyConditionResistPass1F64E(GameStateView &gs, int party_slot)
+{
+    /* 0x1F64E: return true if effect should apply (all resist flags cleared). */
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        return false;
+    }
+    const Mm2RosterRecord &rec = roster_->records[ri];
+    const int roll = rng_ ? rng_->range(1, 0x64) : 0x64;
+
+    if (mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_B) != 0) {
+        const int thr = static_cast<int>(rec.thievery_percent) +
+                        static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_RESIST_BUFF_A));
+        if (thr >= roll) {
+            return false; /* resisted — keep flag */
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_B, 0);
+    }
+    if (mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_A) != 0) {
+        const int r = partyResistCheck7F0E(gs, party_slot);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_A, static_cast<uint8_t>(r));
+        if (r != 0) {
+            return false;
+        }
+    }
+    const uint8_t rc = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_C);
+    if (rc != 0) {
+        int thr = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_RESIST_BUFF_C));
+        if (rc == 0x10) {
+            thr += rec.might_current;
+        } else if (rc == 0x15) {
+            thr += rec.luck_current;
+        } else if (rc == 0x16) {
+            thr += rec.thievery_percent;
+        } else if (rc == 0x24) {
+            thr += rec.armor_class;
+        } else {
+            thr += static_cast<int>(rc);
+        }
+        if (thr >= roll) {
+            return false;
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_C, 0);
+    }
+    return true;
+}
+
+void CombatSession::applyPabilCondition1F72E(GameStateView &gs, uint8_t mask)
+{
+    /* 0x1F72E: for each party slot, 0x1F796 OR mask unless resisted/dead. */
+    const int pc = launch_ ? launch_->party_count : 0;
+    const uint8_t saved_ra = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_A);
+    const uint8_t saved_rb = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_B);
+    const uint8_t saved_rc = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_C);
+    for (int i = 0; i < pc; ++i) {
+        const int ri = rosterIndexForPartySlot(i);
+        if (ri < 0) {
+            continue;
+        }
+        Mm2RosterRecord &rec = roster_->records[ri];
+        if (rec.condition >= 0x80) {
+            continue;
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT, static_cast<uint8_t>(i));
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_A, saved_ra);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_B, saved_rb);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_C, saved_rc);
+        if (partyConditionResistPass1F64E(gs, i)) {
+            rec.condition = static_cast<uint8_t>(rec.condition | mask);
+        }
+    }
+}
+
+void CombatSession::applyPabilConditionRandom1F896(GameStateView &gs, uint8_t mask)
+{
+    /* 0x1F896: random living (cond<$80) then 0x1F796. */
+    const int target = pickMonsterRangedTarget10332(gs);
+    if (target < 0) {
+        return;
+    }
+    const int ri = rosterIndexForPartySlot(target);
+    if (ri < 0) {
+        return;
+    }
+    if (partyConditionResistPass1F64E(gs, target)) {
+        roster_->records[ri].condition =
+            static_cast<uint8_t>(roster_->records[ri].condition | mask);
+    }
+}
+
+void CombatSession::monsterGroupAttack10002(GameStateView &gs, int slot)
+{
+    /* 0x10006: print verb from Pabil; clr -$F0C; jsr -$7CDA → 0x1FB4E. */
+    char mon_name[MM2_MONSTER_NAME_SIZE + 1];
+    mm2_monster_name_to_cstr(&monsters_->records[slots_[slot].type], mon_name, sizeof(mon_name));
+    const uint8_t pabil = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_PABIL);
+    const char *verb = mm2_party_verb_name(pabil);
+    std::snprintf(status_line_, sizeof(status_line_), "%s %s!", mon_name, verb);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, 0);
+    applyPabilEffect1FB4E(gs, slot, pabil);
+}
+
+void CombatSession::applyPabilEffect1FB4E(GameStateView &gs, int slot, uint8_t pabil)
+{
+    /* 0x1FB4E: load resist params; damage-flag or jump-table leaves. */
+    char mon_name[MM2_MONSTER_NAME_SIZE + 1];
+    mm2_monster_name_to_cstr(&monsters_->records[slots_[slot].type], mon_name, sizeof(mon_name));
+    const uint8_t idx = static_cast<uint8_t>(pabil & 0x1F);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_A, mm2_gs_u8(gs.a4(), MM2_GS_PABIL_RESIST_A + idx));
+    mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_B, mm2_gs_u8(gs.a4(), MM2_GS_PABIL_RESIST_B + idx));
+    {
+        int c = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_PABIL_RESIST_C + idx)) - 0x11;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RESIST_FLAG_C, static_cast<uint8_t>(c & 0xFF));
+    }
+
+    bool dmg_flag = false;
+    if (pabil < 2) {
+        dmg_flag = true;
+    } else if (pabil >= 3 && pabil <= 8) {
+        dmg_flag = true;
+    } else if (pabil == 0x18 || pabil == 0x1F) {
+        dmg_flag = true;
+    }
+    if (dmg_flag) {
+        uint16_t dmg = static_cast<uint16_t>(slots_[slot].hp > 0 ? slots_[slot].hp : 1);
+        if (slots_[slot].type < 0xB3) {
+            dmg = static_cast<uint16_t>((dmg / 2) > 0 ? (dmg / 2) : 1);
+        }
+        mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, dmg);
+        applyPabilDamageMulti1F414(gs, mon_name);
+        return;
+    }
+
+    switch (pabil) {
+    case 2: { /* 0x1FC1E curse */
+        uint8_t v = mm2_gs_u8(gs.a4(), MM2_GS_BUFF_79A5);
+        if (v < 0xFF) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_BUFF_79A5, static_cast<uint8_t>(v + 1));
+        }
+        break;
+    }
+    case 9: { /* 0x1F912 explodes */
+        uint16_t dmg = static_cast<uint16_t>((slots_[slot].hp / 2) + 1);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, dmg);
+        applyPabilDamageMulti1F414(gs, mon_name);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ERADICATE_SKIP_PRINT, 1);
+        {
+            const uint32_t xp = mm2_monster_decode_xp(&monsters_->records[slots_[slot].type]);
+            onMonsterKilled(gs, slot, xp);
+        }
+        break;
+    }
+    case 10: /* gazes */
+        applyPabilCondition1F72E(gs, 0x82);
+        break;
+    case 11: { /* drains magic — clr.w +$58 (sp_max) */
+        const int pc = launch_ ? launch_->party_count : 0;
+        for (int i = 0; i < pc; ++i) {
+            const int ri = rosterIndexForPartySlot(i);
+            if (ri >= 0) {
+                roster_->records[ri].sp_max = 0;
+            }
+        }
+        break;
+    }
+    case 12: { /* drains spell level — subq +$72 */
+        const int pc = launch_ ? launch_->party_count : 0;
+        for (int i = 0; i < pc; ++i) {
+            const int ri = rosterIndexForPartySlot(i);
+            if (ri >= 0 && roster_->records[ri].spell_level > 0) {
+                roster_->records[ri].spell_level =
+                    static_cast<uint8_t>(roster_->records[ri].spell_level - 1);
+            }
+        }
+        break;
+    }
+    case 13: { /* vaporizes valuables */
+        const int roll = rng_ ? rng_->range(1, 0x64) : 1;
+        const int pc = launch_ ? launch_->party_count : 0;
+        for (int i = 0; i < pc; ++i) {
+            const int ri = rosterIndexForPartySlot(i);
+            if (ri < 0 || roll <= 0x41) {
+                continue;
+            }
+            const uint16_t ridx = mm2_gs_u16(gs.a4(), MM2_GS_ROSTER_INDEX_TBL + i * 2);
+            if (ridx < 0x18) {
+                roster_->records[ri].gold = 0;
+            } else {
+                roster_->records[ri].gems = 0;
+            }
+        }
+        break;
+    }
+    case 14: { /* juggles party */
+        rollPabilDamage1F6DC(gs, slot, 3);
+        applyPabilDamageMulti1F414(gs, mon_name);
+        const int pc = launch_ ? launch_->party_count : 0;
+        if (pc >= 3 && launch_) {
+            const int swaps = rng_ ? rng_->range(1, 8) : 1;
+            auto *launch = const_cast<Mm2PartyLaunch *>(launch_);
+            for (int s = 0; s < swaps; ++s) {
+                const int a = (rng_ ? rng_->range(1, pc) : 1) - 1;
+                const int b = (rng_ ? rng_->range(1, pc) : 1) - 1;
+                if (a == b || a < 0 || b < 0 || a >= pc || b >= pc) {
+                    continue;
+                }
+                const int tmp = launch->roster_slots[a];
+                launch->roster_slots[a] = launch->roster_slots[b];
+                launch->roster_slots[b] = tmp;
+                const uint16_t wa = mm2_gs_u16(gs.a4(), MM2_GS_ROSTER_INDEX_TBL + a * 2);
+                const uint16_t wb = mm2_gs_u16(gs.a4(), MM2_GS_ROSTER_INDEX_TBL + b * 2);
+                mm2_gs_set_u16(gs.a4(), MM2_GS_ROSTER_INDEX_TBL + a * 2, wb);
+                mm2_gs_set_u16(gs.a4(), MM2_GS_ROSTER_INDEX_TBL + b * 2, wa);
+            }
+        }
+        break;
+    }
+    case 15: /* blast */
+        rollPabilDamage1F6DC(gs, slot, 6);
+        applyPabilDamageSingle1F632(gs, mon_name);
+        break;
+    case 16: /* sleep */
+        applyPabilCondition1F72E(gs, 0x10);
+        break;
+    case 17:
+    case 18:
+        rollPabilDamage1F6DC(gs, slot, 6);
+        applyPabilDamageMulti1F414(gs, mon_name);
+        break;
+    case 19: /* death */
+        applyPabilConditionRandom1F896(gs, 0x81);
+        break;
+    case 20: /* disintegrate */
+        applyPabilConditionRandom1F896(gs, 0xFF);
+        break;
+    case 21:
+        rollPabilDamage1F6DC(gs, slot, 0x28);
+        applyPabilDamageSingle1F632(gs, mon_name);
+        break;
+    case 22:
+        rollPabilDamage1F6DC(gs, slot, 0x0C);
+        applyPabilDamageMulti1F414(gs, mon_name);
+        break;
+    case 23:
+        rollPabilDamage1F6DC(gs, slot, 0x32);
+        applyPabilDamageSingle1F632(gs, mon_name);
+        break;
+    case 24: /* jump-table FAIL */
+        break;
+    case 25: /* implosion */
+        mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, 0x3E8);
+        applyPabilDamageSingle1F632(gs, mon_name);
+        break;
+    case 26:
+        rollPabilDamage1F6DC(gs, slot, 0x14);
+        applyPabilDamageMulti1F414(gs, mon_name);
+        break;
+    case 27: {
+        const int r = rng_ ? rng_->range(1, 0x0F) : 1;
+        mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, static_cast<uint16_t>(r + 1));
+        applyPabilDamageSingle1F632(gs, mon_name);
+        break;
+    }
+    case 28: /* silence-ish */
+        applyPabilCondition1F72E(gs, 0x02);
+        break;
+    case 29: { /* frenzies */
+        const uint8_t swings = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SWINGS);
+        const uint8_t sides = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_DMG_SIDES);
+        const int hi = sides > 0 ? static_cast<int>(sides) : 1;
+        uint16_t sum = 0;
+        for (uint8_t s = 0; s < swings; ++s) {
+            sum = static_cast<uint16_t>(sum + (rng_ ? rng_->range(1, hi) : 1));
+        }
+        mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, sum);
+        applyPabilDamageMulti1F414(gs, mon_name);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ERADICATE_SKIP_PRINT, 1);
+        {
+            const uint32_t xp = mm2_monster_decode_xp(&monsters_->records[slots_[slot].type]);
+            onMonsterKilled(gs, slot, xp);
+        }
+        break;
+    }
+    case 30:
+        applyPabilCondition1F72E(gs, 0x20);
+        break;
+    default:
+        break;
+    }
+}
+
+void CombatSession::appendSingleEffectFeea(GameStateView &gs, const char *victim_name)
+{
+    /* 0xFEEA: (Sabil&$1F)-1 indexes victim strings; skip if Sabil==0. */
+    const uint8_t sabil = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SABIL);
+    if (sabil == 0 || sabil > MM2_SINGLE_EFFECT_COUNT) {
+        return;
+    }
+    const char *eff = mm2_single_effect_name(static_cast<uint8_t>(sabil));
+    if (!eff || eff[0] == '\0' || std::strcmp(eff, "nothing") == 0) {
+        return;
+    }
+    char line[160];
+    std::snprintf(line, sizeof(line), "%s %s!", victim_name, eff);
+    enqueueCombatMessage(line);
+}
+
+int CombatSession::pickMonsterMeleeTarget103BA(GameStateView &gs)
+{
+    /* 0x103BA: advance -$4F8 within front-rank -$5E4D; skip cond & $C0. */
+    const int front = front_rank_count_ > 0 ? front_rank_count_ : 1;
+    const int pc = launch_ ? launch_->party_count : 0;
+    uint8_t cur = mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT);
+    for (int tries = 0; tries < MM2_GS_PARTY_SIZE + 2; ++tries) {
+        if (cur >= static_cast<uint8_t>(front)) {
+            uint8_t fr = static_cast<uint8_t>(front);
+            if (fr < static_cast<uint8_t>(pc)) {
+                fr = static_cast<uint8_t>(fr + 1);
+            }
+            if (fr > static_cast<uint8_t>(pc)) {
+                fr = static_cast<uint8_t>(pc > 0 ? pc : 1);
+            }
+            mm2_gs_set_u8(gs.a4(), -0x5E4D, fr);
+            front_rank_count_ = fr;
+            cur = static_cast<uint8_t>(cur + 1);
+        }
+        if (cur >= static_cast<uint8_t>(front_rank_count_) || cur >= static_cast<uint8_t>(pc)) {
+            cur = 0;
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT, cur);
+        const int ri = rosterIndexForPartySlot(static_cast<int>(cur));
+        if (ri >= 0) {
+            const uint8_t cond = roster_->records[ri].condition;
+            if ((cond & 0xC0) == 0) {
+                return static_cast<int>(cur);
+            }
+        }
+        cur = static_cast<uint8_t>(cur + 1);
+    }
+    return -1;
+}
+
+uint16_t CombatSession::monsterMeleeDamage10478(GameStateView &gs, int mon_slot, int party_slot)
+{
+    /* 0x10478: hit_chance from type>>4 via -$6F16; ceiling vs AC+$24; swings. */
+    mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, 0);
+    mm2_gs_set_u8(gs.a4(), -0x5E31, 0);
+    const uint8_t swings = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SWINGS);
+    mm2_gs_set_u8(gs.a4(), -0x5E2D, swings);
+    const uint8_t mon_type = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + mon_slot);
+    const uint8_t hit_idx = static_cast<uint8_t>(mon_type >> 4);
+    uint8_t hit_chance = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_HIT_TBL + hit_idx);
+
+    const int ri = rosterIndexForPartySlot(party_slot);
+    if (ri < 0) {
+        return 0;
+    }
+    const uint8_t ac = roster_->records[ri].armor_class;
+    uint8_t ceiling = 5;
+    if (ac <= hit_chance) {
+        ceiling = static_cast<uint8_t>(hit_chance - ac);
+    }
+    if ((slots_[mon_slot].status & 0x08) != 0) {
+        ceiling = static_cast<uint8_t>(ceiling / 2);
+    }
+
+    uint16_t total = 0;
+    const uint8_t sides = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_DMG_SIDES);
+    const int side_hi = sides > 0 ? static_cast<int>(sides) : 1;
+    for (uint8_t s = 0; s < swings; ++s) {
+        const int raw = rng_ ? rng_->range(0x0A, 0x3F1) : 0x0A;
+        const int roll = raw / 10;
+        if (ceiling > static_cast<uint8_t>(roll)) {
+            mm2_gs_set_u8(gs.a4(), -0x5E31, static_cast<uint8_t>(mm2_gs_u8(gs.a4(), -0x5E31) + 1));
+            const int hit_dmg = rng_ ? rng_->range(1, side_hi) : 1;
+            total = static_cast<uint16_t>(total + hit_dmg);
+        }
+    }
+    if ((slots_[mon_slot].status & 0x04) != 0) {
+        total = static_cast<uint16_t>(total / 2);
+    }
+    mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, total);
+    return total;
+}
+
+void CombatSession::applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint16_t dmg,
+                                         const char *mon_name)
+{
+    (void)gs;
+    const int idx = rosterIndexForPartySlot(party_slot);
+    if (idx < 0) {
+        return;
+    }
     Mm2RosterRecord &victim = roster_->records[idx];
     char victim_name[MM2_ROSTER_NAME_SIZE + 1];
     mm2_roster_name_to_cstr(&victim, victim_name, sizeof(victim_name));
-
-    /* Simplified melee roll (0x10118 exact formula not traced): rng(1,maxDamage). */
-    const int max_dmg = decodeMonsterMaxDamage(monsters_->records[m.type]);
-    int dmg = rng_->range(1, max_dmg > 0 ? max_dmg : 1);
-    if (party_blocking_[target_slot]) {
-        dmg /= 2; /* 0x11B0A block halves incoming damage. */
+    if (dmg == 0) {
+        std::snprintf(status_line_, sizeof(status_line_), "%s attacks %s and misses.", mon_name,
+                      victim_name);
+        return;
     }
-
-    if (victim.hp_current > static_cast<uint16_t>(dmg)) {
+    if (victim.hp_current > dmg) {
         victim.hp_current = static_cast<uint16_t>(victim.hp_current - dmg);
-        std::snprintf(status_line_, sizeof(status_line_), "%s attacks %s for %d damage.", mon_name, victim_name,
-                      dmg);
+        std::snprintf(status_line_, sizeof(status_line_), "%s attacks %s for %u damage.", mon_name,
+                      victim_name, static_cast<unsigned>(dmg));
     } else {
         /* Lethal hit @ 0x4AAA-0x4AF8: first KO sets bit6 on $26; repeat -> $81. */
         victim.hp_current = 0;
@@ -2245,8 +4242,8 @@ void CombatSession::resolveMonsterTurn(GameStateView &gs, int slot)
         } else {
             victim.condition = static_cast<uint8_t>((victim.condition & 0xEF) | 0x40);
         }
-        std::snprintf(status_line_, sizeof(status_line_), "%s attacks %s - %s falls!", mon_name, victim_name,
-                      victim_name);
+        std::snprintf(status_line_, sizeof(status_line_), "%s attacks %s - %s falls!", mon_name,
+                      victim_name, victim_name);
     }
 }
 
@@ -2367,11 +4364,13 @@ gfx::CombatPanelView CombatSession::panelView() const
     view.show_cast_number = state_ == CombatState::AwaitingCastNumber;
     view.show_cast_target = state_ == CombatState::AwaitingCastTarget;
     view.show_party_pick = state_ == CombatState::AwaitingPartyPick;
+    view.show_item_pick = state_ == CombatState::AwaitingItemPick;
     view.cast_level = cast_level_;
     view.label_monster_slots =
         active() && state_ != CombatState::AwaitingPartyOptions &&
         state_ != CombatState::AwaitingBribeKind && state_ != CombatState::AwaitingBribeAmount &&
-        state_ != CombatState::AwaitingSurpriseDismiss && state_ != CombatState::AwaitingPartyPick;
+        state_ != CombatState::AwaitingSurpriseDismiss && state_ != CombatState::AwaitingPartyPick &&
+        state_ != CombatState::AwaitingItemPick;
     if (view.show_command_options && active_party_slot_ >= 0) {
         const int idx = rosterIndexForPartySlot(active_party_slot_);
         if (idx >= 0) {

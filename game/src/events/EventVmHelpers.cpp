@@ -868,6 +868,53 @@ void eventVmOp31IterateDamage(uint8_t *a4, Mm2RosterFile *roster, const Mm2Party
 
 namespace {
 
+/* -$6A54 container names: 5 env rows × 8 score ranks (0x1B112 / 0x1B37A). */
+static const char *const kSearchContainerNames[5][8] = {
+    {"Wooden Crate", "Tin Lockbox", "Steel Safe", "Copper Safe", "Bronze Safe", "Steel Safe",
+     "Gold Safe", "Stasis Safe"},
+    {"Hidden Cache", "Wicker Chest", "Rusty Trunk", "Copper Box", "Bronze Box", "Steel Box",
+     "Gold Box", "Doomsday Box"},
+    {"Rotting Box", "Rusty Chest", "Stone Chest", "Copper Chest", "Bronze Chest", "Steel Chest",
+     "Gold Chest", "Statis Box"},
+    {"Wooden Chest", "Rusty Chest", "Copper Chest", "Bronze Chest", "Silver Chest", "Gold Chest",
+     "Platinum Box", "Doomsday Box"},
+    {"Ceramic Case", "Lacquer Box", "Jewelled Box", "Copper Trunk", "Bronze Trunk", "Silver Trunk",
+     "Gold Trunk", "Statis Box"},
+};
+
+int searchContainerEnvRow(const uint8_t *a4)
+{
+    /* 0x1B112: map A4-$79E3 → row 0..4. */
+    const uint8_t env = a4 ? mm2_gs_u8(a4, MM2_GS_SIGN_ENV_ID) : 0;
+    if (env == 0) {
+        return 0;
+    }
+    if (env == 3) {
+        return 1;
+    }
+    if (env == 1) {
+        return 2;
+    }
+    if (env == 6 || env == 4) {
+        return 3;
+    }
+    return 4;
+}
+
+void searchFillContainerName(const uint8_t *a4, uint8_t score, char *out, size_t out_cap)
+{
+    if (!out || out_cap == 0) {
+        return;
+    }
+    out[0] = '\0';
+    uint8_t idx = score > 0 ? static_cast<uint8_t>(score - 1) : 0;
+    if (idx > 7) {
+        idx = 7;
+    }
+    const int row = searchContainerEnvRow(a4);
+    std::snprintf(out, out_cap, "%s", kSearchContainerNames[row][idx]);
+}
+
 uint8_t searchComputeRating(const Mm2FoundItems &peek)
 {
     /* 0x1B1BC..0x1B262 */
@@ -946,7 +993,7 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
         empty.sentinel = MM2_FOUND_SENTINEL_EMPTY;
         mm2_found_items_write(a4, &empty);
         if (msg && msg_cap > 0) {
-            std::snprintf(msg, msg_cap, "It Opens!\nThe Party Has found:\nTreasure!");
+            std::snprintf(msg, msg_cap, "Each share = 0 Gold");
         }
         mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 3);
         return true;
@@ -1028,7 +1075,14 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
 
     mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 3);
     if (msg && msg_cap > 0) {
-        std::snprintf(msg, msg_cap, "It Opens!\nThe Party Has found:\nTreasure!");
+        /* 0x1ACFA..0x1AD5E: "Each share = N Gold" [+ " + M Gems"]. */
+        if (gems_each != 0) {
+            std::snprintf(msg, msg_cap, "Each share = %u Gold\n+ %u Gems",
+                          static_cast<unsigned>(gold_each), static_cast<unsigned>(gems_each));
+        } else {
+            std::snprintf(msg, msg_cap, "Each share = %u Gold",
+                          static_cast<unsigned>(gold_each));
+        }
     }
     return true;
 }
@@ -1039,6 +1093,7 @@ SearchPrepareResult eventVmSearchPrepare(uint8_t *a4, Mm2RosterFile *roster,
 {
     if (out) {
         out->rating = 0;
+        out->container_name[0] = '\0';
         out->msg[0] = '\0';
     }
     if (!a4) {
@@ -1064,10 +1119,13 @@ SearchPrepareResult eventVmSearchPrepare(uint8_t *a4, Mm2RosterFile *roster,
         mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 7); /* 0x1B48E */
         if (out) {
             out->rating = rating;
+            searchFillContainerName(a4, score, out->container_name, sizeof(out->container_name));
+            /* 0x1B320..0x1B3E0: Search… / The Party Has found a: / Treasure! /
+             * container name / 1) Open It … 4) Leave it */
             std::snprintf(out->msg, sizeof(out->msg),
-                          "The Party Has found:\nTreasure!\n(rating %u)\n"
-                          "1) Open It  2) Find Trap\n3) Detect Magic  4) Leave",
-                          static_cast<unsigned>(rating));
+                          "Search...\nThe Party Has found a:\nTreasure!\n%s\n"
+                          "1) Open It\n2) Find Trap\n3) Detect Magic\n4) Leave it",
+                          out->container_name[0] ? out->container_name : "Treasure!");
         }
         return SearchPrepareResult::NeedIdentify;
     }

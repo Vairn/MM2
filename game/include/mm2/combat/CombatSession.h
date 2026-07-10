@@ -41,7 +41,8 @@ enum class CombatState : uint8_t {
     AwaitingCastNumber,       /* 0x79EE number digit after level */
     AwaitingCastTarget,       /* 0xD43C / 0xD464: 'A'..'J' monster letter (ESC=$1B cancel) */
     AwaitingPartyPick,        /* 0xD2EA / 0xD312: '1'..'N' party member (Heroism/Frenzy) */
-    AwaitingActionAck,        /* action message shown; any key advances the round loop */
+    AwaitingItemPick,         /* 0xB56E: 'A'..'F' backpack letter (Recharge/Dup/Enchant/Uncurse) */
+    AwaitingActionAck,        /* 0x132E6: delay(-$79AD)*$19+1 frames, or key advances */
 };
 
 enum class CombatOutcome : uint8_t { None, Victory, Fled, Defeated };
@@ -77,7 +78,8 @@ public:
                state_ == CombatState::AwaitingBribeKind || state_ == CombatState::AwaitingBribeAmount ||
                state_ == CombatState::AwaitingCommand || state_ == CombatState::AwaitingCastLevel ||
                state_ == CombatState::AwaitingCastNumber || state_ == CombatState::AwaitingCastTarget ||
-               state_ == CombatState::AwaitingPartyPick || state_ == CombatState::AwaitingActionAck;
+               state_ == CombatState::AwaitingPartyPick || state_ == CombatState::AwaitingItemPick ||
+               state_ == CombatState::AwaitingActionAck;
     }
     CombatState state() const { return state_; }
     CombatOutcome lastOutcome() const { return outcome_; }
@@ -126,6 +128,15 @@ public:
     /** Monster slot (0..10) currently acting in the round loop (A4-$4F7), or -1. */
     int activeMonsterSlot() const { return active_monster_slot_; }
 
+    /** Exploration/sheet cast: same leaf path as combat 'C' (sets active slot). */
+    void castSpellFromSheet(GameStateView &gs, int party_slot, int flat0);
+    /** Sheet/combat Use @ 0xE94A / 0x137F0: charges + effect_byte → spell or stat boost. */
+    bool applyItemUse(GameStateView &gs, int party_slot, bool backpack, int slot_index);
+    /** Drive party/item/cast-target pick while exploration cast is pending. */
+    bool tickSheetCastAux(GameStateView &gs, char key);
+    /** True while sheet cast awaits party/item/monster pick outside combat. */
+    bool sheetCastPending() const { return exploration_cast_; }
+
 private:
     struct ArenaReward {
         bool active = false;
@@ -158,11 +169,34 @@ private:
     void resolvePlayerCast(GameStateView &gs, int flat0);
     /** 0xD464 letter pick → 0x133B6 damage word → 0x108BC apply to slot(s). */
     bool tickCastTarget(GameStateView &gs, char key);
-    /** 0xD2EA: digit '1'..party_count → Heroism/Frenzy target. */
+    /** 0xD2EA / heal-cure / Lloyd / Teleport / Fly aux digit-letter pick. */
     bool tickPartyPick(GameStateView &gs, char key);
+    /** 0xB56E backpack A-F for Recharge/Duplication/Enchant/Uncurse. */
+    bool tickItemPick(GameStateView &gs, char key);
+    void beginItemPickCast(GameStateView &gs, int flat0, const char *prompt);
+    void applyRechargeToBackpackSlot(GameStateView &gs, int pack_slot);
+    void applyDuplicationFromBackpackSlot(GameStateView &gs, int pack_slot);
+    void applyEnchantToBackpackSlot(GameStateView &gs, int pack_slot);
+    void applyUncurseToBackpackSlot(GameStateView &gs, int pack_slot);
+    void applyStoneToFleshToPartySlot(GameStateView &gs, int party_slot);
+    void applyResurrectionToPartySlot(GameStateView &gs, int party_slot);
     void applyCastToMonsterTarget(GameStateView &gs, int slot, int flat0);
     void applyHeroismToPartySlot(GameStateView &gs, int party_slot);
     void applyFrenzyToPartySlot(GameStateView &gs, int party_slot);
+    /** 0xCA58: andi #$2F cond, add heal, clamp to max HP. */
+    void applyHealCa58(GameStateView &gs, int party_slot, uint16_t heal, const char *spell_name);
+    /** 0xC862/0xC8BC/0xC916: mask or clear roster+$26. */
+    void applyCureMaskToPartySlot(GameStateView &gs, int party_slot, uint8_t and_mask, bool clear_all,
+                                  const char *spell_name);
+    /** 0xB26A Restore Alignment: roster+$0D → +$6A. */
+    void applyRestoreAlignmentToPartySlot(GameStateView &gs, int party_slot);
+    /** 0xB332 Rejuvenate: age −(1..10) if roll<50 and age≥18, else age+. */
+    void applyRejuvenateToPartySlot(GameStateView &gs, int party_slot);
+    /** 0xB492 Raise Dead: age caster+1/target+5, dec endurance, clr cond if dead. */
+    void applyRaiseDeadToPartySlot(GameStateView &gs, int party_slot);
+    /** 0x5692: facing key → (dx,dy) in {-1,0,+1}. */
+    void facingDelta5692(GameStateView &gs, int8_t &dx, int8_t &dy) const;
+    void beginPartyPickCast(GameStateView &gs, int flat0, const char *prompt);
     /** 0xC028 Turn Undead / Holy Word: arg0=all undead, else rng(1,arg)>=type. */
     int applyTurnUndeadC050(GameStateView &gs, uint8_t arg);
     /** 0x133B6: -$53E += (rng(1,sides)|0) + addend, once per caster level. */
@@ -171,6 +205,12 @@ private:
     uint8_t spellTargetPower13362(GameStateView &gs, int level) const;
     /** 0x4C8E: mres/undead + full -$11AA[0..6] flag bank for slot. */
     void loadMonsterCombatGlobals(GameStateView &gs, int slot);
+    /** 0x103BA: round-robin living front-rank party target → -$4F8. */
+    int pickMonsterMeleeTarget103BA(GameStateView &gs);
+    /** 0x10478: to-hit/damage vs party; writes -$F0C. */
+    uint16_t monsterMeleeDamage10478(GameStateView &gs, int mon_slot, int party_slot);
+    /** 0x4AAA KO path after monster hit. */
+    void applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint16_t dmg, const char *mon_name);
     /** Seed data-hunk tables -$6F2E / -$7464 into GS (once per fight). */
     void seedCombatStaticTables(GameStateView &gs);
     /** 0x10894: resist/halve/status/damage; messages + 0x10ED4 HP apply. */
@@ -193,6 +233,48 @@ private:
     /** 0x132E6 host: queue per-target combat messages for ack pacing. */
     void enqueueCombatMessage(const char *msg);
     bool advanceCombatMessageQueue();
+    /** Enter AwaitingActionAck; latch 0x132E6 delay frames from -$79AD. */
+    void beginActionAck(GameStateView &gs);
+    /** 0x105B6: special-attack gate vs -$503 charges + -$11BB. */
+    bool monsterSpecialGate105B6(GameStateView &gs, int slot);
+    /** 0x10006: print Pabil verb + 0x1FB4E switch host. */
+    void monsterGroupAttack10002(GameStateView &gs, int slot);
+    /** 0x10118: AC-bit6 monster advances into melee by swapping slot arrays. */
+    void monsterAdvance10118(GameStateView &gs, int slot);
+    /** 0x10082: "waits for opening!" / "adds friends!" when advance finds no swap. */
+    void monsterWaitsOrAddsFriends10082(GameStateView &gs, int slot);
+    /** 0x1042C: "*** Spell Failed ***" banner + 0x132E6 ack. */
+    void spellFailedBanner1042C(GameStateView &gs);
+    /** 0x1FB4E non-damage / damage-flag dispatch. */
+    void applyPabilEffect1FB4E(GameStateView &gs, int slot, uint8_t pabil);
+    /** 0x1F6DC: (type>>4) rolls of rng(1,sides) → -$F0C = sum*2+1. */
+    void rollPabilDamage1F6DC(GameStateView &gs, int mon_slot, uint16_t sides);
+    /** 0x1F414: multi-target party apply of -$F0C. */
+    void applyPabilDamageMulti1F414(GameStateView &gs, const char *mon_name);
+    /** 0x1F632: single living target apply of -$F0C. */
+    void applyPabilDamageSingle1F632(GameStateView &gs, const char *mon_name);
+    /** 0x1F55E: -$7D94 resist then apply -$F0C to -$4F8. */
+    void applyPabilDamage1F55E(GameStateView &gs, const char *mon_name);
+    /** 0x1F72E: OR condition mask onto living party. */
+    void applyPabilCondition1F72E(GameStateView &gs, uint8_t mask);
+    /** 0x1F896: OR mask onto one random living party member. */
+    void applyPabilConditionRandom1F896(GameStateView &gs, uint8_t mask);
+    /** -$7D94 / 0x4952 resist prologue: mutate -$5630/2F/2E; may halve -$F0C. */
+    void partyResistFlags7D94(GameStateView &gs, int party_slot);
+    /** -$7F0E / 0x48BA: level+luck resist roll; 1=resisted. */
+    int partyResistCheck7F0E(GameStateView &gs, int party_slot);
+    /** 0x4442: luck → bonus via -$7486 thresholds (base $FD). */
+    int luckBonus4442(GameStateView &gs, uint8_t luck) const;
+    /** 0x1F64E/0x1F796: condition-resist; true=apply OR. */
+    bool partyConditionResistPass1F64E(GameStateView &gs, int party_slot);
+    /** 0x10332: random living party slot → -$4F8. */
+    int pickMonsterRangedTarget10332(GameStateView &gs);
+    /** 0x10584: ranged latch + 0x10332 + 0x10478. */
+    void monsterRangedAttack10584(GameStateView &gs, int slot);
+    /** Shared melee/ranged hit apply after 0x10478. */
+    void deliverMonsterHit10478(GameStateView &gs, int mon_slot, int target_slot, const char *mon_name);
+    /** 0xFEEA: append Sabil single-effect name after a hit. */
+    void appendSingleEffectFeea(GameStateView &gs, const char *victim_name);
     void resolveMonsterTurn(GameStateView &gs, int slot);
     void finishVictory(GameStateView &gs);
     void finishLeave(GameStateView &gs, bool fled);
@@ -227,8 +309,13 @@ private:
     int front_rank_count_ = 0;   /* A4-$5E4D: party front-rank cutoff (0x11D0C) */
     int encounter_live_total_ = 0; /* roster size at fight start (for "+N more") */
     int cast_level_ = 0;         /* 1..9 while AwaitingCastNumber (0x79EE) */
-    int pending_cast_flat_ = -1; /* flat0 while AwaitingCastTarget / AwaitingPartyPick */
+    int pending_cast_flat_ = -1; /* flat0 while target/party/item pick; -2=Use pick */
+    int pending_cast_school_ = -1; /* 0=sorc 1=cleric while party-pick cast */
+    int force_cast_school_ = -1; /* item-use CD90 school override; -1=from class */
+    bool skip_cast_cost_ = false; /* F470 -$3F0C item-cast: skip SP/gem deduct */
+    bool exploration_cast_ = false; /* sheet cast: don't enter combat ack states */
     int cast_target_slot_ = -1;  /* 0..9 after 'A'..'J' (0xD500 subi #$41) */
+    int cast_aux_ = -1;          /* Fly col 0..4, or multi-step cast scratch */
     int bribe_kind_ = 0;         /* 1=food 2=gold 3=gems (0x12FB8) */
     int bribe_digits_ = 0;       /* 0..4 entered digits for 0x3EE0 */
     uint16_t bribe_amount_ = 0;  /* parsed amount (gold packs hi+lo bytes) */
@@ -246,6 +333,7 @@ private:
     char msg_queue_[kMsgQueueCap][160]{};
     int msg_queue_len_ = 0;
     int msg_queue_idx_ = 0;
+    int ack_frames_left_ = 0; /* 0x132E6: DELAY*$19+1; key also advances */
 };
 
 }  // namespace mm2::combat

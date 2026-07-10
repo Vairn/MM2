@@ -127,6 +127,30 @@ export function smithPrice(baseGold, meta) {
   return price;
 }
 
+/** 0x1BFCC: sell = buy-style / 2 (Merchant second /2 in svc). */
+export function smithSellPrice(buyStylePrice) {
+  return (buyStylePrice / 2) | 0;
+}
+
+/** Identify fee midpoint of rng(1, meta*100); meta==0 → 10. */
+export function smithIdentifyCost(flags) {
+  const meta = flags & 0x3f;
+  if (!meta) return 10;
+  return ((1 + meta * 100) / 2) | 0;
+}
+
+/** Today's Specials date-roll @ 0x1C146. */
+const SPECIALS_DAY = [0, 1, 0, 1, 2, 0, 1, 0, 1, 2, 0, 1, 0, 1, 3, 0, 1, 0, 1, 4, 0, 1, 0, 2, 0, 3, 0, 4, 0, 0];
+const SPECIALS_MONTH = [5, 6, 7, 8, 9, 12];
+
+export function smithSpecialsDateBonus(dayOfYear) {
+  const day = dayOfYear | 0;
+  const rem = day % 30;
+  const mon = (day / 30) | 0;
+  if (rem === 0x1d) return SPECIALS_MONTH[Math.min(mon, 5)] | 0;
+  return SPECIALS_DAY[rem] | 0;
+}
+
 export function pubFoodMenu(mapId) {
   return PUB_FOOD[mapId] ?? PUB_FOOD[0] ?? [];
 }

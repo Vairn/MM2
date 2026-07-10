@@ -1,6 +1,7 @@
 #include "mm2/events/TownServiceTransactions.h"
 
 #include "mm2/gameplay/ExploreActions.h"
+#include "mm2/gameplay/RosterSkills.h"
 #include "mm2/gameplay/SpellBook.h"
 
 #include "mm2/CppStdCompat.h"
@@ -29,8 +30,19 @@ uint8_t attrTableBonus(uint8_t attr)
     return bonus;
 }
 
-/* A4-$6738 BE u16 ×6 — tavern B / temple-style restore menu costs @ 0x1CB48. */
+/* A4-$6738 costs; BE u16 ×6 — tavern B. */
 static const uint16_t kStatBoostCosts[6] = {5, 5, 20, 20, 50, 100};
+/* A4-$672C BE u16 ×6 — tavern B purchase-count limits @ 0x1CBEA. */
+static const uint16_t kStatBoostLimits[6] = {2, 3, 3, 3, 3, 5};
+/* Runtime counters live at A4-$577E (word[6]); BSS, start at 0. */
+constexpr int32_t kGsTavernStatBuyCount = -0x577E;
+
+/* Today's Specials date tables @ A4-$6816 / -$681C (0x1C146). */
+static const uint8_t kSpecialsDayBonus[30] = {0, 1, 0, 1, 2, 0, 1, 0, 1, 2, 0, 1, 0, 1, 3,
+                                             0, 1, 0, 1, 4, 0, 1, 0, 2, 0, 3, 0, 4, 0, 0};
+static const uint8_t kSpecialsMonthBonus[6] = {5, 6, 7, 8, 9, 12};
+
+constexpr uint8_t kSkillMerchant = 10;
 
 /* A4-$6760 BE u16[town*3+menu] — specialties gold @ 0x1CEA4. */
 static const uint16_t kSpecialtyGold[5][3] = {
@@ -489,7 +501,8 @@ TownSvcBuyResult townSvcSmithBuy(Mm2RosterRecord &rec, uint8_t item_id, uint8_t 
                                  uint8_t flags, uint32_t price)
 {
     TownSvcBuyResult r;
-    r.price = price;
+    const uint32_t pay = townSvcSmithMerchantBuyPrice(price, rec);
+    r.price = pay;
 
     /* 0x1BE4C: a character with any condition ($26 != 0) cannot buy. */
     if (rec.condition != 0) {
@@ -513,7 +526,7 @@ TownSvcBuyResult townSvcSmithBuy(Mm2RosterRecord &rec, uint8_t item_id, uint8_t 
     }
 
     /* 0x1BE96 -> 0x1BDD6: gold check + deduct from the char's own gold. */
-    if (!townSvcCharGoldDeduct(rec, price)) {
+    if (!townSvcCharGoldDeduct(rec, pay)) {
         r.price = 0;
         r.reject = TownSvcBuyReject::NotEnoughGold;
         return r;
@@ -531,10 +544,51 @@ TownSvcBuyResult townSvcSmithBuy(Mm2RosterRecord &rec, uint8_t item_id, uint8_t 
     return r;
 }
 
+uint32_t townSvcSmithMerchantBuyPrice(uint32_t price, const Mm2RosterRecord &rec)
+{
+    /* 0x1BFF2: non-sell mode — Merchant (skill 0x0A) → price / 2. */
+    if (gameplay::rosterHasSkillId(rec, kSkillMerchant)) {
+        return price / 2u;
+    }
+    return price;
+}
+
+uint32_t townSvcSmithMerchantSellPrice(uint32_t sell_half_price, const Mm2RosterRecord &rec)
+{
+    /* 0x1BFCE..0x1BFEC: sell already /2; if NO Merchant, /2 again. */
+    if (!gameplay::rosterHasSkillId(rec, kSkillMerchant)) {
+        return sell_half_price / 2u;
+    }
+    return sell_half_price;
+}
+
+uint8_t townSvcSmithSpecialsDateBonus(const uint8_t *a4)
+{
+    /* 0x1C146: day = -$79DE[era]; rem = day%30; mon = day/30.
+     * rem==$1D → -$681C[mon]; else -$6816[rem]. */
+    if (!a4) {
+        return 0;
+    }
+    const uint16_t era = mm2_gs_u16(a4, MM2_GS_ERA);
+    const int ei = (era < MM2_GS_ERA_COUNT) ? static_cast<int>(era) : 0;
+    const uint16_t day = mm2_gs_u16(a4, MM2_GS_DAY + ei * 2);
+    const uint16_t rem = static_cast<uint16_t>(day % 30u);
+    const uint16_t mon = static_cast<uint16_t>(day / 30u);
+    if (rem == 0x1D) {
+        const int mi = (mon < 6) ? static_cast<int>(mon) : 5;
+        return kSpecialsMonthBonus[mi];
+    }
+    if (rem < 30) {
+        return kSpecialsDayBonus[rem];
+    }
+    return 0;
+}
+
 TownSvcSellResult townSvcSmithSell(Mm2RosterRecord &rec, int backpack_slot, uint32_t price)
 {
     TownSvcSellResult r;
-    r.price = price;
+    const uint32_t credit = townSvcSmithMerchantSellPrice(price, rec);
+    r.price = credit;
     r.slot = backpack_slot;
 
     /* 0x1BC2E: afflicted characters cannot sell. */
@@ -558,7 +612,7 @@ TownSvcSellResult townSvcSmithSell(Mm2RosterRecord &rec, int backpack_slot, uint
     }
 
     /* 0x1B62A: credit gold to the character's purse (record+$66). */
-    rec.gold += price;
+    rec.gold += credit;
 
     /* Clear the backpack slot (-$7F26 path @ 0x1BC26). */
     Mm2RosterItemSlot empty{};
@@ -989,10 +1043,11 @@ TownSvcDrinkResult townSvcPubDrink(Mm2RosterRecord &rec, int drink_idx, gameplay
     return r;
 }
 
-TownSvcStatBoostResult townSvcTavernStatBoost(Mm2RosterRecord &rec, int slot, int map_id,
-                                              gameplay::Rng *rng)
+TownSvcStatBoostResult townSvcTavernStatBoost(uint8_t *a4, Mm2RosterRecord &rec, int slot,
+                                              int map_id, gameplay::Rng *rng)
 {
-    /* 0x1CAC4: A–F → cost A4-$6738[slot]; apply 0x1C7EC→0x1C898 (base stats). */
+    /* 0x1CAC4: A–F → cost A4-$6738[slot]; apply 0x1C7EC→0x1C898 (base stats).
+     * Count gate 0x1CBDE: -$577E[slot] < -$672C[slot] → pay+inc only. */
     TownSvcStatBoostResult r;
     if (slot < 0 || slot >= 6) {
         return r;
@@ -1007,12 +1062,27 @@ TownSvcStatBoostResult townSvcTavernStatBoost(Mm2RosterRecord &rec, int slot, in
         return r;
     }
     r.paid = true;
-    (void)townSvcTrainStat(rec, slot, map_id);
-    /* 0x1CC0A: if speed_base (+$6E) >= 2, subq #2 (ASM-clear side effect).
-     * A4-$577E purchase-limit vs A4-$672C is deferred (global counter). */
-    if (rec.speed_base >= 2) {
-        rec.speed_base = static_cast<uint8_t>(rec.speed_base - 2);
+
+    uint16_t count = 0;
+    if (a4) {
+        count = mm2_gs_u16(a4, kGsTavernStatBuyCount + slot * 2);
     }
+    const uint16_t limit = kStatBoostLimits[slot];
+    if (count < limit) {
+        /* 0x1CC1C: increment counter; skip apply + speed side-effect. */
+        if (a4) {
+            mm2_gs_set_u16(a4, kGsTavernStatBuyCount + slot * 2,
+                           static_cast<uint16_t>(count + 1));
+        }
+    } else {
+        (void)townSvcTrainStat(rec, slot, map_id);
+        /* 0x1CC0A: if speed_base (+$6E) >= 2, subq #2. */
+        if (rec.speed_base >= 2) {
+            rec.speed_base = static_cast<uint8_t>(rec.speed_base - 2);
+        }
+        r.applied = true;
+    }
+
     /* Sick: RNG(1, end_base+10)==2 → bset #3,$26 @ 0x1CC4C. */
     const int end_hi = static_cast<int>(rec.endurance_base) + 10;
     const int sick_roll = rng ? rng->range(1, end_hi > 0 ? end_hi : 1) : 1;

@@ -632,6 +632,24 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         return SheetKeyOutcome::None;
     }
 
+    /* Use @ 0xE94A: '1'..'6' equip / 'A'..'F' backpack → GameSession applyItemUse. */
+    if (session.sub_mode == SheetSubMode::UsePick) {
+        session.sub_mode = SheetSubMode::Normal;
+        if (key >= '1' && key <= '6') {
+            session.pending_use_slot = key - '1';
+            setStatus(session, "Using...");
+            return SheetKeyOutcome::None;
+        }
+        if (key >= 'A' && key <= 'F') {
+            session.pending_use_slot = 6 + (key - 'A');
+            setStatus(session, "Using...");
+            return SheetKeyOutcome::None;
+        }
+        session.pending_use_slot = -1;
+        setStatus(session, "");
+        return SheetKeyOutcome::None;
+    }
+
     if (session.sub_mode == SheetSubMode::RemovePickEquip) {
         session.sub_mode = SheetSubMode::Normal;
         if (key >= '1' && key <= '6') {
@@ -706,16 +724,16 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
             session.cast_spell_flat = flat;
             session.sub_mode = SheetSubMode::Normal;
             session.cast_phase = CastPromptPhase::Level;
-            /* Effect dispatch ($CDB8 / combat $CFF8) is still a GAP — acknowledge pick. */
+            /* GameSession dispatches via CombatSession::castSpellFromSheet. */
             {
                 const SpellSchool school = spellSchoolForClass(rec->class_id);
                 const SpellMeta *table = schoolSpellTable(school);
                 if (table) {
                     char buf[48];
-                    std::snprintf(buf, sizeof(buf), "Cast %s (stub).", table[flat].name);
+                    std::snprintf(buf, sizeof(buf), "Cast %s.", table[flat].name);
                     setStatus(session, buf);
                 } else {
-                    setStatus(session, "Cast (stub).");
+                    setStatus(session, "Cast.");
                 }
             }
             return SheetKeyOutcome::None;
@@ -753,6 +771,103 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
             }
             rec->gems = static_cast<uint16_t>(total);
             setStatus(session, "Gems gathered.");
+            return SheetKeyOutcome::None;
+        }
+        setStatus(session, "");
+        return SheetKeyOutcome::None;
+    }
+
+    /* Share ($7DCC): '1' gold ($7BBE), '2' gems ($7CB0), '3' food ($7D3E).
+       Equal split via -$7B4E-style truncating divide; remainder to initiator. */
+    if (session.sub_mode == SheetSubMode::SharePick) {
+        session.sub_mode = SheetSubMode::Normal;
+        if (key == '1') {
+            /* $7BBE: only roster indices < $18; need >=2 eligible. */
+            if (rosterIndexForPartySlot(launch, session.party_slot) >= 0x18) {
+                setStatus(session, "Cannot share gold.");
+                return SheetKeyOutcome::None;
+            }
+            int eligible[MM2_PARTY_LAUNCH_SLOTS];
+            int n = 0;
+            uint32_t total = 0;
+            for (int i = 0; i < launch.party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                const int ri = rosterIndexForPartySlot(launch, i);
+                if (ri < 0 || ri >= 0x18) {
+                    continue;
+                }
+                Mm2RosterRecord *m = rosterMut(roster, launch, i);
+                if (!m) {
+                    continue;
+                }
+                eligible[n++] = i;
+                total += m->gold;
+            }
+            if (n <= 1) {
+                setStatus(session, "Cannot share gold.");
+                return SheetKeyOutcome::None;
+            }
+            const uint32_t share = total / static_cast<uint32_t>(n);
+            for (int k = 0; k < n; ++k) {
+                Mm2RosterRecord *m = rosterMut(roster, launch, eligible[k]);
+                if (m) {
+                    m->gold = share;
+                    total -= share;
+                }
+            }
+            rec->gold += total;
+            setStatus(session, "Gold shared.");
+            return SheetKeyOutcome::None;
+        }
+        if (key == '2') {
+            /* $7CB0: all party members via -$795a count. */
+            const int n = launch.party_count;
+            if (n <= 0) {
+                setStatus(session, "");
+                return SheetKeyOutcome::None;
+            }
+            uint32_t total = 0;
+            for (int i = 0; i < n && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                Mm2RosterRecord *m = rosterMut(roster, launch, i);
+                if (m) {
+                    total += m->gems;
+                }
+            }
+            const uint16_t share = static_cast<uint16_t>(total / static_cast<uint32_t>(n));
+            for (int i = 0; i < n && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                Mm2RosterRecord *m = rosterMut(roster, launch, i);
+                if (m) {
+                    m->gems = share;
+                    total -= share;
+                }
+            }
+            rec->gems = static_cast<uint16_t>(rec->gems + total);
+            setStatus(session, "Gems shared.");
+            return SheetKeyOutcome::None;
+        }
+        if (key == '3') {
+            /* $7D3E: all party; divu by party count; remainder byte to initiator. */
+            const int n = launch.party_count;
+            if (n <= 0) {
+                setStatus(session, "");
+                return SheetKeyOutcome::None;
+            }
+            uint16_t total = 0;
+            for (int i = 0; i < n && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                Mm2RosterRecord *m = rosterMut(roster, launch, i);
+                if (m) {
+                    total = static_cast<uint16_t>(total + m->food);
+                }
+            }
+            const uint8_t share = static_cast<uint8_t>(total / static_cast<uint16_t>(n));
+            for (int i = 0; i < n && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                Mm2RosterRecord *m = rosterMut(roster, launch, i);
+                if (m) {
+                    m->food = share;
+                    total = static_cast<uint16_t>(total - share);
+                }
+            }
+            rec->food = static_cast<uint8_t>(rec->food + static_cast<uint8_t>(total & 0xFF));
+            setStatus(session, "Food shared.");
             return SheetKeyOutcome::None;
         }
         setStatus(session, "");
@@ -943,8 +1058,8 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         if (combat_mode) {
             break;
         }
-        /* GAP: share via $7DCC / 0x6ACE. */
-        setStatus(session, "Share not yet wired ($7DCC).");
+        session.sub_mode = SheetSubMode::SharePick;
+        setStatus(session, "Share: 1) Gold  2) Gems  3) Food");
         break;
     case 'T':
         if (combat_mode) {
@@ -959,8 +1074,9 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         if (combat_mode) {
             break;
         }
-        /* GAP: item use via $E94A / combat_use_item_handler 0x133EC. */
-        setStatus(session, "Use not yet wired ($E94A).");
+        session.sub_mode = SheetSubMode::UsePick;
+        session.pending_use_slot = -1;
+        setStatus(session, "Use which? (1-6/A-F)");
         break;
     default:
         break;

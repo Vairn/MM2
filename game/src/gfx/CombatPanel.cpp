@@ -214,6 +214,13 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
         }
         return;
     }
+    if (view.show_item_pick) {
+        /* 0xB56E / Use pick — prompt already in view.message. */
+        if (view.message[0] != '\0') {
+            textAt(c, 1, kMessageRow, view.message);
+        }
+        return;
+    }
 
     if (view.show_command_options && view.options_for[0] != '\0') {
         /* combat_command_bar_build @ 0x11866: " Options for:" at (1,0x0F),

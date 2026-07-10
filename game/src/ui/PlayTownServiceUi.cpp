@@ -360,9 +360,16 @@ void PlayTownServiceUi::buildSmithView()
     if (!mm2_smith_inventory(ctx_.map_id, smith_category_, slots)) {
         return;
     }
+    /* Category 1 = Today's Specials (ASM mode 2 @ 0x1C13E): date-roll bonus. */
+    const uint8_t specials_bonus =
+        (smith_category_ == 1) ? mm2::events::townSvcSmithSpecialsDateBonus(ctx_.a4) : 0;
     for (int i = 0; i < MM2_SMITH_SLOTS; ++i) {
         uint8_t price_meta = 0, charges = 0, flags = 0;
         mm2_smith_buy_fields(smith_category_, slots[i].meta, &price_meta, &charges, &flags);
+        if (smith_category_ == 1) {
+            price_meta = specials_bonus;
+            flags = specials_bonus;
+        }
         smith_view_[i].item_id = slots[i].item_id;
         smith_view_[i].bonus = flags;
         smith_view_[i].charges = charges;
@@ -395,6 +402,7 @@ void PlayTownServiceUi::buildSmithBackpackView()
         const uint32_t base = irec ? irec->gold : 0u;
         const uint32_t buy = mm2_smith_price(base, static_cast<uint8_t>(slot.flags & 0x3Fu));
         if (smith_mode_ == SmithMode::Sell) {
+            /* Store buy/2; townSvcSmithSell applies Merchant second /2. */
             smith_view_[i].price = mm2_smith_sell_price(buy);
         } else {
             smith_view_[i].price = mm2_smith_identify_cost(slot.flags);
@@ -560,7 +568,7 @@ void PlayTownServiceUi::applySmithBuyAndReturn(int party_slot)
     const mm2::events::TownSvcBuyResult r =
         mm2::events::townSvcSmithBuy(*rec, v.item_id, v.charges, v.bonus, v.price);
     if (r.bought) {
-        std::snprintf(status_, sizeof(status_), "%s bought %s for %u gp.", name, item, v.price);
+        std::snprintf(status_, sizeof(status_), "%s bought %s for %u gp.", name, item, r.price);
     } else {
         switch (r.reject) {
         case mm2::events::TownSvcBuyReject::Condition:
@@ -570,7 +578,8 @@ void PlayTownServiceUi::applySmithBuyAndReturn(int party_slot)
             std::snprintf(status_, sizeof(status_), "%s's pack is full.", name);
             break;
         case mm2::events::TownSvcBuyReject::NotEnoughGold:
-            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, v.price);
+            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name,
+                          mm2::events::townSvcSmithMerchantBuyPrice(v.price, *rec));
             break;
         default:
             std::snprintf(status_, sizeof(status_), "%s could not buy %s.", name, item);
@@ -682,13 +691,16 @@ void PlayTownServiceUi::applyTavernStatBoost(int slot)
     char name[20];
     mm2_roster_name_to_cstr(rec, name, sizeof(name));
     const mm2::events::TownSvcStatBoostResult r =
-        mm2::events::townSvcTavernStatBoost(*rec, slot, ctx_.map_id, ctx_.rng);
+        mm2::events::townSvcTavernStatBoost(ctx_.a4, *rec, slot, ctx_.map_id, ctx_.rng);
     const char *label = tavern_data_.boosts[slot].label;
     if (!r.paid) {
         std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name,
                       tavern_data_.boosts[slot].cost);
     } else if (r.sick) {
         std::snprintf(status_, sizeof(status_), "%s bought %s — you feel sick!", name,
+                      label ? label : "boost");
+    } else if (!r.applied) {
+        std::snprintf(status_, sizeof(status_), "%s paid %u gp for %s (building up).", name, r.cost,
                       label ? label : "boost");
     } else {
         std::snprintf(status_, sizeof(status_), "%s bought %s (%u gp).", name,
@@ -1033,6 +1045,7 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
     if (phase_ == Phase::SmithItems) {
         drawLeftChrome(c);
         int row = kBandRowFirst;
+        Mm2RosterRecord *buyer = mm2::events::townSvcMemberRecord(ctx_, active_member_);
         for (int i = 0; i < MM2_SMITH_SLOTS; ++i) {
             char line[48];
             if (smith_view_[i].item_id != 0) {
@@ -1043,8 +1056,15 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
                         mm2_item_name_to_cstr(irec, item, sizeof(item));
                     }
                 }
-                std::snprintf(line, sizeof(line), "%c) %-13s %u gp", char('A' + i), item,
-                              smith_view_[i].price);
+                uint32_t shown = smith_view_[i].price;
+                if (buyer) {
+                    if (smith_mode_ == SmithMode::Buy) {
+                        shown = mm2::events::townSvcSmithMerchantBuyPrice(shown, *buyer);
+                    } else if (smith_mode_ == SmithMode::Sell) {
+                        shown = mm2::events::townSvcSmithMerchantSellPrice(shown, *buyer);
+                    }
+                }
+                std::snprintf(line, sizeof(line), "%c) %-13s %u gp", char('A' + i), item, shown);
                 drawCell(c, row++, kOptCol, line);
             } else {
                 std::snprintf(line, sizeof(line), "%c) ---", char('A' + i));

@@ -33,6 +33,10 @@ enum class SheetSubMode : uint8_t {
     /** View-only spell grid @ 0x675A / combat sheet 'V' — no cast prompts. */
     SpellBook,
     GatherPick,
+    /** Share @ 0x7DCC: '1' gold (0x7BBE), '2' gems (0x7CB0), '3' food (0x7D3E). */
+    SharePick,
+    /** Use @ 0xE94A: '1'..'6' equip / 'A'..'F' backpack. */
+    UsePick,
     TradePickType,
     TradePickTarget,
     TradePickItemSlot,
@@ -71,6 +75,8 @@ struct SheetSession {
     CastPromptPhase cast_phase = CastPromptPhase::Level;
     int cast_level = 0; /* 1..9 after level digit accepted */
     int cast_spell_flat = -1; /* 0..47 school-local index when picker completes */
+    /** UsePick result: -1 none; 0..5 equip; 6..11 backpack (slot = v-6). */
+    int pending_use_slot = -1;
     char status_line[48] = {};
 };
 

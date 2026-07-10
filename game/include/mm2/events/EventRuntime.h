@@ -26,6 +26,8 @@ enum class EventVmWait : uint8_t {
     MemberSelect,
     /** OP_2F @ 0x16FEA: -$7F92 fills A4-$5C50 (10 chars, space-padded). */
     Answer,
+    /** OP_0E 0x7E free-teleport @ 0xD576: hex digit 0..F via -$7F8C. */
+    HexDigit,
 };
 
 class EventRuntime {
@@ -107,6 +109,11 @@ public:
     }
     bool hasPendingTownMenu() const { return pending_town_menu_ != PendingTownMenu::None; }
 
+    /** OP_0E 0x7E @ 0xD576: prompt X then Y (0–15 hex). */
+    void armFreeTeleportUi();
+    /** OP_0E 0x80 @ 0xD6A4: after "Magical slide trap!" SPACE → halve party stats. */
+    void armSlideTrapHalve() { pending_slide_trap_halve_ = true; }
+
     int locationId() const { return location_id_; }
 
     /** OP_0E default-range dispatch (0x15EDC → event_dat_loader): run overlay
@@ -175,6 +182,9 @@ private:
     bool pending_skill_buy_member_ = false;
     bool pending_general_store_member_ = false;
     bool pending_circus_attr_ = false;
+    bool pending_slide_trap_halve_ = false;
+    uint8_t pending_free_teleport_stage_ = 0; /* 0=idle 1=X 2=Y */
+    uint8_t pending_free_teleport_x_ = 0;
     uint8_t pending_skill_id_ = 0;
     uint32_t pending_skill_cost_ = 0;
 

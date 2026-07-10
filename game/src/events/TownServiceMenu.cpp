@@ -444,7 +444,7 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
                     Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
                     if (rec) {
                         const TownSvcStatBoostResult r =
-                            townSvcTavernStatBoost(*rec, slot, ctx.map_id, ctx.rng);
+                            townSvcTavernStatBoost(ctx.a4, *rec, slot, ctx.map_id, ctx.rng);
                         ui.reportTavernStatBoost(r);
                     }
                 }

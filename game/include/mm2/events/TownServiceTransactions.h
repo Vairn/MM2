@@ -126,13 +126,13 @@ struct TownSvcBuyResult {
  *   1) reject if rec.condition ($26) != 0 (0x1BE4C tst.b $26).
  *   2) scan the backpack id-run (+$3A) for the first empty slot; reject as
  *      BackpackFull when all six are used (0x1BE82 cmpi #6).
- *   3) gold check + deduct from the char's own gold (record+$66) via the
+ *   3) Merchant skill id 0x0A @ +$50 (-$7F32→0x45C4 @ 0x1BFB4): halve price.
+ *   4) gold check + deduct from the char's own gold (record+$66) via the
  *      scc(gold>=price)+subtract primitive (0x1BDD6 == 0x1C9C0). No partial spend.
- *   4) write item_id -> backpack +$3A, charges -> +$40, flags -> +$46 (0x1BEBC),
+ *   5) write item_id -> backpack +$3A, charges -> +$40, flags -> +$46 (0x1BEBC),
  *      via the SoA roster accessors (matches the OP_19 give-item path).
- * `price` is the precomputed shop price (mm2_smith_price over items.dat gold);
- * charges/flags are the per-category buy fields (mm2_smith_buy_fields). The
- * Merchant-skill half-price discount (-$7F32 @ 0x1BFB4) is a documented gap. */
+ * `price` is the precomputed shop price (mm2_smith_price over items.dat gold)
+ * before the Merchant half; charges/flags are the per-category buy fields. */
 TownSvcBuyResult townSvcSmithBuy(Mm2RosterRecord &rec, uint8_t item_id, uint8_t charges,
                                  uint8_t flags, uint32_t price);
 
@@ -150,8 +150,17 @@ struct TownSvcSellResult {
 };
 
 /* Blacksmith sell leaf (0x1BC26). Guards: condition==0, slot occupied; then
- * add `price` to record+$66 (0x1B62A) and clear backpack id/charges/flags. */
+ * credit `price` (already mm2_smith_sell_price = buy/2) and if no Merchant
+ * skill, halve again (0x1BFDC). Clear backpack id/charges/flags. */
 TownSvcSellResult townSvcSmithSell(Mm2RosterRecord &rec, int backpack_slot, uint32_t price);
+
+/* 0x1BFB4 Merchant adjust: buy → /2 if skill 0x0A; sell-halved → /2 if no skill. */
+uint32_t townSvcSmithMerchantBuyPrice(uint32_t price, const Mm2RosterRecord &rec);
+uint32_t townSvcSmithMerchantSellPrice(uint32_t sell_half_price, const Mm2RosterRecord &rec);
+
+/* Today's Specials date-roll bonus @ 0x1C146 (category/mode 2): day%30==$1D →
+ * A4-$681C[day/30], else A4-$6816[day%30]. Overwrites price_meta/flags. */
+uint8_t townSvcSmithSpecialsDateBonus(const uint8_t *a4);
 
 enum class TownSvcIdentifyReject : uint8_t {
     None = 0,
@@ -249,17 +258,20 @@ bool townSvcCircusGiveCupieDoll(Mm2RosterFile *roster, const Mm2PartyLaunch *lau
                                 gameplay::Rng *rng);
 
 /* Tavern B @ 0x1CAC4: A–F buy from A4-$6738 costs; apply via 0x1C7EC (base
- * stats +$6B..+$72). Sick roll RNG(1, end+10)==2 → bset #$3,$26. */
+ * stats +$6B..+$72). Purchase-count gate A4-$577E[slot] vs A4-$672C limits
+ * (0x1CBDE): count < limit → pay + increment only; count >= limit → apply.
+ * Sick roll RNG(1, end+10)==2 → bset #$3,$26. */
 struct TownSvcStatBoostResult {
     bool ok = false;
     bool paid = false;
+    bool applied = false; /* false when only the -$577E counter advanced */
     bool sick = false;
     uint32_t cost = 0;
     int slot = -1; /* 0..5 = A..F */
 };
 
-TownSvcStatBoostResult townSvcTavernStatBoost(Mm2RosterRecord &rec, int slot, int map_id,
-                                              gameplay::Rng *rng);
+TownSvcStatBoostResult townSvcTavernStatBoost(uint8_t *a4, Mm2RosterRecord &rec, int slot,
+                                              int map_id, gameplay::Rng *rng);
 
 /* Tavern C specialties @ 0x1CD2E: pay A4-$6760[town*3+menu] (0x1CEA4), then
  * sick RNG(1, -$7F56(+$73)+5)==1 → bset #$2,$26 and SKIP mask; else

@@ -119,7 +119,8 @@ enum class SearchPrepareResult : uint8_t {
 
 struct SearchPrepareOut {
     uint8_t rating = 0; /* display rating after 0x1B270 re-roll */
-    char msg[96]{};
+    char container_name[24]{}; /* -$6A54[env_row][score-1] @ 0x1B37A */
+    char msg[160]{};
 };
 
 /** Prepare Search: nothing / short-path distribute / long-path Identify modal.

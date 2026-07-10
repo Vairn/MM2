@@ -6,7 +6,10 @@
 #include "mm2/events/TownServiceTransactions.h"
 
 #include "mm2/CppStdCompat.h"
+#include "mm2_items_codec.h"
 #include "mm2_town_tables.h"
+
+#include <cstdio>
 
 namespace mm2::events {
 
@@ -31,6 +34,15 @@ namespace mm2::events {
  * ------------------------------------------------------------------------- */
 
 namespace {
+
+/* Intra-map portal XY tables @ A4-$70D0/-$70C6/-$70BC/-$70B2 (data 0xF2E). */
+static const uint8_t kPortalSrcX[10] = {1, 1, 4, 4, 7, 7, 5, 10, 13, 13};
+static const uint8_t kPortalSrcY[10] = {13, 2, 5, 10, 2, 13, 10, 10, 2, 13};
+static const uint8_t kPortalDstX[10] = {1, 1, 4, 4, 7, 7, 10, 10, 13, 13};
+static const uint8_t kPortalDstY[10] = {14, 1, 4, 11, 1, 14, 4, 11, 1, 14};
+/* Found-item ranges @ -$70A8 / -$70A5 for selectors 0x81..0x83. */
+static const uint8_t kFoundItemSpan[3] = {13, 6, 7};
+static const uint8_t kFoundItemBase[3] = {66, 92, 127};
 
 const char *tavernIntro(int location_id)
 {
@@ -429,6 +441,79 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
             "line the circus grounds. Play (y/n)?";
         showServiceIntro(gs, text, wait, kCircusIntro);
         rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Circus);
+        break;
+    }
+    case 0x7E:
+        /* Free teleport UI -$7DB2 → 0xD576: hex X/Y → set coords + latch. */
+        rt.armFreeTeleportUi();
+        break;
+    case 0x7F: {
+        /* Combat seed -$7DAC → 0xD634: type = (rng(1,16)-1)+(Y<<4); fill party. */
+        uint8_t block[12] = {0};
+        const int roll = rng ? rng->range(1, 16) : 1;
+        const uint8_t mon = static_cast<uint8_t>((roll - 1) + (static_cast<unsigned>(gs.coordY()) << 4));
+        const int party_count = launch ? launch->party_count : 0;
+        for (int i = 0; i < party_count && i < MM2_PARTY_LAUNCH_SLOTS && i < 10; ++i) {
+            block[i] = mon;
+        }
+        mm2_gs_set_u8(gs.a4(), -0x77BE, 0);
+        eventRunFixedEncounter(gs, text, wait, block, 12, false, rt.combat(), &world);
+        break;
+    }
+    case 0x80: {
+        /* Intra-map portal -$7DA6 → 0xD6A4: match XY tables → dest + slide trap. */
+        int hit = -1;
+        const uint8_t cx = gs.coordX();
+        const uint8_t cy = gs.coordY();
+        for (int i = 0; i < 10; ++i) {
+            if (kPortalSrcX[i] == cx && kPortalSrcY[i] == cy) {
+                hit = i;
+                break;
+            }
+        }
+        if (hit < 0) {
+            break;
+        }
+        eventVmClearTileEventFlag(gs.a4(), static_cast<int>(cy), static_cast<int>(cx));
+        gs.setCoordX(kPortalDstX[hit]);
+        gs.setCoordY(kPortalDstY[hit]);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
+                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 5));
+        text.showOp02("Magical slide trap!", 19);
+        text.showSpacePrompt();
+        wait = EventVmWait::Space;
+        rt.armSlideTrapHalve();
+        break;
+    }
+    case 0x81:
+    case 0x82:
+    case 0x83: {
+        /* Found-item -$7DA0 → 0xD89C(arg 0/1/2). */
+        const int arg = static_cast<int>(sel - 0x81);
+        const int span = kFoundItemSpan[arg];
+        const int base = kFoundItemBase[arg];
+        const int roll = rng ? rng->range(1, span) : 1;
+        const uint8_t item_id = static_cast<uint8_t>(roll + base - 1);
+        char iname[40];
+        iname[0] = '\0';
+        if (items) {
+            const Mm2ItemRecord *irec = mm2_items_lookup(items, item_id);
+            if (irec) {
+                mm2_item_name_to_cstr(irec, iname, sizeof(iname));
+            }
+        }
+        if (!iname[0]) {
+            std::snprintf(iname, sizeof(iname), "item #%u", static_cast<unsigned>(item_id));
+        }
+        if (eventVmPartyGiveItem(gs.a4(), roster, launch, item_id, 0, 0)) {
+            eventVmClearTileEventFlag(gs.a4(), static_cast<int>(gs.coordY()),
+                                      static_cast<int>(gs.coordX()));
+            mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
+                          static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
+            std::snprintf(buf, sizeof(buf), "You have found a %s", iname);
+            showServiceTitle(text, wait, buf);
+        }
         break;
     }
     case 0xC9:

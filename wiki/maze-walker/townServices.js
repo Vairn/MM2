@@ -15,6 +15,9 @@ import {
   smithInventory,
   smithBuyFields,
   smithPrice,
+  smithSellPrice,
+  smithIdentifyCost,
+  smithSpecialsDateBonus,
   SMITH_CATEGORY_NAME,
   TEMPLE_DONATION_ALL_BITS,
   pubFoodMenu,
@@ -39,8 +42,12 @@ import {
   applyInnRegistry,
   findArenaTicket,
   consumeArenaTicket,
+  memberHasSkillId,
   ARENA_TICKET_COLOR_NAMES,
 } from "./sessionState.js";
+
+const SKILL_MERCHANT = 10;
+const STAT_BOOST_LIMITS = [2, 3, 3, 3, 3, 5];
 
 /** @param {object} member @param {number} amount */
 function charGoldDeduct(member, amount) {
@@ -225,7 +232,10 @@ export function svcSmithBuy(member, itemId, charges, flags, price) {
     r.price = 0;
     return r;
   }
-  if (!charGoldDeduct(member, price)) {
+  let pay = price | 0;
+  if (memberHasSkillId(member, SKILL_MERCHANT)) pay = (pay / 2) | 0;
+  r.price = pay;
+  if (!charGoldDeduct(member, pay)) {
     r.reject = "gold";
     r.price = 0;
     return r;
@@ -233,6 +243,55 @@ export function svcSmithBuy(member, itemId, charges, flags, price) {
   memberGiveItem(member, itemId, charges, flags, slot);
   r.bought = true;
   r.slot = slot;
+  return r;
+}
+
+/** Sell leaf 0x1BC26 — `halfPrice` is buy-style/2; no Merchant → /2 again. */
+export function svcSmithSell(member, backpackSlot, halfPrice) {
+  const r = { sold: false, reject: null, price: halfPrice | 0, slot: backpackSlot };
+  if (member.condition !== 0) {
+    r.reject = "condition";
+    r.price = 0;
+    return r;
+  }
+  const bp = member.backpack?.[backpackSlot];
+  if (!bp || !bp.id) {
+    r.reject = "empty";
+    r.price = 0;
+    return r;
+  }
+  let credit = halfPrice | 0;
+  if (!memberHasSkillId(member, SKILL_MERCHANT)) credit = (credit / 2) | 0;
+  r.price = credit;
+  member.gold = (member.gold | 0) + credit;
+  bp.id = 0;
+  bp.charges = 0;
+  bp.flags = 0;
+  r.sold = true;
+  return r;
+}
+
+/** Identify leaf 0x1B6E0 — deduct cost; summary is presentation. */
+export function svcSmithIdentify(member, backpackSlot, cost) {
+  const r = { identified: false, reject: null, cost: cost | 0, summary: "" };
+  if (member.condition !== 0) {
+    r.reject = "condition";
+    r.cost = 0;
+    return r;
+  }
+  const bp = member.backpack?.[backpackSlot];
+  if (!bp || !bp.id) {
+    r.reject = "empty";
+    r.cost = 0;
+    return r;
+  }
+  if (!charGoldDeduct(member, cost)) {
+    r.reject = "gold";
+    r.cost = 0;
+    return r;
+  }
+  r.identified = true;
+  r.summary = `Item #${bp.id} flags=${bp.flags & 0x3f} chg=${bp.charges}`;
   return r;
 }
 
@@ -435,16 +494,77 @@ export async function runSmithService(ctx) {
       "",
       "A) Weapons  B) Today's Specials",
       "C) Armor     D) Misc",
-      "(Sell / Identify deferred)",
+      "E) Sell      F) Identify",
       "",
-      "A–D — 0 or Esc to leave smith",
+      "A–F — 0 or Esc to leave smith",
     ].join("\n");
-    const catKey = await promptMenuKey(catText, "abcd0", sprite, 0x0e);
+    const catKey = await promptMenuKey(catText, "abcdef0", sprite, 0x0e);
     if (!catKey || catKey === "0") break;
+
+    if (catKey === "e" || catKey === "f") {
+      const sellMode = catKey === "e";
+      const memberSlot = await promptSelectMember(ctx);
+      if (memberSlot == null) continue;
+      const member = getPartyMember(session, memberSlot);
+      const lines = [
+        sellMode ? "Sell item:" : "Identify item:",
+        partyRosterLines(session),
+        "",
+      ];
+      const priced = [];
+      for (let i = 0; i < 6; i++) {
+        const bp = member.backpack?.[i];
+        if (!bp?.id) {
+          lines.push(`${i + 1}) —`);
+          priced.push(null);
+          continue;
+        }
+        const name = itemNameFromManifest(manifest, bp.id);
+        const base = itemGoldFromManifest(manifest, bp.id);
+        const buy = smithPrice(base, bp.flags & 0x3f);
+        const half = smithSellPrice(buy);
+        const price = sellMode
+          ? memberHasSkillId(member, SKILL_MERCHANT)
+            ? half
+            : (half / 2) | 0
+          : smithIdentifyCost(bp.flags);
+        lines.push(`${i + 1}) ${name} — ${price} gp`);
+        priced.push({ slot: i, half, idCost: smithIdentifyCost(bp.flags) });
+      }
+      lines.push("", "1–6 — 0 back");
+      const pick = await promptMenuKey(lines.join("\n"), "1234560", sprite, 0x0e);
+      if (!pick || pick === "0") continue;
+      const offer = priced[parseInt(pick, 10) - 1];
+      if (!offer) continue;
+      if (sellMode) {
+        const r = svcSmithSell(member, offer.slot, offer.half);
+        if (r.sold) {
+          await waitForSpace(`${member.name} sold item for ${r.price} gp.`, sprite, 0x0e);
+          note(`Smith sell +${r.price} gp`);
+        } else {
+          await waitForSpace(`${member.name}: cannot sell.`, sprite, 0x0e);
+        }
+      } else {
+        const r = svcSmithIdentify(member, offer.slot, offer.idCost);
+        if (r.identified) {
+          await waitForSpace(`${member.name}: ${r.summary}\n−${r.cost} gp`, sprite, 0x0e);
+          note(`Smith identify −${r.cost} gp`);
+        } else if (r.reject === "gold") {
+          await waitForSpace(`${member.name}: not enough gold!`, sprite, 0x0e);
+        } else {
+          await waitForSpace(`${member.name}: cannot identify.`, sprite, 0x0e);
+        }
+      }
+      afterTxn(ctx);
+      continue;
+    }
+
     const category = { a: 0, b: 1, c: 2, d: 3 }[catKey];
     if (category == null) continue;
 
     const slots = smithInventory(screenId, category);
+    const day = session.day | 0;
+    const specialsBonus = category === 1 ? smithSpecialsDateBonus(day) : 0;
     const lines = [`${SMITH_CATEGORY_NAME[category]}`, partyRosterLines(session), ""];
     const priced = [];
     for (let i = 0; i < slots.length; i++) {
@@ -454,7 +574,10 @@ export async function runSmithService(ctx) {
         priced.push(null);
         continue;
       }
-      const fields = smithBuyFields(category, meta);
+      let fields = smithBuyFields(category, meta);
+      if (category === 1) {
+        fields = { priceMeta: specialsBonus, charges: 0, flags: specialsBonus };
+      }
       const base = itemGoldFromManifest(manifest, itemId);
       const price = smithPrice(base, fields.priceMeta);
       const name = itemNameFromManifest(manifest, itemId);
@@ -478,19 +601,18 @@ export async function runSmithService(ctx) {
 
     const r = svcSmithBuy(member, offer.itemId, offer.charges, offer.flags, offer.price);
     if (r.bought) {
-      const name = itemNameFromManifest(manifest, offer.itemId);
       await waitForSpace(
-        `${member.name} bought ${name} for ${r.price} gp.\n${memberSummary(member)}`,
+        `${member.name} bought ${itemNameFromManifest(manifest, offer.itemId)} for ${r.price} gp.`,
         sprite,
         0x0e
       );
-      note(`Smith ${member.name} buy ${name} −${r.price} gp`);
+      note(`Smith buy −${r.price} gp`);
     } else if (r.reject === "gold") {
-      await waitForSpace("Not enough gold!", sprite, 0x0e);
+      await waitForSpace(`${member.name}: not enough gold!`, sprite, 0x0e);
     } else if (r.reject === "full") {
-      await waitForSpace("Backpack full!", sprite, 0x0e);
-    } else if (r.reject === "condition") {
-      await waitForSpace("Cannot buy while afflicted.", sprite, 0x0e);
+      await waitForSpace(`${member.name}'s pack is full.`, sprite, 0x0e);
+    } else {
+      await waitForSpace(`${member.name}: cannot buy.`, sprite, 0x0e);
     }
     afterTxn(ctx);
   }
@@ -576,26 +698,35 @@ const STAT_BOOST = [
   { key: "spellLevel", cost: 100, label: "Spell Level" },
 ];
 
-export function svcTavernStatBoost(member, slot, mapId) {
+export function svcTavernStatBoost(member, slot, mapId, session) {
   const row = STAT_BOOST[slot];
-  if (!row) return { paid: false, cost: 0 };
-  if ((member.condition | 0) !== 0) return { paid: false, cost: row.cost, ok: false };
-  if (!charGoldDeduct(member, row.cost)) return { paid: false, cost: 0 };
-  const town = townCommerce(mapId);
-  const add = town.stat_train_add | 0;
-  const cap = town.stat_train_cap | 0;
-  if (row.key === "level" || row.key === "spellLevel") {
-    member[row.key] = Math.min(255, (member[row.key] | 0) + add);
+  if (!row) return { paid: false, cost: 0, applied: false };
+  if ((member.condition | 0) !== 0) return { paid: false, cost: row.cost, ok: false, applied: false };
+  if (!charGoldDeduct(member, row.cost)) return { paid: false, cost: 0, applied: false };
+  if (!session.tavernStatBuyCount) session.tavernStatBuyCount = [0, 0, 0, 0, 0, 0];
+  const count = session.tavernStatBuyCount[slot] | 0;
+  const limit = STAT_BOOST_LIMITS[slot] | 0;
+  let applied = false;
+  if (count < limit) {
+    session.tavernStatBuyCount[slot] = count + 1;
   } else {
-    const baseKey = row.key;
-    let v = (member[baseKey] | 0) + add;
-    if (v < cap && v >= add) member[baseKey] = v;
+    const town = townCommerce(mapId);
+    const add = town.stat_train_add | 0;
+    const cap = town.stat_train_cap | 0;
+    if (row.key === "level" || row.key === "spellLevel") {
+      member[row.key] = Math.min(255, (member[row.key] | 0) + add);
+    } else {
+      const baseKey = row.key;
+      let v = (member[baseKey] | 0) + add;
+      if (v < cap && v >= add) member[baseKey] = v;
+    }
+    if ((member.speed | 0) >= 2) member.speed = (member.speed | 0) - 2;
+    applied = true;
   }
-  if ((member.speed | 0) >= 2) member.speed = (member.speed | 0) - 2;
   const endHi = (member.endurance | 0) + 10;
   const sick = Math.floor(Math.random() * Math.max(1, endHi)) + 1 === 2;
   if (sick) member.condition = (member.condition | 0) | 0x08;
-  return { paid: true, cost: row.cost, sick, label: row.label, ok: true };
+  return { paid: true, cost: row.cost, sick, label: row.label, ok: true, applied };
 }
 
 /** @param {object} member @param {number} amount */
@@ -887,12 +1018,15 @@ export async function runTavernService(ctx) {
       const slot = await promptSelectMember(ctx);
       if (slot == null) continue;
       const member = getPartyMember(session, slot);
-      const r = svcTavernStatBoost(member, parseInt(pick, 10) - 1, screenId);
+      const r = svcTavernStatBoost(member, parseInt(pick, 10) - 1, screenId, session);
       if (!r.paid) {
         await waitForSpace("Not enough gold / afflicted!", sprite, 0x0e);
       } else if (r.sick) {
         await waitForSpace(`${member.name}: ${r.label} — you feel sick!`, sprite, 0x0e);
         note(`Tavern boost ${r.label}: sick`);
+      } else if (!r.applied) {
+        await waitForSpace(`${member.name} paid for ${r.label} (building up).`, sprite, 0x0e);
+        note(`Tavern boost ${r.label} count-only`);
       } else {
         await waitForSpace(`${member.name} bought ${r.label} (−${r.cost} gp).`, sprite, 0x0e);
         note(`Tavern boost ${r.label} −${r.cost} gp`);
