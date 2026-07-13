@@ -42,7 +42,7 @@ import {
   drawMinimapAmbient,
   formatEventScriptFlow,
 } from "./ui.js";
-import { runEventScript, runTileAmbientEncounter } from "./eventVm.js";
+import { runEventScript, runTileAmbientEncounter, eraGateAllowsEvent } from "./eventVm.js";
 import { promptSelectMember } from "./townServices.js";
 import {
   createSessionState,
@@ -56,8 +56,10 @@ import {
   sessionSearchDetectMagic,
   sessionSearchLeave,
   sessionInteractionGate,
+  sessionFinishCombatDefeat,
   restoreEntryCoord,
 } from "./sessionState.js";
+import { scriptedKeyPoll } from "./scriptedKey.js";
 import {
   SCREEN_W,
   SCREEN_H,
@@ -520,7 +522,7 @@ function renderMinimap(sc) {
   miniCtx.strokeRect(0, 0, w, h);
 }
 
-/** @type {{ type: 'text'|'prompt'|'menu'|'answer', layoutOp: number, vmOp: number | null, text: string, showSpace: boolean, resolve: Function, sprite?: object, answerBuf?: string, validKeys?: string, combatPrompt?: boolean } | null} */
+/** @type {{ type: 'text'|'prompt'|'menu'|'answer'|'combat', layoutOp: number, vmOp: number | null, text: string, showSpace: boolean, resolve: Function, sprite?: object, answerBuf?: string, validKeys?: string, combatPrompt?: boolean } | null} */
 let uiState = null;
 
 function drawUI() {
@@ -532,7 +534,7 @@ function drawUI() {
   uiCanvas.style.pointerEvents = "auto";
 
   if (uiState.type === "text" || uiState.type === "prompt" || uiState.type === "menu" ||
-      uiState.type === "answer") {
+      uiState.type === "answer" || uiState.type === "combat") {
     /* Narrative modal — lower console band rows 17..23 (EventTextView / doc 44),
      * NOT centered on the 208×120 viewport. */
     const panelText = uiState.type === "answer"
@@ -623,6 +625,27 @@ function promptCombatResult(enc) {
       showSpace: false,
       resolve: (v) => resolve(v),
       combatPrompt: true,
+    };
+    draw();
+    updateUI();
+  });
+}
+
+/**
+ * Drive CombatSession::tick with one key — mirrors GameSession combat input poll.
+ * @returns {Promise<{ascii:number,escape:boolean,space:boolean,enter:boolean,ctrl:boolean}>}
+ */
+function waitForCombatKey(text, sprite = null, vmOp = 0x12) {
+  const resolved = resolveEventText(text);
+  return new Promise((resolve) => {
+    uiState = {
+      type: "combat",
+      layoutOp: 0x02,
+      vmOp,
+      text: resolved,
+      showSpace: false,
+      resolve,
+      sprite,
     };
     draw();
     updateUI();
@@ -759,6 +782,40 @@ function handlePlayOverlayKey(ev) {
 
 function handleUIKey(ev) {
   if (!uiState) return false;
+  if (uiState.type === "combat") {
+    const resolve = uiState.resolve;
+    let ascii = 0;
+    if (ev.key === "Escape") {
+      uiState = null;
+      uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      resolve({ ascii: 0x1b, escape: true, space: false, enter: false, ctrl: !!ev.ctrlKey });
+      draw();
+      return true;
+    }
+    if (ev.code === "Space") {
+      uiState = null;
+      uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      resolve({ ascii: 0x20, escape: false, space: true, enter: false, ctrl: !!ev.ctrlKey });
+      draw();
+      return true;
+    }
+    if (ev.key === "Enter") {
+      uiState = null;
+      uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      resolve({ ascii: 0x0d, escape: false, space: false, enter: true, ctrl: !!ev.ctrlKey });
+      draw();
+      return true;
+    }
+    if (ev.key.length === 1) {
+      ascii = ev.key.charCodeAt(0);
+      uiState = null;
+      uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      resolve({ ascii, escape: false, space: false, enter: false, ctrl: !!ev.ctrlKey });
+      draw();
+      return true;
+    }
+    return true;
+  }
   if (uiState.type === "text" && (ev.code === "Space" || ev.key === "Enter")) {
     const resolve = uiState.resolve;
     uiState = null;
@@ -835,6 +892,7 @@ function handleUIKey(ev) {
       if (ev.key.toLowerCase() === "d") {
         /* combat_defeat_retreat @ 0x1164A — restore attrib entry_coord. */
         restoreEntryCoord(state, maps.screens[state.screen]);
+        sessionFinishCombatDefeat(session);
         sessionInteractionGate(session, maps.screens[state.screen], state.x, state.y);
         const resolve = uiState.resolve;
         uiState = null;
@@ -853,6 +911,30 @@ function handleUIKey(ev) {
         return true;
       }
       return true;
+    }
+    /* OP_09/0A: EventRuntime polls scripted buffer before real Y/N. */
+    if ((session.scriptedKeyMode | 0) === 0xfd) {
+      const { key, place } = scriptedKeyPoll(session);
+      if (place?.active && viewportOverlay) {
+        viewportOverlay = {
+          ...viewportOverlay,
+          placement: place.placement,
+          dstX: place.dstX,
+          dstY: place.dstY,
+        };
+        draw();
+      }
+      if (key > 0) {
+        const ch = String.fromCharCode(key).toUpperCase();
+        if (ch === "Y" || ch === "N") {
+          const resolve = uiState.resolve;
+          uiState = null;
+          uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+          resolve(ch === "Y");
+          draw();
+          return true;
+        }
+      }
     }
     if (ev.key.toLowerCase() === "y") {
       const resolve = uiState.resolve;
@@ -1236,12 +1318,19 @@ function buildEventVmCtx() {
     maps,
     overlays,
     session,
+    strDat: session?.strDat ?? null,
+    rng: (lo, hi) => exploreRng.range(lo, hi),
     resolveEventText,
     waitForSpace,
+    waitForCombatKey,
     promptYesNo,
     promptAnswer,
     promptMenuKey,
     promptCombatResult,
+    onCombatDefeat: () => {
+      restoreEntryCoord(state, maps.screens[state.screen]);
+      sessionInteractionGate(session, maps.screens[state.screen], state.x, state.y);
+    },
     onDraw: () => draw(),
     onSessionChange: () => syncPartyEditorsFromSession(),
     onVmStep: ({ trace, cond }) => {
@@ -1253,12 +1342,19 @@ function buildEventVmCtx() {
       viewportOverlay = overlay;
       draw();
     },
+    onScriptedPlace: (place) => {
+      if (place?.active && viewportOverlay && typeof place.placement === "number") {
+        viewportOverlay = { ...viewportOverlay, placement: place.placement, dstX: place.dstX, dstY: place.dstY };
+        draw();
+      }
+    },
     onTeleport: (dest, tx, ty) => {
       state.screen = dest;
       state.x = tx;
       state.y = ty;
       viewportOverlay = null;
       session.combatVictory = false;
+      session.pendingEventLatch = 1;
       screenSelect.value = String(state.screen);
       statusEl.textContent = `Entered ${maps.screens[dest]?.name ?? `screen ${dest}`}`;
       draw();
@@ -1286,7 +1382,8 @@ async function runEvent(evtData, strings) {
     lastVmTrace = result.trace ?? lastVmTrace;
     lastVmCond = session.cond;
     syncPartyEditorsFromSession();
-    if (result.teleported) {
+    if (result.teleported || session.pendingEventLatch) {
+      session.pendingEventLatch = 0;
       checkEvents();
     } else if (result.notes.length) {
       statusEl.textContent = result.notes[result.notes.length - 1];
@@ -1321,6 +1418,8 @@ function checkEvents() {
     for (const [, evtData] of Object.entries(sc.events)) {
       for (const trig of evtData.triggers) {
         if (trig.pos === pos && triggerMatchesFacing(trig.flags, state.facing)) {
+          /* ASM scanner @ 0x175E2: first op 0x22 always; else era == attrib+0x0F. */
+          if (!eraGateAllowsEvent(session, sc, evtData)) continue;
           setTimeout(() => runEvent(evtData, sc.strings), 10);
           return;
         }
@@ -1500,6 +1599,15 @@ async function init() {
     exploreRng.reseed((Date.now() >>> 0) ^ 0xa5a5a5a5);
     if (manifest.defaultParty?.members?.length) {
       statusEl.textContent = `Party loaded from roster (${manifest.defaultParty.partyCount} members)`;
+    }
+    /* str.dat for OP_0E FD bank-3 PTR tables (GameSession::maybeOpenFdPrintChrome). */
+    try {
+      const strResp = await fetch(`../../str.dat?v=${BUILD_ID}`);
+      if (strResp.ok) {
+        session.strDat = new Uint8Array(await strResp.arrayBuffer());
+      }
+    } catch (_) {
+      /* optional — FD PTR pages fall back to chrome literals / (continue) */
     }
     if (data.sprites) await loadSpriteTable(data.sprites);
     else await loadSpritesFromPaths();

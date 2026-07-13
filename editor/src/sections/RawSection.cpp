@@ -1,7 +1,10 @@
 #include "sections/RawSection.h"
 
+#include <string>
+
 #include "imgui.h"
 #include "widgets/HexView.h"
+#include "widgets/UiLayout.h"
 
 namespace mm2 {
 
@@ -20,15 +23,16 @@ bool RawSection::save(const std::string& dataDir) {
 void RawSection::draw(App& app) {
     (void)app;
     if (!loaded) {
-        ImGui::TextDisabled("%s not loaded.", fileName_);
+        ui::EmptyState((std::string(fileName_) + " not loaded.").c_str());
         return;
     }
-    ImGui::TextDisabled("%zu bytes  -  layout not yet reverse-engineered.", file_.data.size());
+    ui::PanelHeader(fileName_, "raw bytes");
+    ImGui::TextDisabled("%zu bytes — layout not yet reverse-engineered.", file_.data.size());
     ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
     ImGui::TextWrapped("%s", note_);
     ImGui::PopTextWrapPos();
 
-    ImGui::SeparatorText("Raw bytes");
+    ui::SectionBlock("Raw bytes");
     DrawHexView("raw_hex", file_.data.data(), file_.data.size(), 0);
 }
 

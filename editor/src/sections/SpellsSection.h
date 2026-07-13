@@ -3,6 +3,7 @@
 
 #include "app/Section.h"
 #include "core/SpellsFile.h"
+#include "widgets/UiLayout.h"
 
 namespace mm2 {
 
@@ -17,6 +18,7 @@ public:
 private:
     SpellsFile file_;
     int selected_ = 0;
+    ui::MasterDetail layout_;
 };
 
 }  // namespace mm2

@@ -208,6 +208,38 @@ def load_item_gold(data_dir: Path) -> list[int]:
     return []
 
 
+def load_item_damage(data_dir: Path) -> list[int]:
+    """items.dat damage byte — combat weapon die rebuild @ 0xF6E0."""
+    from decode_items import decode_record
+
+    for candidate in (data_dir / "items.dat", ROOT / "items.dat", ROOT / "EXTRACTED" / "items.dat"):
+        if candidate.is_file():
+            raw = candidate.read_bytes()
+            rec_size = 0x14
+            out = []
+            for i in range(len(raw) // rec_size):
+                rec = raw[i * rec_size : (i + 1) * rec_size]
+                out.append(decode_record(rec).damage)
+            return out
+    return []
+
+
+def load_item_effect(data_dir: Path) -> list[int]:
+    """items.dat effect_byte — CombatSession::applyItemUse charge→spell/stat path."""
+    from decode_items import decode_record
+
+    for candidate in (data_dir / "items.dat", ROOT / "items.dat", ROOT / "EXTRACTED" / "items.dat"):
+        if candidate.is_file():
+            raw = candidate.read_bytes()
+            rec_size = 0x14
+            out = []
+            for i in range(len(raw) // rec_size):
+                rec = raw[i * rec_size : (i + 1) * rec_size]
+                out.append(decode_record(rec).effect_byte)
+            return out
+    return []
+
+
 def load_default_party(data_dir: Path) -> dict | None:
     """First six roster slots (0..5) — default Goto-Town party in roster.dat."""
     import struct
@@ -320,6 +352,8 @@ def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
         "monsters": load_monster_records(data_dir),
         "items": try_load_default_items(),
         "itemsGold": load_item_gold(data_dir),
+        "itemsDamage": load_item_damage(data_dir),
+        "itemsEffect": load_item_effect(data_dir),
         "defaultParty": load_default_party(data_dir),
         "terrainLookup": load_terrain_lookup(),
         "cartoTile": list(K_CARTO_TILE),
@@ -727,9 +761,11 @@ def build_maps_payload(attrib: list[bytes], screens: list[tuple[bytes, bytes]], 
                     "maxMonsters": a[0x0B],
                     "minMonsters": a[0x0C],
                     "retreat": a[0x0D],
+                    "bribeDemand": a[0x11],  # attrib+0x11 → A4-$5609 / bribe gate
                 },
                 "doorStrength": a[0x12],
                 "doorTrap": a[0x13],
+                "eraGate": a[0x0F],  # attrib+0x0F — scanner gate vs A4-$79B5
                 "flags1A": a[0x1A],  # attrib flags → A4-$5600; bit7 = map-wide dark
                 "sector": a[0x15],
                 # attrib +0x20..+0x3F: 256 roof bits → sky.32 frame 1 (ceiling) vs 0 (open)

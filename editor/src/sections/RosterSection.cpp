@@ -11,6 +11,7 @@
 #include "imgui.h"
 #include "widgets/HexView.h"
 #include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace mm2 {
 
@@ -57,6 +58,76 @@ bool editLongField(const char* id, uint32_t* value) {
     if (!ImGui::InputInt(id, &v, 0, 0)) return false;
     if (v < 0) v = 0;
     *value = static_cast<uint32_t>(v);
+    return true;
+}
+
+bool editEnumCombo(const char* id, uint8_t* value, const char* const* names, int count) {
+    int v = *value;
+    if (v < 0 || v >= count) {
+        // Out-of-range: fall back to integer so the byte is still editable.
+        if (editByteField(id, value)) return true;
+        ImGui::SameLine();
+        ImGui::TextDisabled("?");
+        return false;
+    }
+    if (!ImGui::Combo(id, &v, names, count)) return false;
+    *value = static_cast<uint8_t>(v);
+    return true;
+}
+
+// Roster +$26 condition — ASM-confirmed bitfield + fatal values.
+// Living bits (OR up to 0x7F): bset #0/#2/#3/#4 @ 0xEEA6/0x1CEF8/0x1CC66/0x19DD4,
+//   btst #1 silence @ 0x118F0, or #$20 paralyz @ 0x1EE94, #$40 uncon @ 0xC3FC.
+// Fatal whole-byte: #$81 dead @ 0x1EEC8, #$82 stone @ 0x1EEDA, #$FF erad @ 0x1EEEC.
+constexpr uint8_t kCondCursed = 0x01;
+constexpr uint8_t kCondSilenced = 0x02;
+constexpr uint8_t kCondDiseased = 0x04;
+constexpr uint8_t kCondPoisoned = 0x08;
+constexpr uint8_t kCondAsleep = 0x10;
+constexpr uint8_t kCondParalyzed = 0x20;
+constexpr uint8_t kCondUnconscious = 0x40;
+constexpr uint8_t kCondDead = 0x81;
+constexpr uint8_t kCondStoned = 0x82;
+constexpr uint8_t kCondEradicated = 0xFF;
+
+const char* conditionLabel(uint8_t c) {
+    if (c == kCondDead) return "Dead";
+    if (c == kCondStoned) return "Stoned";
+    if (c >= 0x80) return "Eradicated";  // FAQ: any other ≥0x80
+    if (c == 0) return "Good";
+    return "Afflicted";
+}
+
+int conditionMajorIndex(uint8_t c) {
+    if (c == kCondDead) return 1;
+    if (c == kCondStoned) return 2;
+    if (c >= 0x80) return 3;  // eradicated (0xFF and other ≥0x80)
+    return 0;                 // living / good
+}
+
+bool editConditionMajor(const char* id, uint8_t* value) {
+    int sel = conditionMajorIndex(*value);
+    const char* names = "Living\0Dead\0Stoned\0Eradicated\0";
+    if (!ImGui::Combo(id, &sel, names)) return false;
+    switch (sel) {
+        case 1: *value = kCondDead; break;
+        case 2: *value = kCondStoned; break;
+        case 3: *value = kCondEradicated; break;
+        default:
+            if (*value >= 0x80) *value = 0;  // clear fatal → Good
+            break;
+    }
+    return true;
+}
+
+bool editConditionBit(const char* id, uint8_t* value, uint8_t bit) {
+    if (*value >= 0x80) return false;
+    bool on = (*value & bit) != 0;
+    if (!ImGui::Checkbox(id, &on)) return false;
+    if (on)
+        *value = static_cast<uint8_t>(*value | bit);
+    else
+        *value = static_cast<uint8_t>(*value & static_cast<uint8_t>(~bit));
     return true;
 }
 
@@ -117,7 +188,7 @@ void RosterSection::drawStats(RosterRecord& r) {
         }
     }
 
-    ImGui::SeparatorText("Pools & wealth");
+    ui::SectionBlock("Pools & wealth");
     {
         ui::FormTable form("roster_pools");
         if (form.begin()) {
@@ -162,7 +233,7 @@ void RosterSection::drawStats(RosterRecord& r) {
         }
     }
 
-    ImGui::SeparatorText("Base stats (+0x6A..0x73)");
+    ui::SectionBlock("Base stats", "+0x6A..0x73");
     {
         struct U8Field {
             const char* label;
@@ -217,7 +288,9 @@ void RosterSection::drawCharacterSheet(RosterRecord& r) {
     int townId = townFlags & 0x7F;
     const bool classQuestPlus = (r.u8(kClassQuestGuildMask) & 0x80) != 0;
 
-    ImGui::Text("A>");
+    // Name + live summary
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("A>");
     ImGui::SameLine();
     ui::SetFieldWide();
     if (ImGui::InputText("##char_name", nameBuf, sizeof(nameBuf))) {
@@ -225,322 +298,328 @@ void RosterSection::drawCharacterSheet(RosterRecord& r) {
         dirty = true;
     }
     ImGui::SameLine();
-    ImGui::Text(": %s %s %s %s%s",
-                labelFor(kSexNames, 2, r.u8(kSex)),
-                labelFor(kAlignNames, 3, r.u8(kAlignBase)),
-                labelFor(kRaceNames, 5, r.u8(kRace)),
-                labelFor(kClassNames, 8, r.u8(kClass)),
-                classQuestPlus ? "+" : "");
+    ImGui::TextDisabled(": %s %s %s %s%s", labelFor(kSexNames, 2, r.u8(kSex)),
+                        labelFor(kAlignNames, 3, r.u8(kAlignBase)),
+                        labelFor(kRaceNames, 5, r.u8(kRace)),
+                        labelFor(kClassNames, 8, r.u8(kClass)), classQuestPlus ? "+" : "");
 
-    ImGui::Separator();
-    if (ImGui::BeginTable("roster_sheet", 3,
-                          ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_BordersInnerV)) {
+    // Identity — combos first (these were raw IDs)
+    ui::SectionBlock("Identity");
+    {
+        ui::FormGrid id("roster_id", ui::Em(5.5f));
+        if (id.begin()) {
+            id.row2(
+                "Sex",
+                [&] {
+                    ui::SetFieldStretch();
+                    uint8_t v = r.u8(kSex);
+                    if (editEnumCombo("##sex", &v, kSexNames, 2)) {
+                        r.setU8(kSex, v);
+                        dirty = true;
+                    }
+                },
+                "Race",
+                [&] {
+                    ui::SetFieldStretch();
+                    uint8_t v = r.u8(kRace);
+                    if (editEnumCombo("##race", &v, kRaceNames, 5)) {
+                        r.setU8(kRace, v);
+                        dirty = true;
+                    }
+                });
+            id.row2(
+                "Class",
+                [&] {
+                    ui::SetFieldStretch();
+                    uint8_t v = r.u8(kClass);
+                    if (editEnumCombo("##class", &v, kClassNames, 8)) {
+                        r.setU8(kClass, v);
+                        dirty = true;
+                    }
+                },
+                "Align cur",
+                [&] {
+                    ui::SetFieldStretch();
+                    uint8_t cur = r.u8(kAlignCur);
+                    if (editEnumCombo("##align_cur", &cur, kAlignNames, 3)) {
+                        r.setU8(kAlignCur, cur);
+                        dirty = true;
+                    }
+                });
+            id.row2(
+                "Align base",
+                [&] {
+                    ui::SetFieldStretch();
+                    uint8_t base = r.u8(kAlignBase);
+                    if (editEnumCombo("##align_base", &base, kAlignNames, 3)) {
+                        r.setU8(kAlignBase, base);
+                        dirty = true;
+                    }
+                },
+                "Town",
+                [&] {
+                    ui::SetFieldStretch();
+                    if (townId >= 0 && townId < 6) {
+                        if (ImGui::Combo("##town", &townId, kTownNames, 6)) {
+                            uint8_t next =
+                                static_cast<uint8_t>((inParty ? 0x80 : 0x00) | (townId & 0x7F));
+                            r.setU8(kTownFlags, next);
+                            dirty = true;
+                        }
+                    } else {
+                        if (ImGui::InputInt("##town_raw", &townId, 0, 0)) {
+                            if (townId < 0) townId = 0;
+                            if (townId > 0x7F) townId = 0x7F;
+                            uint8_t next =
+                                static_cast<uint8_t>((inParty ? 0x80 : 0x00) | (townId & 0x7F));
+                            r.setU8(kTownFlags, next);
+                            dirty = true;
+                        }
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("(id %d)", townId);
+                    }
+                });
+            id.row2(
+                "In party",
+                [&] {
+                    if (ImGui::Checkbox("##in_party", &inParty)) {
+                        uint8_t next =
+                            static_cast<uint8_t>((inParty ? 0x80 : 0x00) | (townId & 0x7F));
+                        r.setU8(kTownFlags, next);
+                        dirty = true;
+                    }
+                },
+                "Class +",
+                [&] {
+                    bool hasPlus = (r.u8(kClassQuestGuildMask) & 0x80) != 0;
+                    if (ImGui::Checkbox("##class_plus", &hasPlus)) {
+                        const uint8_t raw = r.u8(kClassQuestGuildMask);
+                        const uint8_t next =
+                            static_cast<uint8_t>(hasPlus ? (raw | 0x80) : (raw & 0x7F));
+                        r.setU8(kClassQuestGuildMask, next);
+                        dirty = true;
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(bit7 @ +0x79)");
+                });
+        }
+    }
+
+    // Stats — 3 equal columns; label + field aligned within each cell
+    ui::SectionBlock("Stats");
+    const float statsLabelW = ui::Em(3.2f);
+
+    auto byteCell = [&](const char* id, int off) {
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        uint8_t v = r.u8(off);
+        if (editByteField(id, &v)) {
+            r.setU8(off, v);
+            dirty = true;
+        }
+    };
+    auto wordCell = [&](const char* id, int off) {
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        uint16_t v = r.u16(off);
+        if (editWordField(id, &v)) {
+            r.setU16(off, v);
+            dirty = true;
+        }
+    };
+    auto longCell = [&](const char* id, int off) {
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        uint32_t v = r.u32(off);
+        if (editLongField(id, &v)) {
+            r.setU32(off, v);
+            dirty = true;
+        }
+    };
+    auto pair = [&](const char* label, const std::function<void()>& field) {
+        ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        ImGui::SameLine(statsLabelW);
+        field();
+    };
+    auto pairCurMax = [&](const char* label, const char* idCur, int offCur, const char* idMax,
+                          int offMax) {
+        ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        ImGui::SameLine(statsLabelW);
+        const float gap = ImGui::GetStyle().ItemSpacing.x;
+        const float slashW = ImGui::CalcTextSize("/").x;
+        const float avail = ImGui::GetContentRegionAvail().x;
+        const float half = (avail - slashW - gap * 2.f) * 0.5f;
+        ImGui::SetNextItemWidth(half);
+        uint16_t cur = r.u16(offCur);
+        if (editWordField(idCur, &cur)) {
+            r.setU16(offCur, cur);
+            dirty = true;
+        }
+        ImGui::SameLine(0, gap);
+        ImGui::TextUnformatted("/");
+        ImGui::SameLine(0, gap);
+        ImGui::SetNextItemWidth(half);
+        uint16_t mx = r.u16(offMax);
+        if (editWordField(idMax, &mx)) {
+            r.setU16(offMax, mx);
+            dirty = true;
+        }
+    };
+
+    if (ImGui::BeginTable("roster_stats_grid", 3,
+                          ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_BordersInnerV |
+                              ImGuiTableFlags_PadOuterX |
+                              ImGuiTableFlags_NoHostExtendX)) {
+        ImGui::TableSetupColumn("c0", ImGuiTableColumnFlags_WidthStretch, 1.f);
+        ImGui::TableSetupColumn("c1", ImGuiTableColumnFlags_WidthStretch, 1.f);
+        ImGui::TableSetupColumn("c2", ImGuiTableColumnFlags_WidthStretch, 1.f);
+
         ImGui::TableNextRow();
+        pair("Mgt", [&] { byteCell("##mgt", kMight); });
+        pairCurMax("HP", "##hp_cur", kHpCur, "##hp_max", kHpMax);
+        pair("Lvl", [&] { byteCell("##lvl", kLevel); });
+
+        ImGui::TableNextRow();
+        pair("Int", [&] { byteCell("##int", kIntellect); });
+        pairCurMax("SP", "##sp_cur", kSpCur, "##sp_max", kSpMax);
+        pair("Age", [&] { byteCell("##age", kAge); });
+
+        ImGui::TableNextRow();
+        pair("Per", [&] { byteCell("##per", kPersonality); });
+        pair("AC", [&] { byteCell("##ac", kArmorClass); });
+        pair("Exp", [&] { longCell("##exp", kExperience); });
+
+        ImGui::TableNextRow();
+        pair("End", [&] { byteCell("##end", kEnduranceCur); });
+        pair("Thv", [&] { byteCell("##thievery", kThievery); });
+        pair("Gold", [&] { longCell("##gold", kGold); });
+
+        ImGui::TableNextRow();
+        pair("Spd", [&] { byteCell("##spd", kSpeed); });
+        pair("SL", [&] { byteCell("##spell_level", kSpellLevel); });
+        pair("Gems", [&] { wordCell("##gems", kGems); });
+
+        ImGui::TableNextRow();
+        pair("Acy", [&] { byteCell("##acy", kAccuracy); });
+        pair("Food", [&] { byteCell("##food", kFood); });
+        pair("Cond", [&] {
+            uint8_t cond = r.u8(kCondition);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (editConditionMajor("##cond_major", &cond)) {
+                r.setU8(kCondition, cond);
+                dirty = true;
+            }
+        });
+
+        ImGui::TableNextRow();
+        pair("Lck", [&] { byteCell("##lck", kLuck); });
         ImGui::TableNextColumn();
-        uint8_t might = r.u8(kMight);
-        uint8_t intellect = r.u8(kIntellect);
-        uint8_t personality = r.u8(kPersonality);
-        uint8_t endurance = r.u8(kEnduranceCur);
-        uint8_t speed = r.u8(kSpeed);
-        uint8_t accuracy = r.u8(kAccuracy);
-        uint8_t luck = r.u8(kLuck);
-
-        ui::FormTable left("roster_sheet_left");
-        if (left.begin()) {
-            left.row("Mgt", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##mgt", &might)) {
-                    r.setU8(kMight, might);
-                    dirty = true;
-                }
-            });
-            left.row("Int", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##int", &intellect)) {
-                    r.setU8(kIntellect, intellect);
-                    dirty = true;
-                }
-            });
-            left.row("Per", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##per", &personality)) {
-                    r.setU8(kPersonality, personality);
-                    dirty = true;
-                }
-            });
-            left.row("End", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##end", &endurance)) {
-                    r.setU8(kEnduranceCur, endurance);
-                    dirty = true;
-                }
-            });
-            left.row("Spd", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##spd", &speed)) {
-                    r.setU8(kSpeed, speed);
-                    dirty = true;
-                }
-            });
-            left.row("Acy", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##acy", &accuracy)) {
-                    r.setU8(kAccuracy, accuracy);
-                    dirty = true;
-                }
-            });
-            left.row("Lck", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##lck", &luck)) {
-                    r.setU8(kLuck, luck);
-                    dirty = true;
-                }
-            });
-        }
-
         ImGui::TableNextColumn();
-        uint16_t hpCur = r.u16(kHpCur);
-        uint16_t hpMax = r.u16(kHpMax);
-        uint16_t spCur = r.u16(kSpCur);
-        uint16_t spMax = r.u16(kSpMax);
-        uint8_t ac = r.u8(kArmorClass);
-        uint8_t thievery = r.u8(kThievery);
-        uint8_t spellLevel = r.u8(kSpellLevel);
 
-        ui::FormTable mid("roster_sheet_mid");
-        if (mid.begin()) {
-            mid.row("HP", [&] {
-                ui::SetFieldShort();
-                if (editWordField("##hp_cur", &hpCur)) {
-                    r.setU16(kHpCur, hpCur);
-                    dirty = true;
-                }
-                ImGui::SameLine();
-                ImGui::Text("/");
-                ImGui::SameLine();
-                ui::SetFieldShort();
-                if (editWordField("##hp_max", &hpMax)) {
-                    r.setU16(kHpMax, hpMax);
-                    dirty = true;
-                }
-            });
-            mid.row("SP", [&] {
-                ui::SetFieldShort();
-                if (editWordField("##sp_cur", &spCur)) {
-                    r.setU16(kSpCur, spCur);
-                    dirty = true;
-                }
-                ImGui::SameLine();
-                ImGui::Text("/");
-                ImGui::SameLine();
-                ui::SetFieldShort();
-                if (editWordField("##sp_max", &spMax)) {
-                    r.setU16(kSpMax, spMax);
-                    dirty = true;
-                }
-            });
-            mid.row("AC", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##ac", &ac)) {
-                    r.setU8(kArmorClass, ac);
-                    dirty = true;
-                }
-            });
-            mid.row("Thievery %%", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##thievery", &thievery)) {
-                    r.setU8(kThievery, thievery);
-                    dirty = true;
-                }
-            });
-            mid.row("SL", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##spell_level", &spellLevel)) {
-                    r.setU8(kSpellLevel, spellLevel);
-                    dirty = true;
-                }
-            });
-        }
-
-        ImGui::TableNextColumn();
-        uint8_t level = r.u8(kLevel);
-        uint8_t age = r.u8(kAge);
-        uint32_t experience = r.u32(kExperience);
-        uint32_t gold = r.u32(kGold);
-        uint16_t gems = r.u16(kGems);
-        uint8_t food = r.u8(kFood);
-        uint8_t cond = r.u8(kCondition);
-
-        ui::FormTable right("roster_sheet_right");
-        if (right.begin()) {
-            right.row("Lvl", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##lvl", &level)) {
-                    r.setU8(kLevel, level);
-                    dirty = true;
-                }
-            });
-            right.row("Age", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##age", &age)) {
-                    r.setU8(kAge, age);
-                    dirty = true;
-                }
-            });
-            right.row("Exp", [&] {
-                ui::SetFieldMed();
-                if (editLongField("##exp", &experience)) {
-                    r.setU32(kExperience, experience);
-                    dirty = true;
-                }
-            });
-            right.row("Gold", [&] {
-                ui::SetFieldMed();
-                if (editLongField("##gold", &gold)) {
-                    r.setU32(kGold, gold);
-                    dirty = true;
-                }
-            });
-            right.row("Gems", [&] {
-                ui::SetFieldShort();
-                if (editWordField("##gems", &gems)) {
-                    r.setU16(kGems, gems);
-                    dirty = true;
-                }
-            });
-            right.row("Food", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##food", &food)) {
-                    r.setU8(kFood, food);
-                    dirty = true;
-                }
-            });
-            right.row("Condition", [&] {
-                ui::SetFieldShort();
-                if (editByteField("##cond", &cond)) {
-                    r.setU8(kCondition, cond);
-                    dirty = true;
-                }
-            });
-        }
         ImGui::EndTable();
     }
 
-    ImGui::SeparatorText("Identity and location flags");
-    ui::FormGrid flagsGrid("roster_identity", ui::LabelWidth(), ui::FieldMed());
-    if (flagsGrid.begin()) {
-        flagsGrid.row2(
-            "Sex", [&] {
-                ui::SetFieldShort();
-                uint8_t v = r.u8(kSex);
-                if (editByteField("##sex", &v)) {
-                    r.setU8(kSex, v);
+    // Living afflictions are OR-able bits on +$26 (ASM); hidden when Dead/Stone/Erad.
+    {
+        uint8_t cond = r.u8(kCondition);
+        if (cond < 0x80) {
+            ImGui::Spacing();
+            auto bit = [&](const char* label, uint8_t mask) {
+                ImGui::PushID(mask);
+                if (editConditionBit(label, &cond, mask)) {
+                    r.setU8(kCondition, cond);
                     dirty = true;
                 }
-            },
-            "Race", [&] {
-                ui::SetFieldShort();
-                uint8_t v = r.u8(kRace);
-                if (editByteField("##race", &v)) {
-                    r.setU8(kRace, v);
-                    dirty = true;
-                }
-            });
-        flagsGrid.row2(
-            "Class", [&] {
-                ui::SetFieldShort();
-                uint8_t v = r.u8(kClass);
-                if (editByteField("##class", &v)) {
-                    r.setU8(kClass, v);
-                    dirty = true;
-                }
-            },
-            "Align cur/base", [&] {
-                ui::SetFieldShort();
-                uint8_t cur = r.u8(kAlignCur);
-                if (editByteField("##align_cur", &cur)) {
-                    r.setU8(kAlignCur, cur);
-                    dirty = true;
-                }
-                ImGui::SameLine();
-                ImGui::Text("/");
-                ImGui::SameLine();
-                ui::SetFieldShort();
-                uint8_t base = r.u8(kAlignBase);
-                if (editByteField("##align_base", &base)) {
-                    r.setU8(kAlignBase, base);
-                    dirty = true;
-                }
-            });
-        flagsGrid.row2(
-            "Town ID (low7)", [&] {
-                ui::SetFieldShort();
-                if (ImGui::InputInt("##town", &townId, 0, 0)) {
-                    if (townId < 0) townId = 0;
-                    if (townId > 0x7F) townId = 0x7F;
-                    uint8_t next = static_cast<uint8_t>((inParty ? 0x80 : 0x00) | townId);
-                    r.setU8(kTownFlags, next);
-                    dirty = true;
-                }
-            },
-            "In active party (bit7)", [&] {
-                if (ImGui::Checkbox("##in_party", &inParty)) {
-                    uint8_t next = static_cast<uint8_t>((inParty ? 0x80 : 0x00) | (townId & 0x7F));
-                    r.setU8(kTownFlags, next);
-                    dirty = true;
-                }
-            });
-        flagsGrid.row2(
-            "Class '+' display (bit7 @ +0x79)", [&] {
-                bool hasPlus = (r.u8(kClassQuestGuildMask) & 0x80) != 0;
-                if (ImGui::Checkbox("##class_plus", &hasPlus)) {
-                    const uint8_t raw = r.u8(kClassQuestGuildMask);
-                    const uint8_t next = static_cast<uint8_t>(hasPlus ? (raw | 0x80) : (raw & 0x7F));
-                    r.setU8(kClassQuestGuildMask, next);
-                    dirty = true;
-                }
-            },
-            "Guild/quest mask (+0x79)", [&] {
-                ui::SetFieldShort();
-                uint8_t v = r.u8(kClassQuestGuildMask);
-                if (editByteField("##class_quest_mask", &v)) {
-                    r.setU8(kClassQuestGuildMask, v);
-                    dirty = true;
-                }
-                ImGui::SameLine();
-                ImGui::TextDisabled("(class-quest/guild bits; 0x40 = seen Pegasus, OP_18 sel 0x74)");
-            });
-        flagsGrid.row2(
-            "Script work flag (+0x78)", [&] {
-                ui::SetFieldShort();
-                uint8_t v = r.u8(kScriptWorkFlag);
-                if (editByteField("##script_work", &v)) {
-                    r.setU8(kScriptWorkFlag, v);
-                    dirty = true;
-                }
-            },
-            "Temp/score word (+0x76)", [&] {
-                ui::SetFieldShort();
-                uint16_t v = r.u16(kTempScoreWord);
-                if (editWordField("##temp_score", &v)) {
-                    r.setU16(kTempScoreWord, v);
-                    dirty = true;
-                }
-            });
+                ImGui::PopID();
+            };
+            if (ImGui::BeginTable("cond_bits", 4, ImGuiTableFlags_SizingStretchSame)) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                bit("Cursed", kCondCursed);
+                ImGui::TableNextColumn();
+                bit("Silenced", kCondSilenced);
+                ImGui::TableNextColumn();
+                bit("Diseased", kCondDiseased);
+                ImGui::TableNextColumn();
+                bit("Poisoned", kCondPoisoned);
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                bit("Asleep", kCondAsleep);
+                ImGui::TableNextColumn();
+                bit("Paralyzed", kCondParalyzed);
+                ImGui::TableNextColumn();
+                bit("Unconscious", kCondUnconscious);
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("0x%02X", cond);
+                ImGui::EndTable();
+            }
+        } else {
+            ImGui::TextDisabled("Fatal condition 0x%02X (%s)", cond, conditionLabel(cond));
+        }
     }
-    ImGui::TextDisabled("Town label: %s", labelFor(kTownNames, 6, static_cast<uint8_t>(townId)));
+
+    ui::SectionBlock("Flags", "class-quest / script scratch");
+    {
+        ui::FormGrid flags("roster_flags", ui::Em(7.f));
+        if (flags.begin()) {
+            flags.row2(
+                "Seen Pegasus",
+                [&] {
+                    uint8_t raw = r.u8(kClassQuestGuildMask);
+                    bool seen = (raw & 0x40) != 0;
+                    if (ImGui::Checkbox("##pegasus", &seen)) {
+                        r.setU8(kClassQuestGuildMask,
+                                static_cast<uint8_t>(seen ? (raw | 0x40) : (raw & ~0x40)));
+                        dirty = true;
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(bit6 / OP_18 sel 0x74)");
+                },
+                "Guild mask",
+                [&] {
+                    ui::SetFieldShort();
+                    uint8_t v = r.u8(kClassQuestGuildMask);
+                    if (editByteField("##class_quest_mask", &v)) {
+                        r.setU8(kClassQuestGuildMask, v);
+                        dirty = true;
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("0x%02X", v);
+                });
+            flags.row2(
+                "Script work",
+                [&] {
+                    ui::SetFieldShort();
+                    uint8_t v = r.u8(kScriptWorkFlag);
+                    if (editByteField("##script_work", &v)) {
+                        r.setU8(kScriptWorkFlag, v);
+                        dirty = true;
+                    }
+                },
+                "Temp/score",
+                [&] {
+                    ui::SetFieldShort();
+                    uint16_t v = r.u16(kTempScoreWord);
+                    if (editWordField("##temp_score", &v)) {
+                        r.setU16(kTempScoreWord, v);
+                        dirty = true;
+                    }
+                });
+        }
+    }
 }
 
 void RosterSection::drawEquipment(App& app, RosterRecord& r) {
     auto drawSlots = [&](const char* title, int base) {
-        ImGui::SeparatorText(title);
+        ui::SectionBlock(title);
         ImGui::TextDisabled("6 slots");
         if (!ImGui::BeginTable(title, 5,
                                ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                                    ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit)) {
             return;
         }
-        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 28.f);
+        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, ui::Em(1.75f));
         ImGui::TableSetupColumn("Item ID", ImGuiTableColumnFlags_WidthFixed, 72.f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Charges", ImGuiTableColumnFlags_WidthFixed, 72.f);
@@ -603,7 +682,7 @@ void RosterSection::drawSpells(RosterRecord& r) {
     const char* schoolName = (school == SpellSchool::Cleric) ? "Cleric" : "Sorcerer";
     constexpr int kSpellCols = 7;
 
-    ImGui::SeparatorText("Spell Book");
+    ui::SectionBlock("Spell Book");
     ImGui::TextDisabled("Game-style %s spell grid.", schoolName);
     ImGui::TextDisabled(
         "NOTE: the +0x4C..0x57 \"spells\" bitset is UNVERIFIED (MM2 gates spells by "
@@ -667,12 +746,12 @@ void RosterSection::drawSpells(RosterRecord& r) {
     }
     ImGui::EndChild();
 
-    ImGui::SeparatorText("Names");
+    ui::SectionBlock("Names");
     int flat = 1;  // 1-based for spellName API
     for (int level = 1; level <= kSpellLevels; ++level) {
         char levelTitle[32];
         snprintf(levelTitle, sizeof(levelTitle), "Level %d", level);
-        ImGui::SeparatorText(levelTitle);
+        ui::SectionBlock(levelTitle);
         char tableId[32];
         snprintf(tableId, sizeof(tableId), "roster_spells_names_l%d", level);
         if (ImGui::BeginTable(tableId, 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
@@ -706,6 +785,79 @@ void RosterSection::drawSpells(RosterRecord& r) {
             ImGui::EndTable();
         }
     }
+}
+
+uint8_t RosterSection::hirelingUnlockByte(int letterIndex) const {
+    if (letterIndex < 0 || letterIndex >= 24) return 0;
+    using namespace roster_global::tail_off;
+    const int off = kEventBank + letterIndex;
+    const int slot = kRosterGlobalStart + off / kRosterRecordSize;
+    const int byte = off % kRosterRecordSize;
+    if (slot < 0 || slot >= kRosterCount) return 0;
+    return file_.records[slot].raw[static_cast<size_t>(byte)];
+}
+
+void RosterSection::setHirelingUnlock(int letterIndex, bool found) {
+    if (letterIndex < 0 || letterIndex >= 24) return;
+    using namespace roster_global::tail_off;
+    const int off = kEventBank + letterIndex;
+    const int slot = kRosterGlobalStart + off / kRosterRecordSize;
+    const int byte = off % kRosterRecordSize;
+    if (slot < 0 || slot >= kRosterCount) return;
+    file_.records[slot].raw[static_cast<size_t>(byte)] = found ? 1 : 0;
+    dirty = true;
+}
+
+void RosterSection::drawHirelingUnlocks() {
+    ui::PanelHeader("Hireling unlocks", "g=0x00..0x17  (found = hireable at inn)");
+    ImGui::TextWrapped(
+        "These 24 bytes live in the roster.dat global tail (A4-$798B). "
+        "The party UI hides a hireling letter until its byte is nonzero.");
+    ImGui::Spacing();
+
+    if (ImGui::Button("Unlock all")) {
+        for (int i = 0; i < 24; ++i) setHirelingUnlock(i, true);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Lock all")) {
+        for (int i = 0; i < 24; ++i) setHirelingUnlock(i, false);
+    }
+    ImGui::Spacing();
+
+    if (!ImGui::BeginTable("hire_unlock_panel", 3,
+                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                               ImGuiTableFlags_SizingStretchProp)) {
+        return;
+    }
+    ImGui::TableSetupColumn("Found", ImGuiTableColumnFlags_WidthFixed, ui::Em(5.f));
+    ImGui::TableSetupColumn("Hireling", ImGuiTableColumnFlags_WidthFixed, ui::Em(4.f));
+    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableHeadersRow();
+    for (int i = 0; i < 24; ++i) {
+        const int slot = 24 + i;
+        std::string nm = file_.records[slot].nameStr();
+        bool found = hirelingUnlockByte(i) != 0;
+        ImGui::PushID(i);
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        if (ImGui::Checkbox("##found", &found)) setHirelingUnlock(i, found);
+        ImGui::TableNextColumn();
+        char letter[4];
+        std::snprintf(letter, sizeof(letter), "%c", 'A' + i);
+        if (ImGui::Selectable(letter, selected_ == slot, ImGuiSelectableFlags_SpanAllColumns))
+            selected_ = slot;
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(nm.empty() ? "(empty)" : nm.c_str());
+        if (found) {
+            ImGui::SameLine();
+            ui::StatusChip("found", ui::Success());
+        } else {
+            ImGui::SameLine();
+            ui::StatusChip("locked", ui::Muted());
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndTable();
 }
 
 void RosterSection::drawGlobalOverlay() {
@@ -766,7 +918,7 @@ void RosterSection::drawGlobalOverlay() {
                   tailU16(G::kYearByEra + 12), tailU16(G::kYearByEra + 14),
                   tailU16(G::kYearByEra + 16), tailU16(G::kYearByEra + 18));
 
-    ImGui::SeparatorText("Known decoded globals");
+    ui::SectionBlock("Known decoded globals");
     ui::FormTable known("roster_globals_known");
     if (known.begin()) {
         known.row("Era index", [&] { ImGui::Text("%u", era); });
@@ -867,6 +1019,33 @@ void RosterSection::drawGlobalOverlay() {
     ImGui::TextDisabled(
         "Tail layout from save_game_state @ 0x823C (reload timer path @ 0x86F6). "
         "Event g-vars resolved @ 0x15620 (OP_17/OP_1A/OP_32).");
+
+    ui::SectionBlock("Hireling unlocks A–X", "g=0x00..0x17 / A4-$798B — nonzero = found");
+    ImGui::TextDisabled("ASM party UI hides hireling letters when bank[letter] is zero (0x574).");
+    auto writeTailU8 = [&](int off, uint8_t v) {
+        const int slot = kRosterGlobalStart + off / kRosterRecordSize;
+        const int byte = off % kRosterRecordSize;
+        if (slot < kRosterCount && byte >= 0 && byte < kRosterRecordSize) {
+            file_.records[slot].raw[static_cast<size_t>(byte)] = v;
+            dirty = true;
+        }
+    };
+    if (ImGui::BeginTable("hireling_unlocks", 8, ImGuiTableFlags_SizingStretchSame)) {
+        for (int i = 0; i < 24; ++i) {
+            if (i % 8 == 0) ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            char label[8];
+            std::snprintf(label, sizeof(label), "%c", 'A' + i);
+            bool found = tailU8(G::kEventBank + i) != 0;
+            ImGui::PushID(i);
+            if (ImGui::Checkbox(label, &found)) {
+                writeTailU8(G::kEventBank + i, found ? 1 : 0);
+                saveTail[static_cast<size_t>(G::kEventBank + i)] = found ? 1 : 0;
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
     ImGui::Separator();
 
     if (ImGui::BeginTable("roster_global_blocks", 5,
@@ -922,7 +1101,7 @@ void RosterSection::drawGlobalOverlay() {
     }
 
     RosterRecord& g = file_.records[selectedGlobal];
-    ImGui::SeparatorText("Selected global block (hex)");
+    ui::SectionBlock("Selected global block");
     ImGui::Text("Slot %d @ file 0x%04X, A4 offset start -$%04X",
                 selectedGlobal,
                 selectedGlobal * kRosterRecordSize,
@@ -933,23 +1112,79 @@ void RosterSection::drawGlobalOverlay() {
 
 void RosterSection::draw(App& app) {
     if (!loaded) {
-        ImGui::TextDisabled("roster.dat not loaded.");
+        ui::EmptyState("roster.dat not loaded.");
         return;
     }
     if (selected_ < 0 || selected_ >= kRosterCharacterCount) selected_ = 0;
 
-    ui::BeginListPanel("roster_list");
-    for (int i = 0; i < kRosterCharacterCount; ++i) {
-        char label[64];
+    if (!ui::BeginMasterList(layout_, "roster_list", "Roster")) {
+        return;
+    }
+
+    ImGui::TextDisabled("Characters");
+    for (int i = 0; i < 24; ++i) {
         std::string nm = file_.records[i].nameStr();
+        char hay[96];
+        snprintf(hay, sizeof(hay), "%d %s", i, nm.c_str());
+        if (!ui::ListFilterPass(layout_, hay)) continue;
+        char label[64];
         snprintf(label, sizeof(label), "%2d  %s", i, nm.empty() ? "(empty)" : nm.c_str());
         if (ImGui::Selectable(label, selected_ == i)) selected_ = i;
     }
-    ui::ListPanelNextDetail("roster_detail");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::TextDisabled("Hirelings  (checkbox = found)");
+    for (int i = 0; i < 24; ++i) {
+        const int slot = 24 + i;
+        std::string nm = file_.records[slot].nameStr();
+        char letter = static_cast<char>('A' + i);
+        char hay[96];
+        snprintf(hay, sizeof(hay), "%d %c %s", slot, letter, nm.c_str());
+        if (!ui::ListFilterPass(layout_, hay)) continue;
+
+        bool found = hirelingUnlockByte(i) != 0;
+        ImGui::PushID(1000 + i);
+        if (ImGui::Checkbox("##u", &found)) setHirelingUnlock(i, found);
+        ImGui::SameLine();
+        char label[64];
+        snprintf(label, sizeof(label), "%c  %s", letter, nm.empty() ? "(empty)" : nm.c_str());
+        if (!found) ImGui::PushStyleColor(ImGuiCol_Text, ui::Muted());
+        if (ImGui::Selectable(label, selected_ == slot)) selected_ = slot;
+        if (!found) ImGui::PopStyleColor();
+        ImGui::PopID();
+    }
+
+    ui::EndMasterListBeginDetail(layout_, "roster_detail");
 
     RosterRecord& r = file_.records[selected_];
+    std::string nm = r.nameStr();
+    char sub[64];
+    if (selected_ >= 24) {
+        const int letter = selected_ - 24;
+        const bool found = hirelingUnlockByte(letter) != 0;
+        snprintf(sub, sizeof(sub), "Hireling %c · slot %d · %s", 'A' + letter, selected_,
+                 found ? "FOUND" : "locked");
+    } else {
+        snprintf(sub, sizeof(sub), "Character · slot %d", selected_);
+    }
+    ui::PanelHeader(nm.empty() ? "(empty)" : nm.c_str(), sub);
 
-    if (ImGui::BeginTabBar("roster_tabs")) {
+    if (selected_ >= 24) {
+        const int letter = selected_ - 24;
+        bool found = hirelingUnlockByte(letter) != 0;
+        if (ImGui::Checkbox("Found / hireable at inn", &found)) setHirelingUnlock(letter, found);
+        ImGui::SameLine();
+        ImGui::TextDisabled("(writes g=0x%02X in global event bank)", letter);
+        ImGui::Spacing();
+    }
+
+    if (ImGui::BeginTabBar("roster_tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+        if (ImGui::BeginTabItem("Hirelings")) {
+            drawHirelingUnlocks();
+            ImGui::EndTabItem();
+        }
         if (ImGui::BeginTabItem("Character")) {
             drawCharacterSheet(r);
             ImGui::EndTabItem();
@@ -967,19 +1202,20 @@ void RosterSection::draw(App& app) {
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Hex")) {
-            ImGui::Text("Record %d @ 0x%04X (%d bytes)", selected_, selected_ * kRosterRecordSize,
-                        kRosterRecordSize);
-            DrawHexView("roster_hex", r.raw.data(), kRosterRecordSize, selected_ * kRosterRecordSize);
+            ImGui::TextDisabled("Record %d @ 0x%04X (%d bytes)", selected_,
+                                selected_ * kRosterRecordSize, kRosterRecordSize);
+            DrawHexView("roster_hex", r.raw.data(), kRosterRecordSize,
+                        selected_ * kRosterRecordSize);
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Globals 48..63")) {
+        if (ImGui::BeginTabItem("Globals")) {
             drawGlobalOverlay();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
     }
 
-    ui::EndDetailPanel();
+    ui::EndMasterDetail();
 }
 
 }  // namespace mm2

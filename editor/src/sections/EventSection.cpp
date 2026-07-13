@@ -22,30 +22,31 @@
 #include "imgui.h"
 #include "portable-file-dialogs.h"
 #include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace mm2 {
 namespace {
 
 ImU32 stmtColor(const std::string& kind) {
     if (kind == "say" || kind == "service_title" || kind == "plain_text" || kind == "ask_yes_no")
-        return IM_COL32(120, 210, 150, 255);
+        return ui::ToU32(ImVec4(0.42f, 0.78f, 0.55f, 1.00f));
     if (kind == "if" || kind == "set_cond" || kind == "skip_if_true" || kind == "skip_if_false" ||
         kind == "skip_if_victory")
-        return IM_COL32(240, 180, 90, 255);
+        return ui::ToU32(ui::Warn());
     if (kind == "abort" || kind == "end" || kind == "wait" || kind == "clear_tile_event")
-        return IM_COL32(255, 130, 130, 255);
+        return ui::ToU32(ui::Danger());
     if (kind == "selector" || kind == "shop" || kind == "quest" || kind == "go_to" ||
         kind == "overlay")
-        return IM_COL32(140, 180, 255, 255);
+        return IM_COL32(130, 165, 230, 255);
     if (kind == "give_item" || kind == "set_party_bits" || kind == "apply_party" ||
         kind == "party_effect" || kind == "party_damage" || kind == "treasure" ||
         kind == "or_member_field")
-        return IM_COL32(190, 160, 255, 255);
+        return IM_COL32(175, 145, 230, 255);
     if (kind == "fight" || kind == "fight_b" || kind == "play_sound" || kind == "engine_call")
-        return IM_COL32(255, 160, 110, 255);
+        return IM_COL32(235, 145, 100, 255);
     if (kind == "raw_op" || kind == "unlifted" || kind == "unknown_line")
-        return IM_COL32(170, 170, 170, 255);
-    return IM_COL32(200, 200, 210, 255);
+        return ui::ToU32(ui::Muted());
+    return IM_COL32(190, 190, 200, 255);
 }
 
 std::string formatExprShort(const eventlang::Expr& c) {
@@ -464,13 +465,16 @@ void EventSection::importDsl(App& app) {
 }
 
 void EventSection::drawToolbar(App& app) {
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.f, 4.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.f, 4.f));
+    const ImGuiStyle& st = ImGui::GetStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(st.FramePadding.x, st.FramePadding.y));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(st.ItemSpacing.x * 0.85f, st.ItemSpacing.y * 0.85f));
+
+    ui::BeginToolbarRow();
 
     // Location picker
     ImGui::AlignTextToFramePadding();
     ImGui::TextDisabled("Loc");
-    ImGui::SameLine(0, 4.f);
+    ImGui::SameLine(0, ui::Em(0.25f));
     ImGui::SetNextItemWidth(ui::Em(18.f));
     const int prevLoc = selectedLoc_;
     if (ImGui::BeginCombo("##loc", eventLocationLabel(selectedLoc_).c_str())) {
@@ -519,26 +523,25 @@ void EventSection::drawToolbar(App& app) {
     ImGui::SameLine();
     if (ImGui::Button("Import")) importDsl(app);
 
-    // Status chip — right side
     ImGui::SameLine();
     const float chipW = ui::Em(14.f);
     ui::SameLineRightAlign(chipW);
     if (!compileError_.empty()) {
-        ImGui::TextColored(ImVec4(1.f, 0.45f, 0.45f, 1.f), "Compile error");
+        ui::StatusChip("Compile error", ui::Danger());
     } else if (scriptDirty_) {
-        ImGui::TextColored(ImVec4(1.f, 0.75f, 0.35f, 1.f), "Unsaved edits");
+        ui::StatusChip("Unsaved edits", ui::Warn());
     } else if (!compileOkMsg_.empty()) {
-        ImGui::TextColored(ImVec4(0.55f, 0.9f, 0.55f, 1.f), "Compile OK");
+        ui::StatusChip("Compile OK", ui::Success());
     } else {
         ImGui::TextDisabled("%s", eventlang::recordKindName(ast_.recordKind));
     }
+    ui::EndToolbarRow();
 
     ImGui::PopStyleVar(2);
 
     // Record-kind notes sit under the toolbar, not in the action row.
     if (ast_.recordKind == eventlang::RecordKind::CastleBlob) {
-        ImGui::TextColored(ImVec4(1.f, 0.7f, 0.3f, 1.f),
-                           "Castle-style record (no triplet terminator) — edit carefully.");
+        ui::TextWarn("Castle-style record (no triplet terminator) — edit carefully.");
     } else if (ast_.recordKind == eventlang::RecordKind::OverlayBank) {
         ImGui::TextDisabled(
             "Overlay bank (locs 60..70): LE string anchor @ [0..1], scripts @ [2..] — matches ASM "
@@ -757,11 +760,8 @@ void EventSection::drawProblems() {
     if (!hasErr && !hasOk) return;
 
     if (hasErr) {
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(48, 12, 12, 255));
-        ImGui::BeginChild("problems", ImVec2(0, 0), ImGuiChildFlags_Borders);
-        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 120, 120, 255));
-        ImGui::TextUnformatted("Problems");
-        ImGui::PopStyleColor();
+        ui::PushDangerBanner("problems");
+        ui::StatusChip("Problems", ui::Danger());
         ImGui::SameLine(0, ui::Em(0.8f));
         if (compileErrorLine_ >= 0) {
             char btn[40];
@@ -771,14 +771,11 @@ void EventSection::drawProblems() {
         }
         ImGui::TextWrapped("%s", compileError_.c_str());
         if (compileErrorLine_ >= 0 && ImGui::IsItemClicked()) jumpToError();
-        ImGui::EndChild();
-        ImGui::PopStyleColor();
+        ui::EndBanner();
     } else {
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(12, 36, 18, 255));
-        ImGui::BeginChild("problems", ImVec2(0, 0), ImGuiChildFlags_Borders);
-        ImGui::TextColored(ImVec4(0.55f, 0.9f, 0.55f, 1.f), "%s", compileOkMsg_.c_str());
-        ImGui::EndChild();
-        ImGui::PopStyleColor();
+        ui::PushSuccessBanner("problems");
+        ui::TextSuccess("%s", compileOkMsg_.c_str());
+        ui::EndBanner();
     }
 }
 

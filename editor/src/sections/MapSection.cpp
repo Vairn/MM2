@@ -1,4 +1,4 @@
-#include "sections/MapSection.h"
+﻿#include "sections/MapSection.h"
 
 #include <cstdio>
 
@@ -7,6 +7,7 @@
 #include "imgui.h"
 #include "widgets/Texture.h"
 #include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace mm2 {
 
@@ -196,11 +197,11 @@ void MapSection::drawWindow() {
     float z = viewZoom_;
 
     ImGui::Text("Backdrop: sky.32 (top) + %s (bottom)  -  %s", floorName, envName);
-    ImGui::SetNextItemWidth(160);
+    ImGui::SetNextItemWidth(ui::Em(10.0f));
     ImGui::SliderFloat("View zoom", &viewZoom_, 1.0f, 4.0f, "%.0fx");
     if (sky_.tex.size() > 1) {
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(160);
+        ImGui::SetNextItemWidth(ui::Em(10.0f));
         ImGui::SliderInt("Sky frame", &skyFrame_, 0, static_cast<int>(sky_.tex.size()) - 1);
     }
 
@@ -219,12 +220,12 @@ void MapSection::drawWindow() {
     // Reserve the canvas and draw a border, then the two backdrop halves.
     ImVec2 canvas(W * z, (H * 2) * z);
     dl->AddRectFilled(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
-                      IM_COL32(0, 0, 0, 255));
+                      ui::ToU32(ui::CanvasBg()));
     int sf = sky_.tex.empty() ? -1 : (skyFrame_ < static_cast<int>(sky_.tex.size()) ? skyFrame_ : 0);
     blit(sky_, sf, 0.0f, 0.0f);     // ceiling / sky
     blit(*floor, 0, 0.0f, H);       // floor
     dl->AddRect(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
-                IM_COL32(120, 120, 120, 255));
+                ui::AccentU32(160));
     ImGui::Dummy(canvas);
 
     if (sky_.tex.empty() || floor->tex.empty())
@@ -311,10 +312,10 @@ void MapSection::drawOutdoorView3D() {
     ImGui::Text("Camera  (%d, %d)  facing %s  |  outdoor", camera_.x, camera_.y,
                 kFacing[camera_.facing & 3]);
 
-    ImGui::SetNextItemWidth(80);
+    ImGui::SetNextItemWidth(ui::Em(5.0f));
     ImGui::InputInt("X##cam", &camera_.x);
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(80);
+    ImGui::SetNextItemWidth(ui::Em(5.0f));
     ImGui::InputInt("Y##cam", &camera_.y);
     if (camera_.x < 0) camera_.x = 0;
     if (camera_.y < 0) camera_.y = 0;
@@ -332,10 +333,10 @@ void MapSection::drawOutdoorView3D() {
 
     handleView3DKeyboardInput();
 
-    ImGui::SetNextItemWidth(160);
+    ImGui::SetNextItemWidth(ui::Em(10.0f));
     ImGui::SliderFloat("View zoom##3d", &viewZoom_, 1.0f, 4.0f, "%.0fx");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(160);
+    ImGui::SetNextItemWidth(ui::Em(10.0f));
     ImGui::SliderFloat("Map zoom##mini", &zoom_, 1.0f, 4.0f, "%.0fx");
 
     OutdoorMapGrid grid(file_, attrib_, screen_);
@@ -361,7 +362,7 @@ void MapSection::drawOutdoorView3D() {
 
     ImVec2 canvas(W * z, H * z);
     dl->AddRectFilled(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
-                      IM_COL32(0, 0, 0, 255));
+                      ui::ToU32(ui::CanvasBg()));
 
     blit(floorOut_, 0, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DFloorY));
     blit(sky_, 0, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DSkyY));
@@ -376,7 +377,7 @@ void MapSection::drawOutdoorView3D() {
     }
 
     dl->AddRect(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
-                IM_COL32(120, 120, 120, 255));
+                ui::AccentU32(160));
     ImGui::Dummy(canvas);
     ImGui::EndGroup();
 
@@ -420,7 +421,7 @@ void MapSection::drawView3D() {
     Env env = envOf(screen_);
     if (env != Env::Outdoor) {
         const char* wallsetLabels[] = {"Auto (map env)", "Town", "Cavern", "Castle"};
-        ImGui::SetNextItemWidth(180);
+        ImGui::SetNextItemWidth(ui::Em(11.0f));
         ImGui::Combo("Wallset##3d", &wallsetOverride_, wallsetLabels, IM_ARRAYSIZE(wallsetLabels));
         if (wallsetOverride_ == static_cast<int>(WallsetOverride::Town)) env = Env::Town;
         else if (wallsetOverride_ == static_cast<int>(WallsetOverride::Cavern)) env = Env::Cavern;
@@ -468,10 +469,10 @@ void MapSection::drawView3D() {
     ImGui::Text("Camera  (%d, %d)  facing %s  |  %s", camera_.x, camera_.y,
                 kFacing[camera_.facing & 3], skyFrame ? "ceiling" : "open sky");
 
-    ImGui::SetNextItemWidth(80);
+    ImGui::SetNextItemWidth(ui::Em(5.0f));
     ImGui::InputInt("X##cam", &camera_.x);
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(80);
+    ImGui::SetNextItemWidth(ui::Em(5.0f));
     ImGui::InputInt("Y##cam", &camera_.y);
     if (camera_.x < 0) camera_.x = 0;
     if (camera_.y < 0) camera_.y = 0;
@@ -489,10 +490,10 @@ void MapSection::drawView3D() {
 
     handleView3DKeyboardInput();
 
-    ImGui::SetNextItemWidth(160);
+    ImGui::SetNextItemWidth(ui::Em(10.0f));
     ImGui::SliderFloat("View zoom##3d", &viewZoom_, 1.0f, 4.0f, "%.0fx");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(160);
+    ImGui::SetNextItemWidth(ui::Em(10.0f));
     ImGui::SliderFloat("Map zoom##mini", &zoom_, 1.0f, 4.0f, "%.0fx");
 
     const float W = static_cast<float>(kView3DViewportW);
@@ -561,20 +562,20 @@ void MapSection::drawView3D() {
 
     ImVec2 canvas(W * z, H * z);
     dl->AddRectFilled(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
-                      IM_COL32(0, 0, 0, 255));
+                      ui::ToU32(ui::CanvasBg()));
 
-    // 1. floor backdrop — townf.32 frame 0 at (8, 68)
+    // 1. floor backdrop - townf.32 frame 0 at (8, 68)
     blit(*floor, 0, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DFloorY));
-    // 2. sky/ceiling backdrop — sky.32 frame from roof bit at (8, 8)
+    // 2. sky/ceiling backdrop - sky.32 frame from roof bit at (8, 8)
     blit(sky_, skyFrame, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DSkyY));
-    // 3. walls (town/cave/castle.32) — painted over sky/floor like view_3d_master @0x2ECE
+    // 3. walls (town/cave/castle.32) - painted over sky/floor like view_3d_master @0x2ECE
     for (const View3DBlit& wb : scene.blits) {
         blit(*walls, wb.frame, static_cast<float>(wb.x), static_cast<float>(wb.y));
         blitTorch(wb);
     }
 
     dl->AddRect(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
-                IM_COL32(120, 120, 120, 255));
+                ui::AccentU32(160));
     ImGui::Dummy(canvas);
 
     ImGui::EndGroup();
@@ -622,7 +623,7 @@ void MapSection::drawView3D() {
                         visualWallN(v), visualWallE(v), visualWallS(v), visualWallW(v));
         }
         ImGui::Separator();
-        ImGui::TextDisabled("Non-zero frustum slots → blits above");
+        ImGui::TextDisabled("Non-zero frustum slots â†’ blits above");
         for (int i = 0; i < static_cast<int>(scene.slots.size()); ++i) {
             const uint8_t s = scene.slots[static_cast<size_t>(i)];
             if (s != 0)
@@ -636,7 +637,7 @@ void MapSection::drawGrid(const char* id, std::array<uint8_t, kMapPageSize>& pag
                           bool markEvents) {
     ImGui::PushID(id);
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float cell = 28.0f;
+    const float cell = ui::Em(1.75f);
     // On-disk row 0 is the SOUTH (bottom) row, so draw it last: screen row y
     // shows data row (15 - y). Matches the game/b3dmm2 editor which iterate
     // rows 15->0 and index with c=((15-y)*16)+x.
@@ -659,7 +660,7 @@ void MapSection::drawGrid(const char* id, std::array<uint8_t, kMapPageSize>& pag
             if (markEvents && collisionHasEvent(v)) {
                 ImVec2 mn = ImGui::GetItemRectMin();
                 dl->AddCircleFilled(ImVec2(mn.x + 5.0f, mn.y + 5.0f), 3.0f,
-                                    IM_COL32(255, 80, 80, 255));
+                                    ui::ToU32(ui::MapEvent()));
             }
             ImGui::PopID();
             ImGui::PopStyleColor(2);
@@ -669,7 +670,7 @@ void MapSection::drawGrid(const char* id, std::array<uint8_t, kMapPageSize>& pag
     ImGui::Text("Selected tile (%d,%d) = 0x%02X", selTile % kMapGridDim, selTile / kMapGridDim,
                 page[selTile]);
     int v = page[selTile];
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(ui::Em(7.5f));
     if (ImGui::InputInt("Tile value", &v)) {
         page[selTile] = static_cast<uint8_t>(v & 0xFF);
         dirty = true;
@@ -718,11 +719,11 @@ void MapSection::drawCartoGrid(const char* id, std::array<uint8_t, kMapPageSize>
             if (markEvents && collisionHasEvent(page[idx])) {
                 ImVec2 mn = ImGui::GetItemRectMin();
                 dl->AddCircleFilled(ImVec2(mn.x + 4.0f, mn.y + 4.0f), 3.0f,
-                                    IM_COL32(255, 80, 80, 255));
+                                    ui::ToU32(ui::MapEvent()));
             }
             if (idx == selTile)
                 dl->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
-                            IM_COL32(255, 220, 0, 255), 0.0f, 0, 2.0f);
+                            ui::ToU32(ui::MapPlayer()), 0.0f, 0, 2.0f);
             ImGui::PopID();
             if (x != kMapGridDim - 1) ImGui::SameLine();
         }
@@ -734,7 +735,7 @@ void MapSection::drawCartoGrid(const char* id, std::array<uint8_t, kMapPageSize>
     ImGui::Text("Selected tile (%d,%d) = 0x%02X -> frame %d", selTile % kMapGridDim,
                 selTile / kMapGridDim, v, cartoFrame(screen_, v, usesOutbCarto(screen_)));
     int iv = v;
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(ui::Em(7.5f));
     ImGui::PushID(id);
     if (ImGui::InputInt("Tile value", &iv)) {
         page[selTile] = static_cast<uint8_t>(iv & 0xFF);
@@ -745,7 +746,7 @@ void MapSection::drawCartoGrid(const char* id, std::array<uint8_t, kMapPageSize>
 }
 
 void MapSection::drawMinimap() {
-    // Auto-map uses page 0 (visual tiles) — same path as drawCartoGrid on the
+    // Auto-map uses page 0 (visual tiles) - same path as drawCartoGrid on the
     // Visual tab.  Event dots still come from page 1 (collision 0x80 flag).
     const bool  useOutb    = usesOutbCarto(screen_);
     const bool  useTownb   = !useOutb;
@@ -765,11 +766,11 @@ void MapSection::drawMinimap() {
     ImVec2      origin = ImGui::GetCursorScreenPos();
 
     dl->AddRectFilled(origin, ImVec2(origin.x + mapW, origin.y + mapH),
-                      IM_COL32(12, 12, 22, 255));
+                      ui::ToU32(ui::CanvasBg()));
 
     for (int cy = 0; cy < dim; ++cy) {      // cy=0 = north (top of minimap)
         for (int cx = 0; cx < dim; ++cx) {  // cx=0 = west (left of minimap)
-            // Disk row 0 = south → screen bottom; cy=0 ↔ disk row 15 (north).
+            // Disk row 0 = south â†’ screen bottom; cy=0 â†” disk row 15 (north).
             int     diskY = dim - 1 - cy;
             int     idx   = diskY * dim + cx;
             uint8_t v     = vis[static_cast<size_t>(idx)];
@@ -784,7 +785,7 @@ void MapSection::drawMinimap() {
             } else {
                 // Fallback: page-0 wall edges (2-bit fields per direction).
                 dl->AddRectFilled(ImVec2(px, py), ImVec2(px + tw, py + th),
-                                  IM_COL32(30, 30, 45, 255));
+                                  IM_COL32(28, 22, 32, 255));
                 ImU32 wc = IM_COL32(210, 215, 220, 255);
                 float t  = 1.5f;
                 if (v & 0xC0) dl->AddLine(ImVec2(px,      py),      ImVec2(px + tw, py),      wc, t);
@@ -793,14 +794,14 @@ void MapSection::drawMinimap() {
                 if (v & 0x03) dl->AddLine(ImVec2(px,      py),      ImVec2(px,      py + th), wc, t);
             }
 
-            // Event dot (red) — collision page 0x80 flag only.
+            // Event dot (red) - collision page 0x80 flag only.
             if (collisionHasEvent(col[static_cast<size_t>(idx)]))
                 dl->AddCircleFilled(ImVec2(px + tw * 0.5f, py + th * 0.5f), 2.0f * zoom_,
-                                    IM_COL32(255, 65, 65, 200));
+                                    ui::ToU32(ImVec4(0.92f, 0.38f, 0.38f, 0.78f)));
         }
     }
 
-    // Player cell — highlight + direction arrow.
+    // Player cell - highlight + direction arrow.
     // Cartography.h documents direction-arrow frames 0x20..0x23 (N/S/E/W) in townb.32.
     int   screenCY = dim - 1 - camera_.y;
     float pcx      = origin.x + camera_.x * tw;
@@ -814,9 +815,9 @@ void MapSection::drawMinimap() {
     if (useArrowTile) {
         // Yellow selection highlight behind the arrow tile
         dl->AddRectFilled(ImVec2(pcx, pcy), ImVec2(pcx + tw, pcy + th),
-                          IM_COL32(255, 220, 0, 55));
+                          ui::ToU32(ImVec4(0.95f, 0.82f, 0.28f, 0.22f)));
         dl->AddRect(ImVec2(pcx, pcy), ImVec2(pcx + tw, pcy + th),
-                    IM_COL32(255, 220, 0, 200), 0.0f, 0, 1.5f);
+                    ui::ToU32(ImVec4(0.95f, 0.82f, 0.28f, 0.78f)), 0.0f, 0, 1.5f);
         dl->AddImage(static_cast<ImTextureID>(townb_.tex[dirFrame]),
                      ImVec2(pcx, pcy), ImVec2(pcx + tw, pcy + th));
     } else {
@@ -828,7 +829,7 @@ void MapSection::drawMinimap() {
         float arrL = th * 0.5f, arrW = tw * 0.28f;
         float tipX = cx2 + kArrDx[f] * arrL, tipY = cy2 + kArrDy[f] * arrL;
         float perpX = -kArrDy[f], perpY = kArrDx[f];
-        dl->AddCircleFilled(ImVec2(cx2, cy2), tw * 0.35f, IM_COL32(255, 220, 0, 255));
+        dl->AddCircleFilled(ImVec2(cx2, cy2), tw * 0.35f, ui::ToU32(ui::MapPlayer()));
         dl->AddTriangleFilled(ImVec2(tipX, tipY),
                               ImVec2(cx2 + perpX * arrW, cy2 + perpY * arrW),
                               ImVec2(cx2 - perpX * arrW, cy2 - perpY * arrW),
@@ -873,7 +874,7 @@ void MapSection::drawCollisionDecode(uint8_t cell) {
                 fieldDesc(s, false), fieldDesc(w, true));
     ImGui::TextDisabled("dark squares cost 1 light factor on entry");
     if (collisionHasEvent(cell))
-        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
+        ImGui::TextColored(ui::MapEvent(),
                            "Event flag (0x80) SET - this tile has an event.dat entry");
     else
         ImGui::TextDisabled("No event flag (0x80 clear)");
@@ -882,13 +883,14 @@ void MapSection::drawCollisionDecode(uint8_t cell) {
 void MapSection::draw(App& app) {
     (void)app;
     if (!loaded) {
-        ImGui::TextDisabled("map.dat not loaded.");
+        ui::EmptyState("map.dat not loaded.");
         return;
     }
 
+    ui::BeginToolbarRow();
     ui::SetFieldWide();
     std::string cur = std::to_string(screen_) + ": " + areaLabel(screen_);
-    if (ImGui::BeginCombo("Screen", cur.c_str())) {
+    if (ImGui::BeginCombo("##map_screen", cur.c_str())) {
         for (int i = 0; i < kMapScreens; ++i) {
             std::string lbl = std::to_string(i) + ": " + areaLabel(i);
             if (ImGui::Selectable(lbl.c_str(), screen_ == i)) screen_ = i;
@@ -905,27 +907,29 @@ void MapSection::draw(App& app) {
     }
     ImGui::SameLine();
     ImGui::TextDisabled("%s", isOutdoor(screen_) ? "outdoor" : "indoor");
+    ui::EndToolbarRow();
+    ImGui::Spacing();
 
     MapScreen& s = file_.screens[screen_];
 
-    if (ImGui::BeginTabBar("map_tabs")) {
+    if (ImGui::BeginTabBar("map_tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
         if (ImGui::BeginTabItem("Tiles")) {
             ImGui::Checkbox("Tile graphics", &graphical_);
             if (graphical_) {
                 ImGui::SameLine();
-                ImGui::SetNextItemWidth(160);
+                ImGui::SetNextItemWidth(ui::Em(10.0f));
                 ImGui::SliderFloat("Zoom", &zoom_, 1.0f, 8.0f, "%.0fx");
             }
             if (ImGui::BeginTable("map_pages", 2, ImGuiTableFlags_BordersInnerV)) {
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::SeparatorText("Visual tiles (page 0)");
+                ui::SectionBlock("Visual tiles", "page 0");
                 if (graphical_)
                     drawCartoGrid("visual", s.visual, selVisual_);
                 else
                     drawGrid("visual", s.visual, selVisual_);
                 ImGui::TableNextColumn();
-                ImGui::SeparatorText("Collision + events (page 1)");
+                ui::SectionBlock("Collision + events", "page 1");
                 // Collision always renders with the indoor townb.32 cartography
                 // tiles (even on outdoor screens); falls back to hex if missing.
                 // Event-flagged cells (0x80) get a red marker.

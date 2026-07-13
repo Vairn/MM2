@@ -11,6 +11,7 @@
 #include "widgets/HexView.h"
 #include "widgets/Texture.h"
 #include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace fs = std::filesystem;
 
@@ -177,18 +178,21 @@ void MonstersSection::loadSprite(uint8_t picture) {
 
 void MonstersSection::draw(App& app) {
     if (!loaded) {
-        ImGui::TextDisabled("monsters.dat not loaded.");
+        ui::EmptyState("monsters.dat not loaded.");
         return;
     }
 
-    ui::BeginListPanel("mon_list");
-    for (int i = 0; i < kMonstersCount; ++i) {
-        char label[64];
-        std::string nm = file_.records[i].nameStr();
-        snprintf(label, sizeof(label), "%3d  %s", i, nm.empty() ? "(blank)" : nm.c_str());
-        if (ImGui::Selectable(label, selected_ == i)) selected_ = i;
+    if (!ui::BeginMasterList(layout_, "mon_list", "256 monsters")) {
+        return;
     }
-    ui::ListPanelNextDetail("mon_detail");
+    for (int i = 0; i < kMonstersCount; ++i) {
+        std::string nm = file_.records[i].nameStr();
+        if (!ui::ListFilterPass(layout_, nm.c_str()) &&
+            !ui::ListFilterPass(layout_, std::to_string(i).c_str()))
+            continue;
+        if (ui::ListRow(i, nm.c_str(), selected_ == i)) selected_ = i;
+    }
+    ui::EndMasterListBeginDetail(layout_, "mon_detail");
 
     MonsterRecord& r = file_.records[selected_];
 
@@ -197,11 +201,14 @@ void MonstersSection::draw(App& app) {
     std::strncpy(nameBuf, nm.c_str(), sizeof(nameBuf));
     nameBuf[kMonsterNameSize] = '\0';
 
+    ui::PanelHeader(nm.empty() ? "(blank monster)" : nm.c_str(),
+                    (std::string("#") + std::to_string(selected_)).c_str());
+
     {
         ui::FormTable form("mon_name");
         if (form.begin()) {
             form.row("Name", [&] {
-                ui::SetFieldWide();
+                ui::SetFieldStretch();
                 if (ImGui::InputText("##name", nameBuf, sizeof(nameBuf))) {
                     r.setName(nameBuf);
                     dirty = true;
@@ -213,13 +220,14 @@ void MonstersSection::draw(App& app) {
     uint8_t pic = r.raw[0x15];
     if (spritePic_ != pic) loadSprite(pic);
 
-    if (ImGui::BeginTable("mon_body", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV)) {
-        ImGui::TableSetupColumn("sprite", ImGuiTableColumnFlags_WidthFixed, ui::Em(20.f));
+    if (ImGui::BeginTable("mon_body", 2,
+                          ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV)) {
+        ImGui::TableSetupColumn("sprite", ImGuiTableColumnFlags_WidthFixed, ui::Em(22.f));
         ImGui::TableSetupColumn("props", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableNextRow();
 
         ImGui::TableNextColumn();
-        ImGui::SeparatorText("Sprite");
+        ui::SectionBlock("Sprite");
         ImGui::TextDisabled("picture=%u  (file %u, flag 0x80=%s)", pic, pic & 0x7F,
                             (pic & 0x80) ? "set" : "clear");
 
@@ -254,7 +262,7 @@ void MonstersSection::draw(App& app) {
             if (pcDir_.empty()) {
                 ImGui::TextDisabled("No PC assets folder set (open one from the PC Walls section).");
             } else if (!pcPic_ || !pcPic_->ok) {
-                ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "No PC sprite for picture id %d in %s.", pic & 0x7F,
+                ImGui::TextColored(ui::Danger(), "No PC sprite for picture id %d in %s.", pic & 0x7F,
                                    pcMode_ == PcSpriteMode::Cga ? "MONSTERS.4" : "MONSTERS.16");
             } else {
                 const int n = static_cast<int>(pcPic_->frames.size());
@@ -449,7 +457,7 @@ void MonstersSection::draw(App& app) {
                 }
             }
         } else {
-            ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "No sprite: %s",
+            ImGui::TextColored(ui::Danger(), "No sprite: %s",
                                sprite_.error.empty() ? "decode failed" : sprite_.error.c_str());
         }
 
@@ -473,7 +481,7 @@ void MonstersSection::draw(App& app) {
             }
         };
 
-        ImGui::SeparatorText("Abilities (ASM-confirmed)");
+        ui::SectionBlock("Abilities", "ASM-confirmed");
         ImGui::TextDisabled("Single-target attack (Sabil 0x%02X)", r.sabil());
         effectCombo("Effect##single", r.singleEffect(), kAbilityNames, kAbilityCount,
                     &MonsterRecord::setSingleEffect);
@@ -524,7 +532,7 @@ void MonstersSection::draw(App& app) {
             ImGui::SetTooltip("Oabil bit7. Monster duplicates itself in combat\n"
                               "(asm 0x100B0).");
 
-        ImGui::SeparatorText("Named fields (semantics partial)");
+        ui::SectionBlock("Named fields", "semantics partial");
         ImGui::Text("Derived HP: %u", r.hpValue());
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("ASM 0x4C8E: ((hp_code & 0x3F)+1) * {1,10,100,1000}[(hp_code>>6)&3]");
@@ -578,12 +586,14 @@ void MonstersSection::draw(App& app) {
         ImGui::EndTable();
     }
 
-    ImGui::SeparatorText("Raw record");
-    ImGui::Text("Record %d @ 0x%04X (%d bytes)", selected_, selected_ * kMonsterRecordSize,
-                kMonsterRecordSize);
-    DrawHexView("mon_hex", r.raw.data(), kMonsterRecordSize, selected_ * kMonsterRecordSize);
+    if (ui::BeginHexBlock("Raw record")) {
+        ImGui::TextDisabled("Record %d @ 0x%04X (%d bytes)", selected_,
+                            selected_ * kMonsterRecordSize, kMonsterRecordSize);
+        DrawHexView("mon_hex", r.raw.data(), kMonsterRecordSize, selected_ * kMonsterRecordSize);
+        ui::EndHexBlock();
+    }
 
-    ui::EndDetailPanel();
+    ui::EndMasterDetail();
 }
 
 }  // namespace mm2

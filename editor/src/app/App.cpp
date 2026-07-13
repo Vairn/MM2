@@ -17,6 +17,8 @@
 #include "sections/RosterSection.h"
 #include "sections/SpellsSection.h"
 #include "sections/StrSection.h"
+#include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace mm2 {
 
@@ -113,44 +115,82 @@ void App::drawMenuBar() {
 }
 
 void App::drawBrowser() {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(ui::Em(0.6f), ui::Em(0.5f)));
     ImGui::Begin("Data Files");
+
+    ImGui::TextUnformatted("EXPLORER");
+    ImGui::Spacing();
     if (state_.dataDir.empty()) {
-        ImGui::TextWrapped("No data folder open. Use File > Open Data Folder...");
-    } else {
-        ImGui::TextDisabled("%s", state_.dataDir.c_str());
+        ImGui::TextWrapped("File > Open Data Folder...");
+        ImGui::End();
+        ImGui::PopStyleVar();
+        return;
     }
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ui::Muted());
+    ImGui::TextWrapped("%s", state_.dataDir.c_str());
+    ImGui::PopStyleColor();
+    ImGui::Spacing();
     ImGui::Separator();
+    ImGui::Spacing();
+
     for (int i = 0; i < static_cast<int>(sections_.size()); ++i) {
         Section* s = sections_[i].get();
+        const bool missing = !s->loaded && s->fileName()[0] != '\0';
+        const bool dirty = s->dirty;
+        const bool active = active_ == i;
+
+        if (active) {
+            ImGui::PushStyleColor(ImGuiCol_Header, ui::AccentSoft());
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ui::AccentSoft());
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ui::Accent());
+        } else if (missing) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ui::Muted());
+        } else if (dirty) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ui::Warn());
+        }
+
         char label[96];
-        const char* mark = s->dirty ? "* " : (s->loaded ? "  " : "x ");
+        const char* mark = dirty ? "* " : (missing ? "o " : "  ");
         snprintf(label, sizeof(label), "%s%s", mark, s->title());
-        if (ImGui::Selectable(label, active_ == i)) active_ = i;
+        if (ImGui::Selectable(label, active, ImGuiSelectableFlags_SpanAvailWidth)) active_ = i;
+
+        if (active)
+            ImGui::PopStyleColor(3);
+        else if (missing || dirty)
+            ImGui::PopStyleColor();
+
         if (ImGui::IsItemHovered() && s->fileName()[0])
             ImGui::SetTooltip("%s%s", s->fileName(), s->loaded ? "" : " (not loaded)");
     }
+
+    ImGui::Spacing();
     ImGui::Separator();
-    ImGui::TextDisabled("* unsaved   x missing");
+    ImGui::Spacing();
+    ui::TextMuted("* unsaved   o missing");
     ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 void App::drawActivePanel() {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(ui::Em(0.75f), ui::Em(0.55f)));
     ImGui::Begin("Editor");
     if (sections_.empty()) {
         ImGui::End();
+        ImGui::PopStyleVar();
         return;
     }
     Section* s = sections_[active_].get();
-    ImGui::Text("%s", s->title());
-    if (s->fileName()[0]) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("(%s)%s", s->fileName(), s->dirty ? "  *modified" : "");
-    }
-    ImGui::Separator();
+    char fileSub[96] = {};
+    if (s->fileName()[0]) snprintf(fileSub, sizeof(fileSub), "%s", s->fileName());
+    const ImVec4 chipCol = ui::Warn();
+    ui::PanelHeader(s->title(), fileSub[0] ? fileSub : nullptr, s->dirty ? "MODIFIED" : nullptr,
+                    s->dirty ? &chipCol : nullptr);
     ImGui::BeginChild("##section_body", ImVec2(0, 0), ImGuiChildFlags_None);
     s->draw(*this);
     ImGui::EndChild();
     ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 void App::frame() {
@@ -194,15 +234,21 @@ void App::frame() {
     drawBrowser();
     drawActivePanel();
 
-    // Status bar.
-    if (ImGui::BeginViewportSideBar("##status", vp, ImGuiDir_Down, ImGui::GetFrameHeight(),
+    // Status bar — muted strip.
+    const float statusH = ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.y;
+    ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4(0.08f, 0.04f, 0.04f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.28f, 0.10f, 0.10f, 0.35f));
+    if (ImGui::BeginViewportSideBar("##status", vp, ImGuiDir_Down, statusH,
                                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav)) {
         if (ImGui::BeginMenuBar()) {
-            ImGui::Text("%s", state_.status.c_str());
+            ImGui::PushStyleColor(ImGuiCol_Text, ui::Muted());
+            ImGui::TextUnformatted(state_.status.empty() ? "Ready" : state_.status.c_str());
+            ImGui::PopStyleColor();
             ImGui::EndMenuBar();
         }
     }
     ImGui::End();
+    ImGui::PopStyleColor(2);
 
     if (pendingOpen_) {
         openDataFolderNow(pendingDataDir_);

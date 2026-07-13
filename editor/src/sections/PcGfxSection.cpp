@@ -10,6 +10,7 @@
 #include "portable-file-dialogs.h"
 #include "widgets/Texture.h"
 #include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace fs = std::filesystem;
 
@@ -370,7 +371,7 @@ void PcGfxSection::draw(App& app) {
 
 void PcGfxSection::drawWallDetail() {
     if (!wall_.ok && wall_.frames.empty()) {
-        ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "Decode failed: %s", wall_.error.c_str());
+        ImGui::TextColored(ui::Danger(), "Decode failed: %s", wall_.error.c_str());
         return;
     }
     ImGui::TextDisabled("%d frames  header=%d  offsets=%s  compressed=%zuB decompressed=%zu/%uB%s",
@@ -439,8 +440,7 @@ void PcGfxSection::drawWallDetail() {
                 if (!tex) continue;
                 ImVec2 sz = wallFrameDisplaySize(fr.width, fr.height, zoom_, kWallThumbMaxPx);
                 const bool current = (i == wallFrame_);
-                if (current) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1, 0.85f, 0.2f, 1));
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, current ? 2.0f : 0.0f);
+                ui::SelectedFrameScope sel(current);
                 ImGui::BeginGroup();
                 if (ImGui::ImageButton(("wf" + std::to_string(i)).c_str(), static_cast<ImTextureID>(tex), sz))
                     wallFrame_ = i;
@@ -450,8 +450,6 @@ void PcGfxSection::drawWallDetail() {
                 else
                     ImGui::TextDisabled("%d  %dx%d", fr.index, fr.width, fr.height);
                 ImGui::EndGroup();
-                ImGui::PopStyleVar();
-                if (current) ImGui::PopStyleColor();
                 x += sz.x + 12;
                 if (x + sz.x < avail) ImGui::SameLine();
                 else x = 0;
@@ -464,7 +462,7 @@ void PcGfxSection::drawWallDetail() {
 
 void PcGfxSection::drawMonsterDetail() {
     if (!atlas_.ok) {
-        ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "Decode failed: %s", atlas_.error.c_str());
+        ImGui::TextColored(ui::Danger(), "Decode failed: %s", atlas_.error.c_str());
         return;
     }
     ImGui::TextDisabled("header=%zuB (%zu slots)  %zu picture ids resolved", atlas_.headerBytes,
@@ -486,7 +484,7 @@ void PcGfxSection::drawMonsterDetail() {
     ImGui::TextDisabled("(same picture id as NN.anm in monsters.dat byte 0x15 & 0x7F)");
 
     if (!pic_ || !pic_->ok) {
-        ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "No decodable picture for this id.");
+        ImGui::TextColored(ui::Danger(), "No decodable picture for this id.");
         return;
     }
 

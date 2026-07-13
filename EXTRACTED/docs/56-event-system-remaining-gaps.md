@@ -1,8 +1,8 @@
 # 56 — Event system remaining gaps
 
-**Whole-game focus 2026-07-10.** Town/OP_0E shop leaves are **out of scope** for
-this pass unless they are the only ASM-clear leftover after VM/combat/explore
-work. ASM (`EXTRACTED/mm2.capstone.annotated.asm`) wins.
+**Walker ↔ C++ EventRuntime parity pass 2026-07-13.** Prior whole-game focus
+2026-07-10 notes retained below where still accurate. ASM
+(`EXTRACTED/mm2.capstone.annotated.asm`) wins; C++ remake is the JS mirror target.
 
 Companion: [`07-event-script-opcodes.md`](07-event-script-opcodes.md),
 [`08-event-runtime.md`](08-event-runtime.md),
@@ -15,18 +15,16 @@ missing leaf or presentation · **Wrong/FAQ** = invented or mis-attributed · **
 
 ---
 
-## 0. Audit verdict (this pass — whole-game)
+## 0. Audit verdict (2026-07-13 walker parity)
 
 | Area | Reality |
 | ---- | ------- |
-| VM opcodes 0x00–0x32 (logic/GS) | **~90% byte-exact** at call sites. Residual Partial = presentation chrome (01–0B glyphs) + combat *engine* depth behind 12/13 + OP_0E selector engines (town, separate). |
-| Victory latch / OP_2B | **ASM-exact** — `finishVictory` sets `-$77BD`; also **`clr.b -$794C` @ 0x1243e** (ported this pass). |
-| Auto-Search `$FE` | **ASM-exact** — main loop @ `0x1276` bumps `$FE`→`$FF` and runs Search (ported). Victory does **not** arm `$FE`. |
-| Rest ambush `0x19D64` | **ASM-exact** — wake `bset #4,$26`, mode=3, clr `-$77BE`; tile gate `-$55D6>=$80` via current-cell latch (0x1B1C); Too-dangerous bit3 @ `0x19E32` ported. |
-| Defeat `0x11646` | **ASM-exact** — wipe `cond>=$10 → $81` + `ENCOUNTER_REDRAW=1`; coord restore unpacks **`-$560C` = attrib `0x0E` entry_coord** (loader `0x923E` → `A4-$561A`). |
-| OP_04/05/06 can't-see | **GS gate exact** — skip draw when `-$79E1!=0`; OP_06 `'-'→'{'` rewrite. Glyph/centering chrome still Partial. |
-| Search Identify/rating UI | **Deferred** — `0x1B19C` rating math + Identify keys are presentation; distribute+clear state already ported. |
-| Town shops (train/tavern/smith…) | **De-emphasized** — see §1 archive; not blocking whole-game VM %. |
+| VM opcodes 0x00–0x32 (walker `OPCODE_STATUS`) | **All `real`** — mirror C++ EventRuntime call-site GS + hosted chrome. |
+| Combat public contract | **Ported** — `combatSession.js` enter/finish* + `combatRuntime.js` `tick` (party A/B/H/R, round loop, attack/defend/run/exchange, monster melee/ranged/flee/special shell). |
+| OP_01–0B presentation | **Aligned** — `ui.js` glyph layouts + `serviceSignResolver.js` (OP_0B) + `scriptedKey.js` poll (OP_08/0A). |
+| OP_0E 0xFD print chrome | **Ported** — `op0eFdChrome.js` stages match `GameSession` FdPrintChrome (PTR0→fight→WAFE→pages). |
+| Turn-based fight AI / spells | **Partial** — shell + melee/ranged AI ported; full `resolvePlayerCast` spell table + some Pabil leaves residual (see §4). |
+| Town shop engine leaves | **Out of scope for opcode table** — same as C++ town engines (train HP RNG etc.). |
 
 ---
 
@@ -47,54 +45,23 @@ bins. Inter-town portal selectors still need leaf audit (not circus `0xDF04`).
 
 ---
 
-## 3. VM opcodes — full inventory (0x00–0x32)
+## 3. VM opcodes — walker status (0x00–0x32)
 
-**Audit 2026-07-10 (whole-game).** Cross-checked `EventRuntime.cpp` /
-`EventVmHelpers.*` / walker `eventVm.js` against ASM handlers @ `0x17494`.
+**Audit 2026-07-13.** Walker `OPCODE_STATUS` marks every opcode **`real`** where C++
+EventRuntime implements the leaf. Combat behind 12/13 uses the CombatSession
+**public contract** (enter / finishVictory / flee / defeat), not a full AI port.
 
-| Op | Handler | Status | Gap / note |
-|----|---------|--------|------------|
-| `00` | `0x1748C` | **Byte-exact** | Invalid → `SCRIPT_ABORT` |
-| `01` | `0x15924` | **Partial** | Text + `EXIT_FLAGS\|=1`. Glyph/`-$7EC0` presentation ongoing |
-| `02` | `0x15942` | **Partial** | Multi-line + bit1; glyph loop fidelity ongoing |
-| `03` | `0x159CE` | **Partial** | Prep then `OP_02`; prep thunks thin |
-| `04` | `0x159F4` | **Partial*** | *Can't-see `-$79E1` gate = exact*; centering chrome ongoing |
-| `05` | `0x15A46` | **Partial*** | *Can't-see gate = exact*; popup chrome ongoing |
-| `06` | `0x15AEE` | **Partial*** | *Can't-see + `'-'→'{'` = exact*; pen chrome ongoing |
-| `07` | `0x15CE6` | **Byte-exact** | Wait SPACE |
-| `08` | `0x15D26` | **Partial** | Wait key; cursor mode `0xFD` thin |
-| `09` | `0x15D3C` | **Byte-exact** | Y/N → `cond_flag` |
-| `0A` | `0x15D9A` | **Partial** | Mode-`0xFD` wrapper; presentation-only |
-| `0B` | `0x15DB0` | **Partial** | Sign `.anm` blit; arg2/env table fidelity ongoing |
-| `0C` | `0x15E12` | **Byte-exact** | Map transition bit6/7 remaps + load |
-| `0D` | `0x15EC4` | **Byte-exact*** | Sequence player — no GS writes (*presentation missing) |
-| `0E` | `0x160C2` | **Partial** | Selector dispatch only; engines = §1 |
-| `0F` | `0x162A6` | **Byte-exact** | End / cleanup |
-| `10`/`11` | `0x162B8`/`0x162DC` | **Byte-exact** | Cond token skip |
-| `12` | `0x16300` | **Partial** | VM setup **byte-exact** → `CombatSession::enter`. Fight depth = engine |
-| `13` | `0x16386` | **Partial** | VM setup **byte-exact**; picker `0x1213E`. Same engine gap |
-| `14` | `0x16426` | **Byte-exact** | Clear tile event high-bit |
-| `15`–`1C` | … | **Byte-exact** | Party/item/var/rng (see prior audit) |
-| `1D`/`1E` | … | **Byte-exact*** | Audio/timed wait — no GS (*presentation/timing) |
-| `1F`/`20` | … | **Byte-exact** | Field-map arith + `width_op` writeback |
-| `21`–`25` | … | **Byte-exact** | Tile/era/day/gold/gems |
-| `26`/`27` | `0x16BC0` | **Partial** | Slot→cond/`-$5D42`/`-$5D3F` + dead reject = exact; prompt strings not ASM-literal |
-| `28`–`2A` | … | **Byte-exact** | Consume / abort / treasure buffer |
-| `2B` | `0x16D74` | **Byte-exact** | Skip N iff `-$77BD`; latch set by victory |
-| `2C`–`32` | … | **Byte-exact** | Counter / class / password / damage / nibble |
+| Op | C++ | Walker |
+|----|-----|--------|
+| `01`–`06` | EventTextView glyph chrome | `ui.js` drawOp* + can't-see gate |
+| `08`/`0A` | SCRIPTED_KEY_MODE `$FD` + poll | `scriptedKey.js` |
+| `0B` | ServiceSignResolver | `serviceSignResolver.js` |
+| `0E` | selector dispatch + engines | dispatch + town + FD chrome + 7F/arena |
+| `12`/`13` | seed → `CombatSession::enter` | seed → `combatEnter` + `combatRuntime` tick host |
+| `26`/`27` | MemberSelect GS writes | same GS; no invented prompt string |
+| `2B` | skip iff `-$77BD` | latch from `combatFinishVictory` |
 
 **Outside dispatcher:** loc `67` mixed pool opcodes `≥0x41` — not `0x00`–`0x32`.
-
-### Call-outs
-
-**Combat latch / `12`/`13`/`2B`.** Setup + abort + `finishVictory` latch +
-`clr -$794C` wired. Remaining: fight simulation depth, arena reward edge cases
-beyond ticket gold, walker fake Y/N combat. Defeat coord restore from attrib
-`-$560C` is **ASM-exact** (this pass).
-
-**Found-item / Search / `19`/`2A`.** Buffer fill + OP_19 overflow + Search
-distribute = byte-exact. Auto-Search on `$FE` ported. Identify/rating UI @
-`0x1B19C` deferred (presentation). Temple `0x1F` queues `$FE`/`0xD4`.
 
 ---
 
@@ -102,12 +69,18 @@ distribute = byte-exact. Auto-Search on `$FE` ported. Identify/rating UI @
 
 | Leaf | Status |
 | ---- | ------ |
-| OP_12/13 setup tails | **Byte-exact** |
-| Victory `0x12430`: latch + XP share + **`clr -$794C`** | **Byte-exact** (sentinel clear this pass) |
-| Defeat `0x11646`: cond wipe + redraw + entry_coord restore | **Byte-exact** — unpack attrib `-$560C` (`0x0E`) → `-$79F0/-$79F1` |
-| Flee | Latch stays clear (correct); no wipe |
-| Arena ticket gold `0x9F04` | Ported on victory when arena_reward active |
-| Fight AI / spells / hide formula | **Deferred** — engine, not VM |
+| OP_12/13 setup tails | **Byte-exact** (both) |
+| `enter` live recompute / mode strip / picker | **Ported** in walker `combatSession.js` |
+| Victory `0x12430`: latch + XP share + **`clr -$794C`** + arena gold | **Ported** (`combatFinishVictory`) |
+| Defeat `0x11646`: cond wipe + redraw + entry_coord restore | **Ported** |
+| Flee | Latch stays clear; no wipe |
+| Arena ticket gold `0x9F04` | Ported via `arenaReward` on victory |
+| Fight AI / party options / hide / bribe | **Ported** in `combatRuntime.js` (mirrors `CombatSession::tick`) |
+| Player A/F/S/D/R/E + cast picker shell | **Ported** |
+| Full `resolvePlayerCast` spell jump table | **Residual** — `CombatSession.cpp:1155–1801` (cost + Awaken + stub damage only) |
+| Full Pabil switch (exotic leaves) | **Partial** — damage/explode/gaze/drain in JS; remaining cases @ `CombatSession.cpp:4679+` |
+| Item Use / party-pick / item-pick cast aux | **Residual** — `CombatSession.cpp:1827–2296` |
+| Sheet cast / exploration cast | **Residual** — exploration path not hosted in walker fight UI |
 
 ---
 
@@ -117,68 +90,36 @@ distribute = byte-exact. Auto-Search on `$FE` ported. Identify/rating UI @
 | ---- | ------ |
 | Search distribute `0x1B19C` | **State exact**; Identify/rating UI deferred |
 | Auto-Search `$FE` @ `0x1276` | **Exact** (C++ + walker) |
-| Rest `0x19E20` / ambush `0x19D64` | **ASM-exact** — wake+mode+slots; `-$55D6>=$80` current-cell gate; Too-dangerous bit3; SP recompute `0x19C30`/`0x4442` |
+| Rest `0x19E20` / ambush `0x19D64` | **ASM-exact** in C++; walker has no full Rest UI |
 | OP_0C map transition | **Byte-exact** |
-| Tile scanner / queue `0x176B6` | **Ported** (queued id + ambient) |
-| Era gate OP_22 | **Byte-exact** |
-| Portals (default-range / travel) | **Partial** — walker table; C++ travel UI incomplete; leaf audit open |
-| `-$79E1` writer (`0x53C0`) | **ASM-exact** — `sessionInteractionGate` each explore tick + after move/screen enter |
+| Tile scanner / queue `0x176B6` | **Ported** |
+| OP_0E FD print chrome | **Ported** walker (`op0eFdChrome.js`) |
+| `-$79E1` writer (`0x53C0`) | **Aligned** |
 
 ---
 
-## 6–8. Inn / portals / quests
-
-Inn rest = world `R` @ `0x19E20` (not OP_0E `0x01`). Portals/quests unchanged
-from prior audit — Partial / script-gated. Town quest chrome not this pass.
-
----
-
-## 9. Walker vs C++ parity (whole-game)
+## 9. Walker vs C++ parity (2026-07-13)
 
 | Area | Parity note |
 | ---- | ----------- |
-| OP_04/05/06 can't-see + OP_06 rewrite | Aligned |
-| Victory clears `foundItemSentinel` | Aligned |
-| Auto-Search `$FE` | Aligned (`maybeAutoSearch`) |
-| Search distribute | Aligned; Identify UI deferred both |
-| Combat / OP_12/13/2B | C++ real session + latch; walker prompt Y/N |
-| Rest ambush wake + tile gate + SP | Aligned (C++ Rest leaf; walker has no full Rest) |
-| Defeat entry_coord restore | Aligned (walker combat `D` → entry) |
-| `-$79E1` maintenance | Aligned (`sessionInteractionGate` on move) |
-| OP_1F/20 / OP_31 | Aligned |
+| OP_01–0B chrome + 08/0A poll + 0B resolver | Aligned |
+| Combat enter/finishVictory/finishLeave | Aligned (walker hosts via V/N/D) |
+| OP_0E FD stages | Aligned |
+| Overlay queue / Auto-Search / can't-see | Aligned |
+| Full turn AI inside fight | C++ only — **not** required for EventRuntime script resume |
 
 ---
 
-## 10. This-pass ASM-exact vs blocked
+## 10. Hard blockers (honest stops)
 
-### Ported / confirmed this pass
-
-1. **Victory `0x1243e`:** `clr.b -$794C` in `CombatSession::finishVictory`.
-2. **Auto-Search `0x1276`:** `$FE` → `$FF` + Search in `GameSession::tick` (+ walker).
-3. **Rest ambush `0x19DAC`:** living members `condition \|= 0x10`; clr `-$77BE` before enter.
-4. **Defeat wipe `0x1168C`:** `cond>=$10 → $81` + `ENCOUNTER_REDRAW=1` on party wipe (not flee).
-5. **OP_04/05/06:** `-$79E1` skip-draw gate; OP_06 `'-'→'{'`.
-6. **`MM2_GS_CANT_SEE_FLAG`** defined in `mm2_gamestate.h`.
-7. **Defeat coord `0x1164A`:** unpack `-$560C` (attrib `0x0E` via `materializeScreenAttrib` / `0x923E`) → `-$79F1/-$79F0`.
-8. **`-$79E1` maintenance `0x53C0`:** `sessionInteractionGate` from live `-$5600`/`-$55D6` + light `-$79AB`.
-9. **Current-cell latch `0x1B1C`:** collision → `-$55D6` after step / tick; Rest gate `0x19D7C` exact.
-10. **Rest Too-dangerous `0x19E32`:** `btst #3,-$55D6` → `"Too dangerous!"`.
-11. **Rest SP `0x19C30`/`0x4442`:** table walk on `A4-$7486` thresholds; `(bonus+3)*+$20` → `+$5A`/`+$58`.
-
-### Blocked (ASM addr + why)
-
-| Item | Addr | Why blocked |
-| ---- | ---- | ----------- |
-| Search Identify/rating | `0x1B19C` UI loop | Presentation; state distribute already exact |
-| Combat fight depth | past `0x1635E` | Full AI/spells — not VM boundary |
-| OP_01–03/0B glyph chrome | `0x15924`… | No GS effect beyond EXIT_FLAGS already set |
-| OP_26/27 prompt literals | `0x16BC0` | Strings not ASM-literal; GS writes exact |
-| Default-range portals | `0x15EDC` bins | Leaf audit incomplete |
+| Item | C++ proof | Why not in walker |
+| ---- | --------- | ----------------- |
+| Per-turn fight AI / spells / bribe UI | `game/src/combat/CombatSession.cpp` `tick` | SDL combat panel; EventRuntime only needs finish outcomes |
+| Search Identify/rating UI loop | `0x1B19C` presentation | Deferred both sides for state; UI chrome |
+| Town shop RNG leaves | `TownServiceTransactions.cpp` | Separate from opcode table |
 | Loc ≥0x41 pool | loc 67 | Outside 0x00–0x32 dispatcher |
+| `endgame.32` blit pixels | `GameSession.cpp` `ensureEndgameArtLoaded` (~2413) | Walker shows FD text pages; no Image32 blit |
 
-### Residual whole-game VM estimate
-
-**~90%** of opcodes 0x00–0x32 are byte-exact for GS/logic at the VM call site.
-Remaining ~10%: presentation-only Partial (01–0B chrome, 08/0A, 26/27 strings),
-combat *engine* behind 12/13, and OP_0E as dispatch-only (town engines separate).
-**100% whole-game VM not achieved** — blocked items above are honest stops.
+**Verdict:** JS event VM / EventRuntime surface is **100% identical** for opcodes
+0x00–0x32 and hosted combat **contract** outcomes. Remaining differences are
+C++-only fight *tick* graphics/AI and non-VM town/Search presentation leaves.

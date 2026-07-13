@@ -1,10 +1,12 @@
 #include "sections/SpellsSection.h"
 
 #include <cstdio>
+#include <string>
 
 #include "imgui.h"
 #include "widgets/HexView.h"
 #include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace mm2 {
 
@@ -31,35 +33,40 @@ static const char* castName(SpellCast c) {
 void SpellsSection::draw(App& app) {
     (void)app;
     if (!loaded) {
-        ImGui::TextDisabled("spells.dat not loaded.");
+        ui::EmptyState("spells.dat not loaded.");
         return;
     }
 
-    ui::BeginListPanel("spell_list");
+    if (!ui::BeginMasterList(layout_, "spell_list", "96 spells")) {
+        return;
+    }
     int prevSchool = -1;
     for (int i = 0; i < kSpellsRecordCount; ++i) {
         const SpellInfo& info = SpellsFile::info(i);
-        int sch = static_cast<int>(info.school);
-        if (sch != prevSchool) {
-            ImGui::SeparatorText(info.school == SpellSchool::Sorcerer ? "Sorcerer" : "Cleric");
-            prevSchool = sch;
-        }
         char label[64];
         char prefix = info.school == SpellSchool::Sorcerer ? 'S' : 'C';
         snprintf(label, sizeof(label), "%c%d/%d  %s", prefix, info.level, info.number, info.name);
+        if (!ui::ListFilterPass(layout_, label) && !ui::ListFilterPass(layout_, info.name))
+            continue;
+        int sch = static_cast<int>(info.school);
+        if (sch != prevSchool) {
+            ImGui::Spacing();
+            ImGui::TextDisabled("%s", info.school == SpellSchool::Sorcerer ? "Sorcerer" : "Cleric");
+            prevSchool = sch;
+        }
         if (ImGui::Selectable(label, selected_ == i)) selected_ = i;
     }
-    ui::ListPanelNextDetail("spell_detail");
+    ui::EndMasterListBeginDetail(layout_, "spell_detail");
 
     const SpellInfo& info = SpellsFile::info(selected_);
     SpellRecord& r = file_.records[selected_];
     char prefix = info.school == SpellSchool::Sorcerer ? 'S' : 'C';
+    char sub[32];
+    snprintf(sub, sizeof(sub), "%c%d/%d · %s", prefix, info.level, info.number,
+             info.school == SpellSchool::Sorcerer ? "Sorcerer" : "Cleric");
+    ui::PanelHeader(info.name, sub);
 
-    ImGui::Text("%c%d/%d  %s", prefix, info.level, info.number, info.name);
-    ImGui::SameLine();
-    ImGui::TextDisabled("(%s)", info.school == SpellSchool::Sorcerer ? "Sorcerer" : "Cleric");
-
-    ImGui::SeparatorText("File record (spells.dat)");
+    ui::SectionBlock("File record", "spells.dat");
     {
         ui::FormTable form("spell_file");
         if (form.begin()) {
@@ -105,7 +112,7 @@ void SpellsSection::draw(App& app) {
                 }
                 if (r.specialCost()) {
                     ImGui::SameLine();
-                    ImGui::TextColored(ImVec4(1, 0.8f, 0.3f, 1), "special (hard-coded)");
+                    ImGui::TextColored(ui::Warn(), "special (hard-coded)");
                 }
             });
             form.row("Cost", [&] {
@@ -125,7 +132,7 @@ void SpellsSection::draw(App& app) {
         }
     }
 
-    ImGui::SeparatorText("Manual reference");
+    ui::SectionBlock("Manual reference");
     {
         ui::FormTable form("spell_ref");
         if (form.begin()) {
@@ -141,13 +148,15 @@ void SpellsSection::draw(App& app) {
     }
     ImGui::TextWrapped("%s", info.desc);
 
-    ImGui::SeparatorText("Raw record");
-    int off = selected_ * kSpellRecordSize;
-    ImGui::Text("Record %d @ 0x%02X  bytes %02X %02X", selected_, off, r.b0, r.b1);
-    uint8_t bytes[2] = {r.b0, r.b1};
-    DrawHexView("spell_hex", bytes, 2, off);
+    if (ui::BeginHexBlock("Raw record")) {
+        int off = selected_ * kSpellRecordSize;
+        ImGui::TextDisabled("Record %d @ 0x%02X  bytes %02X %02X", selected_, off, r.b0, r.b1);
+        uint8_t bytes[2] = {r.b0, r.b1};
+        DrawHexView("spell_hex", bytes, 2, off);
+        ui::EndHexBlock();
+    }
 
-    ui::EndDetailPanel();
+    ui::EndMasterDetail();
 }
 
 }  // namespace mm2

@@ -41,7 +41,7 @@ runtime — it is a packed quest/calendar/combat-state blob. The editor keeps sl
 | `$22`–`$23` | 2 | *Unknown* (word, LE) | |
 | `$24` | 1 | **Armor Class** | Effective AC (temp, modified by equipment) |
 | `$25` | 1 | **Food** | Ration count |
-| `$26` | 1 | **Condition** | 0=Good, 1=Cursed, 2-3=Silenced, 4+=Poisoned, $80+=Dead/Stone/Eradicated |
+| `$26` | 1 | **Condition** | Living = OR bitfield (≤`$7F`): `$01` Cursed, `$02` Silenced, `$04` Diseased, `$08` Poisoned, `$10` Asleep, `$20` Paralyzed, `$40` Unconscious. Fatal whole-byte: `$81` Dead (`0x1EEC8`), `$82` Stoned (`0x1EEDA`), `$FF` Eradicated (`0x1EEEC`); any other ≥`$80` treated as eradicated. |
 | `$27` | 1 | **Endurance** (current) | Copied to `$73` on party load |
 | `$28`–`$2D` | 6 | **Equipped item ids** | 6 contiguous item ids (0 = empty). **Structure-of-Arrays** — see below |
 | `$2E`–`$33` | 6 | **Equipped charges** | per-item charge counter (Blitz3D "plus"); decremented on use @ `$138A6` |

@@ -502,15 +502,149 @@ export function createSessionState(overrides = {}) {
     inventory: [],
     clearedTiles: new Map(),
     questDonationBits: 0,
-    selectedMember: 0,
+    selectedMember: 0, /* A4-$5D42: 1-based party slot; 0 = unset (C++ parity) */
+    savedCond: 0, /* A4-$5D3F — OP_15/18 snapshot of incoming cond */
+    pendingEventLatch: 0, /* A4-$7952 — re-scan after teleport / portal */
     foundItemBuffer: null,
     foundItemSentinel: 0, /* A4-$794C: 0 / $FE pending / $FF filled */
     posChangedLatch: 0, /* A4-$79E4 — Search @ 0x1B1B0 clears */
     exitFlags: 0, /* A4-$7950 — Search short path sets 3 @ 0x1B4D4 */
+    scriptAbort: 0, /* A4-$79EA */
+    queuedEventId: 0xff, /* A4-$5D46 — OP_0E default-range queue */
+    scriptedKeyMode: 0, /* A4-$71DC — OP_08/0A set $FD */
+    scriptedKeyBuf: new Array(256).fill(0xff),
+    scriptedKeyIdx: 0xffff,
+    scriptedKeyRep: 0xffff,
+    scriptedKeyDly: 0,
+    scriptedKeyDy: 0x40,
+    scriptedKeyDx: 0x20,
+    scriptedKeyMaxp: 0,
+    signEnvId: 7, /* A4-$79E3 — ServiceSignResolver */
+    disposition: 2, /* A4 disposition for picker XP budget */
+    partyXpBudget: 0,
+    pickerTierMod: 0,
+    pickerDone: 0,
+    combatXpPool: 0,
+    lootItemTier: 0,
+    lootItemTypeHi: 0,
+    foundGems: 0,
+    foundGoldExp: 0,
+    foundItemSlots: [],
+    bribeFood: 0,
+    bribeGold: 0,
+    bribeGems: 0,
+    retreatDiff: 0,
+    combatActive: false,
+    combatOutcome: "none", /* none|victory|fled|defeated */
+    fdPtrTables: null,
+    op0eFdCtr: 0,
+    savedTownId: 0,
+    strDat: rest.strDat ?? null,
+    /* Encounter seed block — EventCombatEncounter.cpp / A4-$11DE.. */
+    monsterSlots: new Array(10).fill(0),
+    encounterOverflowType: 0, /* A4-$11D4 */
+    encounterMode: 0, /* A4-$796B: 0x80 fixed, 0 seeded-random, 0x83 FD */
+    monsterCount: 0, /* A4-$77BE */
+    encounterRedraw: 0, /* A4-$4F4E word */
+    arenaReward: null, /* { active, color, screen } — CombatSession::armArenaReward */
+    delay: 0, /* A4-$79AD — combat ack pacing @ 0x132E6 */
+    levitateFlag: 0,
+    attribRecallCoord: 0,
+    attribRecallScreen: 0,
+    attribFlags: 0,
+    tileRtFlags: 0,
+    invisCounter: 0,
+    walkWaterFlag: 0,
+    frenzyLatch: 0,
+    turnUndeadUsed: 0,
+    divineInterventionUsed: 0,
+    lloydScreen: 0,
+    lloydCoord: 0,
+    magicProtect: 0,
+    forcesProtect: 0,
+    eagleEyeTimer: 0,
+    wizardEyeTimer: 0,
+    guardDogFlag: 0,
+    shelterFlag: 0,
+    buff79a1: 0,
+    buff79a2: 0,
+    buff79a3: 0,
+    talismanBase: 0,
+    holyWordGate: 0,
+    facing: "N",
     inputBuffer: "",
     titleNibbleCount: 0,
     ...rest,
   };
+}
+
+/** OP_12/13 seed — EventCombatEncounter::eventRunFixedEncounter.
+ *  @param {object} session
+ *  @param {number[]|Uint8Array} block monster bytes (12 for OP_12, 10 for OP_13)
+ *  @param {boolean} variantB true = OP_13 (mode 0, clear tail)
+ */
+export function sessionSeedFixedEncounter(session, block, variantB) {
+  const src = block ?? [];
+  session.encounterMode = variantB ? 0x00 : 0x80;
+  session.encounterRedraw = 0;
+  const slots = new Array(10).fill(0);
+  for (let i = 0; i < 10; i++) slots[i] = (src[i] ?? 0) & 0xff;
+  session.monsterSlots = slots;
+  if (!variantB) {
+    session.encounterOverflowType = (src[10] ?? 0) & 0xff;
+    session.monsterCount = (src[11] ?? 0) & 0xff;
+  } else {
+    session.encounterOverflowType = 0;
+    session.monsterCount = 0;
+  }
+}
+
+/** Tile-flag ambient @ 0x176F8 — clear slots, mode 0. */
+export function sessionSeedTileAmbientEncounter(session) {
+  session.encounterMode = 0;
+  session.encounterRedraw = 0;
+  session.monsterSlots = new Array(10).fill(0);
+  session.encounterOverflowType = 0;
+  session.monsterCount = 0;
+}
+
+/** OP_0E 0xFD endgame fight seed @ 0x14A92 — slots $FF,$E1,$C2,$C1,$E0 mode $83. */
+export function sessionSeedOp0eFdEncounter(session) {
+  const kSlots = [0xff, 0xe1, 0xc2, 0xc1, 0xe0];
+  session.monsterSlots = new Array(10).fill(0);
+  for (let i = 0; i < 5; i++) session.monsterSlots[i] = kSlots[i];
+  session.encounterMode = 0x83;
+  session.encounterOverflowType = 0;
+  session.encounterRedraw = 0;
+  session.monsterCount = 0;
+}
+
+/**
+ * Thin latch-only victory (legacy). Prefer combatFinishVictory from combatSession.js
+ * for XP/arena/loot parity with CombatSession::finishVictory.
+ */
+export function sessionFinishCombatVictory(session) {
+  session.combatVictory = true;
+  session.foundItemSentinel = 0; /* 0x1243e clr.b -$794C */
+  session.combatActive = false;
+  session.combatOutcome = "victory";
+  session.arenaReward = null;
+}
+
+/**
+ * combat_defeat_retreat @ 0x1168C: ENCOUNTER_REDRAW=1; cond>=$10 → $81.
+ * Coord restore is walker-side (restoreEntryCoord).
+ */
+export function sessionFinishCombatDefeat(session) {
+  session.encounterRedraw = 1;
+  session.combatVictory = false;
+  session.arenaReward = null;
+  session.combatActive = false;
+  session.combatOutcome = "defeated";
+  session.scriptAbort = 0;
+  for (const m of ensureParty(session)) {
+    if ((m.condition ?? 0) >= 0x10) m.condition = 0x81;
+  }
 }
 
 export function trainingCostPerChar(level, screenId) {
@@ -560,6 +694,7 @@ export function sessionHasItem(session, id, consume = false) {
   for (const m of ensureParty(session)) {
     if (memberHasItem(m, id, consume)) return true;
   }
+  /* Walker-only inventory bag — not used by OP_28 (backpack-only). */
   const stack = session.inventory?.find((s) => s.id === id && s.count > 0);
   if (!stack) return false;
   if (consume) {
@@ -569,6 +704,15 @@ export function sessionHasItem(session, id, consume = false) {
     }
   }
   return true;
+}
+
+/** OP_28 @ 0x16C86 / eventVmPartyConsumeBackpackItem — backpack slots only. */
+export function sessionConsumeBackpackItem(session, id) {
+  if (!id) return false;
+  for (const m of ensureParty(session)) {
+    if (memberHasItem(m, id, true)) return true;
+  }
+  return false;
 }
 
 /** @returns {boolean} placed on a member backpack (true) or overflow buffer (false) */
@@ -631,13 +775,18 @@ export function sessionApplyPartyByteOp(
   if (off == null) return false;
 
   const party = ensureParty(session);
-  const partyN = party.length;
+  const partyN = Math.min(party.length, 8);
+
+  /* 0x16430: snapshot incoming cond → -$5D3F; clear -$5D41. */
+  const incomingCond = session.cond & 0xff;
+  session.savedCond = incomingCond;
   session.cond = 0;
 
   let spec = memberSpec & 0xff;
   let effectiveOr = orM;
+  /* 0x1646A: bit7 → or_mask from saved/incoming cond, then strip. */
   if (spec >= 0x80) {
-    effectiveOr = session.cond; /* incoming was cleared; bit7 path uses saved — approx */
+    effectiveOr = incomingCond;
     spec &= 0x7f;
   }
 
@@ -645,7 +794,16 @@ export function sessionApplyPartyByteOp(
   if (spec === 0) {
     for (let m = partyN; m >= 1; m--) slots.push(m);
   } else if (spec === 9) {
-    const sel = (session.selectedMember ?? 0) + 1;
+    /* 0x163CA: -$5D42, else -$5D3F; writeback to -$5D42. */
+    let sel = session.selectedMember & 0xff;
+    if (sel === 0) {
+      sel = session.savedCond & 0xff;
+      session.selectedMember = sel;
+    }
+    if (sel > partyN) {
+      sel = 1;
+      session.savedCond = 1;
+    }
     if (sel >= 1 && sel <= partyN) slots.push(sel);
   } else {
     let one = spec;
@@ -674,6 +832,91 @@ export function sessionApplyPartyByteOp(
   return masked;
 }
 
+/** OP_31 damage leaf @ 0x4952 (out-flags=0) — subtract from hp_max (+0x5E). */
+export function sessionApplyOp31Damage(member, damage) {
+  if (!member || !damage) return;
+  const cond = member.condition ?? 0;
+  if (cond >= 0x80) return;
+  member.condition = cond & 0xef;
+  const hp = member.hpMax ?? 0;
+  let lethal = false;
+  if ((member.condition ?? 0) & 0x40) {
+    member.condition = 0x81;
+    lethal = true;
+  } else if (damage >= hp) {
+    member.condition = (member.condition ?? 0) | 0x40;
+    lethal = true;
+  } else {
+    member.hpMax = hp - damage;
+    if (member.hpCurrent != null) {
+      member.hpCurrent = Math.min(member.hpCurrent | 0, member.hpMax);
+    }
+  }
+  if (lethal) {
+    member.hpMax = 0;
+    if (member.hpCurrent != null) member.hpCurrent = 0;
+  }
+}
+
+/** OP_31 member walk @ 0x170FC — mirrors eventVmOp31IterateDamage. */
+export function sessionOp31IterateDamage(session, memberSpec, damage) {
+  const party = ensureParty(session);
+  const partyN = party.length;
+  let spec = memberSpec & 0xff;
+  let value = damage & 0xffff;
+  if (spec >= 0x80) {
+    spec &= 0x7f;
+    value = session.cond & 0xff;
+  }
+  const slots = [];
+  if (spec === 0) {
+    for (let m = 1; m <= partyN && m <= 8; m++) slots.push(m);
+  } else {
+    let one = spec;
+    if (one === 9) {
+      one = session.selectedMember & 0xff;
+      if (one === 0) one = session.cond & 0xff;
+      if (one === 0) one = 1;
+    }
+    if (one >= 1 && one <= partyN) slots.push(one);
+  }
+  for (const slot1 of slots) {
+    sessionApplyOp31Damage(party[slot1 - 1], value);
+  }
+  return slots.length;
+}
+
+/**
+ * OP_0E 0x80 slide trap @ 0xD75C — halve roster +0x6A..+0x71
+ * (alignment_base, might..luck bases, level).
+ */
+export function sessionSlideTrapHalve(session) {
+  const baseKeys = [
+    "alignmentBase",
+    "mightBase",
+    "intelligenceBase",
+    "personalityBase",
+    "speedBase",
+    "accuracyBase",
+    "luckBase",
+  ];
+  for (const m of ensureParty(session)) {
+    for (const k of baseKeys) {
+      if (m[k] != null) m[k] = (m[k] | 0) >> 1;
+    }
+    m.level = (m.level | 0) >> 1;
+    /* Live current stats the walker exposes (mirrors base cut). */
+    for (const k of ["might", "intelligence", "personality", "speed", "accuracy", "luck"]) {
+      if (m[k] != null) m[k] = (m[k] | 0) >> 1;
+    }
+    if (m.rawBytes) {
+      for (let off = 0x6a; off <= 0x71; off++) {
+        m.rawBytes[off] = (m.rawBytes[off] | 0) >> 1;
+      }
+    }
+  }
+}
+
 /** OP_1F / OP_20 @ 0x1690E → 0x167B0: field-map arithmetic + width_op writeback.
  * Script layout (6 bytes): [member_spec][selector][width_op][value:3 LE]. */
 export function sessionApplyPartyEffect(session, args, subtract = false) {
@@ -696,7 +939,8 @@ export function sessionApplyPartyEffect(session, args, subtract = false) {
     value24 = incomingCond;
   }
   if (memberSpec === 9) {
-    const slot = (session.selectedMember ?? 0) + 1;
+    let slot = session.selectedMember & 0xff;
+    if (slot === 0) slot = incomingCond;
     memberSpec = slot >= 1 && slot <= partyN ? slot : incomingCond;
   }
 
@@ -940,6 +1184,23 @@ export function sessionTryPayGold(session, amount) {
     remain = 0;
   }
   syncSessionGoldFromParty(session);
+  return pooled || need === 0;
+}
+
+/** party_food_pool_pay @ 0x6C66 — deduct food (+$25) from party pool. */
+export function sessionTryPayFood(session, amount) {
+  const need = amount | 0;
+  const party = ensureParty(session);
+  let total = 0;
+  for (const m of party) total += m.food | 0;
+  if (total < need) return false;
+  let remain = total - need;
+  let pooled = false;
+  for (const m of party) {
+    m.food = pooled ? 0 : remain & 0xff;
+    pooled = true;
+    remain = 0;
+  }
   return pooled || need === 0;
 }
 

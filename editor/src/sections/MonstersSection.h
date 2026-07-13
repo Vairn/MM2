@@ -7,6 +7,7 @@
 #include "core/Gfx.h"
 #include "core/MonstersFile.h"
 #include "core/PcGfx.h"
+#include "widgets/UiLayout.h"
 
 namespace mm2 {
 
@@ -39,6 +40,7 @@ private:
 
     MonstersFile file_;
     int selected_ = 0;
+    ui::MasterDetail layout_;
 
     std::string dir_;
 

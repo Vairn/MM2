@@ -7,6 +7,7 @@
 #include "imgui.h"
 #include "widgets/Texture.h"
 #include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace fs = std::filesystem;
 
@@ -351,28 +352,29 @@ void GfxSection::drawTitleTab() {
 void GfxSection::draw(App& app) {
     (void)app;
     if (!loaded) {
-        ImGui::TextDisabled("No %s files found in the data folder.", ext_);
+        ui::EmptyState(isAnm_ ? "No .anm files found in the data folder."
+                              : "No .32 files found in the data folder.");
         return;
     }
 
     ui::BeginListPanel("gfx_files");
     for (int i = 0; i < static_cast<int>(files_.size()); ++i) {
+        if (!ui::ListFilterPass(ui::LegacyMasterDetail("gfx_files"), files_[i].c_str())) continue;
         if (ImGui::Selectable(files_[i].c_str(), selectedFile_ == i)) selectFile(i);
     }
     ui::ListPanelNextDetail("gfx_view");
     if (selectedFile_ < 0) {
-        ImGui::TextDisabled("Select a file.");
+        ui::EmptyState("Select a file.");
         ui::EndDetailPanel();
         return;
     }
 
-    ImGui::Text("%s", files_[selectedFile_].c_str());
+    ui::PanelHeader(files_[selectedFile_].c_str());
     if (!image_.ok && image_.frames.empty()) {
-        ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "Decode failed: %s", image_.error.c_str());
+        ImGui::TextColored(ui::Danger(), "Decode failed: %s", image_.error.c_str());
         ui::EndDetailPanel();
         return;
     }
-    ImGui::SameLine();
     ImGui::TextDisabled("frames=%d depth=%d  chunk@0x%zX%s", image_.frameCount, image_.depth,
                         image_.chunkOffset,
                         image_.error.empty() ? "" : "  (partial)");
@@ -550,15 +552,12 @@ void GfxSection::draw(App& app) {
                     if (!tex) continue;
                     ImVec2 sz(anmCanvas_.width * zoom_, anmCanvas_.height * zoom_);
                     const bool current = (i == selectedFrame_);
-                    if (current) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1, 0.85f, 0.2f, 1));
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, current ? 2.0f : 0.0f);
+                    ui::SelectedFrameScope sel(current);
                     ImGui::BeginGroup();
                     if (ImGui::ImageButton(("cf" + std::to_string(i)).c_str(), static_cast<ImTextureID>(tex), sz))
                         selectedFrame_ = i;
                     ImGui::TextDisabled("%d", i);
                     ImGui::EndGroup();
-                    ImGui::PopStyleVar();
-                    if (current) ImGui::PopStyleColor();
                     x += sz.x + 12;
                     if (x + sz.x < avail) ImGui::SameLine();
                     else x = 0;
@@ -577,6 +576,7 @@ void GfxSection::draw(App& app) {
                 unsigned int tex = textures_[i];
                 if (!tex) continue;
                 ImVec2 sz(fr.width * zoom_, fr.height * zoom_);
+                ui::SelectedFrameScope sel(i == selectedFrame_);
                 ImGui::BeginGroup();
                 if (ImGui::ImageButton(("f" + std::to_string(i)).c_str(),
                                        static_cast<ImTextureID>(tex), sz))
@@ -597,7 +597,8 @@ void GfxSection::draw(App& app) {
                     ImVec4 col(image_.palette[i][0] / 255.0f, image_.palette[i][1] / 255.0f,
                                image_.palette[i][2] / 255.0f, 1.0f);
                     ImGui::PushID(i);
-                    ImGui::ColorButton("##c", col, ImGuiColorEditFlags_NoTooltip, ImVec2(28, 28));
+                    ImGui::ColorButton("##c", col, ImGuiColorEditFlags_NoTooltip,
+                                       ImVec2(ui::Em(1.75f), ui::Em(1.75f)));
                     ImGui::PopID();
                 }
                 ImGui::EndTable();

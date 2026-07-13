@@ -44,7 +44,9 @@ import {
   consumeArenaTicket,
   memberHasSkillId,
   ARENA_TICKET_COLOR_NAMES,
+  sessionSeedFixedEncounter,
 } from "./sessionState.js";
+import { runCombatContract } from "./combatSession.js";
 
 const SKILL_MERCHANT = 10;
 const STAT_BOOST_LIMITS = [2, 3, 3, 3, 3, 5];
@@ -1260,8 +1262,7 @@ export async function runDeferredServiceMenu(ctx, sel, title, sprite, lines) {
  * (thunk -$7DFA -> 0x92F2), not this engine — see selectorBin.js.
  */
 export async function runArenaTicketSelector(ctx, sel) {
-  const { session, waitForSpace, promptYesNo, promptCombatResult, note, sprite, screenId, onSessionChange } =
-    ctx;
+  const { session, waitForSpace, note, sprite, screenId, onSessionChange } = ctx;
   const s = sel & 0xff;
   const party = ensureParty(session);
   const ticket = findArenaTicket(party);
@@ -1280,31 +1281,27 @@ export async function runArenaTicketSelector(ctx, sel) {
 
   const roll = 1 + Math.floor(Math.random() * 16); /* asm rng(1,16) @ thunk -$7BB4 */
   const monsterType = arenaMonsterType(ticket.color, screenId, roll);
+  /* asm 0x9F04: mode=0x80 fixed fight via same seed as OP_12. */
+  const block = new Array(12).fill(0);
+  for (let i = 0; i < party.length && i < 10; i++) block[i] = monsterType;
+  sessionSeedFixedEncounter(session, block, false);
+  session.arenaReward = { active: true, color: ticket.color, screen: screenId };
+
   const colorName = ARENA_TICKET_COLOR_NAMES[ticket.color] ?? `#${ticket.color}`;
   const enc = {
     text: `Arena Games — ${colorName} ticket\nmonster type 0x${monsterType.toString(16)} (asm 0x9D76 → same combat thunk as OP_12)`,
     heading: "Arena Games",
     names: ["Opponents"],
   };
-  const won = promptCombatResult
-    ? await promptCombatResult(enc)
-    : await promptYesNo("Enter combat?", sprite, 0x0e);
+  const outcome = await runCombatContract(ctx, enc, 0x0e);
 
-  if (won) {
-    session.combatVictory = true;
-    /* asm 0x9F1E-0xA048: gold from the 4x3 table (data 0xE7A) to the first
-     * eligible member; "Winner, you receive N gold" (0xA0FC/0xA111). The
-     * documented record+0x79 ROM bug (doc 36) is NOT replicated. */
+  if (outcome === "victory") {
+    /* combatFinishVictory already paid arena gold when arenaReward was armed. */
     const gold = arenaGoldReward(ticket.color, screenId);
-    const payee = party[0];
-    if (payee) {
-      payee.gold = (payee.gold | 0) + gold;
-    }
-    syncSessionGoldFromParty(session);
     await waitForSpace(`Winner, you receive ${gold} gold`, sprite, 0x0e);
     note(`exec_selector(0x${s.toString(16)}): arena victory (${colorName} ticket), +${gold} gp`);
     onSessionChange?.(session);
   } else {
-    note(`exec_selector(0x${s.toString(16)}): arena fight declined/lost (${colorName} ticket)`);
+    note(`exec_selector(0x${s.toString(16)}): arena fight ${outcome} (${colorName} ticket)`);
   }
 }

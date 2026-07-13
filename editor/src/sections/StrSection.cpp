@@ -4,6 +4,7 @@
 
 #include "imgui.h"
 #include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace mm2 {
 
@@ -46,14 +47,15 @@ void StrSection::syncTextFromLines() {
 void StrSection::draw(App& app) {
     (void)app;
     if (!loaded) {
-        ImGui::TextDisabled("str.dat not loaded.");
+        ui::EmptyState("str.dat not loaded.");
         return;
     }
     if (!linesBuilt_) rebuildLines();
 
-    ImGui::Text("Decoded text pool: %zu bytes, %zu lines. Transform: (byte + 0x1C) & 0xFF.",
-                file_.rawSize, lines_.size());
-    ImGui::TextDisabled("Editing length changes file size on save (encoded newline = 0x01).");
+    ui::PanelHeader("String pool", "str.dat");
+    ImGui::TextDisabled("%zu bytes · %zu lines · transform (byte + 0x1C) & 0xFF", file_.rawSize,
+                        lines_.size());
+    ImGui::Spacing();
 
     // Resizable per-row buffer backed by the std::string.
     auto callback = [](ImGuiInputTextCallbackData* data) -> int {
@@ -73,7 +75,7 @@ void StrSection::draw(App& app) {
                             ImGuiTableFlags_SizingFixedFit;
     if (ImGui::BeginTable("str_lines", 2, flags, ImVec2(0, 0))) {
         ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 56.f);
+        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, ui::Em(3.5f));
         ImGui::TableSetupColumn("Text", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
 

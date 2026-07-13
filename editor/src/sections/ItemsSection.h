@@ -1,6 +1,7 @@
 #pragma once
 #include "app/Section.h"
 #include "core/ItemsFile.h"
+#include "widgets/UiLayout.h"
 
 namespace mm2 {
 
@@ -17,6 +18,7 @@ public:
 private:
     ItemsFile file_;
     int selected_ = 0;
+    ui::MasterDetail layout_;
 };
 
 }  // namespace mm2

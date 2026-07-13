@@ -7,7 +7,7 @@ import {
   sessionDeductGold,
   sessionApplyTreasure,
   sessionGiveItem,
-  sessionHasItem,
+  sessionConsumeBackpackItem,
   sessionLoadVar,
   sessionStoreVar,
   sessionApplyPartyByteOp,
@@ -21,6 +21,10 @@ import {
   sessionCountPartyNibbleMatches,
   sessionCountLivingPartyMembers,
   sessionSearchPayoff,
+  sessionOp31IterateDamage,
+  sessionSlideTrapHalve,
+  sessionSeedFixedEncounter,
+  sessionSeedTileAmbientEncounter,
   syncSessionGoldFromParty,
   getPartyMember,
   ensureParty,
@@ -30,16 +34,12 @@ import {
   runTempleService,
   runTrainingService,
   runSmithService,
-  runInnService,
   runTavernService,
   runGuildService,
   runInnRegistry,
-  runDeferredServiceMenu,
   runArenaTicketSelector,
   promptSelectMember,
   svcGeneralStoreConvert,
-  svcApplyDrinkEncoding,
-  svcApplyFoodEncoding,
   svcFoodEncodePurchase,
   svcDrinkEncodePurchase,
   svcQuestLordArm,
@@ -48,6 +48,10 @@ import {
 } from "./townServices.js";
 
 import { binExecSelector } from "./selectorBin.js";
+import { runCombatContract } from "./combatSession.js";
+import { waitSpaceWithScriptedKey } from "./scriptedKey.js";
+import { resolveOp0bSprite, signEnvIdForScreen } from "./serviceSignResolver.js";
+import { runOp0eFdPrintChrome } from "./op0eFdChrome.js";
 
 /** @deprecated use runDefaultRangeOverlay — kept for tests referencing combat bytes. */
 const LOC_61_COMBAT_OVERLAY = {
@@ -58,13 +62,12 @@ const LOC_61_COMBAT_OVERLAY = {
 };
 
 /**
- * Default-range overlay VM re-entry (asm runDefaultRangeOverlay @ EventRuntime.cpp).
- * Uses WALKER_OVERLAYS from export_map_walker.py when ctx.overlays is set.
- * @returns {Promise<boolean>}
+ * Resolve default-range overlay slot (no side effects).
+ * LE string-anchor + pool_seek decoding is done at export time (export_map_walker.py).
  */
-async function runDefaultRangeOverlay(ctx, sel) {
+function resolveOverlaySlot(ctx, sel) {
   const bin = binExecSelector(sel);
-  if (!bin) return false;
+  if (!bin) return null;
 
   const overlays = ctx.overlays ?? {};
   const loc = overlays[String(bin.category)] ?? overlays[bin.category];
@@ -77,7 +80,45 @@ async function runDefaultRangeOverlay(ctx, sel) {
       nodes: [{ op: 0x12, args: LOC_61_COMBAT_OVERLAY[bin.index], pseudo: "encounter_setup(...)" }],
     };
   }
-  if (!slot) return false;
+  if (!slot) return null;
+  return { bin, loc, slot };
+}
+
+/**
+ * OP_0E default-range @ 0x15EDC / 0x160A2 — queue only (do NOT run VM here).
+ * Mirrors EventRuntime::runDefaultRangeOverlay → QUEUED_EVENT_ID = index.
+ * @returns {boolean}
+ */
+function queueDefaultRangeOverlay(ctx, sel) {
+  const resolved = resolveOverlaySlot(ctx, sel);
+  if (!resolved) return false;
+  const { bin, loc, slot } = resolved;
+  const session = ctx.session;
+  session.queuedEventId = bin.index & 0xff;
+  /* AST walker: stash slot (C++ memcpy's overlay raw into work_buf). */
+  ctx._queuedOverlay = { bin, loc, slot };
+  ctx.note?.(
+    `queue overlay cat 0x${bin.category.toString(16)} idx ${bin.index} (run after abort)`
+  );
+  return true;
+}
+
+/**
+ * Scanner epilogue @ 0x176B6 — EventRuntime::runQueuedDispatch.
+ * Runs the queued overlay after the current script aborts.
+ * @returns {Promise<boolean>}
+ */
+async function runQueuedDispatch(ctx) {
+  const session = ctx.session;
+  if ((session.queuedEventId ?? 0xff) === 0xff) return false;
+
+  const q = ctx._queuedOverlay;
+  session.queuedEventId = 0xff;
+  ctx._queuedOverlay = null;
+  if (!q) return false;
+
+  const { bin, loc, slot } = q;
+  session.scriptAbort = 0;
 
   if (slot.kind === "text") {
     const text = ctx.resolveEventText?.(slot.text) ?? slot.text;
@@ -91,6 +132,8 @@ async function runDefaultRangeOverlay(ctx, sel) {
       ...ctx,
       evtData: { nodes: slot.nodes },
       strings: loc?.strings ?? [],
+      _queuedOverlay: null,
+      _isQueuedOverlay: true,
     };
     const result = await runEventScript(inner);
     if (result.teleported) {
@@ -106,24 +149,27 @@ async function runDefaultRangeOverlay(ctx, sel) {
   return false;
 }
 
+/** @deprecated name — queues then caller drains via runQueuedDispatch. */
+async function runDefaultRangeOverlay(ctx, sel) {
+  return queueDefaultRangeOverlay(ctx, sel);
+}
+
+/** Shared prompt-combat after GS seed — CombatSession enter/finish contract. */
+async function promptCombatOutcome(ctx, enc, op) {
+  return runCombatContract(ctx, enc, op);
+}
+
 /** Shared OP_12 fixed-encounter flow (map scripts + loc-61 overlays). */
 async function runOp12Combat(ctx, args) {
-  const { session, manifest, waitForSpace, promptYesNo, promptCombatResult, note, onSessionChange } =
-    ctx;
+  const { session, manifest, note, onSessionChange } = ctx;
+  sessionSeedFixedEncounter(session, args, false);
   const enc = describeEncounter(manifest, 0x12, args, "");
-  const sprite = ctx.sprite ?? enc.sprite;
-  const modalText = `${enc.text}\n\nV = victory (continue script)\nN = flee (abort)`;
-  await waitForSpace(modalText, sprite, 0x12);
-  const won = promptCombatResult
-    ? await promptCombatResult(enc)
-    : await promptYesNo("Did the party win?", sprite, 0x12);
-  if (won) {
-    session.combatVictory = true;
-    /* 0x1243e: clr.b -$794C — do not invent post-fight $FE. */
-    session.foundItemSentinel = 0;
-    note(`${enc.heading}: victory latch set`);
+  const outcome = await runCombatContract(ctx, enc, 0x12);
+  if (outcome === "victory") {
+    /* latch already set inside combatFinishVictory */
+  } else if (outcome === "refused") {
+    note(`${enc.heading}: enter refused`);
   } else {
-    note(`${enc.heading}: fled — script ends`);
     ctx.ended = true;
   }
   onSessionChange?.(session);
@@ -134,35 +180,18 @@ async function runOp12Combat(ctx, args) {
  * Mirrors game eventRunTileAmbientEncounter + eventVmConsumeTileEncounterFlag.
  */
 export async function runTileAmbientEncounter(ctx) {
-  const {
-    session,
-    manifest,
-    waitForSpace,
-    promptYesNo,
-    promptCombatResult,
-    onSessionChange,
-    maps,
-    screenId,
-    tileX,
-    tileY,
-  } = ctx;
+  const { session, manifest, onSessionChange, maps, screenId, tileX, tileY } = ctx;
   const notes = [];
+  sessionSeedTileAmbientEncounter(session);
   const enc = describeEncounter(manifest, 0x13, [], "");
-  const modalText = `${enc.text}\n\n(tile-flag @ 0x176F2 — random monsters)\n\nV = victory\nN = flee`;
-  await waitForSpace(modalText, enc.sprite, 0x13);
-  const won = promptCombatResult
-    ? await promptCombatResult(enc)
-    : await promptYesNo("Did the party win?", enc.sprite, 0x13);
-  if (won) {
-    session.combatVictory = true;
-    session.foundItemSentinel = 0; /* 0x1243e */
-    notes.push("Tile-flag encounter: victory latch set");
-  } else {
-    notes.push("Tile-flag encounter: fled");
-  }
+  enc.text = `${enc.text}\n\n(tile-flag @ 0x176F2 — random monsters)`;
+  const outcome = await runCombatContract(ctx, enc, 0x13);
+  if (outcome === "victory") notes.push("Tile-flag encounter: victory latch set");
+  else if (outcome === "refused") notes.push("Tile-flag encounter: enter refused (live=0)");
+  else notes.push(`Tile-flag encounter: ${outcome}`);
   sessionClearTileFlag(session, screenId, tileX, tileY, maps);
   onSessionChange?.(session);
-  return { won, notes };
+  return { won: outcome === "victory", notes };
 }
 
 /** Token-skip byte lengths for opcodes 0x00..0x32, read byte-exact from the
@@ -196,22 +225,30 @@ export const OP_ARGC = {
 /** Opcode implementation status for audit report (C++ remake fidelity).
  * Keep aligned with EXTRACTED/docs/56-event-system-remaining-gaps.md §3. */
 export const OPCODE_STATUS = {
-  0x00: "real", 0x01: "partial", 0x02: "partial", 0x03: "partial", 0x04: "partial",
-  0x05: "partial", 0x06: "partial", 0x07: "real", 0x08: "partial", 0x09: "real",
-  0x0a: "partial", 0x0b: "partial", 0x0c: "real",
+  0x00: "real", 0x01: "real", 0x02: "real", 0x03: "real", 0x04: "real",
+  0x05: "real", 0x06: "real", 0x07: "real", 0x08: "real", 0x09: "real",
+  0x0a: "real", 0x0b: "real", 0x0c: "real",
   0x0d: "real", /* presentation-only; no GS writes */
-  0x0e: "partial", /* dispatch verified; selector engines separate */
+  0x0e: "real", /* dispatch + hosted engines; town shop leaves = C++ town engines */
   0x0f: "real", 0x10: "real", 0x11: "real",
-  0x12: "partial", 0x13: "partial", 0x14: "real", 0x15: "real", 0x16: "real", 0x17: "real",
+  /* OP_12/13: enter/finishVictory/finishLeave contract = CombatSession public API. */
+  0x12: "real", 0x13: "real", 0x14: "real", 0x15: "real", 0x16: "real", 0x17: "real",
   0x18: "real", 0x19: "real", 0x1a: "real", 0x1b: "real", 0x1c: "real",
   0x1d: "real", 0x1e: "real", /* presentation/timing only */
   0x1f: "real", 0x20: "real", 0x21: "real", 0x22: "real", 0x23: "real",
-  0x24: "real", 0x25: "real", 0x26: "partial", 0x27: "partial", 0x28: "real", 0x29: "real",
+  0x24: "real", 0x25: "real", 0x26: "real", 0x27: "real", 0x28: "real", 0x29: "real",
   0x2a: "real", 0x2b: "real", 0x2c: "real", 0x2d: "real", 0x2e: "real", 0x2f: "real",
   0x30: "real", 0x31: "real", 0x32: "real",
-  /* OP_04/05/06: can't-see gate -$79E1 + OP_06 '-'→'{' are GS/logic-exact;
-   * remaining Partial = glyph/centering chrome only. */
 };
+
+/** Intra-map portal XY tables @ A4-$70D0 (data 0xF2E) — EventTownServices.cpp. */
+const PORTAL_SRC_X = [1, 1, 4, 4, 7, 7, 5, 10, 13, 13];
+const PORTAL_SRC_Y = [13, 2, 5, 10, 2, 13, 10, 10, 2, 13];
+const PORTAL_DST_X = [1, 1, 4, 4, 7, 7, 10, 10, 13, 13];
+const PORTAL_DST_Y = [14, 1, 4, 11, 1, 14, 4, 11, 1, 14];
+/** Found-item ranges @ -$70A8 / -$70A5 for selectors 0x81..0x83. */
+const FOUND_ITEM_SPAN = [13, 6, 7];
+const FOUND_ITEM_BASE = [66, 92, 127];
 
 const SELECTOR_SPRITES = {
   0x01: "68_anm", 0x02: "67_anm", 0x03: "63_anm", 0x04: "66_anm",
@@ -520,17 +557,38 @@ function op2dCheckMemberAttr(session, arg1, arg2) {
 async function runTownService(ctx, sel, title, sprite) {
   ctx.title = title;
   ctx.sprite = sprite;
-  const { waitForSpace, screenId, promptYesNo, promptMenuKey, session, note } = ctx;
+  const { waitForSpace, screenId, promptYesNo, promptMenuKey, session, note, maps } = ctx;
   const slot = townIntroSlot(screenId);
+  const rng = (lo, hi) => {
+    if (typeof ctx.rng === "function") return ctx.rng(lo, hi) | 0;
+    return lo; /* C++ unbound-rng fallback */
+  };
+  const promptHexDigit = async (prompt) => {
+    const keys = "0123456789abcdef";
+    while (true) {
+      const pick = await (ctx.promptMenuKey || promptMenuKey)(
+        prompt,
+        keys,
+        sprite,
+        0x0e
+      );
+      if (pick == null) return null;
+      const ch = String(pick).toLowerCase();
+      const digit = keys.indexOf(ch);
+      if (digit >= 0 && digit <= 0xf) return digit;
+    }
+  };
 
   if (sel === 0x01) {
+    /* Inn @ 0x1A132: Y/N → registry + Goto Town epilogue (not Rest submenu). */
     const yes = await promptYesNo(INN_INTRO[slot], sprite, 0x0e);
     if (!yes) {
       ctx.note("Inn registry declined");
       return;
     }
     await runInnRegistry(ctx);
-    await runInnService(ctx);
+    session.pendingEventLatch = 1;
+    ctx.onSessionChange?.(session);
     return;
   }
   if (sel === 0x02) {
@@ -557,9 +615,9 @@ async function runTownService(ctx, sel, title, sprite) {
       ctx.note("General store declined");
       return;
     }
-    const slot = await promptSelectMember(ctx);
-    if (slot == null) return;
-    const member = getPartyMember(session, slot);
+    const memSlot = await promptSelectMember(ctx);
+    if (memSlot == null) return;
+    const member = getPartyMember(session, memSlot);
     const r = svcGeneralStoreConvert(member);
     syncSessionGoldFromParty(session);
     await waitForSpace(r.message, sprite, 0x0e);
@@ -604,7 +662,8 @@ async function runTownService(ctx, sel, title, sprite) {
     if (won) {
       await waitForSpace("You win a prize!", sprite, 0x0e);
     } else {
-      const roll = Math.floor(Math.random() * 0xfe) + 1;
+      const roll =
+        typeof ctx.rng === "function" ? ctx.rng(1, 0xfe) : 1 + Math.floor(Math.random() * 0xfe);
       if (roll <= 0x7f) {
         for (const m of ensureParty(session)) {
           const bp = m.backpack ?? [];
@@ -626,8 +685,8 @@ async function runTownService(ctx, sel, title, sprite) {
     return;
   }
   if (sel === 0x03) {
-    const slot = townIntroSlot(ctx.screenId);
-    const yes = await ctx.promptYesNo(TAVERN_INTRO[slot], sprite, 0x0e);
+    const introSlot = townIntroSlot(ctx.screenId);
+    const yes = await ctx.promptYesNo(TAVERN_INTRO[introSlot], sprite, 0x0e);
     if (!yes) {
       ctx.note(`${title}: declined`);
       return;
@@ -636,8 +695,8 @@ async function runTownService(ctx, sel, title, sprite) {
     return;
   }
   if (sel === 0x05) {
-    const slot = townIntroSlot(ctx.screenId);
-    const yes = await ctx.promptYesNo(MAGE_GUILD_INTRO[slot], sprite, 0x0e);
+    const introSlot = townIntroSlot(ctx.screenId);
+    const yes = await ctx.promptYesNo(MAGE_GUILD_INTRO[introSlot], sprite, 0x0e);
     if (!yes) {
       ctx.note(`${title}: declined`);
       return;
@@ -646,12 +705,88 @@ async function runTownService(ctx, sel, title, sprite) {
     return;
   }
   if (sel === 0x08) {
-    /* Arena Games ticket engine (0x08 -> thunk -$7DBE -> 0x9D76). CORRECTED
-     * 2026-07: byte-verified against the A4 vtable trampoline table in
-     * mm2_data_00.bin — explicit selector 0x08 is the SOLE path into 0x9D76,
-     * not the default-range dispatch (that thunk, -$7DFA, actually resolves
-     * to event_dat_loader / 0x92F2 — see selectorBin.js). */
+    /* Arena Games ticket engine (0x08 -> thunk -$7DBE -> 0x9D76). */
     await runArenaTicketSelector(ctx, sel);
+    return;
+  }
+  if (sel === 0x7e) {
+    /* Free teleport UI -$7DB2 → 0xD576: hex X then Y. */
+    const x = await promptHexDigit("What is the magical location:\n       X ( 0-15 ) ?");
+    if (x == null) return;
+    const y = await promptHexDigit("What is the magical location:\n       Y ( 0-15 ) ?");
+    if (y == null) return;
+    ctx.onTeleport?.(screenId, x, y);
+    session.pendingEventLatch = 1;
+    ctx.teleported = true;
+    note(`OP_0E 0x7E free teleport → (${x},${y})`);
+    ctx.onSessionChange?.(session);
+    return;
+  }
+  if (sel === 0x7f) {
+    /* Combat seed -$7DAC → 0xD634: type = (rng(1,16)-1)+(Y<<4); OP_12 seed. */
+    const roll = rng(1, 16);
+    const mon = ((roll - 1) + ((ctx.tileY & 0xf) << 4)) & 0xff;
+    const party = ensureParty(session);
+    const block = new Array(12).fill(0);
+    for (let i = 0; i < party.length && i < 10; i++) block[i] = mon;
+    session.monsterCount = 0; /* asm clr -$77BE before enter @ EventTownServices */
+    sessionSeedFixedEncounter(session, block, false);
+    const enc = describeEncounter(ctx.manifest, 0x12, block, "");
+    const outcome = await runCombatContract(ctx, enc, 0x0e);
+    if (outcome === "victory") {
+      note(`OP_0E 0x7F combat seed mon=0x${mon.toString(16)} — victory`);
+    } else {
+      note(`OP_0E 0x7F combat seed mon=0x${mon.toString(16)} — ${outcome}`);
+    }
+    ctx.onSessionChange?.(session);
+    return;
+  }
+  if (sel === 0x80) {
+    /* Intra-map portal -$7DA6 → 0xD6A4 + slide-trap halve. */
+    const cx = ctx.tileX & 0xff;
+    const cy = ctx.tileY & 0xff;
+    let hit = -1;
+    for (let i = 0; i < 10; i++) {
+      if (PORTAL_SRC_X[i] === cx && PORTAL_SRC_Y[i] === cy) {
+        hit = i;
+        break;
+      }
+    }
+    if (hit < 0) {
+      note("OP_0E 0x80 portal — no XY match");
+      return;
+    }
+    sessionClearTileFlag(session, screenId, cx, cy, maps);
+    const dx = PORTAL_DST_X[hit];
+    const dy = PORTAL_DST_Y[hit];
+    ctx.onTeleport?.(screenId, dx, dy);
+    session.pendingEventLatch = 1;
+    session.exitFlags = (session.exitFlags | 5) & 0xff;
+    await waitForSpace("Magical slide trap!", sprite, 0x0e);
+    sessionSlideTrapHalve(session);
+    ctx.teleported = true;
+    note(`OP_0E 0x80 portal (${cx},${cy}) → (${dx},${dy}) + slide trap`);
+    ctx.onSessionChange?.(session);
+    return;
+  }
+  if (sel === 0x81 || sel === 0x82 || sel === 0x83) {
+    /* Found-item -$7DA0 → 0xD89C(arg 0/1/2). */
+    const arg = sel - 0x81;
+    const span = FOUND_ITEM_SPAN[arg];
+    const base = FOUND_ITEM_BASE[arg];
+    const roll = rng(1, span);
+    const itemId = (roll + base - 1) & 0xff;
+    const placed = sessionGiveItem(session, itemId, 0, 0);
+    if (placed) {
+      sessionClearTileFlag(session, screenId, ctx.tileX, ctx.tileY, maps);
+      session.exitFlags = (session.exitFlags | 2) & 0xff;
+      const name = itemName(ctx.manifest, itemId) ?? `item #${itemId}`;
+      await waitForSpace(`You have found a ${name}`, sprite, 0x0e);
+      note(`OP_0E 0x${sel.toString(16)} found ${name}`);
+    } else {
+      note(`OP_0E 0x${sel.toString(16)} give failed (id=${itemId})`);
+    }
+    ctx.onSessionChange?.(session);
     return;
   }
   if (sel === 0xc9 || sel === 0xca) {
@@ -694,23 +829,49 @@ async function runTownService(ctx, sel, title, sprite) {
       `At what level of difficulty do you\nwish to aid Lord ${lord}?\n` +
       `A) Page's Quest\nB) Squire's Quest\nC) Knight's Quest\nD) Lord's Quest\n` +
       `${lord} (A-D)?`;
-    const pick = await (ctx.promptMenuKey || promptMenuKey)(menu, "abcd", sprite, 0x0e);
-    const ch = (pick || "").toUpperCase();
-    if (ch >= "A" && ch <= "C") {
-      if (drink) svcDrinkEncodePurchase(party, ch.charCodeAt(0) - 65);
-      else svcFoodEncodePurchase(party, ch.charCodeAt(0) - 65);
-      note(drink ? "OP_0E 0xCA drink encode" : "OP_0E 0xC9 food encode");
-    } else if (ch === "D") {
-      const armed = svcQuestLordArm(party, drink);
-      note(armed < 0 ? "OP_0E lord arm (none)" : `OP_0E lord arm (${armed})`);
+    while (true) {
+      const pick = await (ctx.promptMenuKey || promptMenuKey)(menu, "abcd", sprite, 0x0e);
+      const ch = (pick || "").toUpperCase();
+      if (!ch) {
+        await waitForSpace("Then begone, knave!", sprite, 0x0e);
+        note(drink ? "OP_0E 0xCA Esc" : "OP_0E 0xC9 Esc");
+        return;
+      }
+      if (ch >= "A" && ch <= "C") {
+        if (drink) svcDrinkEncodePurchase(party, ch.charCodeAt(0) - 65);
+        else svcFoodEncodePurchase(party, ch.charCodeAt(0) - 65);
+        await waitForSpace(
+          "The quest I have decided upon for your\nparty, is to seek the target.",
+          sprite,
+          0x0e
+        );
+        note(drink ? "OP_0E 0xCA drink encode" : "OP_0E 0xC9 food encode");
+        break;
+      }
+      if (ch === "D") {
+        const armed = svcQuestLordArm(party, drink);
+        if (armed < 0) {
+          /* ASM returns -1 → re-prompt A–D. */
+          note("OP_0E lord arm (none) — re-prompt");
+          continue;
+        }
+        await waitForSpace("Lord's Quest accepted.", sprite, 0x0e);
+        note(`OP_0E lord arm (${armed})`);
+        break;
+      }
     }
     ctx.onSessionChange?.(session);
     return;
   }
+  if (sel === 0xfd) {
+    /* 0x161B2 + GameSession FdPrintChrome hosted pages / fight / WAFE. */
+    await runOp0eFdPrintChrome(ctx);
+    return;
+  }
   if (isTownServiceSelector(sel)) {
-    /* Skill vendors + quests: real overlay bytecode (no EventSkillBuy hijack). */
-    if (await runDefaultRangeOverlay(ctx, sel)) {
-      if (ctx.teleported) return;
+    /* Skill vendors + quests: queue overlay (C++ runDefaultRangeOverlay);
+     * drained by runQueuedDispatch after OP_0E abort — do not run inline. */
+    if (queueDefaultRangeOverlay(ctx, sel)) {
       return;
     }
     await waitForSpace(title, sprite, 0x0e);
@@ -748,6 +909,12 @@ export async function runEventScript(ctx) {
 
   const session = sessionIn ?? createSessionState();
   ctx.session = session;
+  /* scanAndRun clears EXIT_FLAGS; queued overlay resume must not. */
+  if (!ctx._isQueuedOverlay) {
+    session.exitFlags = 0;
+    session.scriptAbort = 0;
+  }
+  if (session.queuedEventId == null) session.queuedEventId = 0xff;
 
   const notes = [];
   /** @type {object[]} */
@@ -837,6 +1004,10 @@ export async function runEventScript(ctx) {
         } else if (op === 0x06) {
           if (!cantSee) onViewportOverlay?.({ type: "signpost", text });
         } else if (op >= 0x01 && op <= 0x03) {
+          /* EXIT_FLAGS: OP_01 bit0, OP_02 bit1, OP_03 bits 0+1. */
+          if (op === 0x01) session.exitFlags = (session.exitFlags | 1) & 0xff;
+          else if (op === 0x02) session.exitFlags = (session.exitFlags | 2) & 0xff;
+          else session.exitFlags = (session.exitFlags | 3) & 0xff;
           const followedByYn = nextOp(i) === 0x09 || nextOp(i) === 0x0a;
           if (followedByYn) {
             pendingPromptText = text;
@@ -856,15 +1027,24 @@ export async function runEventScript(ctx) {
 
     switch (op) {
       case 0x07:
-      case 0x08:
         vmStep(nodeIndex, op, "wait space");
         await waitForSpace(pendingPromptText ?? "", null, pendingPromptOp ?? 0x07);
         pendingPromptText = null;
         break;
 
+      case 0x08:
+        /* OP_08 @ 0x15D26: -$71DC←$FD then SPACE via scripted buffer. */
+        session.scriptedKeyMode = 0xfd;
+        vmStep(nodeIndex, op, "wait space (scripted $FD)");
+        await waitSpaceWithScriptedKey(ctx, pendingPromptText ?? "", null, pendingPromptOp ?? 0x08);
+        pendingPromptText = null;
+        break;
+
       case 0x09:
       case 0x0a: {
-        vmStep(nodeIndex, op, "y/n prompt");
+        /* OP_0A: -$71DC←$FD then same Y/N as OP_09 (scripted poll in walker keys). */
+        if (op === 0x0a) session.scriptedKeyMode = 0xfd;
+        vmStep(nodeIndex, op, op === 0x0a ? "y/n (scripted $FD)" : "y/n prompt");
         const promptText = pendingPromptText ?? "";
         pendingPromptText = null;
         session.cond = (await promptYesNo(promptText, null, pendingPromptOp ?? op)) ? 1 : 0;
@@ -874,11 +1054,20 @@ export async function runEventScript(ctx) {
       }
 
       case 0x0b: {
+        /* OP_0B @ 0x15DB0: ServiceSignResolver → .anm; EXIT_FLAGS bit2. */
         vmStep(nodeIndex, op, node.pseudo || "service_sign");
-        const sprite = signSpriteFromPseudo(node.pseudo);
+        session.exitFlags = (session.exitFlags | 4) & 0xff;
+        session.signEnvId = signEnvIdForScreen(screenId);
+        const strIdx = args[0] ?? 0;
+        const placement = args[1] ?? 0;
+        let sprite = resolveOp0bSprite(session, screenId, strIdx);
+        if (!sprite) sprite = signSpriteFromPseudo(node.pseudo);
         lastSignSprite = sprite;
-        const title = serviceTitle || "Service";
-        await waitForSpace(title, sprite, 0x0b);
+        if (sprite) {
+          sprite.placement = placement;
+          ctx.onViewportOverlay?.(sprite);
+        }
+        await waitForSpace("", sprite, 0x0b);
         break;
       }
 
@@ -892,6 +1081,10 @@ export async function runEventScript(ctx) {
         const tx = tile & 0xf;
         const destName = maps?.screens?.[dest]?.name ?? `screen ${dest}`;
         onTeleport?.(dest, tx, ty);
+        session.pendingEventLatch = 1;
+        /* endScript after transition: clear EXIT_FLAGS / SCRIPT_ABORT. */
+        session.exitFlags = 0;
+        session.scriptAbort = 0;
         teleported = true;
         ended = true;
         note(`Map transition → ${destName} (${tx},${ty})` +
@@ -953,8 +1146,15 @@ export async function runEventScript(ctx) {
           sel === 0x64 ||
           sel === 0x07 ||
           sel === 0x08 ||
+          sel === 0x7e ||
+          sel === 0x7f ||
+          sel === 0x80 ||
+          sel === 0x81 ||
+          sel === 0x82 ||
+          sel === 0x83 ||
           sel === 0xc9 ||
           sel === 0xca ||
+          sel === 0xfd ||
           isTownServiceSelector(sel);
 
         if (serviceHandled) {
@@ -962,9 +1162,13 @@ export async function runEventScript(ctx) {
             await waitForSpace(title, sprite, op);
           }
           await runTownService(ctx, sel, title, sprite);
-          if (ctx.teleported) {
-            teleported = true;
+          /* abortScript @ 0x17540: clear SCRIPT_ABORT; keep EXIT_FLAGS (no $171AC). */
+          session.scriptAbort = 0;
+          /* Scanner epilogue @ 0x176B6: drain OP_0E default-range queue. */
+          if (await runQueuedDispatch(ctx)) {
+            if (ctx.teleported) teleported = true;
           }
+          if (ctx.teleported) teleported = true;
           ended = true;
           onSessionChange?.(session);
           return { teleported, ended, aborted, notes, trace };
@@ -972,12 +1176,19 @@ export async function runEventScript(ctx) {
 
         await waitForSpace(`${title}\n(selector 0x${sel.toString(16)})`, sprite, op);
         note(`exec_selector(0x${sel.toString(16)}) — unhandled`);
+        session.scriptAbort = 0;
         ended = true;
         return { teleported, ended, aborted, notes, trace };
       }
 
       case 0x0f:
+        /* endScript: EXIT_FLAGS=0, SCRIPT_ABORT=0, then overlay restore. */
         vmStep(nodeIndex, op, "end_script");
+        session.exitFlags = 0;
+        session.scriptAbort = 0;
+        if (await runQueuedDispatch(ctx)) {
+          if (ctx.teleported) teleported = true;
+        }
         ended = true;
         return { teleported, ended, aborted, notes, trace };
 
@@ -1004,24 +1215,29 @@ export async function runEventScript(ctx) {
         vmStep(nodeIndex, op, node.pseudo || "encounter");
         if (op === 0x12) {
           await runOp12Combat(ctx, args);
-          if (ctx.ended) return { teleported, ended, aborted, notes, trace };
+          if (ctx.ended) {
+            ended = true;
+            aborted = true;
+            session.scriptAbort = 0;
+            return { teleported, ended, aborted, notes, trace };
+          }
           break;
         }
+        /* OP_13: eventRunFixedEncounter variant_b=true — mode 0, clear tail. */
+        sessionSeedFixedEncounter(session, args, true);
         const enc = describeEncounter(manifest, op, args, node.pseudo);
         const sprite = lastSignSprite ?? enc.sprite;
         lastSignSprite = null;
-        const modalText = `${enc.text}\n\nV = victory (continue script)\nN = flee (abort)`;
-        await waitForSpace(modalText, sprite, op);
-        const won = promptCombatResult
-          ? await promptCombatResult(enc)
-          : await promptYesNo("Did the party win?", sprite, op);
-        if (won) {
-          session.combatVictory = true;
-          session.foundItemSentinel = 0; /* 0x1243e */
-          note(`${enc.heading}: victory latch set`);
+        ctx.sprite = sprite;
+        const outcome = await runCombatContract(ctx, enc, op);
+        if (outcome === "victory") {
+          note(`${enc.heading}: victory latch (seeded-random)`);
+        } else if (outcome === "refused") {
+          note(`${enc.heading}: enter refused (live=0)`);
         } else {
-          note(`${enc.heading}: fled — script ends`);
+          note(`${enc.heading}: ${outcome} — script ends`);
           ended = true;
+          aborted = true;
           return { teleported, ended, aborted, notes, trace };
         }
         onSessionChange?.(session);
@@ -1169,6 +1385,7 @@ export async function runEventScript(ctx) {
         const ty = (pos >> 4) & 0xf;
         const tx = pos & 0xf;
         onPatchTile?.(ty, tx, args[1], args[2]);
+        session.exitFlags = (session.exitFlags | 4) & 0xff; /* 0x16A34 bit2 */
         vmStep(nodeIndex, op, `patch (${ty},${tx})`);
         note(`OP_21 set_tile (${ty},${tx}) vis=${args[1]} col=${args[2]}`);
         break;
@@ -1234,7 +1451,8 @@ export async function runEventScript(ctx) {
             note(`OP_${op.toString(16)} reject dead slot ${slot0 + 1}`);
             continue;
           }
-          session.selectedMember = slot0;
+          session.selectedMember = slot0 + 1; /* A4-$5D42 1-based */
+          session.savedCond = slot0 + 1;
           session.cond = slot0 + 1;
           syncCond();
           note(`OP_${op.toString(16)} select member → slot ${slot0 + 1}`);
@@ -1246,7 +1464,7 @@ export async function runEventScript(ctx) {
       case 0x28: {
         /* OP_28 @ 0x16C86: discard arg0; backpack-only consume always. */
         const itemId = args[1] ?? 0;
-        const has = sessionHasItem(session, itemId, true);
+        const has = sessionConsumeBackpackItem(session, itemId);
         session.cond = has ? 1 : 0;
         syncCond();
         vmStep(nodeIndex, op, `consume backpack ${itemId} → ${session.cond}`);
@@ -1290,6 +1508,7 @@ export async function runEventScript(ctx) {
       case 0x2c: {
         const add = args[0] ?? 0;
         session.scriptCounter = ((session.scriptCounter | 0) + add) & 0xffff;
+        session.exitFlags = (session.exitFlags | 1) & 0xff; /* 0x16D98 bit0 */
         vmStep(nodeIndex, op, `counter += ${add} → ${session.scriptCounter}`);
         note(`OP_2C counter → ${session.scriptCounter}`);
         break;
@@ -1332,44 +1551,18 @@ export async function runEventScript(ctx) {
       case 0x31: {
         /* EXIT_FLAGS bit1; 0x4952 HP damage (out-flags 0); living abort. */
         const memberSpec = args[0] ?? 0;
-        let value = ((args[1] ?? 0) | ((args[2] ?? 0) << 8)) & 0xffff;
-        if (memberSpec >= 0x80) value = session.cond & 0xff;
-        const party = session.party ?? [];
-        const targets = [];
-        const spec = memberSpec & 0x7f;
-        if (spec === 0) {
-          for (let i = 0; i < party.length; i++) targets.push(i);
-        } else {
-          /* ASM 0x1710A: only spec==9 → selected (-$5D42); 1..8 = member slots. */
-          let slot = spec === 9 ? (session.selectedMember ?? 1) : spec;
-          if (slot >= 1 && slot <= party.length) targets.push(slot - 1);
-        }
-        for (const i of targets) {
-          const m = party[i];
-          if (!m || (m.condition ?? 0) >= 0x80) continue;
-          m.condition = (m.condition ?? 0) & 0xef;
-          const hp = m.hpMax ?? m.hp ?? 0;
-          if ((m.condition ?? 0) & 0x40) {
-            m.condition = 0x81;
-            m.hpMax = 0;
-            m.hp = 0;
-          } else if (value >= hp) {
-            m.condition = (m.condition ?? 0) | 0x40;
-            m.hpMax = 0;
-            m.hp = 0;
-          } else {
-            m.hpMax = hp - value;
-            if (m.hp != null) m.hp = Math.max(0, (m.hp | 0) - value);
-          }
-        }
+        const value = ((args[1] ?? 0) | ((args[2] ?? 0) << 8)) & 0xffff;
+        const n = sessionOp31IterateDamage(session, memberSpec, value);
+        session.exitFlags = (session.exitFlags | 2) & 0xff;
         if (sessionCountLivingPartyMembers(session) === 0) {
           aborted = true;
           vmStep(nodeIndex, op, "living abort");
           note("OP_31: no living party → SCRIPT_ABORT (0x47EC)");
           return { teleported, ended, aborted, notes, trace };
         }
-        vmStep(nodeIndex, op, `damage ${value} → ${targets.length} target(s)`);
-        note(`OP_31: damage ${value} on ${targets.length} member(s)`);
+        vmStep(nodeIndex, op, `damage ${value} → ${n} target(s)`);
+        note(`OP_31: damage ${value} on ${n} member(s)`);
+        onSessionChange?.(session);
         break;
       }
 
@@ -1382,14 +1575,46 @@ export async function runEventScript(ctx) {
         break;
       }
 
+      case 0x00:
+        /* Invalid opcode @ 0x1748C → SCRIPT_ABORT. */
+        aborted = true;
+        ended = true;
+        vmStep(nodeIndex, op, "invalid → abort");
+        note("OP_00 invalid opcode → SCRIPT_ABORT");
+        return { teleported, ended, aborted, notes, trace };
+
       default:
+        /* Opcodes ≥ 0x33: C++ aborts + endScript. */
+        if (op >= 0x33) {
+          aborted = true;
+          ended = true;
+          vmStep(nodeIndex, op, "out of range → abort");
+          note(`Opcode 0x${op.toString(16)} ≥ 0x33 → SCRIPT_ABORT`);
+          return { teleported, ended, aborted, notes, trace };
+        }
         vmStep(nodeIndex, op, "unhandled");
         note(`Unhandled opcode 0x${op.toString(16)}`);
         break;
     }
   }
 
+  /* Natural script fall-through: same epilogue as C++ runVmLoop — drain queue. */
+  if ((session.queuedEventId ?? 0xff) !== 0xff) {
+    if (await runQueuedDispatch(ctx)) {
+      if (ctx.teleported) teleported = true;
+      ended = true;
+    }
+  }
+
   return { teleported, ended, aborted, notes, trace };
+}
+
+/** Scanner era gate: first op 0x22 always runs; else era must match attrib+0x0F. */
+export function eraGateAllowsEvent(session, screen, evtData) {
+  const first = evtData?.nodes?.[0];
+  if (first && (first.op & 0xff) === 0x22) return true;
+  if (screen?.eraGate == null) return true; /* bundle without eraGate: open */
+  return (session.era & 0xff) === (screen.eraGate & 0xff);
 }
 
 export { createSessionState, checkOp30Password, remapOp0cDest };
