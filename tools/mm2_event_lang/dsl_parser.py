@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from .ast import EventFile, Expr, Location, RecordKind, Script, StringDef, Stmt, Trigger, TriggerCond
+from .semantic_tables import var_group_by_name
 
 RE_LOCATION = re.compile(r"^location\s+(\d+)", re.I)
 RE_RECORD = re.compile(r"^record\s+(\w+)", re.I)
@@ -70,13 +71,18 @@ def _parse_expr(text: str) -> Expr:
         return Expr.yes_no(mode)
     if t.startswith("load_var8 "):
         m = re.match(
-            r"load_var8\s+group=0x([0-9A-Fa-f]+)(?:\s+index=0x([0-9A-Fa-f]+))?",
+            r"load_var8\s+(?:group=0x([0-9A-Fa-f]+)|([A-Za-z_][A-Za-z0-9_]*))"
+            r"(?:\s+index=0x([0-9A-Fa-f]+))?",
             t,
             re.I,
         )
         if m:
-            idx = int(m.group(2), 16) if m.group(2) else 0
-            return Expr("load_var8", {"group": int(m.group(1), 16), "index": idx})
+            if m.group(1) is not None:
+                group = int(m.group(1), 16)
+            else:
+                group = var_group_by_name(m.group(2)) or 0
+            idx = int(m.group(3), 16) if m.group(3) else 0
+            return Expr("load_var8", {"group": group, "index": idx})
     return Expr("unknown", {"text": t})
 
 
@@ -145,17 +151,31 @@ def _parse_stmt_line(line: str) -> Stmt | None:
         return Stmt.delay(int(s[6:].strip()))
     if s.startswith("load_var8 "):
         m = re.match(
-            r"load_var8\s+group=0x([0-9A-Fa-f]+)(?:\s+index=0x([0-9A-Fa-f]+))?",
+            r"load_var8\s+(?:group=0x([0-9A-Fa-f]+)|([A-Za-z_][A-Za-z0-9_]*))"
+            r"(?:\s+index=0x([0-9A-Fa-f]+))?",
             s,
             re.I,
         )
         if m:
-            idx = int(m.group(2), 16) if m.group(2) else 0
-            return Stmt.load_var8(int(m.group(1), 16), idx)
+            if m.group(1) is not None:
+                group = int(m.group(1), 16)
+            else:
+                group = var_group_by_name(m.group(2)) or 0
+            idx = int(m.group(3), 16) if m.group(3) else 0
+            return Stmt.load_var8(group, idx)
     if s.startswith("store_var8 "):
-        m = re.match(r"store_var8\s+group=0x([0-9A-Fa-f]+)\s+value=0x([0-9A-Fa-f]+)", s, re.I)
+        m = re.match(
+            r"store_var8\s+(?:group=0x([0-9A-Fa-f]+)|([A-Za-z_][A-Za-z0-9_]*))"
+            r"\s+value=0x([0-9A-Fa-f]+)",
+            s,
+            re.I,
+        )
         if m:
-            return Stmt.store_var8(int(m.group(1), 16), int(m.group(2), 16))
+            if m.group(1) is not None:
+                group = int(m.group(1), 16)
+            else:
+                group = var_group_by_name(m.group(2)) or 0
+            return Stmt.store_var8(group, int(m.group(3), 16))
     if s.startswith("@op "):
         parts = s.split()
         op = int(parts[1], 16)

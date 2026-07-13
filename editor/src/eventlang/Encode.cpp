@@ -69,18 +69,13 @@ std::vector<uint8_t> encodeLocation(Location& loc) {
             if (!sc->body.empty()) text = sc->body[0].getStr("text");
             for (char c : text) scriptPool.push_back(c == '\n' ? 0x40 : static_cast<uint8_t>(c));
         } else if (!sc->rawSegment.empty() && sc->body.empty()) {
-            // Preserve unlifted overlay bytecode.
+            // Preserve unlifted overlay bytecode (no AST body).
             scriptPool.insert(scriptPool.end(), sc->rawSegment.begin(), sc->rawSegment.end());
         } else {
+            // Strict: always lower from AST. rawSegment must not paper over lift bugs.
             auto ops = lowerStmts(sc->body, stringIndex);
             auto bytes = opsToBytes(ops);
-            // Shared skip-tails (e.g. skill trainers) are lossy in CFG lift.
-            // Prefer retail segment bytes when lower diverges and we still have them.
-            if (!sc->rawSegment.empty() && bytes != sc->rawSegment) {
-                scriptPool.insert(scriptPool.end(), sc->rawSegment.begin(), sc->rawSegment.end());
-            } else {
-                scriptPool.insert(scriptPool.end(), bytes.begin(), bytes.end());
-            }
+            scriptPool.insert(scriptPool.end(), bytes.begin(), bytes.end());
         }
         scriptPool.push_back(0xFF);
     }

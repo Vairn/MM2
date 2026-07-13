@@ -105,6 +105,47 @@ QUEST_FLAG_PATTERNS: dict[tuple[int, int, int], tuple[str, str]] = {
     (0x75, 0xFD, 0x02): ("sorcerer_stasis", "ybmug_freed"),
 }
 
+# OP_17/OP_1A group ids — eventVmResolveVarOffset + ASM hireling gate (0x586/0x7B6).
+# g=0x00..0x17 → hireling_a..hireling_x (nonzero = unlock). Other ids = GS singletons.
+VAR_GROUP_NAMES: dict[int, str] = {
+    **{i: f"hireling_{chr(ord('a') + i)}" for i in range(0x18)},
+    0x23: "levitate",
+    0x27: "talisman_0",
+    0x28: "talisman_1",
+    0x29: "talisman_2",
+    0x2A: "talisman_3",
+    0x2B: "eagle_eye",
+    0x2C: "wizard_eye",
+    0x32: "guardian_cave",
+    0x33: "tundra_lever",
+    0x3B: "xabran_gate",
+    0x3C: "dawn_gate",
+    0x3D: "period_flag_b",
+    0x3E: "period_flag_a",
+    0x80: "gate_b_0",
+    0x81: "gate_b_1",
+    0x82: "gate_b_2",
+    0x83: "gate_b_3",
+    0x84: "era_low",
+}
+
+VAR_GROUP_BY_NAME: dict[str, int] = {v: k for k, v in VAR_GROUP_NAMES.items()}
+
+
+def var_group_name(group: int) -> str | None:
+    return VAR_GROUP_NAMES.get(group & 0xFF)
+
+
+def var_group_by_name(name: str) -> int | None:
+    low = name.strip().lower()
+    if low.startswith("0x"):
+        try:
+            return int(low, 16) & 0xFF
+        except ValueError:
+            return None
+    return VAR_GROUP_BY_NAME.get(low)
+
+
 TRIGGER_COND_BY_BYTE = {
     0x10: "always",
     0x20: "from north",

@@ -161,9 +161,20 @@ Expr parseExpr(const std::string& text) {
     }
     if (startsWith(t, "monster_present ") || startsWith(t, "party_has_item ")) {
         size_t h1 = t.find("0x");
-        size_t h2 = t.find("0x", h1 + 1);
-        int item = h2 != std::string::npos ? parseHex(t, h2 + 2) : parseHex(t, h1 + 2);
-        int a = h2 != std::string::npos ? parseHex(t, h1 + 2) : 0;
+        int item = parseHex(t, h1 + 2);
+        int a = 0;
+        size_t ap = t.find("a=0x");
+        if (ap == std::string::npos) ap = t.find("a=0X");
+        if (ap != std::string::npos) {
+            a = parseHex(t, ap + 4);
+        } else {
+            // Legacy two-hex form: party_has_item 0xAA 0xITEM
+            size_t h2 = t.find("0x", h1 + 1);
+            if (h2 != std::string::npos) {
+                a = item;
+                item = parseHex(t, h2 + 2);
+            }
+        }
         return Expr::make("party_has_item").set("a", a).set("b", item).set("item", item);
     }
     if (startsWith(t, "count_title_nibble ")) {
@@ -177,11 +188,20 @@ Expr parseExpr(const std::string& text) {
         return Expr::make("threshold").set("value", parseHex(t, hx + 2));
     }
     if (startsWith(t, "load_var8 ")) {
+        int group = -1;
         size_t g = t.find("group=0x");
-        int group = parseHex(t, g + 8);
+        if (g != std::string::npos) {
+            group = parseHex(t, g + 8);
+        } else {
+            std::istringstream iss(t.substr(10));
+            std::string tok;
+            iss >> tok;
+            group = varGroupByName(tok);
+        }
         int idx = 0;
         size_t ix = t.find("index=0x");
         if (ix != std::string::npos) idx = parseHex(t, ix + 8);
+        if (group < 0) group = 0;
         return Expr::make("load_var8").set("group", group).set("index", idx);
     }
     if (startsWith(t, "party_bits ")) {
@@ -284,6 +304,17 @@ Stmt parseStmtLine(const std::string& line) {
         return Stmt::make("audio_wait").set("index", std::stoi(trim(s.substr(11))));
     if (s == "ask yes_no") return Stmt::make("ask_yes_no").set("mode", 0);
     if (s == "ask yes_no mode=1") return Stmt::make("ask_yes_no").set("mode", 1);
+    if (startsWith(s, "set_cond ")) {
+        Stmt st = Stmt::make("set_cond");
+        st.cond = parseExpr(trim(s.substr(9)));
+        return st;
+    }
+    if (startsWith(s, "skip_if_true "))
+        return Stmt::make("skip_if_true").set("n", std::stoi(trim(s.substr(13))));
+    if (startsWith(s, "skip_if_false "))
+        return Stmt::make("skip_if_false").set("n", std::stoi(trim(s.substr(14))));
+    if (startsWith(s, "skip_if_victory "))
+        return Stmt::make("skip_if_victory").set("n", std::stoi(trim(s.substr(16))));
     if (s == "clear_input" || s == "read_answer") return Stmt::make("read_answer");
     if (s == "clear_tile_event") return Stmt::make("clear_tile_event");
     if (s == "abort") return Stmt::make("abort");
@@ -421,8 +452,14 @@ Stmt parseStmtLine(const std::string& line) {
     if (startsWith(s, "say_door ")) return Stmt::make("say").set("variant", "door").set("string", trim(s.substr(9)));
     if (startsWith(s, "say_block "))
         return Stmt::make("say").set("variant", "block").set("string", trim(s.substr(10)));
-    if (startsWith(s, "say_popup "))
+    if (startsWith(s, "say_popup_a "))
+        return Stmt::make("say").set("variant", "popup_a").set("string", trim(s.substr(12)));
+    if (startsWith(s, "say_popup_b "))
+        return Stmt::make("say").set("variant", "popup_b").set("string", trim(s.substr(12)));
+    if (startsWith(s, "say_popup "))  // legacy alias → popup_a
         return Stmt::make("say").set("variant", "popup_a").set("string", trim(s.substr(10)));
+    if (startsWith(s, "say_basic "))
+        return Stmt::make("say").set("variant", "basic").set("string", trim(s.substr(10)));
     if (startsWith(s, "say ")) return Stmt::make("say").set("variant", "").set("string", trim(s.substr(4)));
     if (startsWith(s, "go_to ")) {
         // go_to screen N pos 0xNN
@@ -434,19 +471,38 @@ Stmt parseStmtLine(const std::string& line) {
     }
     if (startsWith(s, "delay ")) return Stmt::make("delay").set("ticks", std::stoi(trim(s.substr(6))));
     if (startsWith(s, "load_var8 ")) {
+        int group = -1;
         size_t g = s.find("group=0x");
-        int group = parseHex(s, g + 8);
+        if (g != std::string::npos) {
+            group = parseHex(s, g + 8);
+        } else {
+            std::istringstream iss(s.substr(10));
+            std::string tok;
+            iss >> tok;
+            group = varGroupByName(tok);
+        }
         int idx = 0;
         size_t ix = s.find("index=0x");
         if (ix != std::string::npos) idx = parseHex(s, ix + 8);
+        if (group < 0) group = 0;
         return Stmt::make("load_var8").set("group", group).set("index", idx);
     }
     if (startsWith(s, "store_var8 ")) {
+        int group = -1;
         size_t g = s.find("group=0x");
+        if (g != std::string::npos) {
+            group = parseHex(s, g + 8);
+        } else {
+            std::istringstream iss(s.substr(11));
+            std::string tok;
+            iss >> tok;
+            group = varGroupByName(tok);
+        }
         size_t v = s.find("value=0x");
+        if (group < 0) group = 0;
         return Stmt::make("store_var8")
-            .set("group", parseHex(s, g + 8))
-            .set("value", parseHex(s, v + 8));
+            .set("group", group)
+            .set("value", v != std::string::npos ? parseHex(s, v + 8) : 0);
     }
     if (startsWith(s, "@op ")) {
         std::istringstream iss(s.substr(4));
@@ -634,14 +690,46 @@ ParseResult parseLocationText(const std::string& text) {
             if (stripped == "strings:") {
                 ++i;
                 int idx = 0;
+                auto unescapeQuoted = [](const std::string& in) {
+                    std::string out;
+                    out.reserve(in.size());
+                    for (size_t p = 0; p < in.size(); ++p) {
+                        if (in[p] == '\\' && p + 1 < in.size()) {
+                            out.push_back(in[p + 1]);
+                            ++p;
+                        } else {
+                            out.push_back(in[p]);
+                        }
+                    }
+                    return out;
+                };
                 while (i < static_cast<int>(lines.size())) {
                     std::string sl = trim(lines[i]);
                     if (sl.empty() || startsWith(sl, "on ") || startsWith(sl, "script ")) break;
-                    // name: "text"
+                    // name: "text"  OR  name: raw aa bb  OR  name: (block)
                     size_t colon = sl.find(':');
                     if (colon == std::string::npos) break;
                     std::string name = trim(sl.substr(0, colon));
                     std::string rest = trim(sl.substr(colon + 1));
+                    if (startsWith(rest, "raw")) {
+                        std::istringstream iss(rest.substr(3));
+                        std::string tok;
+                        std::vector<uint8_t> raw;
+                        while (iss >> tok) {
+                            if (tok == "#" || startsWith(tok, "#")) break;
+                            raw.push_back(static_cast<uint8_t>(parseHex(tok, 0)));
+                        }
+                        std::string textVal;
+                        for (uint8_t b : raw) textVal += (b == 0x40) ? '\n' : static_cast<char>(b);
+                        StringDef sd;
+                        sd.name = name;
+                        sd.text = textVal;
+                        sd.index = idx++;
+                        sd.rawBytes = std::move(raw);
+                        loc.strings.push_back(std::move(sd));
+                        ++i;
+                        continue;
+                    }
                     if (rest.empty()) {
                         // block form
                         ++i;
@@ -666,6 +754,7 @@ ParseResult parseLocationText(const std::string& text) {
                                     if (!trim(last).empty()) textVal += trim(last);
                                 }
                             }
+                            textVal = unescapeQuoted(textVal);
                             for (char& c : textVal)
                                 if (c == '@') c = '\n';
                             StringDef sd;
@@ -678,8 +767,23 @@ ParseResult parseLocationText(const std::string& text) {
                         }
                         break;
                     }
-                    if (rest.size() >= 2 && rest.front() == '"' && rest.back() == '"') {
-                        std::string textVal = rest.substr(1, rest.size() - 2);
+                    if (rest.size() >= 2 && rest.front() == '"') {
+                        // Scan quoted string with \" escapes.
+                        std::string textVal;
+                        bool ok = false;
+                        for (size_t p = 1; p < rest.size(); ++p) {
+                            if (rest[p] == '\\' && p + 1 < rest.size()) {
+                                textVal.push_back(rest[p + 1]);
+                                ++p;
+                                continue;
+                            }
+                            if (rest[p] == '"') {
+                                ok = true;
+                                break;
+                            }
+                            textVal.push_back(rest[p]);
+                        }
+                        if (!ok) break;
                         for (char& c : textVal)
                             if (c == '@') c = '\n';
                         StringDef sd;
@@ -752,6 +856,12 @@ ParseResult parseLocationText(const std::string& text) {
     } catch (const std::exception& ex) {
         result.ok = false;
         result.error = ex.what();
+        result.errorLine = (i >= 0 && i < static_cast<int>(lines.size())) ? i : -1;
+        if (result.errorLine >= 0) {
+            result.error += "  (line ";
+            result.error += std::to_string(result.errorLine + 1);
+            result.error += ")";
+        }
         return result;
     }
 

@@ -208,6 +208,14 @@ std::vector<LoweredOp> stmtToOps(const Stmt& stmt,
     }
     if (k == "ask_yes_no")
         return {LoweredOp{static_cast<uint8_t>(stmt.getNum("mode") ? 0x0A : 0x09), {}, 0}};
+    // Exact token skips (fidelity-first linear DSL). N is author/decompile-provided.
+    if (k == "skip_if_true")
+        return {LoweredOp{0x10, {static_cast<uint8_t>(stmt.getNum("n"))}, 0}};
+    if (k == "skip_if_false")
+        return {LoweredOp{0x11, {static_cast<uint8_t>(stmt.getNum("n"))}, 0}};
+    if (k == "skip_if_victory")
+        return {LoweredOp{0x2B, {static_cast<uint8_t>(stmt.getNum("n"))}, 0}};
+    if (k == "set_cond") return exprToCondOps(stmt.cond);
     if (k == "if") {
         auto thenOps = lowerStmts(stmt.thenBody, stringIndex);
         auto elseOps = lowerStmts(stmt.elseBody, stringIndex);
@@ -215,22 +223,28 @@ std::vector<LoweredOp> stmtToOps(const Stmt& stmt,
         if (stmt.cond.kind == "combat_victory") {
             std::vector<LoweredOp> out;
             const auto& skipped = !elseOps.empty() ? elseOps : thenOps;
-            out.push_back(LoweredOp{0x2B, {static_cast<uint8_t>(skipped.size())}, 0});
+            // Prefer explicit skip count when present (shared-tail fidelity).
+            const int n = stmt.getNum("n", static_cast<int>(skipped.size()));
+            out.push_back(LoweredOp{0x2B, {static_cast<uint8_t>(n)}, 0});
             out.insert(out.end(), skipped.begin(), skipped.end());
             return out;
         }
         auto condOps = exprToCondOps(stmt.cond);
         std::vector<LoweredOp> out = condOps;
         if (!thenOps.empty() && !elseOps.empty()) {
-            out.push_back(LoweredOp{0x11, {static_cast<uint8_t>(thenOps.size() + 1)}, 0});
+            const int nThen = stmt.getNum("n_then", static_cast<int>(thenOps.size() + 1));
+            const int nElse = stmt.getNum("n_else", static_cast<int>(elseOps.size()));
+            out.push_back(LoweredOp{0x11, {static_cast<uint8_t>(nThen)}, 0});
             out.insert(out.end(), thenOps.begin(), thenOps.end());
-            out.push_back(LoweredOp{0x10, {static_cast<uint8_t>(elseOps.size())}, 0});
+            out.push_back(LoweredOp{0x10, {static_cast<uint8_t>(nElse)}, 0});
             out.insert(out.end(), elseOps.begin(), elseOps.end());
         } else if (!thenOps.empty()) {
-            out.push_back(LoweredOp{0x11, {static_cast<uint8_t>(thenOps.size())}, 0});
+            const int n = stmt.getNum("n", static_cast<int>(thenOps.size()));
+            out.push_back(LoweredOp{0x11, {static_cast<uint8_t>(n)}, 0});
             out.insert(out.end(), thenOps.begin(), thenOps.end());
         } else if (!elseOps.empty()) {
-            out.push_back(LoweredOp{0x10, {static_cast<uint8_t>(elseOps.size())}, 0});
+            const int n = stmt.getNum("n", static_cast<int>(elseOps.size()));
+            out.push_back(LoweredOp{0x10, {static_cast<uint8_t>(n)}, 0});
             out.insert(out.end(), elseOps.begin(), elseOps.end());
         }
         return out;
@@ -313,7 +327,8 @@ std::vector<LoweredOp> stmtToOps(const Stmt& stmt,
     }
     if (k == "audio_wait")
         return {LoweredOp{0x1D, {static_cast<uint8_t>(stmt.getNum("index"))}, 0}};
-    if (k == "unreachable") return {};  // comments only — do not re-emit dead tails
+    // Dead tails after go_to/abort/end still exist in retail bytecode — re-emit.
+    if (k == "unreachable") return lowerStmts(stmt.body, stringIndex);
     if (k == "go_to")
         return {LoweredOp{0x0C,
                            {static_cast<uint8_t>(stmt.getNum("screen")),

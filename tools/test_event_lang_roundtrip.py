@@ -69,8 +69,8 @@ class TestEventLangRoundtrip(unittest.TestCase):
             nxt = sc.body[j + 1] if j + 1 < len(sc.body) else None
             lines.extend(emit_mod._format_stmt(stmt, 1, nxt))
         self.assertIn("if yes_no:", "\n".join(lines))
-        self.assertIn("store_var8 group=0x2B value=0x32", "\n".join(lines))
-        self.assertIn("store_var8 group=0x2C value=0x32", "\n".join(lines))
+        self.assertIn("store_var8 eagle_eye value=0x32", "\n".join(lines))
+        self.assertIn("store_var8 wizard_eye value=0x32", "\n".join(lines))
         self.assertNotIn("@op 0x1A", "\n".join(lines))
 
     def test_loc0_op0b_op0e_mechanical(self) -> None:

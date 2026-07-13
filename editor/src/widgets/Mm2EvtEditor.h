@@ -20,6 +20,8 @@ public:
     void goToLine(int line0);
     /** Find first line containing needle; returns 0-based line or -1. */
     int findLine(const std::string& needle) const;
+    void clearErrorMarkers();
+    void markErrorLine(int line0, const char* tip = nullptr);
 
     bool draw(const char* title, const ImVec2& size);
 

@@ -2,19 +2,11 @@
 
 #include "eventlang/OpcodeTable.h"
 #include "eventlang/Semantics.h"
-#include "eventlang/TokenSkip.h"
 
 #include <optional>
 
 namespace mm2::eventlang {
 namespace {
-
-int indexAtOffset(const std::vector<LoweredOp>& ops, int off) {
-    for (int i = 0; i < static_cast<int>(ops.size()); ++i) {
-        if (ops[i].off >= off) return i;
-    }
-    return static_cast<int>(ops.size());
-}
 
 Expr opToCondExpr(const LoweredOp& op) {
     const uint8_t o = op.op;
@@ -93,10 +85,10 @@ Expr opToCondExpr(const LoweredOp& op) {
 std::optional<Stmt> opToStmt(const LoweredOp& op) {
     const uint8_t o = op.op;
     const auto& a = op.args;
-    // Cond-set ops are normally consumed by liftRange; side-effecting cond ops may
-    // also appear as bare statements when not immediately followed by a branch
-    // (OP_15/19/1F/20). Pure cond ops return nullopt here.
-    if (isCondSetOp(o) && o != 0x15 && o != 0x19 && o != 0x1F && o != 0x20) return std::nullopt;
+    // Cond-set ops: linear lift emits set_cond / ask_yes_no / side-effect stmts below.
+    if (isCondSetOp(o) && o != 0x15 && o != 0x19 && o != 0x1F && o != 0x20 && o != 0x09 &&
+        o != 0x0A && o != 0x17)
+        return std::nullopt;
     if (o == 0x10 || o == 0x11 || o == 0x2B) return std::nullopt;
     if (o >= 0x01 && o <= 0x06 && !a.empty()) {
         return Stmt::make("say").set("variant", sayVariantForOp(o)).set("string", static_cast<int>(a[0]));
@@ -183,187 +175,54 @@ std::optional<Stmt> opToStmt(const LoweredOp& op) {
     return s;
 }
 
-std::vector<Stmt> liftRange(const std::vector<LoweredOp>& ops, const uint8_t* seg, size_t segLen,
-                            int start, int end);
-
-// VM: OP_10 skips N tokens when cond!=0; OP_11 skips when cond==0.
-// Retail layout is fall-through: the region after the skip still runs unless
-// the taken path aborted/ended. Exclusive if/else is a two-skip idiom:
-//   cond; OP_11 n=len(then)+1; then; OP_10 m=len(else); else
-std::vector<Stmt> liftRange(const std::vector<LoweredOp>& ops, const uint8_t* seg, size_t segLen,
-                            int start, int end) {
-    std::vector<Stmt> body;
-    int i = start;
-    // Live cond survives say/wait/etc. until OP_10/11 (VM cond_flag is sticky).
-    // If the cond-set was already emitted as a side-effect stmt, branch uses prior_cond
-    // so lower does not duplicate the opcode.
-    std::optional<Expr> pendingCond;
-    bool pendingEmitted = false;
-
-    while (i < end) {
-        const LoweredOp& op = ops[i];
-
-        if (isCondSetOp(op.op)) {
-            const bool branched =
-                (i + 1 < end) && (ops[i + 1].op == 0x10 || ops[i + 1].op == 0x11);
-            pendingCond = opToCondExpr(op);
-            if (branched) {
-                // Consume into the following if — do not also emit as a stmt.
-                pendingEmitted = false;
-                ++i;
-                continue;
-            }
-            // Side-effecting cond ops (party write / give / party_effect): emit stmt,
-            // keep cond live for a later OP_10/11 (e.g. give_item; wait; if …).
-            if (op.op == 0x15 || op.op == 0x19 || op.op == 0x1F || op.op == 0x20) {
-                auto st = opToStmt(op);
-                if (st) body.push_back(*st);
-                pendingEmitted = true;
-                ++i;
-                continue;
-            }
-            // Pure cond op not yet branched: keep live without emitting; a later
-            // OP_10/11 will attach it. Orphan (no branch) stays lost — same as before.
-            pendingEmitted = false;
-            ++i;
-            continue;
-        }
-
-        if ((op.op == 0x10 || op.op == 0x11) && !op.args.empty()) {
-            int n = op.args[0];
-            size_t skipStart = static_cast<size_t>(op.off + 2);
-            auto targetOff = skipNTokens(seg, segLen, skipStart, n);
-            if (!targetOff) {
-                Stmt s = Stmt::make("raw_op").set("op", op.op);
-                std::vector<int> args;
-                for (uint8_t x : op.args) args.push_back(x);
-                s.setList("args", args);
-                body.push_back(s);
-                ++i;
-                pendingCond.reset();
-                pendingEmitted = false;
-                continue;
-            }
-            int skipIdx = indexAtOffset(ops, static_cast<int>(*targetOff));
-            const int rawSkipIdx = skipIdx;
-            if (skipIdx > end) skipIdx = end;
-
-            Expr cond;
-            if (pendingEmitted)
-                cond = Expr::make("prior_cond");
-            else if (pendingCond)
-                cond = *pendingCond;
-            else
-                cond = Expr::make("unknown");
-            pendingCond.reset();
-            pendingEmitted = false;
-            Stmt ifs = Stmt::make("if");
-            ifs.cond = cond;
-
-            // Exclusive if/else: OP_11 then immediately OP_10 after then-body.
-            if (op.op == 0x11 && skipIdx < end && ops[skipIdx].op == 0x10 &&
-                !ops[skipIdx].args.empty() && n == (skipIdx - (i + 1)) + 1) {
-                const LoweredOp& op10 = ops[skipIdx];
-                int m = op10.args[0];
-                size_t elseStart = static_cast<size_t>(op10.off + 2);
-                auto elseEndOff = skipNTokens(seg, segLen, elseStart, m);
-                int elseEndIdx = elseEndOff ? indexAtOffset(ops, static_cast<int>(*elseEndOff)) : end;
-                if (elseEndIdx > end) elseEndIdx = end;
-                ifs.thenBody = liftRange(ops, seg, segLen, i + 1, skipIdx);
-                ifs.elseBody = liftRange(ops, seg, segLen, skipIdx + 1, elseEndIdx);
-                body.push_back(std::move(ifs));
-                auto rest = liftRange(ops, seg, segLen, elseEndIdx, end);
-                body.insert(body.end(), rest.begin(), rest.end());
-                return body;
-            }
-
-            if (op.op == 0x10) {
-                // cond true → skip else region; false → run else then fall into rest.
-                // When the skip lands PAST our parent range (rawSkipIdx > end), this is
-                // the locksmith/pay pattern: success jumps over a shared join (often
-                // go_to/abort that OP_0C/29 ends on), so pull success ops into then.
-                if (rawSkipIdx > end) {
-                    ifs.elseBody = liftRange(ops, seg, segLen, i + 1, end);
-                    ifs.thenBody = liftRange(ops, seg, segLen, rawSkipIdx, static_cast<int>(ops.size()));
-                    body.push_back(std::move(ifs));
-                    // Ops at [end, rawSkipIdx) belong to the parent join / shared exit.
-                    return body;
-                }
-                ifs.elseBody = liftRange(ops, seg, segLen, i + 1, skipIdx);
-                ifs.thenBody.clear();
-            } else {
-                // cond false → skip then region; true → run then then fall into rest.
-                ifs.thenBody = liftRange(ops, seg, segLen, i + 1, skipIdx);
-                ifs.elseBody.clear();
-            }
-            body.push_back(std::move(ifs));
-            auto rest = liftRange(ops, seg, segLen, skipIdx, end);
-            body.insert(body.end(), rest.begin(), rest.end());
-            return body;
-        }
-
-        if (op.op == 0x2B && !op.args.empty()) {
-            // OP_2B @ 0x16D74: skip N tokens when COMBAT_VICTORY_LATCH set — same
-            // shape as OP_10 (true → skip else region).
-            int n = op.args[0];
-            size_t skipStart = static_cast<size_t>(op.off + 2);
-            auto targetOff = skipNTokens(seg, segLen, skipStart, n);
-            if (targetOff) {
-                int skipIdx = indexAtOffset(ops, static_cast<int>(*targetOff));
-                if (skipIdx > end) skipIdx = end;
-                pendingCond.reset();
-                pendingEmitted = false;
-                Stmt ifs = Stmt::make("if");
-                ifs.cond = Expr::make("combat_victory");
-                ifs.elseBody = liftRange(ops, seg, segLen, i + 1, skipIdx);
-                ifs.thenBody.clear();
-                body.push_back(std::move(ifs));
-                auto rest = liftRange(ops, seg, segLen, skipIdx, end);
-                body.insert(body.end(), rest.begin(), rest.end());
-                return body;
-            }
-        }
-
-        auto st = opToStmt(op);
-        if (st) body.push_back(*st);
-        // Do NOT clear pendingCond here — VM cond_flag survives say/wait/select_member
-        // until the next cond-set or OP_10/11 (delayed-cond patterns).
-        ++i;
-
-        // OP_0C / OP_29 / OP_0F stop the script — anything still in this range is
-        // only reachable via an earlier skip (often duplicated on the fail path).
-        if (st && (st->kind == "go_to" || st->kind == "abort" || st->kind == "end") && i < end) {
-            auto dead = liftRange(ops, seg, segLen, i, end);
-            if (!dead.empty()) {
-                Stmt u = Stmt::make("unreachable");
-                u.body = std::move(dead);
-                body.push_back(std::move(u));
-            }
-            return body;
-        }
-    }
-    return body;
+// Fidelity-first linear lift: preserve exact OP_10/11/2B skip counts.
+// Structured if/else is lossy for shared-tail / long-skip CFG patterns.
+Stmt makeSkip(const char* kind, int n) {
+    return Stmt::make(kind).set("n", n);
 }
 
 }  // namespace
 
-std::vector<Stmt> liftSegment(const std::vector<LoweredOp>& ops, const uint8_t* seg, size_t segLen) {
-    if (ops.empty()) return {};
-    auto lifted = liftRange(ops, seg, segLen, 0, static_cast<int>(ops.size()));
-    if (!lifted.empty()) return lifted;
-    std::vector<Stmt> fallback;
-    for (const auto& o : ops) {
-        auto st = opToStmt(o);
-        if (st) fallback.push_back(*st);
-        else {
-            Stmt s = Stmt::make("raw_op").set("op", o.op);
+std::vector<Stmt> liftSegment(const std::vector<LoweredOp>& ops, const uint8_t* /*seg*/,
+                              size_t /*segLen*/) {
+    std::vector<Stmt> body;
+    body.reserve(ops.size());
+    for (const auto& op : ops) {
+        if (op.op == 0x10 && !op.args.empty()) {
+            body.push_back(makeSkip("skip_if_true", op.args[0]));
+            continue;
+        }
+        if (op.op == 0x11 && !op.args.empty()) {
+            body.push_back(makeSkip("skip_if_false", op.args[0]));
+            continue;
+        }
+        if (op.op == 0x2B && !op.args.empty()) {
+            body.push_back(makeSkip("skip_if_victory", op.args[0]));
+            continue;
+        }
+
+        // Pure cond-set ops → set_cond <expr> (sticky VM flag for following skips).
+        // ask_yes_no / load_var8 / side-effecting cond ops have stmt forms.
+        if (isCondSetOp(op.op) && op.op != 0x15 && op.op != 0x19 && op.op != 0x1F &&
+            op.op != 0x20 && op.op != 0x09 && op.op != 0x0A && op.op != 0x17) {
+            Stmt s = Stmt::make("set_cond");
+            s.cond = opToCondExpr(op);
+            body.push_back(std::move(s));
+            continue;
+        }
+
+        auto st = opToStmt(op);
+        if (st) {
+            body.push_back(*st);
+        } else {
+            Stmt s = Stmt::make("raw_op").set("op", op.op);
             std::vector<int> args;
-            for (uint8_t x : o.args) args.push_back(x);
+            for (uint8_t x : op.args) args.push_back(x);
             s.setList("args", args);
-            fallback.push_back(s);
+            body.push_back(s);
         }
     }
-    return fallback;
+    return body;
 }
 
 }  // namespace mm2::eventlang

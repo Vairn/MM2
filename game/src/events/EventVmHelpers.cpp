@@ -270,7 +270,9 @@ bool eventVmStringLooksLikeBytecode(const uint8_t *bytes, size_t len)
 int32_t eventVmResolveVarOffset(uint8_t group, uint8_t index)
 {
     /* event_op_var_resolve @ 0x15620 keys on a single id byte; `index` is unused
-     * (OP_17 reads+discards a 2nd byte). ids 0x00..0x17 index the flag bank. */
+     * (OP_17 reads+discards a 2nd byte). ids 0x00..0x17 index the flag bank.
+     * Party/roster UI treats bank[letter-'A'] as hireling A..X unlock (nonzero =
+     * visible/hireable): tst.b (-$798B,d0) when page offset == 0x18 @ 0x586/0x7B6. */
     (void)index;
     if (group <= 0x17) {
         return MM2_GS_EVENT_VAR_BANK + group;

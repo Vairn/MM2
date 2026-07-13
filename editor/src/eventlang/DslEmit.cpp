@@ -90,7 +90,12 @@ std::string formatExpr(const Expr& expr) {
     if (k == "monster_present" || k == "party_has_item") {
         char buf[64];
         const int item = expr.getNum("item", expr.getNum("b"));
-        std::snprintf(buf, sizeof(buf), "party_has_item 0x%02X", item);
+        const int a = expr.getNum("a", 0);
+        // OP_16 packs two args; arg1 is discarded by VM but must roundtrip.
+        if (a)
+            std::snprintf(buf, sizeof(buf), "party_has_item 0x%02X a=0x%02X", item, a);
+        else
+            std::snprintf(buf, sizeof(buf), "party_has_item 0x%02X", item);
         return buf;
     }
     if (k == "count_title_nibble") {
@@ -106,12 +111,19 @@ std::string formatExpr(const Expr& expr) {
     }
     if (k == "load_var8") {
         int idx = expr.getNum("index", 0);
-        char buf[64];
-        if (idx)
-            std::snprintf(buf, sizeof(buf), "load_var8 group=0x%02X index=0x%02X",
-                          expr.getNum("group"), idx);
-        else
-            std::snprintf(buf, sizeof(buf), "load_var8 group=0x%02X", expr.getNum("group"));
+        int group = expr.getNum("group");
+        const char* gname = varGroupName(group);
+        char buf[80];
+        if (gname) {
+            if (idx)
+                std::snprintf(buf, sizeof(buf), "load_var8 %s index=0x%02X", gname, idx);
+            else
+                std::snprintf(buf, sizeof(buf), "load_var8 %s", gname);
+        } else if (idx) {
+            std::snprintf(buf, sizeof(buf), "load_var8 group=0x%02X index=0x%02X", group, idx);
+        } else {
+            std::snprintf(buf, sizeof(buf), "load_var8 group=0x%02X", group);
+        }
         return buf;
     }
     if (k == "party_bits") {
@@ -142,8 +154,10 @@ std::string formatExpr(const Expr& expr) {
 std::string sayVerb(const std::string& variant) {
     if (variant == "door") return "say_door";
     if (variant == "block") return "say_block";
-    if (variant == "popup_a" || variant == "popup_b") return "say_popup";
-    if (variant == "basic") return "say";
+    if (variant == "popup_a") return "say_popup_a";
+    if (variant == "popup_b") return "say_popup_b";
+    if (variant == "basic") return "say_basic";
+    // OP_03 default / empty variant
     return "say";
 }
 
@@ -199,23 +213,6 @@ std::string firstOverlayStringHint(const Location& oloc, int eventId) {
     return walk(body);
 }
 
-void emitOverlayScriptComments(const Location& oloc, int eventId, int depth,
-                               std::vector<std::string>& lines) {
-    if (eventId < 0 || eventId >= static_cast<int>(oloc.scripts.size())) return;
-    const Script& sc = oloc.scripts[eventId];
-    std::unordered_map<std::string, std::string> lookup;
-    for (const auto& s : oloc.strings) lookup[s.name] = s.text;
-    std::vector<std::string> bodyLines;
-    for (const auto& stmt : sc.body) formatStmt(stmt, 0, lookup, bodyLines, oloc.id, nullptr);
-    std::string pad(static_cast<size_t>(depth) * 2, ' ');
-    lines.push_back(pad + "# --- overlay " + std::to_string(oloc.id) + " event_" +
-                    (eventId < 10 ? "0" : "") + std::to_string(eventId) + " (runs in-place) ---");
-    for (const auto& ln : bodyLines) {
-        if (ln.empty()) continue;
-        lines.push_back(pad + "# " + ln);
-    }
-}
-
 void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::string, std::string>& lookup,
                 std::vector<std::string>& lines, int locId, const EventFileAst* file) {
     std::string pad(static_cast<size_t>(depth) * 2, ' ');
@@ -258,6 +255,25 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
         lines.push_back(pad + (stmt.getNum("mode") ? "ask yes_no mode=1" : "ask yes_no"));
         return;
     }
+    if (k == "set_cond") {
+        lines.push_back(pad + "set_cond " + formatExpr(stmt.cond));
+        return;
+    }
+    if (k == "skip_if_true") {
+        lines.push_back(pad + "skip_if_true " + std::to_string(stmt.getNum("n")) +
+                        "  # OP_10 skip when cond!=0");
+        return;
+    }
+    if (k == "skip_if_false") {
+        lines.push_back(pad + "skip_if_false " + std::to_string(stmt.getNum("n")) +
+                        "  # OP_11 skip when cond==0");
+        return;
+    }
+    if (k == "skip_if_victory") {
+        lines.push_back(pad + "skip_if_victory " + std::to_string(stmt.getNum("n")) +
+                        "  # OP_2B skip when combat victory");
+        return;
+    }
     if (k == "if") {
         lines.push_back(pad + "if " + formatExpr(stmt.cond) + ":");
         for (const auto& s : stmt.thenBody) formatStmt(s, depth + 1, lookup, lines, locId, file);
@@ -294,9 +310,6 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
                             line += "\"";
                         }
                     }
-                    lines.push_back(line);
-                    emitOverlayScriptComments(oloc, bin->second, depth + 1, lines);
-                    return;
                 }
             }
         }
@@ -475,19 +488,31 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
     }
     if (k == "load_var8") {
         int idx = stmt.getNum("index", 0);
-        char buf[64];
-        if (idx)
-            std::snprintf(buf, sizeof(buf), "load_var8 group=0x%02X index=0x%02X",
-                          stmt.getNum("group"), idx);
-        else
-            std::snprintf(buf, sizeof(buf), "load_var8 group=0x%02X", stmt.getNum("group"));
+        int group = stmt.getNum("group");
+        const char* gname = varGroupName(group);
+        char buf[80];
+        if (gname) {
+            if (idx)
+                std::snprintf(buf, sizeof(buf), "load_var8 %s index=0x%02X", gname, idx);
+            else
+                std::snprintf(buf, sizeof(buf), "load_var8 %s", gname);
+        } else if (idx) {
+            std::snprintf(buf, sizeof(buf), "load_var8 group=0x%02X index=0x%02X", group, idx);
+        } else {
+            std::snprintf(buf, sizeof(buf), "load_var8 group=0x%02X", group);
+        }
         lines.push_back(pad + buf);
         return;
     }
     if (k == "store_var8") {
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "store_var8 group=0x%02X value=0x%02X", stmt.getNum("group"),
-                      stmt.getNum("value"));
+        int group = stmt.getNum("group");
+        int value = stmt.getNum("value");
+        const char* gname = varGroupName(group);
+        char buf[80];
+        if (gname)
+            std::snprintf(buf, sizeof(buf), "store_var8 %s value=0x%02X", gname, value);
+        else
+            std::snprintf(buf, sizeof(buf), "store_var8 group=0x%02X value=0x%02X", group, value);
         lines.push_back(pad + buf);
         return;
     }
@@ -505,18 +530,9 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
         return;
     }
     if (k == "unreachable") {
+        // Keep as real stmts so text/AST roundtrip still emits retail dead tails.
         lines.push_back(pad + "# unreachable (prior go_to/abort/end stops script):");
-        for (const auto& s : stmt.body) {
-            std::vector<std::string> tmp;
-            formatStmt(s, depth, lookup, tmp, locId, file);
-            for (auto& ln : tmp) {
-                if (ln.empty()) continue;
-                // already indented; prefix comment marker after indent
-                size_t non = 0;
-                while (non < ln.size() && ln[non] == ' ') ++non;
-                lines.push_back(ln.substr(0, non) + "# " + ln.substr(non));
-            }
-        }
+        for (const auto& s : stmt.body) formatStmt(s, depth, lookup, lines, locId, file);
         return;
     }
     if (k == "raw_op") {
@@ -587,14 +603,63 @@ std::string emitLocation(const Location& loc, const std::string& areaComment,
         lines.push_back("");
         lines.push_back("strings:");
         for (const auto& s : loc.strings) {
+            // Prefer exact rawBytes when they differ from text→0x40 encoding (0x0A etc.).
+            std::vector<uint8_t> expected;
+            for (char c : s.text) expected.push_back(c == '\n' ? 0x40 : static_cast<uint8_t>(c));
+            const bool useRaw = !s.rawBytes.empty() && s.rawBytes != expected;
+            if (useRaw) {
+                std::ostringstream hex;
+                hex << "  " << s.name << ": raw";
+                for (uint8_t b : s.rawBytes) {
+                    char buf[4];
+                    std::snprintf(buf, sizeof(buf), " %02x", b);
+                    hex << buf;
+                }
+                // Human-readable hint (comment only).
+                std::string shown = s.text;
+                for (char& c : shown)
+                    if (c == '\n') c = '@';
+                if (shown.size() > 48) shown = shown.substr(0, 45) + "...";
+                for (char& c : shown)
+                    if (c == '"') c = '\'';
+                if (!shown.empty()) hex << "  # \"" << shown << "\"";
+                lines.push_back(hex.str());
+                continue;
+            }
             std::string shown = s.text;
             for (char& c : shown)
                 if (c == '\n') c = '@';
-            if (shown.size() > 72) {
+            // Embedded quotes break naive """...""" delimiters — use raw hex.
+            const bool hasQuote = s.text.find('"') != std::string::npos;
+            if (hasQuote) {
+                std::ostringstream hex;
+                hex << "  " << s.name << ": raw";
+                const auto& bytes = !s.rawBytes.empty() ? s.rawBytes : expected;
+                for (uint8_t b : bytes) {
+                    char buf[4];
+                    std::snprintf(buf, sizeof(buf), " %02x", b);
+                    hex << buf;
+                }
+                std::string hint = shown;
+                if (hint.size() > 48) hint = hint.substr(0, 45) + "...";
+                for (char& c : hint)
+                    if (c == '"') c = '\'';
+                if (!hint.empty()) hex << "  # \"" << hint << "\"";
+                lines.push_back(hex.str());
+                continue;
+            }
+            // Escape backslashes for parse symmetry (quotes already handled above).
+            std::string esc;
+            esc.reserve(shown.size() + 4);
+            for (char c : shown) {
+                if (c == '\\') esc.push_back('\\');
+                esc.push_back(c);
+            }
+            if (esc.size() > 72) {
                 lines.push_back("  " + s.name + ":");
-                lines.push_back("    \"\"\"" + shown + "\"\"\"");
+                lines.push_back("    \"\"\"" + esc + "\"\"\"");
             } else {
-                lines.push_back("  " + s.name + ": \"" + shown + "\"");
+                lines.push_back("  " + s.name + ": \"" + esc + "\"");
             }
         }
     }

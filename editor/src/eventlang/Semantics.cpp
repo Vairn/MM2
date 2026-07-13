@@ -87,6 +87,80 @@ int partyFieldByName(const std::string& name) {
     return -1;
 }
 
+const char* varGroupName(int group) {
+    const int g = group & 0xFF;
+    /* event_var_bank[0..23] @ -$798B: hireling letter unlock (ASM 0x586 / 0x7B6). */
+    if (g <= 0x17) {
+        static const char* const kHireling[24] = {
+            "hireling_a", "hireling_b", "hireling_c", "hireling_d", "hireling_e", "hireling_f",
+            "hireling_g", "hireling_h", "hireling_i", "hireling_j", "hireling_k", "hireling_l",
+            "hireling_m", "hireling_n", "hireling_o", "hireling_p", "hireling_q", "hireling_r",
+            "hireling_s", "hireling_t", "hireling_u", "hireling_v", "hireling_w", "hireling_x",
+        };
+        return kHireling[g];
+    }
+    switch (g) {
+        case 0x23: return "levitate";
+        case 0x27: return "talisman_0";
+        case 0x28: return "talisman_1";
+        case 0x29: return "talisman_2";
+        case 0x2A: return "talisman_3";
+        case 0x2B: return "eagle_eye";
+        case 0x2C: return "wizard_eye";
+        case 0x32: return "guardian_cave";
+        case 0x33: return "tundra_lever";
+        case 0x3B: return "xabran_gate";
+        case 0x3C: return "dawn_gate";
+        case 0x3D: return "period_flag_b";
+        case 0x3E: return "period_flag_a";
+        case 0x80: return "gate_b_0";
+        case 0x81: return "gate_b_1";
+        case 0x82: return "gate_b_2";
+        case 0x83: return "gate_b_3";
+        case 0x84: return "era_low";
+        default: return nullptr;
+    }
+}
+
+int varGroupByName(const std::string& name) {
+    std::string lower;
+    for (char c : name) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (lower.size() >= 3 && (lower[0] == '0') && (lower[1] == 'x')) {
+        int v = 0;
+        for (size_t i = 2; i < lower.size(); ++i) {
+            char c = lower[i];
+            int d = (c >= '0' && c <= '9') ? (c - '0')
+                  : (c >= 'a' && c <= 'f') ? (c - 'a' + 10) : -1;
+            if (d < 0) return -1;
+            v = (v << 4) | d;
+        }
+        return v & 0xFF;
+    }
+    if (lower.size() == 10 && lower.compare(0, 9, "hireling_") == 0) {
+        char L = lower[9];
+        if (L >= 'a' && L <= 'x') return L - 'a';
+    }
+    if (lower == "levitate") return 0x23;
+    if (lower == "talisman_0") return 0x27;
+    if (lower == "talisman_1") return 0x28;
+    if (lower == "talisman_2") return 0x29;
+    if (lower == "talisman_3") return 0x2A;
+    if (lower == "eagle_eye") return 0x2B;
+    if (lower == "wizard_eye") return 0x2C;
+    if (lower == "guardian_cave") return 0x32;
+    if (lower == "tundra_lever") return 0x33;
+    if (lower == "xabran_gate") return 0x3B;
+    if (lower == "dawn_gate") return 0x3C;
+    if (lower == "period_flag_b") return 0x3D;
+    if (lower == "period_flag_a") return 0x3E;
+    if (lower == "gate_b_0") return 0x80;
+    if (lower == "gate_b_1") return 0x81;
+    if (lower == "gate_b_2") return 0x82;
+    if (lower == "gate_b_3") return 0x83;
+    if (lower == "era_low") return 0x84;
+    return -1;
+}
+
 const char* skillNibbleName(int nibble) {
     switch (nibble & 0x0F) {
         case 0x03: return "cartographer";

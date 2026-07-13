@@ -30,6 +30,10 @@ private:
     void applyAstToFile(App& app);
     void ensureSelectedEvent();
     void selectEvent(int eventId);
+    /** Switch location + event to an overlay bank target (discards unsaved buffer). */
+    void openOverlay(int locId, int eventId);
+    void jumpToError();
+    void tryOpenOverlayFromEditorClick();
     void drawToolbar(App& app);
     void drawOutline();
     void drawEditor();
@@ -46,8 +50,12 @@ private:
     int selectedLoc_ = 0;
     int astLoc_ = -1;
     int selectedEvent_ = -1;
+    int compileErrorLine_ = -1;  // 0-based
     bool scriptDirty_ = false;
     bool outlineFilterScripts_ = true;
+    float outlineW_ = 0.f;     // 0 => default em width
+    float inspectorW_ = 0.f;   // 0 => default em width
+    float problemsH_ = 0.f;    // 0 => auto when visible
 };
 
 }  // namespace mm2

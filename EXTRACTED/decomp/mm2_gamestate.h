@@ -313,7 +313,7 @@
 /* Temple donate blessed path @ 0x1D7FE: writes light/protect/flags then addq.w #1.
  * Offset confirmed in ASM; semantic name is descriptive (not a bootstrap symbol). */
 #define MM2_GS_TEMPLE_BLESS_CTR (-0x5770)  /* word  addq @ 0x1D852 after blessed buff */
-#define MM2_GS_EVENT_VAR_BANK   (-0x798B)  /* byte[24] ($8685) g=0x00..0x17 */
+#define MM2_GS_EVENT_VAR_BANK   (-0x798B)  /* byte[24] ($8685) g=0x00..0x17; hireling A..X unlock */
 #define MM2_GS_TUNDRA_LEVER     (-0x7990)  /* byte  ($8680) */
 #define MM2_GS_XABRAN_GATE      (-0x798F)  /* byte  ($8681) */
 #define MM2_GS_DAWN_GATE        (-0x798E)  /* byte  ($8682) */

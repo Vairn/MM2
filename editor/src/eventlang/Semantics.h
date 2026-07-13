@@ -21,6 +21,13 @@ std::string partyMemberToken(int memberSpec);
 /** Field selector → short name when known (skills, quest_flags, …). */
 const char* partyFieldName(int fieldSel);
 int partyFieldByName(const std::string& name);
+
+/** OP_17/OP_1A group id → name from eventVmResolveVarOffset + ASM hireling gate.
+ *  g=0x00..0x17 = hireling_a..hireling_x (party UI tst.b -$798B+letter @ 0x586).
+ *  Other ids match MM2_GS_* singletons in the resolver switch. Unknown → nullptr. */
+const char* varGroupName(int group);
+/** Inverse of varGroupName; also accepts group=0xNN hex token. -1 if unknown. */
+int varGroupByName(const std::string& name);
 /** Skill nibble id (low 4 bits) → name when known. */
 const char* skillNibbleName(int nibble);
 

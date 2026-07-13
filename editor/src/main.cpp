@@ -124,6 +124,9 @@ int main(int argc, char** argv) {
         for (int i = 0; i < 71; ++i) {
             auto loc = mm2::eventlang::decompileLocation(file.rawRecords[i].data(),
                                                          file.rawRecords[i].size(), i);
+            loc.modified = true;
+            loc.rawBlob.clear();
+            for (auto& sc : loc.scripts) sc.rawSegment.clear();
             auto rebuilt = mm2::eventlang::encodeLocation(loc);
             if (rebuilt == file.rawRecords[i])
                 ++ok;
@@ -133,7 +136,7 @@ int main(int argc, char** argv) {
                              file.rawRecords[i].size(), rebuilt.size());
             }
         }
-        std::printf("roundtrip: %d/%d byte-identical\n", ok, ok + fail);
+        std::printf("strict AST roundtrip: %d/%d byte-identical\n", ok, ok + fail);
         file.locations.clear();
         for (int i = 0; i < 71; ++i)
             file.locations.push_back(mm2::eventlang::decompileLocation(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import textwrap
 
 from .ast import EventFile, Expr, Location, RecordKind, Script, Stmt, TriggerCond
-from .semantic_tables import selector_handler_comment
+from .semantic_tables import selector_handler_comment, var_group_name
 
 
 def _indent(lines: list[str], level: int = 1) -> list[str]:
@@ -56,6 +56,11 @@ def _format_expr(expr: Expr) -> str:
         return f"cond >= 0x{d['value']:02X}"
     if k == "load_var8":
         idx = int(d.get("index", 0))
+        gname = var_group_name(int(d["group"]))
+        if gname:
+            if idx:
+                return f"load_var8 {gname} index=0x{idx:02X}"
+            return f"load_var8 {gname}"
         if idx:
             return f"load_var8 group=0x{d['group']:02X} index=0x{idx:02X}"
         return f"load_var8 group=0x{d['group']:02X}"
@@ -182,10 +187,18 @@ def _format_stmt(
         return [f"{pad}delay {d['ticks']}"]
     if k == "load_var8":
         idx = int(d.get("index", 0))
+        gname = var_group_name(int(d["group"]))
+        if gname:
+            if idx:
+                return [f"{pad}load_var8 {gname} index=0x{idx:02X}"]
+            return [f"{pad}load_var8 {gname}"]
         if idx:
             return [f"{pad}load_var8 group=0x{d['group']:02X} index=0x{idx:02X}"]
         return [f"{pad}load_var8 group=0x{d['group']:02X}"]
     if k == "store_var8":
+        gname = var_group_name(int(d["group"]))
+        if gname:
+            return [f"{pad}store_var8 {gname} value=0x{d['value']:02X}"]
         return [f"{pad}store_var8 group=0x{d['group']:02X} value=0x{d['value']:02X}"]
     if k == "plain_text":
         txt = d["text"].replace("\n", "@")

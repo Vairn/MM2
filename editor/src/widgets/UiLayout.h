@@ -174,4 +174,40 @@ inline void ToolbarSpacer() {
 }
 inline void EndToolbarRow() { ImGui::EndGroup(); }
 
+// Compact panel chrome: title + optional muted subtitle, then a hairline.
+inline void PanelHeader(const char* title, const char* subtitle = nullptr) {
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 3.f));
+    ImGui::TextUnformatted(title);
+    if (subtitle && subtitle[0]) {
+        ImGui::SameLine(0, Em(0.5f));
+        ImGui::TextDisabled("%s", subtitle);
+    }
+    ImGui::Separator();
+    ImGui::PopStyleVar();
+}
+
+// Drag a vertical strip to resize *width. `rightPanel` inverts the delta so the
+// strip can sit to the left of a right-hand panel.
+inline bool VSplitter(const char* id, float* width, float minW, float maxW,
+                      bool rightPanel = false) {
+    ImGui::PushID(id);
+    ImGui::SameLine(0, 0);
+    const float thick = Em(0.35f);
+    ImGui::InvisibleButton("##vs", ImVec2(thick, -1.f));
+    const bool active = ImGui::IsItemActive();
+    if (ImGui::IsItemHovered() || active) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    if (active && width) {
+        *width += rightPanel ? -ImGui::GetIO().MouseDelta.x : ImGui::GetIO().MouseDelta.x;
+        if (*width < minW) *width = minW;
+        if (*width > maxW) *width = maxW;
+    }
+    const ImVec2 a = ImGui::GetItemRectMin();
+    const ImVec2 b = ImGui::GetItemRectMax();
+    const float mid = (a.x + b.x) * 0.5f;
+    ImU32 col = active ? IM_COL32(180, 50, 50, 220) : IM_COL32(120, 35, 35, 160);
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(mid, a.y + 4.f), ImVec2(mid, b.y - 4.f), col, 1.5f);
+    ImGui::PopID();
+    return active;
+}
+
 }  // namespace mm2::ui
