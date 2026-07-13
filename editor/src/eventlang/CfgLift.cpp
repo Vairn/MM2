@@ -64,6 +64,15 @@ Expr opToCondExpr(const LoweredOp& op) {
             .set("item", a[1])
             .set("charges", a[2])
             .set("flags", a[3]);
+    // OP_1F/20 @ 0x1690E: party field add/sub; cond=1 entry, OP_20 clears on underflow.
+    if ((o == 0x1F || o == 0x20) && a.size() >= 6) {
+        std::vector<int> args;
+        for (uint8_t x : a) args.push_back(x);
+        return Expr::make("party_effect_ok")
+            .set("mode", o == 0x20 ? 1 : 0)
+            .set("sel", a[0])
+            .setList("args", args);
+    }
     if (o == 0x30) {
         std::string decoded;
         for (uint8_t b : a) {
@@ -84,9 +93,10 @@ Expr opToCondExpr(const LoweredOp& op) {
 std::optional<Stmt> opToStmt(const LoweredOp& op) {
     const uint8_t o = op.op;
     const auto& a = op.args;
-    // Cond-set ops are normally consumed by liftRange; OP_15/19 may also appear
-    // as bare statements when not followed by a branch.
-    if (isCondSetOp(o) && o != 0x15 && o != 0x19) return std::nullopt;
+    // Cond-set ops are normally consumed by liftRange; side-effecting cond ops may
+    // also appear as bare statements when not immediately followed by a branch
+    // (OP_15/19/1F/20). Pure cond ops return nullopt here.
+    if (isCondSetOp(o) && o != 0x15 && o != 0x19 && o != 0x1F && o != 0x20) return std::nullopt;
     if (o == 0x10 || o == 0x11 || o == 0x2B) return std::nullopt;
     if (o >= 0x01 && o <= 0x06 && !a.empty()) {
         return Stmt::make("say").set("variant", sayVariantForOp(o)).set("string", static_cast<int>(a[0]));
@@ -184,21 +194,39 @@ std::vector<Stmt> liftRange(const std::vector<LoweredOp>& ops, const uint8_t* se
                             int start, int end) {
     std::vector<Stmt> body;
     int i = start;
+    // Live cond survives say/wait/etc. until OP_10/11 (VM cond_flag is sticky).
+    // If the cond-set was already emitted as a side-effect stmt, branch uses prior_cond
+    // so lower does not duplicate the opcode.
     std::optional<Expr> pendingCond;
+    bool pendingEmitted = false;
 
     while (i < end) {
         const LoweredOp& op = ops[i];
 
         if (isCondSetOp(op.op)) {
-            // Only consume as a condition when a branch follows; otherwise emit
-            // as a statement (orphan OP_15 tests are rare but must not vanish).
             const bool branched =
                 (i + 1 < end) && (ops[i + 1].op == 0x10 || ops[i + 1].op == 0x11);
+            pendingCond = opToCondExpr(op);
             if (branched) {
-                pendingCond = opToCondExpr(op);
+                // Consume into the following if — do not also emit as a stmt.
+                pendingEmitted = false;
                 ++i;
                 continue;
             }
+            // Side-effecting cond ops (party write / give / party_effect): emit stmt,
+            // keep cond live for a later OP_10/11 (e.g. give_item; wait; if …).
+            if (op.op == 0x15 || op.op == 0x19 || op.op == 0x1F || op.op == 0x20) {
+                auto st = opToStmt(op);
+                if (st) body.push_back(*st);
+                pendingEmitted = true;
+                ++i;
+                continue;
+            }
+            // Pure cond op not yet branched: keep live without emitting; a later
+            // OP_10/11 will attach it. Orphan (no branch) stays lost — same as before.
+            pendingEmitted = false;
+            ++i;
+            continue;
         }
 
         if ((op.op == 0x10 || op.op == 0x11) && !op.args.empty()) {
@@ -213,13 +241,22 @@ std::vector<Stmt> liftRange(const std::vector<LoweredOp>& ops, const uint8_t* se
                 body.push_back(s);
                 ++i;
                 pendingCond.reset();
+                pendingEmitted = false;
                 continue;
             }
             int skipIdx = indexAtOffset(ops, static_cast<int>(*targetOff));
             const int rawSkipIdx = skipIdx;
             if (skipIdx > end) skipIdx = end;
 
-            Expr cond = pendingCond.value_or(Expr::make("unknown"));
+            Expr cond;
+            if (pendingEmitted)
+                cond = Expr::make("prior_cond");
+            else if (pendingCond)
+                cond = *pendingCond;
+            else
+                cond = Expr::make("unknown");
+            pendingCond.reset();
+            pendingEmitted = false;
             Stmt ifs = Stmt::make("if");
             ifs.cond = cond;
 
@@ -274,6 +311,8 @@ std::vector<Stmt> liftRange(const std::vector<LoweredOp>& ops, const uint8_t* se
             if (targetOff) {
                 int skipIdx = indexAtOffset(ops, static_cast<int>(*targetOff));
                 if (skipIdx > end) skipIdx = end;
+                pendingCond.reset();
+                pendingEmitted = false;
                 Stmt ifs = Stmt::make("if");
                 ifs.cond = Expr::make("combat_victory");
                 ifs.elseBody = liftRange(ops, seg, segLen, i + 1, skipIdx);
@@ -287,7 +326,8 @@ std::vector<Stmt> liftRange(const std::vector<LoweredOp>& ops, const uint8_t* se
 
         auto st = opToStmt(op);
         if (st) body.push_back(*st);
-        pendingCond.reset();
+        // Do NOT clear pendingCond here — VM cond_flag survives say/wait/select_member
+        // until the next cond-set or OP_10/11 (delayed-cond patterns).
         ++i;
 
         // OP_0C / OP_29 / OP_0F stop the script — anything still in this range is

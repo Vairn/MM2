@@ -43,6 +43,8 @@ bool isCondSetOp(uint8_t op) {
         case 0x19:  // give_item → cond=1 if placed on a member
         case 0x1B:
         case 0x1C:  // rng roll → raw cond byte
+        case 0x1F:  // party_effect add → cond=1, underflow N/A
+        case 0x20:  // party_effect sub → cond=0 on underflow (EventPartyEffects)
         case 0x22:
         case 0x23:
         case 0x24:

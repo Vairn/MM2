@@ -23,10 +23,22 @@ std::string hex2(int v) {
 std::string formatExpr(const Expr& expr) {
     const std::string& k = expr.kind;
     if (k == "class_field" || k == "member_attr") {
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "member_attr arg1=0x%02X arg2=0x%02X",
-                      expr.getNum("arg1", expr.getNum("field")),
-                      expr.getNum("arg2", expr.getNum("mask")));
+        // OP_2D @ 0x16DBA: keep packed args for roundtrip; annotate decode.
+        const int a1 = expr.getNum("arg1", expr.getNum("field"));
+        const int a2 = expr.getNum("arg2", expr.getNum("mask"));
+        char buf[128];
+        const char* which = (a1 & 0x80) ? "race" : (a1 & 0x40) ? "sex" : "class";
+        const char* mode = (a1 & 0x20) ? "any" : "all";
+        const int v1 = a1 & 0x0F;
+        const int v2 = ((a1 & 0xE0) == 0) ? (a2 & 0x0F) : v1;
+        if (v2 != v1)
+            std::snprintf(buf, sizeof(buf),
+                          "member_attr arg1=0x%02X arg2=0x%02X  # %s %s val=0x%X|0x%X", a1, a2,
+                          which, mode, v1, v2);
+        else
+            std::snprintf(buf, sizeof(buf),
+                          "member_attr arg1=0x%02X arg2=0x%02X  # %s %s val=0x%X", a1, a2, which,
+                          mode, v1);
         return buf;
     }
     if (k == "class_is") return "class " + expr.getStr("class");
@@ -50,10 +62,24 @@ std::string formatExpr(const Expr& expr) {
         return buf;
     }
     if (k == "combat_victory") return "combat_victory";
+    if (k == "prior_cond") return "prior_cond";
     if (k == "give_item_ok") {
-        char buf[80];
-        std::snprintf(buf, sizeof(buf), "give_item_ok item=0x%02X", expr.getNum("item"));
+        char buf[96];
+        std::snprintf(buf, sizeof(buf),
+                      "give_item_ok item=0x%02X member=%d charges=%d flags=0x%02X",
+                      expr.getNum("item"), expr.getNum("member"), expr.getNum("charges"),
+                      expr.getNum("flags"));
         return buf;
+    }
+    if (k == "party_effect_ok") {
+        std::ostringstream oss;
+        oss << "party_effect_ok mode=" << expr.getNum("mode") << " sel=" << hex2(expr.getNum("sel"));
+        auto it = expr.lists.find("args");
+        if (it != expr.lists.end() && it->second.size() > 1) {
+            oss << " args";
+            for (size_t i = 1; i < it->second.size(); ++i) oss << " " << hex2(it->second[i]);
+        }
+        return oss.str();
     }
     if (k == "era_in")
         return "era in " + std::to_string(expr.getNum("lo")) + ".." + std::to_string(expr.getNum("hi"));
@@ -290,6 +316,16 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
         if (it != stmt.lists.end() && it->second.size() > 1) {
             oss << " args";
             for (size_t i = 1; i < it->second.size(); ++i) oss << " " << hex2(it->second[i]);
+            // Annotate field selector + LE24 amount (EventPartyEffects @ 0x1690E).
+            if (it->second.size() >= 6) {
+                const int field = it->second[1];
+                const int width = it->second[2];
+                const int amount = it->second[3] | (it->second[4] << 8) | (it->second[5] << 16);
+                char tip[80];
+                std::snprintf(tip, sizeof(tip), "  # field=0x%02X width=%d amount=%d", field, width,
+                              amount);
+                oss << tip;
+            }
         }
         lines.push_back(oss.str());
         return;
@@ -371,8 +407,8 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
             std::snprintf(buf, sizeof(buf), "party_bits %s %s mask=0x%02X",
                           partyMemberToken(member).c_str(), fname, mask);
         else
-            std::snprintf(buf, sizeof(buf),
-                          "@apply_party count=0x%02X op=0x%02X val=0x%02X", member, field, mask);
+            std::snprintf(buf, sizeof(buf), "party_bits %s field=0x%02X mask=0x%02X",
+                          partyMemberToken(member).c_str(), field, mask);
         lines.push_back(pad + buf);
         return;
     }
@@ -388,8 +424,8 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
                           partyMemberToken(member).c_str(), fname, andM, orM);
         } else {
             std::snprintf(buf, sizeof(buf),
-                          "@apply_party_masked count=0x%02X set=0x%02X and=0x%02X or=0x%02X",
-                          member, field, andM, orM);
+                          "set_party_bits %s field=0x%02X and=0x%02X or=0x%02X",
+                          partyMemberToken(member).c_str(), field, andM, orM);
         }
         std::string line = pad + buf;
         // Skill grant: and clears one nibble, or writes skill id into the other.

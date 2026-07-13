@@ -143,6 +143,16 @@ std::vector<LoweredOp> exprToCondOps(const Expr& expr) {
                             static_cast<uint8_t>(expr.getNum("charges")),
                             static_cast<uint8_t>(expr.getNum("flags"))},
                            0}};
+    if (k == "party_effect_ok") {
+        std::vector<uint8_t> args;
+        auto it = expr.lists.find("args");
+        if (it != expr.lists.end())
+            for (int x : it->second) args.push_back(static_cast<uint8_t>(x));
+        while (args.size() < 6) args.push_back(0);
+        return {LoweredOp{static_cast<uint8_t>(expr.getNum("mode") ? 0x20 : 0x1F), args, 0}};
+    }
+    if (k == "prior_cond" || k == "unknown")
+        return {};  // cond already produced by a prior stmt / sticky VM flag
     if (k == "combat_victory")
         return {};  // OP_2B is emitted from the if stmt, not as a cond-op prefix
     if (k == "yes_no")
@@ -161,7 +171,7 @@ std::vector<LoweredOp> exprToCondOps(const Expr& expr) {
             for (int x : it->second) args.push_back(static_cast<uint8_t>(x));
         return {LoweredOp{static_cast<uint8_t>(expr.getNum("op")), args, 0}};
     }
-    return {LoweredOp{0x1C, {0}, 0}};
+    return {};
 }
 
 std::vector<LoweredOp> stmtToOps(const Stmt& stmt,

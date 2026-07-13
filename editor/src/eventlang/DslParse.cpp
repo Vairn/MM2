@@ -83,6 +83,49 @@ Expr parseExpr(const std::string& text) {
         return Expr::make("rng_roll").set("max", mx);
     }
     if (t == "combat_victory") return Expr::make("combat_victory");
+    if (t == "prior_cond") return Expr::make("prior_cond");
+    if (startsWith(t, "give_item_ok")) {
+        auto grabHex = [&](const char* key) -> int {
+            size_t p = t.find(key);
+            if (p == std::string::npos) return 0;
+            size_t hx = t.find("0x", p);
+            if (hx == std::string::npos) hx = t.find("0X", p);
+            return hx == std::string::npos ? 0 : parseHex(t, hx + 2);
+        };
+        auto grabInt = [&](const char* key) -> int {
+            size_t p = t.find(key);
+            if (p == std::string::npos) return 0;
+            return std::stoi(t.substr(p + std::char_traits<char>::length(key)));
+        };
+        return Expr::make("give_item_ok")
+            .set("item", grabHex("item="))
+            .set("member", grabInt("member="))
+            .set("charges", grabInt("charges="))
+            .set("flags", grabHex("flags="));
+    }
+    if (startsWith(t, "party_effect_ok ")) {
+        int mode = 0;
+        size_t mp = t.find("mode=");
+        if (mp != std::string::npos) mode = std::stoi(t.substr(mp + 5));
+        size_t sp = t.find("sel=");
+        int sel = 0;
+        if (sp != std::string::npos) {
+            size_t hx = t.find("0x", sp);
+            sel = hx != std::string::npos ? parseHex(t, hx + 2) : std::stoi(t.substr(sp + 4));
+        }
+        std::vector<int> args = {sel};
+        size_t ap = t.find(" args ");
+        if (ap != std::string::npos) {
+            std::istringstream iss(t.substr(ap + 6));
+            std::string tok;
+            while (iss >> tok) {
+                if (startsWith(tok, "0x") || startsWith(tok, "0X")) args.push_back(parseHex(tok, 2));
+                else args.push_back(std::stoi(tok));
+            }
+        }
+        while (static_cast<int>(args.size()) < 6) args.push_back(0);
+        return Expr::make("party_effect_ok").set("mode", mode).set("sel", sel).setList("args", args);
+    }
     if (startsWith(t, "member_attr ") || startsWith(t, "class_field ")) {
         size_t a1 = t.find("arg1=0x");
         size_t a2 = t.find("arg2=0x");
