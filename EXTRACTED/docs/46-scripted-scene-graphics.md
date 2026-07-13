@@ -1,11 +1,14 @@
 # Scripted Scene Graphics (Corak, Pegasus, Castle Engine)
 
-Deep ASM trace of **graphics-heavy scripted moments** that are **not** plain
-`OP_01`–`OP_07` text and **not** `OP_0B` shop signboards alone. Companion:
-[45-event-graphics-opcodes.md](45-event-graphics-opcodes.md) (event VM scope),
-[44-event-text-rendering.md](44-event-text-rendering.md),
-[08-event-runtime.md](08-event-runtime.md),
-[38-title-screen-and-intro-assets.md](38-title-screen-and-intro-assets.md).
+> **Graphics-heavy scripted moments** (Corak / Pegasus / castle overlays). Companion:
+> [45-event-graphics-opcodes.md](45-event-graphics-opcodes.md),
+> [44-event-text-rendering.md](44-event-text-rendering.md),
+> [08-event-runtime.md](08-event-runtime.md).
+>
+> **Audio correction (2026-07):** `0x6FB8` / `A4-$7232` / `0x77AA` are **`play_sound_seq` /
+> SFX tables / `play_tone_env`** — see [58-amiga-audio-in-exe.md](58-amiga-audio-in-exe.md).
+> Do **not** treat them as a castle graphics bytecode runner. Viewport overlays still use
+> `0x316E` / `0x9A30` / mode `$17` as below.
 
 ASM: `EXTRACTED/mm2.capstone.annotated.asm`, `A4 = $7FFE`.
 
@@ -19,7 +22,12 @@ ASM: `EXTRACTED/mm2.capstone.annotated.asm`, `A4 = $7FFE`.
 | **Guardian Pegasus** first visit **C2** `(4,7)` | **loc 11 evt 04**: party flag gate + **`OP_0B`** sign + **`OP_03`** dialogue + **`OP_07`** | **Viewport sprite overlay** — **`monsters.dat` #131** (`picture=0x15`) → **`21.anm`** via **`0x9A30`/`0x316E`/`0x23C8C`** mode **`$17`** over **outdoor 3D**; **not** title `intro.32` |
 | **Title pegasus** | — | **`0x25FCE` / `0x26A1E`** only ([doc 39](39-title-screen-animation.md)) |
 
-**Critical distinction:** In-game “illustration scenes” use the **castle / scripted-scene subsystem** (bytecode @ `A4-$7232`, draw @ `0x76AC`, sprites @ `0x738C`). The **event VM** only supplies **string indices** and **`OP_0B`** shop signs on walkable maps. Retail screenshots of Corak/Pegasus match the **overlay subsystem**, not a single opcode.
+**Critical distinction:** In-game “illustration scenes” use the **viewport overlay**
+(`0x316E` / mode `$17`) and related draw helpers (`0x76AC` / `0x738C`), plus
+optional **`play_song_scripted`** text+wait (`0x64F8`). The **event VM** supplies
+**string indices** and **`OP_0B`** shop signs on walkable maps. **`0x6FB8` /
+`A4-$7232` / `0x77AA` are Paula audio** ([doc 58](58-amiga-audio-in-exe.md)) —
+not a castle graphics bytecode runner.
 
 ---
 
@@ -38,14 +46,18 @@ flowchart TB
 
   subgraph castle [Castle / scripted-scene engine]
     q[0x176B6 queued id / loc 63·65·68]
-    run[0x6FB8 bytecode runner]
-    frame[0x77AA frame dispatch]
     draw[0x76AC scene draw step]
-    song[0x64F8 play_song_scripted]
+    song[0x64F8 play_song_scripted — text+wait; not Paula title]
     spr[0x738C slot setup → 0x316E / 0x23C8C]
-    q --> run --> frame --> draw
-    frame --> song
+    q --> draw
+    draw --> song
     draw --> spr
+  end
+
+  subgraph audio [Audio — see doc 58]
+    sfx[0x6FB8 play_sound_seq via -$7E42]
+    tone[0x77AA play_tone_env]
+    sfx --> tone
   end
 
   subgraph shared [Shared viewport overlay]
@@ -62,7 +74,8 @@ flowchart TB
 |-------|-------|-------|------------------|
 | Event text | `0x15924`–`0x15CE6` | loc string bank `A4-$47C8` | Rows 17–22 / popup cells ([doc 44](44-event-text-rendering.md)) |
 | **`OP_0B`** | `0x15DB0` | `0x9A30(id)` → **`NN.anm`** (`0x316E` `subq` + `0x9A30` `addq` cancel) | Viewport `(8,8)–(215,127)` via **`0x3266`/`0x23C8C`** |
-| **Castle scene** | `0x6FB8` / `0x76AC` | Scene table `A4-$72FC` / sheet handles `A4-$7366` | Full viewport or slot rects (see §3) |
+| **Castle scene draw** | `0x76AC` | Scene / sheet handles (trace still partial) | Full viewport or slot rects (see §3) |
+| **SFX / tones** | `0x6FB8` / `0x77AA` | DATA seq table `A4-$7232` — **audio** ([doc 58](58-amiga-audio-in-exe.md)) | Paula via `audio.device` |
 | **Scripted score + text** | `0x64F8` | Pointer table **`A4-$73C4`** + **`A4-$73C0`** | Cleared band + **`-$7BE4`** strings + **`0x6798`** wait |
 | Title attract | `0x25FCE` | Embedded **`intro.32`**, **`introclips.32`** | Full 320×200 ([doc 38/39](38-title-screen-and-intro-assets.md)) |
 
@@ -94,50 +107,52 @@ Retail: **white spirit figure over the live 3D hood** (walls/torches visible beh
 
 ---
 
-## 3. Castle scripted-scene engine
+## 3. Castle / scripted-scene graphics (not audio)
 
-Separate from **`0x172CA`** opcode dispatch. Drives **loc 63 / 65 / 68** “castle blob” records, **queued events** (`A4-$5D46` @ **`0x176B6`**), and **first-time / tile** hooks.
+Separate from **`0x172CA`** opcode dispatch. Drives **loc 63 / 65 / 68** “castle blob”
+records, **queued events** (`A4-$5D46` @ **`0x176B6`**), and **first-time / tile** hooks
+via **viewport overlays** and **`0x64F8`** text steps.
 
-### 3.1 Key A4 fields
+> **Do not confuse with audio:** `A4-$79AF` / `-$79B0` are **Walk Beep / Sounds**
+> flags; `A4-$7232` / `0x6FB8` / `0x77AA` / `A4-$7252` / `A4-$7326` are the **SFX
+> player** ([doc 58](58-amiga-audio-in-exe.md)). Older drafts of this section
+> misread that entire cluster as a “scene bytecode runner”.
+
+### 3.1 Key A4 fields (graphics / queue)
 
 | Offset | Name | Role in scenes |
 |--------|------|----------------|
-| `-$79AF` | `script_scene_index` | Index into **`A4-$7232`** bytecode pointer table (`0x6FB8`) |
-| `-$79B0` | `script_scene_alt` | Secondary queue byte (save/restore @ `0x8484`) |
 | `-$7958` | `run_scene_on_tile` | Set @ **`0xCCB8`/`0xCD44`** when a scene should run on event tile |
 | `-$79E9` | `first_time_flag` | Set on area enter @ **`0x6E84`**; overland @ **`0x2242`** checks it |
-| `-$7232` | `scene_script_ptrs[]` | Per-index bytecode stream pointers |
-| `-$2AFE` | `tile_script_desc[]` | Tile-linked script descriptors (used @ **`0x7B30`**) |
 | `-$730C` / `-$7366` / `-$7352` | Scene handles / active flags | **`0x76AC`** draw pipeline |
-| `-$F00` / `-$F04` / `-$F08` | Scene object roots | Alloc @ **`0x7070`** (`0x264`-byte headers, 5 slots) |
-| `-$73C4` / `-$73C0` | Scripted text/score tables | **`play_song_scripted`** @ **`0x64F8`** |
+| `-$F00` / `-$F04` / `-$F08` | Scene object roots | Alloc @ **`0x7070`** (`0x264`-byte headers, 5 slots) — **also** audio device init; shared region needs care |
+| `-$73C4` / `-$73C0` | Scripted text tables | **`play_song_scripted`** @ **`0x64F8`** (text+wait, not Paula title) |
 | `-$79FE` | Viewport overlay handle | Shared with **`OP_0B`** / scene sprites |
+| `-$79B2` | Panel mode | Gates some `0x64F8` waits (≠ Sounds flag) |
 
-### 3.2 Bytecode runner — `0x6FB8`
+### 3.2 Audio cluster (moved — see doc 58)
 
-Loop while **`A4-$79AF`** / arg index `< 0x0A`:
+| Address | Real role |
+|---------|-----------|
+| `0x6FB8` / `-$7E42` | `play_sound_seq` ids 0..9 |
+| `A4-$7232` | Pointers to 10 SFX note streams |
+| `A4-$7252` | Duration index table |
+| `0x77AA` / `-$7E24` | `play_tone_env` (Paula note) |
+| `A4-$79AF` / `-$79B0` | Walk Beep / Sounds gates |
 
-1. Fetch stream pointer from **`A4-$7232[index]`**.
-2. Wait for key **`-$7BD2`** if needed.
-3. Read byte; if **`$FF`**, exit.
-4. Read operand word from **`A4-$7252`** table.
-5. Call **`0x77AA(operand, stream_state)`** — one scene “step”.
+### 3.3 Draw helpers — `0x76AC` / `0x738C` / `0x728E`
 
-Called from the **`0x7064`** loop (same family as **`0x6FB8`** parent @ **`0x6FB8`** / area loader).
-
-### 3.3 Frame player — `0x77AA` → `0x76AC`
-
-**`0x77AA`** (args: scene type byte, timing):
-
-- For **`type < 0x64`**: divides tick @ **`0x76AC`** — maps to **score/script line** via **`A4-$7326`**, **`A4-$734A`**, **`A4-$730C`**; calls **`0x7532`** (blit prep) or **`0x738C`** (sprite slot) or **`0x738C`** → **`-$7B18`/`-$7B24`** (sheet blit).
-
-**`0x76AC`** core step:
+**`0x76AC`** core step (when used for illustration layers):
 
 - Index **`A4-$7366`** sheet pointer, **`A4-$7352`** active word.
 - **`0x7532`**: push **`A4-$F00`** object, **`-$7B30`** — **mode `$16`-class prep** on viewport.
 - **`0x738C`**: configure scene layer (types **`$1c`**, **`$1e`**, blit **`$22`/`$26`**, **`A4-$7356`** handle) — **this is where full illustration layers attach**.
 
 **Full-viewport illustration (Pegasus):** **`0x728E`** path loads a wide sheet (**`pea $400`**, **`-$7B06`**) into scene object **`$e`**, then **`-$7B18`** blit — consistent with **320×200-class art** filling the playfield while **chrome + bottom text** remain ([doc 15](15-3d-view-and-game-screen.md) composition). Filename is **not** hard-coded as `intro.32` in the code hunk (loader uses **data-hunk / scene table** paths); retail art matches **`intro.32`** frame 0 ([doc 38](38-title-screen-and-intro-assets.md)).
+
+> **GAP:** which exact CODE paths still call `0x76AC`/`0x738C` for Corak/endgame
+> (vs remake’s `ScriptedSceneEngine` using `51.anm` / `intro.32`) — re-trace without
+> assuming `0x6FB8` is the entry.
 
 ### 3.4 Tile condition hooks — `0x78A8` chain
 
@@ -161,7 +176,7 @@ These are **scripted score + text** steps (table **`A4-$73C4`**), often paired w
 4. Cursor **`-$7BFC`**, **`0x6798(50)`** tick wait (SPACE flow).
 5. Does **not** load `.anm` itself — **graphics come from parallel **`0x76AC`/`0x738C`** step** or pre-placed overlay handle.
 
-Also invoked from **title** path **`0x1000`** with id **`0x12D`** ([doc 25](25-mm2-music-format.md)).
+Also invoked from paths that older docs confused with title music; the **Paula title theme** is overlay `0x283FC` ([doc 58](58-amiga-audio-in-exe.md)), not `0x64F8` with id `0x12D`.
 
 ### 3.6 Area enter / first-time — `0x6E08` / `0x6E84`
 
@@ -384,7 +399,18 @@ parallel **`0x76AC`/`0x738C`** steps or a pre-placed `A4-$79FE` overlay.
 
 Footer string near `0x644A` in code hunk: **`*** Combat Only ***`** (also `A4-$73C0` default row).
 
-### 10.2 Castle bytecode runner @ `0x6FB8` (`A4-$7232`, draw @ `0x76AC` / `0x728E`)
+### 10.2 Audio vs graphics (do not re-merge)
+
+| Item | Address | Doc |
+|------|---------|-----|
+| SFX player | `0x6FB8` / `A4-$7232` / `0x77AA` | [58](58-amiga-audio-in-exe.md) |
+| Overlay blit | `0x316E` / mode `$17` | §2 above |
+| Scripted text+wait | `0x64F8` | §3.5 |
+| Draw helpers | `0x76AC` / `0x738C` / `0x728E` | §3.3 |
+
+Older catalog rows that listed `0x6FB8` as “castle bytecode” are **obsolete**.
+
+### 10.2b Scene catalog (graphics / text only)
 
 | Step | Routine | Role |
 |------|---------|------|

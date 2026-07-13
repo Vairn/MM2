@@ -23,7 +23,10 @@ set(ACE_USE_ECS_FEATURES ON CACHE BOOL "ACE ECS features" FORCE)
 if(AMIGA)
   message(STATUS "[MM2] Amiga / ACE target (Bartman m68k-amiga-elf)")
   add_compile_definitions(MM2_HOST_AMIGA MM2_FORCE_AMIGA)
-  set(MM2_PLATFORM_SOURCES src/platform/amiga/PlatformAmiga.cpp)
+  set(MM2_PLATFORM_SOURCES
+    src/platform/amiga/PlatformAmiga.cpp
+    src/platform/AudioStub.cpp
+  )
   set(MM2_MAIN_SOURCE src/main_amiga.cpp)
 
   # Presets may set ACE_DEBUG=ON for RelWithDebInfo (optimized + symbols + MM2_DBG spam).
@@ -62,7 +65,10 @@ if(AMIGA)
 else()
   message(STATUS "[MM2] Desktop / SDL2 target")
   add_compile_definitions(MM2_HOST_SDL)
-  set(MM2_PLATFORM_SOURCES src/platform/sdl/PlatformSDL.cpp)
+  set(MM2_PLATFORM_SOURCES
+    src/platform/sdl/PlatformSDL.cpp
+    src/platform/sdl/AudioSDL.cpp
+  )
   set(MM2_MAIN_SOURCE src/main.cpp)
 
   include(FetchContent)
@@ -105,6 +111,10 @@ set(MM2_CODEC_SOURCES
 if(NOT AMIGA)
   add_library(mm2_codecs STATIC ${MM2_CODEC_SOURCES})
   target_include_directories(mm2_codecs PUBLIC ${MM2_DECOMP})
+
+  # Tests link Movement/EventVmHelpers/CombatSession without SDL audio.
+  add_library(mm2_audio_stub STATIC src/platform/AudioStub.cpp)
+  target_include_directories(mm2_audio_stub PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 endif()
 
 # GameSession + automap_golden share automap implementation (Cartography.h is header-only).
@@ -116,23 +126,23 @@ set(MM2_AUTOMAP_SOURCES
 
 if(NOT AMIGA)
   add_executable(image32_golden tests/image32_golden.c)
-  target_link_libraries(image32_golden PRIVATE mm2_codecs)
+  target_link_libraries(image32_golden PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(pc_gfx_rgba_dump tests/pc_gfx_rgba_dump.c)
-  target_link_libraries(pc_gfx_rgba_dump PRIVATE mm2_codecs)
+  target_link_libraries(pc_gfx_rgba_dump PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(pc_monsters_rgba_dump tests/pc_monsters_rgba_dump.c)
-  target_link_libraries(pc_monsters_rgba_dump PRIVATE mm2_codecs)
+  target_link_libraries(pc_monsters_rgba_dump PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(pc_gfx_pixels_dump tests/pc_gfx_pixels_dump.c)
-  target_link_libraries(pc_gfx_pixels_dump PRIVATE mm2_codecs)
+  target_link_libraries(pc_gfx_pixels_dump PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(pc_lzw_dump tests/pc_lzw_dump.c)
-  target_link_libraries(pc_lzw_dump PRIVATE mm2_codecs)
+  target_link_libraries(pc_lzw_dump PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(font_golden tests/font_golden.cpp src/gfx/ScreenCompositor.cpp src/gfx/mm2_font8x8.c)
   target_include_directories(font_golden PRIVATE include)
-  target_link_libraries(font_golden PRIVATE mm2_codecs)
+  target_link_libraries(font_golden PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(view3d_middlegate_check
     tests/view3d_middlegate_check.cpp
@@ -140,7 +150,7 @@ if(NOT AMIGA)
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(view3d_middlegate_check PRIVATE include)
-  target_link_libraries(view3d_middlegate_check PRIVATE mm2_codecs)
+  target_link_libraries(view3d_middlegate_check PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(view3d_torch_door_test
     tests/view3d_torch_door_test.cpp
@@ -148,7 +158,7 @@ if(NOT AMIGA)
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(view3d_torch_door_test PRIVATE include)
-  target_link_libraries(view3d_torch_door_test PRIVATE mm2_codecs)
+  target_link_libraries(view3d_torch_door_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(view3d_outdoor_check
     tests/view3d_outdoor_check.cpp
@@ -156,42 +166,47 @@ if(NOT AMIGA)
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(view3d_outdoor_check PRIVATE include)
-  target_link_libraries(view3d_outdoor_check PRIVATE mm2_codecs)
+  target_link_libraries(view3d_outdoor_check PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(movement_middlegate_test
     tests/movement_middlegate_test.cpp
     src/gameplay/Movement.cpp
+    src/gameplay/ExploreActions.cpp
     src/events/EventVmHelpers.cpp
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(movement_middlegate_test PRIVATE include)
-  target_link_libraries(movement_middlegate_test PRIVATE mm2_codecs)
+  target_link_libraries(movement_middlegate_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(calendar_rollover_test
     tests/calendar_rollover_test.cpp
     src/gameplay/Movement.cpp
+    src/gameplay/ExploreActions.cpp
     src/events/EventVmHelpers.cpp
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(calendar_rollover_test PRIVATE include)
-  target_link_libraries(calendar_rollover_test PRIVATE mm2_codecs)
+  target_link_libraries(calendar_rollover_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(combat_setup_test
     tests/combat_setup_test.cpp
     src/combat/EncounterPicker.cpp
     src/combat/CombatSession.cpp
     src/events/EventVmHelpers.cpp
+    src/events/TownServiceTransactions.cpp
     src/gameplay/ExploreActions.cpp
+    src/gameplay/Movement.cpp
+    src/gameplay/RosterSkills.cpp
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(combat_setup_test PRIVATE include)
-  target_link_libraries(combat_setup_test PRIVATE mm2_codecs)
+  target_link_libraries(combat_setup_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(playsession_input_test
     tests/playsession_input_test.cpp
     src/gameplay/PlaySessionInput.cpp)
   target_include_directories(playsession_input_test PRIVATE include)
-  target_link_libraries(playsession_input_test PRIVATE mm2_codecs)
+  target_link_libraries(playsession_input_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(explore_commands_test
     tests/explore_commands_test.cpp
@@ -201,12 +216,13 @@ if(NOT AMIGA)
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(explore_commands_test PRIVATE include)
-  target_link_libraries(explore_commands_test PRIVATE mm2_codecs)
+  target_link_libraries(explore_commands_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(automap_golden
     tests/automap_golden.cpp
     ${MM2_AUTOMAP_SOURCES}
     src/events/EventVmHelpers.cpp
+    src/gameplay/ExploreActions.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
     src/gfx/EnvAssets.cpp
@@ -215,7 +231,7 @@ if(NOT AMIGA)
     src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(automap_golden PRIVATE include)
-  target_link_libraries(automap_golden PRIVATE mm2_codecs)
+  target_link_libraries(automap_golden PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(character_sheet_input_test
     tests/character_sheet_input_test.cpp
@@ -229,13 +245,13 @@ if(NOT AMIGA)
     src/gfx/mm2_font8x8.c
     src/runtime/PathScratch.cpp)
   target_include_directories(character_sheet_input_test PRIVATE include)
-  target_link_libraries(character_sheet_input_test PRIVATE mm2_codecs)
+  target_link_libraries(character_sheet_input_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(party_hp_format_test
     tests/party_hp_format_test.cpp
     src/gfx/PartyStatusFormat.cpp)
   target_include_directories(party_hp_format_test PRIVATE include)
-  target_link_libraries(party_hp_format_test PRIVATE mm2_codecs)
+  target_link_libraries(party_hp_format_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(event_middlegate_test
     tests/event_middlegate_test.cpp
@@ -253,6 +269,7 @@ if(NOT AMIGA)
     src/combat/EncounterPicker.cpp
     src/combat/CombatSession.cpp
     src/gameplay/ExploreActions.cpp
+    src/gameplay/Movement.cpp
     src/gameplay/RosterSkills.cpp
     src/ui/PlayTownServiceUi.cpp
     src/gfx/ViewportAnmOverlay.cpp
@@ -266,7 +283,7 @@ if(NOT AMIGA)
     src/runtime/Mm2Alloc.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(event_middlegate_test PRIVATE include)
-  target_link_libraries(event_middlegate_test PRIVATE mm2_codecs)
+  target_link_libraries(event_middlegate_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(event_town_skills_test
     tests/event_town_skills_test.cpp
@@ -284,6 +301,7 @@ if(NOT AMIGA)
     src/combat/EncounterPicker.cpp
     src/combat/CombatSession.cpp
     src/gameplay/ExploreActions.cpp
+    src/gameplay/Movement.cpp
     src/gameplay/RosterSkills.cpp
     src/gfx/ViewportAnmOverlay.cpp
     src/gfx/GfxBackend.cpp
@@ -295,7 +313,7 @@ if(NOT AMIGA)
     src/runtime/Mm2Alloc.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(event_town_skills_test PRIVATE include)
-  target_link_libraries(event_town_skills_test PRIVATE mm2_codecs)
+  target_link_libraries(event_town_skills_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(event_op_demo
     tests/event_op_demo.cpp
@@ -315,12 +333,13 @@ if(NOT AMIGA)
   src/world/MapWorld.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(event_op_demo PRIVATE include)
-  target_link_libraries(event_op_demo PRIVATE mm2_codecs)
+  target_link_libraries(event_op_demo PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(playscreen_golden
     tests/playscreen_golden.cpp
     src/GameSession.cpp
     ${MM2_AUTOMAP_SOURCES}
+    ${MM2_PLATFORM_SOURCES}
     src/events/ScriptedSceneEngine.cpp
     src/gameplay/Movement.cpp
     src/gameplay/PlaySessionInput.cpp
@@ -355,12 +374,13 @@ if(NOT AMIGA)
     src/runtime/Mm2Alloc.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(playscreen_golden PRIVATE include)
-  target_link_libraries(playscreen_golden PRIVATE mm2_codecs)
+  target_link_libraries(playscreen_golden PRIVATE mm2_codecs SDL2::SDL2)
 
   add_executable(combat_golden
     tests/combat_golden.cpp
     src/GameSession.cpp
     ${MM2_AUTOMAP_SOURCES}
+    ${MM2_PLATFORM_SOURCES}
     src/events/ScriptedSceneEngine.cpp
     src/gameplay/Movement.cpp
     src/gameplay/PlaySessionInput.cpp
@@ -395,7 +415,7 @@ if(NOT AMIGA)
     src/runtime/Mm2Alloc.cpp
     src/runtime/PathScratch.cpp)
   target_include_directories(combat_golden PRIVATE include)
-  target_link_libraries(combat_golden PRIVATE mm2_codecs)
+  target_link_libraries(combat_golden PRIVATE mm2_codecs SDL2::SDL2)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -534,6 +554,16 @@ if(AMIGA)
   endif()
 else()
   target_link_libraries(${_mm2_target} PRIVATE mm2_codecs SDL2::SDL2main SDL2::SDL2)
+  # Pre-rendered Paula exports (tools/export_mm2_amiga_sfx.py) beside the binary.
+  add_custom_command(
+    TARGET ${_mm2_target} POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${_mm2_target}>/audio"
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+      "${MM2_ROOT}/EXTRACTED/audio"
+      "$<TARGET_FILE_DIR:${_mm2_target}>/audio"
+    COMMENT "[MM2] Copy EXTRACTED/audio WAVs beside desktop binary"
+    VERBATIM
+  )
 endif()
 
 if(AMIGA AND ACE_DEBUG)

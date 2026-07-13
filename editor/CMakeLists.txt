@@ -51,7 +51,15 @@ FetchContent_Declare(
   SOURCE_SUBDIR  not-a-real-subdir
 )
 
-FetchContent_MakeAvailable(glfw imgui portable_file_dialogs imnodes stb)
+# Syntax-highlighting text editor for .mm2evt (goossens rewrite of ImGuiColorTextEdit).
+FetchContent_Declare(
+  imguicolortextedit
+  GIT_REPOSITORY https://github.com/goossens/ImGuiColorTextEdit.git
+  GIT_TAG        master
+  SOURCE_SUBDIR  not-a-real-subdir
+)
+
+FetchContent_MakeAvailable(glfw imgui portable_file_dialogs imnodes stb imguicolortextedit)
 
 # Auburn zoom fork still references removed ImGuiIO::SetPlatformImeDataFn (imgui 1.91+).
 set(_imnodes_cpp "${imnodes_SOURCE_DIR}/imnodes.cpp")
@@ -103,6 +111,16 @@ target_include_directories(imnodes PUBLIC ${imnodes_SOURCE_DIR})
 target_link_libraries(imnodes PUBLIC imgui)
 
 # ---------------------------------------------------------------------------
+# ImGuiColorTextEdit (syntax highlighting)
+# ---------------------------------------------------------------------------
+add_library(imguicolortextedit STATIC
+  ${imguicolortextedit_SOURCE_DIR}/TextEditor.cpp
+)
+target_include_directories(imguicolortextedit PUBLIC ${imguicolortextedit_SOURCE_DIR})
+target_link_libraries(imguicolortextedit PUBLIC imgui)
+target_compile_definitions(imguicolortextedit PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
+
+# ---------------------------------------------------------------------------
 # Editor sources
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE MM2ED_SRC CONFIGURE_DEPENDS
@@ -116,9 +134,10 @@ target_include_directories(MM2ED PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${portable_file_dialogs_SOURCE_DIR}
   ${stb_SOURCE_DIR}
+  ${imguicolortextedit_SOURCE_DIR}
 )
 
-target_link_libraries(MM2ED PRIVATE imgui imnodes glfw OpenGL::GL)
+target_link_libraries(MM2ED PRIVATE imgui imnodes imguicolortextedit glfw OpenGL::GL)
 
 if(MSVC)
   target_compile_options(MM2ED PRIVATE /W3)
@@ -130,4 +149,24 @@ endif()
 if(WIN32 AND MINGW)
   enable_language(RC)
   target_sources(MM2ED PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/MM2ED.rc")
+endif()
+
+# ---------------------------------------------------------------------------
+# CLI: dump / roundtrip .mm2evt (no ImGui)
+# ---------------------------------------------------------------------------
+file(GLOB EVENTLANG_SRC CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/eventlang/*.cpp
+)
+# EventOps is header-only; AreaNames may be pulled — keep dump lean.
+add_executable(mm2evt_dump
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/mm2evt_dump.cpp
+  ${EVENTLANG_SRC}
+)
+target_include_directories(mm2evt_dump PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+if(MSVC)
+  target_compile_options(mm2evt_dump PRIVATE /W3)
+else()
+  target_compile_options(mm2evt_dump PRIVATE -Wall -Wextra -Wno-unused-parameter)
 endif()

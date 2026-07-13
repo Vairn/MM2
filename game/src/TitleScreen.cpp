@@ -3,6 +3,7 @@
 #include "mm2/DataPath.h"
 #include "mm2/Mm2Dbg.h"
 #include "mm2/gfx/GfxBackend.h"
+#include "mm2/platform/Audio.h"
 #include "mm2/platform/Platform.h"
 #include "mm2/runtime/PathScratch.h"
 
@@ -788,6 +789,7 @@ void TitleScreen::attractEnter()
 #if MM2_HOST_AMIGA
     invalidatePegasusPaint();
 #endif
+    audio::playTitleTheme(true);
 }
 
 TitleScreen::AttractAdvance TitleScreen::attractTick(const platform::KeyState &keys)
@@ -798,6 +800,7 @@ TitleScreen::AttractAdvance TitleScreen::attractTick(const platform::KeyState &k
     }
     tickPegasusAnimation();
     if (keys.any_key) {
+        audio::stopTitleTheme();
         return AttractAdvance::GoMenu;
     }
     return AttractAdvance::Continue;
@@ -807,6 +810,7 @@ void TitleScreen::attractDraw() { drawAttract(); }
 
 void TitleScreen::menuEnter()
 {
+    audio::stopTitleTheme();
     if (pc_title_mode_) {
         releaseLogoAsset();
         releaseIntroClips();

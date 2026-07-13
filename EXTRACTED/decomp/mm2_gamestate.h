@@ -29,6 +29,8 @@
 #define MM2_GS_COORD_B          (-0x79F1)  /* byte  ($860F) */
 #define MM2_GS_COORD_A          (-0x79F0)  /* byte  ($8610) */
 #define MM2_GS_SCRIPT_ABORT     (-0x79EA)  /* byte  ($8616) */
+#define MM2_GS_OP0E_SUBMODE     (-0x7946)  /* word  ($86BA) OP_0E entry=2; inn/0xFD=1 @ 0x160D4 */
+#define MM2_GS_SAVED_TOWN_ID    (-0x79AC)  /* byte  ($8654) inn 0x1A1E2: copy -$79F2; 0xFD→GotoTown */
 #define MM2_GS_FIRST_TIME_FLAG  (-0x79E9)  /* byte  ($8617) */
 /* -$79E8 ($8618): a real engine boolean flag (set to 1 / tst / clr in ~15 sites,
  * e.g. 0x6DFE/0x8C98/0x8E2C) — purpose not fully traced (screen/redraw/state).
@@ -48,6 +50,10 @@
  * Field reads are A4-$561A + record offset (doc 12). */
 #define MM2_GS_ATTRIB_BUF       (-0x561A)  /* byte[64] ($A9E6) */
 #define MM2_GS_ENTRY_COORD      (-0x560C)  /* byte  ($A9F4) = attrib 0x0E packed (Y<<4)|X */
+#define MM2_GS_RETREAT_DIFF     (-0x560D)  /* byte  ($A9F3) = attrib 0x0D; flee if rng<$thresh @ 0x116CA/0x13148 */
+#define MM2_GS_PARTY_RAN_LATCH  (-0x5E4C)  /* byte  ($A1B4) set #1 on successful char Run @ 0x116D2; → 0x11646 */
+#define MM2_GS_MELEE_RANGE_N    (-0x0524)  /* byte  ($FADC) monsters in melee reach; 0x11D0C / AI @ 0x1079A */
+#define MM2_GS_FRONT_RANK_N     (-0x5E4D)  /* byte  ($A1B3) party front-rank cutoff; 0x11D0C / 0x103BA */
 #define MM2_GS_ATTRIB_FLAGS     (-0x5600)  /* byte  ($AA00) = attrib 0x1A flags */
 #define MM2_GS_SIGN_ENV_ID      (-0x79E3)  /* byte  ($861D) OP_0B table pick @ 0x15772 */
 #define MM2_GS_RUNTIME_ENV      (-0x7660)  /* byte  ($89A0) area gfx env id; surface_flag&0xF @ 0x1650 */
@@ -75,8 +81,12 @@
 #define MM2_GS_BUFF_79A3        (-0x79A3)  /* byte  ($865D) set #1 @ 0xB284 (C flat21 Air Transmute) */
 #define MM2_GS_BUFF_79A2        (-0x79A2)  /* byte  ($865E) set #1 @ 0xB400 (C flat41 Fire Transmute) */
 #define MM2_GS_BUFF_79A1        (-0x79A1)  /* byte  ($865F) set #1 @ 0xB34C (C flat31 Earth Transmute) */
-#define MM2_GS_SPELL_STATUS_MODE (-0x053B) /* byte  ($FAC5) 0=damage 1=status (0x108BC) */
+#define MM2_GS_SPELL_STATUS_MODE (-0x053B) /* byte  ($FAC5) 0=damage 1=status 2=skip-banner (0x108BC) */
 #define MM2_GS_SPELL_STATUS_CODE (-0x053C) /* byte  ($FAC4) status opcode; bits via -$6F2E */
+#define MM2_GS_ENCASE_TIER      (-0x0521) /* byte  ($FADF) Encase power 0..4; DoT idx @ 0x106BC */
+#define MM2_GS_ENCASE_DMG_TBL   (-0x6F26) /* word[4] ($90DA) 10/20/40/80 @ 0x106D4 */
+#define MM2_GS_ENCASE_MODE_TBL  (-0x6F1E) /* byte[4] ($90E2) mode_d 6/5/4/5 @ 0x106E4 */
+#define MM2_GS_MONSTER_FLEE_TIER (-0x11B6) /* byte  ($EE4A) Oabil bits5-6 @ 0x4E9C */
 #define MM2_GS_STATUS_BIT_TBL   (-0x6F2E)  /* byte[8] ($90D2) data hunk 0x10D0: 02 04 08 10 20 40 80 00 */
 #define MM2_GS_MRES_CHANCE_TBL  (-0x7464)  /* byte[8] ($8B9C) data 0xB9A: 0,10,20,35,50,75,90,100 */
 #define MM2_GS_MONSTER_MRES     (-0x11AF)  /* byte  ($EE51) mres chance tbl[-$7464] (0x4C8E) */
@@ -266,6 +276,37 @@
 #define MM2_GS_STR_BANK_OFFS    (-0x71E8)  /* word[] ($8E18) bank start offsets into str.dat */
 #define MM2_GS_STR_BANK_CURSOR  (-0x71EA)  /* word  ($8E16) next C-string offset in decode buf -$ED2 */
 #define MM2_GS_STR_FILE_HANDLE  (-0x77CE)  /* long  ($8832) dos handle used when -$ED6 null */
+/* OP_0E 0xFD @ 0x1493C: bank-3 next-string ptr tables (A4-relative i32 in remake). */
+#define MM2_GS_OP0E_FD_PTR0     (-0x5E26)  /* long[4]  */
+#define MM2_GS_OP0E_FD_PTR1     (-0x5E16)  /* long[4]  */
+#define MM2_GS_OP0E_FD_PTR2     (-0x5E06)  /* long[14] */
+#define MM2_GS_OP0E_FD_PTR3     (-0x5DCE)  /* long[4]  */
+#define MM2_GS_OP0E_FD_PTR4     (-0x5DBE)  /* long[11] */
+#define MM2_GS_OP0E_FD_PTR5     (-0x5D92)  /* long[10] */
+#define MM2_GS_OP0E_FD_MODE     (-0x71DC)  /* byte  ($8E24) set $FD after table fill */
+#define MM2_GS_OP0E_FD_CTR      (-0x7972)  /* word  addq @ 0x14112 (abort==3 / -$7ED2) */
+/* -$7DDC key_read_scripted @ 0x97A2 (doc 44): replay buffer + cursors. */
+#define MM2_GS_SCRIPTED_KEY_BUF (-0x119A)  /* byte[] key stream; $FF end/wrap */
+#define MM2_GS_SCRIPTED_KEY_IDX (-0x1110)  /* word  read cursor; $FFFF = reset */
+#define MM2_GS_SCRIPTED_KEY_REP (-0x71D6)  /* word  secondary/choreography cursor */
+#define MM2_GS_SCRIPTED_KEY_DLY (-0x71DB)  /* byte  delay remaining (0x993e) */
+#define MM2_GS_SCRIPTED_KEY_DY  (-0x71DA)  /* word  place arg2 default $40 → dst_x */
+#define MM2_GS_SCRIPTED_KEY_DX  (-0x71D8)  /* word  place arg3 default $20 → dst_y-8 */
+#define MM2_GS_SCRIPTED_KEY_MAXP (-0x1116) /* byte  placement clamp (sign load @ 0x320C) */
+#define MM2_GS_SCRIPTED_KEY_MODE MM2_GS_OP0E_FD_MODE /* -$71DC: $FD wrap, $FF stop */
+/* Tavern 0x1D208 bank-1 fill (A4-relative i32 ptrs in remake): */
+#define MM2_GS_TAVERN_HDR       (-0x59EE)  /* long[5][4] town×4 menu headers */
+#define MM2_GS_TAVERN_DRINK_LBL (-0x599E)  /* long[6] */
+#define MM2_GS_TAVERN_MISC14    (-0x5986)  /* long[14] */
+#define MM2_GS_TAVERN_RUMORS    (-0x594E)  /* long[5][8] town×8; stride $20 */
+#define MM2_GS_TAVERN_TIPS      (-0x58AE)  /* long[5][8] town×8; stride $20 */
+#define MM2_GS_TAVERN_BOOST_LBL (-0x580E)  /* long[6] stat-boost captions */
+#define MM2_GS_TAVERN_FOOD      (-0x57F6)  /* long[5][6] town×6 food lines */
+/* DATA hunk (not BSS): specialty/boost gold + limits + +$76 masks */
+#define MM2_GS_TAVERN_SPECIALTY_GOLD (-0x6760) /* BE u16[5][3] @ 0x1CEA4 */
+#define MM2_GS_TAVERN_BOOST_GOLD     (-0x6738) /* BE u16[6] @ 0x1CAC4 */
+#define MM2_GS_TAVERN_BOOST_LIMIT    (-0x672C) /* BE u16[6] @ 0x1CBEA */
+#define MM2_GS_TAVERN_SPECIALTY_MASK (-0x786C) /* BE u16[5][3] OR → +$76 */
 #define MM2_GS_SPELL_ACTED      (-0x7958)  /* byte  ($86A8) spell-acted latch (0xD506 / stubs) */
 #define MM2_GS_SPELL_DAMAGE     (-0x053E)  /* word  ($FAC2) 0x1338E damage accumulator */
 #define MM2_GS_TEMPLE_DONATION  (-0x799E)  /* byte  ($8672) OP_0E temple quest bits */

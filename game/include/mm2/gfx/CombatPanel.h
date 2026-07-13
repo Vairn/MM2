@@ -12,6 +12,7 @@ struct CombatMonsterLine {
      * @ 0x12742. NOT an acted flag: -$524 is rolled per fight by 0x11D0C. */
     bool show_checkmark = false;
     char status_suffix[16]{};    /* 4-char abbrev from A4-$6FBC via -$519[slot] (0x127FE) */
+    bool highlighted = false;    /* 0x1061E / 0x1265E acting-slot pen flash */
 };
 
 /** AGA multi-monster viewport slot (presentation upgrade — see 41-aga-port-plan §8). */
@@ -39,6 +40,8 @@ struct CombatPanelView {
     bool show_item_pick = false;       /* 0xB56E "A-F" / Use 1-6/A-F */
     int cast_level = 0;                /* echoed after level accepted */
     bool label_monster_slots = false;  /* A–J prefixes (round loop only) */
+    /* 0x1061E → 0x1265E: pen=1 redraw of the acting monster roster line. */
+    int highlight_slot = -1;           /* battle slot 0..9, or -1 */
     /* Command capability flags for the active character (0x11866):
      *   melee  A4-$5E36: slot < front-rank cutoff -$5E4D
      *   shoot  A4-$5E35: (class == 2 or back rank) and bow byte +$4E

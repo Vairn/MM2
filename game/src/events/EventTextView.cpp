@@ -281,6 +281,7 @@ void EventTextView::reset()
     sign_overlay_.unload();
     pegasus_overlay_.unload();
     sign_placement_ = 0;
+    sign_dst_override_ = false;
     for (EventTextLayer &layer : layers_) {
         layer.op = EventTextOp::None;
         layer.text[0] = '\0';
@@ -357,6 +358,7 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, const GameS
                              const Mm2AttribRecord *attrib, uint8_t str_idx, uint8_t placement)
 {
     sign_placement_ = placement;
+    sign_dst_override_ = false;
     sign_overlay_.unload();
     bool has_sign = false;
     if (data_dir) {
@@ -383,6 +385,7 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, int screen_
                              const Mm2AttribRecord *attrib, uint8_t str_idx, uint8_t placement)
 {
     sign_placement_ = placement;
+    sign_dst_override_ = false;
     sign_overlay_.unload();
     bool has_sign = false;
     if (data_dir) {
@@ -451,6 +454,29 @@ void EventTextView::clearTextEntry()
     ++text_entry_revision_;
 }
 
+void EventTextView::applyScriptedSignPlace(uint8_t placement, uint16_t dst_x, uint16_t dst_y)
+{
+    /* -$7FBC / 0x3266 → mode $17 @ 0x23E24: dst_x=arg2, dst_y=arg3+8. */
+    sign_placement_ = placement;
+    sign_dst_x_ = dst_x;
+    sign_dst_y_ = dst_y;
+    sign_dst_override_ = true;
+}
+
+void EventTextView::clearServiceSignSprite()
+{
+    /* place(-1) @ 0x3280 clears A4-$79FE. */
+    sign_overlay_.unload();
+    sign_placement_ = 0;
+    sign_dst_override_ = false;
+    for (int i = 0; i < layer_count_; ++i) {
+        if (layers_[i].op == EventTextOp::Op0BServiceSign) {
+            layers_[i].op = EventTextOp::None;
+            layers_[i].text[0] = '\0';
+        }
+    }
+}
+
 bool EventTextView::tickAnimation()
 {
     bool changed = sign_overlay_.tick();
@@ -492,7 +518,11 @@ void EventTextView::drawServiceSignOverlay(gfx::ScreenCompositor &c) const
             continue;
         }
         if (sign_overlay_.loaded()) {
-            sign_overlay_.blitCentered(c, sign_placement_);
+            if (sign_dst_override_) {
+                sign_overlay_.blitAt(c, static_cast<int>(sign_dst_x_), static_cast<int>(sign_dst_y_));
+            } else {
+                sign_overlay_.blitCentered(c, sign_placement_);
+            }
         } else if (layer.text[0] != '\0') {
             drawServiceSignStub(c, layer.text);
         }
@@ -594,6 +624,7 @@ void EventTextView::clearPersistentOverlays()
     sign_overlay_.unload();
     pegasus_overlay_.unload();
     sign_placement_ = 0;
+    sign_dst_override_ = false;
 }
 
 void EventTextView::clearConsoleMessageLayers()

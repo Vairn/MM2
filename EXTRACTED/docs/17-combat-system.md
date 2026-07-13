@@ -89,19 +89,18 @@ RNG helper: `JSR -$7BB4(A4)` with `(1, max)` returns a roll in `[1,max]`.
 
 | Key | Action | Handler |
 |-----|--------|---------|
-| A   | Attack (single target) | `0xCD90` |
-| F   | Fight (auto/melee)      | `0xCFD0` |
+| A   | Attack (first target, no picker; arg 0 → `0x1162C`) | `0x11A50` → `0x111DA` |
+| F   | Fight (picker when >1 live; arg `$FF` → `0x1162C`) | `0x11B4C` → `0x111DA` |
 | C   | Cast spell              | spell select -> dispatch table `0xD000..0xD256` |
-| S   | Shoot (ranged)          | (ranged path) |
+| S   | Shoot (picker; arg `$FF` → `0x11610`) | `0x11BA4` → `0x111DA` |
+| Ctrl-A | Quick: Shoot if able else Attack else end turn | `0x11A2A` |
 | B   | Block                   | `0x11B0A` (`-$7D5E`/`-$7C3E`) |
 | R   | Run / retreat           | `0x11B1A` (`-$7CC2` party reorder) |
 | U   | Use item                | `0x11B62` (`0x133EC`) |
 | V   | View character          | `0x11B6E` (`-$7E00`) |
 
-Target selection: `0x111DA` ("which (A - x)?"), `-$5E32` selects monster-side
-(`-$77BE`) vs party-side (`-$524`) targeting; chosen index -> `-$51D`. The
-Attack command has its own selector at `0xD43C`/`0xD390` (auto-targets when only
-one monster remains).
+Target selection: `0x111DA` ("which (A - x)?") when arg=`$FF`; arg `0` hits index 0.
+Single live monster forces arg←0 (auto). Spell Attack path also has `0xD43C`/`0xD390`.
 
 ### Spells (Cast)
 `0xD000..0xD256` is a jump table of per-spell handlers (`JSR $bc3a`, `$bc7a`, …

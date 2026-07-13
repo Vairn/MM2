@@ -430,8 +430,9 @@ uint32_t mm2_smith_identify_cost(uint8_t backpack_flags)
     if (meta == 0) {
         return 10u;
     }
-    /* Midpoint of rng(1, meta*100) @ 0x1BF60 — deterministic until shop RNG wired. */
-    return (1u + (uint32_t)meta * 100u) / 2u;
+    /* 0x1BF48: meta==0 → 10; else d0=meta, d1=$64, jsr -$7B54 (mul @ 0x24C74)
+     * → cost = meta*100. Not RNG (-$7BB4). */
+    return (uint32_t)meta * 100u;
 }
 
 /* Mage guild sorcerer spells [map][slot] = {spell_index 0..47, gold}. Decoded

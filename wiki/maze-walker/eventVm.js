@@ -40,6 +40,11 @@ import {
   svcGeneralStoreConvert,
   svcApplyDrinkEncoding,
   svcApplyFoodEncoding,
+  svcFoodEncodePurchase,
+  svcDrinkEncodePurchase,
+  svcQuestLordArm,
+  svcQuestCompleteReward,
+  svcQuestBusy,
 } from "./townServices.js";
 
 import { binExecSelector } from "./selectorBin.js";
@@ -650,22 +655,56 @@ async function runTownService(ctx, sel, title, sprite) {
     return;
   }
   if (sel === 0xc9 || sel === 0xca) {
-    /* 0x19AB4/0x19AC4 → 0x1980A: food XP 0x18DE0 / drink XP 0x18D3A; encode UI deferred. */
-    if (sel === 0xca) {
-      for (const m of ensureParty(session)) {
-        svcApplyDrinkEncoding(m);
-      }
-      syncSessionGoldFromParty(session);
-      note("OP_0E 0xCA drink apply (armed +$7C bit1)");
+    /* 0x19AB4/0x19AC4 → 0x1980A: 0x193AC reward+apply, busy gate, else A–D. */
+    const drink = sel === 0xca;
+    const party = ensureParty(session);
+    const done = svcQuestCompleteReward(party, drink, ctx.manifest);
+    syncSessionGoldFromParty(session);
+    if (done.activity > 0) {
+      const msg =
+        done.membersRewarded > 0
+          ? `You have done everyone a great service\nand you shall be rewarded.\n  ${done.xpEach} experience points!`
+          : "Quest progress applied.";
+      await waitForSpace(msg, sprite, 0x0e);
+      note(drink ? "OP_0E 0xCA quest complete/apply" : "OP_0E 0xC9 quest complete/apply");
       ctx.onSessionChange?.(session);
-    } else {
-      for (const m of ensureParty(session)) {
-        svcApplyFoodEncoding(m, ctx.manifest);
-      }
-      syncSessionGoldFromParty(session);
-      note("OP_0E 0xC9 food apply (items.dat gold×8)");
-      ctx.onSessionChange?.(session);
+      return;
     }
+    if (svcQuestBusy(party, drink)) {
+      await waitForSpace(
+        drink
+          ? "Your party has already been quested\nto seek out the foe."
+          : "Your party has already been quested\nto seek out the item.",
+        sprite,
+        0x0e
+      );
+      note(drink ? "OP_0E 0xCA quest busy" : "OP_0E 0xC9 quest busy");
+      return;
+    }
+    const intro = drink
+      ? "Heads of monstrous beasts adorn the\nwalls in this room.  Will you gather\nmore trophies for Lord Slayer (y/n)?"
+      : "The huge chamber is overstocked with\nmany unusual items.  Lord Hoardall\nbegs your party for a favor.  Will\nyou gather more items for him (y/n)?";
+    const yes = await ctx.promptYesNo(intro, sprite, 0x0e);
+    if (!yes) {
+      note(drink ? "OP_0E 0xCA declined" : "OP_0E 0xC9 declined");
+      return;
+    }
+    const lord = drink ? "Slayer" : "Hoardall";
+    const menu =
+      `At what level of difficulty do you\nwish to aid Lord ${lord}?\n` +
+      `A) Page's Quest\nB) Squire's Quest\nC) Knight's Quest\nD) Lord's Quest\n` +
+      `${lord} (A-D)?`;
+    const pick = await (ctx.promptMenuKey || promptMenuKey)(menu, "abcd", sprite, 0x0e);
+    const ch = (pick || "").toUpperCase();
+    if (ch >= "A" && ch <= "C") {
+      if (drink) svcDrinkEncodePurchase(party, ch.charCodeAt(0) - 65);
+      else svcFoodEncodePurchase(party, ch.charCodeAt(0) - 65);
+      note(drink ? "OP_0E 0xCA drink encode" : "OP_0E 0xC9 food encode");
+    } else if (ch === "D") {
+      const armed = svcQuestLordArm(party, drink);
+      note(armed < 0 ? "OP_0E lord arm (none)" : `OP_0E lord arm (${armed})`);
+    }
+    ctx.onSessionChange?.(session);
     return;
   }
   if (isTownServiceSelector(sel)) {

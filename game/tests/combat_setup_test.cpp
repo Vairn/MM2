@@ -43,7 +43,8 @@ void setupParty(Mm2RosterFile &roster, Mm2PartyLaunch &launch, uint8_t might, ui
     mm2_roster_set_name(&roster.records[0], "Tester");
     roster.records[0].might_current = might;
     roster.records[0].speed_current = speed;
-    roster.records[0].hp_current = hp;
+    roster.records[0].hp_current = hp; /* +$74 ceiling (XP budget) */
+    roster.records[0].hp_max = hp;     /* +$5E working HP (combat damage) */
 
     launch = Mm2PartyLaunch{};
     launch.party_count = 1;
@@ -58,10 +59,12 @@ void setupTwoMemberParty(Mm2RosterFile &roster, Mm2PartyLaunch &launch)
     roster.records[0].might_current = 99;
     roster.records[0].speed_current = 99;
     roster.records[0].hp_current = 999;
+    roster.records[0].hp_max = 999;
     roster.records[0].condition = 0;
     roster.records[1].might_current = 1;
     roster.records[1].speed_current = 1;
-    roster.records[1].hp_current = 0; /* unconscious */
+    roster.records[1].hp_current = 0; /* unconscious — no ceiling */
+    roster.records[1].hp_max = 0;     /* no working HP */
     roster.records[1].condition = 0;
 
     launch = Mm2PartyLaunch{};
@@ -121,8 +124,12 @@ int main()
     Mm2PartyLaunch launch{};
     gameplay::Rng rng(1);
 
+    /* Each scenario reseeds so surprise/flee rolls stay independent of how many
+     * RNG draws prior fights consumed (HP/damage path changes must not cascade). */
+
     /* ---- Victory: a 1-HP monster always dies to the party's first Attack. */
     {
+        rng.reseed(1);
         std::memset(&gs_image, 0, sizeof(gs_image));
         std::memset(&monsters, 0, sizeof(monsters));
         Mm2MonsterRecord &mon = monsters.records[7];
@@ -160,6 +167,7 @@ int main()
 
     /* ---- XP split @ 0x12430: unconscious (0 HP, condition < $80) gets a share. */
     {
+        rng.reseed(1);
         std::memset(&gs_image, 0, sizeof(gs_image));
         std::memset(&monsters, 0, sizeof(monsters));
         Mm2MonsterRecord &mon = monsters.records[9];
@@ -190,6 +198,7 @@ int main()
 
     /* ---- XP split: dead/stoned (condition >= $80) excluded from share. */
     {
+        rng.reseed(1);
         std::memset(&gs_image, 0, sizeof(gs_image));
         std::memset(&monsters, 0, sizeof(monsters));
         Mm2MonsterRecord &mon = monsters.records[9];
@@ -219,6 +228,7 @@ int main()
 
     /* ---- Arena reward: victory also grants the color/screen gold table. */
     {
+        rng.reseed(1);
         std::memset(&gs_image, 0, sizeof(gs_image));
         std::memset(&monsters, 0, sizeof(monsters));
         Mm2MonsterRecord &mon = monsters.records[3];
@@ -251,6 +261,7 @@ int main()
 
     /* ---- Defeat: a fast, hard-hitting monster drops a 1-HP party before its turn. */
     {
+        rng.reseed(1);
         std::memset(&gs_image, 0, sizeof(gs_image));
         std::memset(&monsters, 0, sizeof(monsters));
         Mm2MonsterRecord &mon = monsters.records[1];
@@ -285,8 +296,9 @@ int main()
                "defeat scenario: wipe restores entry_coord (7,5)", fails);
     }
 
-    /* ---- Run: a zero-difficulty screen (attrib byte 0x0D == 0) always flees. */
+    /* ---- Run: 0x116B0 success when rng(1,100) < -$560D (attrib 0x0D). */
     {
+        rng.reseed(1);
         std::memset(&gs_image, 0, sizeof(gs_image));
         std::memset(&monsters, 0, sizeof(monsters));
         Mm2MonsterRecord &mon = monsters.records[5];
@@ -295,12 +307,16 @@ int main()
 
         setupParty(roster, launch, /*might=*/1, /*speed=*/99, /*hp=*/999);
         seedFixedEncounter(gs, 5);
+        /* Thresh $65 → every roll 1..100 succeeds (ASM cmp/bcc). */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RETREAT_DIFF, 0x65);
 
         CombatSession combat;
         combat.bindParty(&roster, &launch);
         combat.bindMonsters(&monsters);
         combat.bindRng(&rng);
         combat.enter(gs, world);
+        /* enter() mirrors world.attrib()[0x0D]==0 over the seed — restore. */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RETREAT_DIFF, 0x65);
         expect(combat.awaitingPartyOptions(), "run scenario: party options before fight", fails);
 
         platform::KeyState keys{};
@@ -309,11 +325,17 @@ int main()
         expect(combat.awaitingCommand(), "run scenario: party prompted (higher speed)", fails);
 
         keys.last_ascii = 'R';
-        const bool ended = combat.tick(gs, world, keys);
-        expect(ended, "run scenario: Run succeeds against 0 retreat difficulty", fails);
+        combat.tick(gs, world, keys);
+        /* 0x116B0 sets latch + shrink; leave happens at next 0x13282 check. */
+        const bool ended = fightToEnd(combat, gs, world, ' ');
+        expect(ended, "run scenario: Run succeeds when rng < -$560D", fails);
         expect(combat.lastOutcome() == CombatOutcome::Fled, "run scenario: outcome == Fled", fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 0,
                "run scenario: COMBAT_VICTORY_LATCH stays clear on flee", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_PARTY_RAN_LATCH) == 1,
+               "run scenario: -$5E4C set on successful Run", fails);
+        expect(mm2_gs_u16(gs.a4(), MM2_GS_PARTY_COUNT) == 0,
+               "run scenario: Char-Run shrinks -$795A", fails);
     }
 
     /* ---- Random picker (0x1213E/0x12072/0x11F0A) invariants, exercised
@@ -321,6 +343,7 @@ int main()
      * and a non-trivial group-size gate must yield at least one monster
      * within the attrib min/max tier bounds, and terminate (PICKER_DONE). */
     {
+        rng.reseed(1);
         std::memset(&gs_image, 0, sizeof(gs_image));
         mm2_gs_set_u8(gs.a4(), MM2_GS_DISPOSITION, 2); /* default: budget = totalHP/8 */
 
@@ -352,6 +375,7 @@ int main()
     /* ---- Zero XP budget must not arm a 0-monster fight (stock inn starters
      * ship with hp_current=0; without the leave-inn wake that yields budget 0). */
     {
+        rng.reseed(1);
         std::memset(&gs_image, 0, sizeof(gs_image));
         mm2_gs_set_u8(gs.a4(), MM2_GS_DISPOSITION, 2);
         mm2_gs_set_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE, 0);
@@ -401,6 +425,7 @@ int main()
 
     /* ---- AGA multi-monster gallery: panelView groups alive slots by picture id. */
     {
+        rng.reseed(1);
         std::memset(&gs_image, 0, sizeof(gs_image));
         std::memset(&monsters, 0, sizeof(monsters));
         /* Types 1..5 with pictures 10,10,20,30,40 — expect 4 distinct slots, pic10 stack=2. */
@@ -460,6 +485,7 @@ int main()
 
     /* Combat cast @ 0x11A90 / 0x79EE: level+number on message band, no spell grid. */
     {
+        rng.reseed(1);
         Mm2RosterFile roster{};
         Mm2PartyLaunch launch{};
         Mm2MonstersFile monsters{};

@@ -109,6 +109,26 @@ def display_string(s: str) -> str:
 
 
 def decode_location(blob: bytes, loc_id: int) -> dict:
+    # locs 60..70: overlay/queued-dispatch banks (ASM 0x176B6).
+    # work_buf[0..1] = LE absolute string anchor; scripts start at offset 2.
+    # Scanning for 00 00 00 poisons the string table (embedded in opcode args).
+    if 60 <= loc_id <= 70 and len(blob) >= 2:
+        str_table_offset = blob[0] | (blob[1] << 8)
+        script_start = 2
+        script_end = min(str_table_offset, len(blob))
+        script_bytes = blob[script_start:script_end]
+        strings = decode_strings(blob, str_table_offset) if str_table_offset < len(blob) else []
+        return {
+            "location_id": loc_id,
+            "record_kind": "overlay_bank",
+            "triplets": [],
+            "script_offset": script_start,
+            "script_length": len(script_bytes),
+            "string_table_offset": str_table_offset,
+            "strings": strings,
+            "terminated": True,
+        }
+
     triplets, pos, terminated = decode_triplets(blob)
 
     str_rel_lo = blob[pos] if pos < len(blob) else 0
@@ -169,7 +189,7 @@ OPCODES: dict[int, dict[str, object]] = {
     0x0A: {"name": "OP_0A_PROMPT_YN_B", "argc": 0, "handler": "0x15D9A"},
     0x0B: {"name": "OP_0B_SHOW_SERVICE_WINDOW", "argc": 2, "handler": "0x15DB0"},
     0x0C: {"name": "OP_0C_MAP_TRANSITION", "argc": 2, "handler": "0x15E12"},
-    0x0D: {"name": "OP_0D_ENGINE_CALL", "argc": 1, "handler": "0x15EC4"},
+    0x0D: {"name": "OP_0D_PLAY_SOUND_SEQ", "argc": 1, "handler": "0x15EC4"},
     0x0E: {"name": "OP_0E_EXEC_SELECTOR", "argc": 1, "handler": "0x160C2"},
     0x0F: {"name": "OP_0F_END_SCRIPT", "argc": 0, "handler": "0x162A6"},
     0x10: {"name": "OP_10_IF_TRUE_SKIPTOK", "argc": None, "handler": "0x162B8"},
@@ -178,7 +198,7 @@ OPCODES: dict[int, dict[str, object]] = {
     0x13: {"name": "OP_13_ENCOUNTER_SETUP_B", "argc": 10, "handler": "0x16386"},
     0x14: {"name": "OP_14_CLEAR_TILE_EVENT", "argc": 0, "handler": "0x16398"},
     0x15: {"name": "OP_15_APPLY_PARTY", "argc": 3, "handler": "0x16426"},
-    0x16: {"name": "OP_16_CHECK_MONSTER_PRESENT", "argc": 2, "handler": "0x16520"},
+    0x16: {"name": "OP_16_SCAN_PARTY_ITEMS", "argc": 2, "handler": "0x16520"},
     0x17: {"name": "OP_17_LOAD_VAR_TO_COND", "argc": 2, "handler": "0x165A4"},
     0x18: {"name": "OP_18_APPLY_PARTY_MASKED", "argc": 4, "handler": "0x165C6"},
     0x19: {"name": "OP_19_ADD_PARTY_ENTITY", "argc": 4, "handler": "0x165D8"},
@@ -192,21 +212,21 @@ OPCODES: dict[int, dict[str, object]] = {
     0x21: {"name": "OP_21_SET_TILE", "argc": 3, "handler": "0x16A34"},
     0x22: {"name": "OP_22_CHECK_ERA_RANGE", "argc": 2, "handler": "0x16A9E"},
     0x23: {"name": "OP_23_CHECK_DAY_RANGE", "argc": 2, "handler": "0x16ADA"},
-    0x24: {"name": "OP_24_CHECK_GOLD_TO_COND", "argc": 2, "handler": "0x16B54"},
-    0x25: {"name": "OP_25_CHECK_CODE16_TO_COND", "argc": 2, "handler": "0x16B82"},
+    0x24: {"name": "OP_24_PAY_GOLD_TO_COND", "argc": 2, "handler": "0x16B54"},
+    0x25: {"name": "OP_25_PAY_GEMS_TO_COND", "argc": 2, "handler": "0x16B82"},
     0x26: {"name": "OP_26_SELECT_MEMBER", "argc": 0, "handler": "0x16BC0"},
     0x27: {"name": "OP_27_SELECT_MEMBER_B", "argc": 0, "handler": "0x16BC0"},
     0x28: {"name": "OP_28_CONSUME_ITEM_TO_COND", "argc": 2, "handler": "0x16C86"},
     0x29: {"name": "OP_29_SET_ABORT", "argc": 0, "handler": "0x16D08"},
     0x2A: {"name": "OP_2A_SET_TREASURE", "argc": 14, "handler": "0x16D16"},
-    0x2B: {"name": "OP_2B_SKIPTOK", "argc": None, "handler": "0x16D74"},
+    0x2B: {"name": "OP_2B_SKIPTOK_IF_VICTORY", "argc": None, "handler": "0x16D74"},
     0x2C: {"name": "OP_2C_ADJUST_STATE", "argc": 1, "handler": "0x16D98"},
     0x2D: {"name": "OP_2D_CHECK_MEMBER_ATTR", "argc": 2, "handler": "0x16DBA"},
     0x2E: {"name": "OP_2E_SET_PARTY_ATTR", "argc": 2, "handler": "0x16F50"},
-    0x2F: {"name": "OP_2F_CLEAR_INPUT_BUF", "argc": 0, "handler": "0x16FEA"},
+    0x2F: {"name": "OP_2F_READ_ANSWER", "argc": 0, "handler": "0x16FEA"},
     0x30: {"name": "OP_30_CHECK_ANSWER", "argc": 10, "handler": "0x17034"},
     0x31: {"name": "OP_31_PARTY_ITERATE_CALL", "argc": 3, "handler": "0x170BC"},
-    0x32: {"name": "OP_32_LOAD_COND_FROM_VAR", "argc": 1, "handler": "0x17190"},
+    0x32: {"name": "OP_32_COUNT_TITLE_NIBBLE", "argc": 1, "handler": "0x17190"},
 }
 
 SELECTOR_NAMES = {
@@ -322,10 +342,10 @@ def resolve_service_sign(loc_id: int | None, str_idx: int) -> int | None:
 # - Atlantium arena gate is ticket-gated: no-ticket message -> with-ticket immediate combat,
 #   ticket consumed, return to same gate tile, retrigger by stepping off/on.
 # - There are four ticket items (green/yellow/red/black) and four town-purchased keys.
-# - OP_24 appears to be a money predicate (u16 amounts commonly 10/25/50/200/500).
-# - OP_25 is a non-gold 16-bit predicate path; values observed are small codes (0/1/2).
+# - OP_24 is gold pool-pay (0x6ACE): check+deduct+pool; cond=success.
+# - OP_25 is gems pool-pay (0x6B9A); NOT tickets (tickets = OP_0E 0x08).
 # - User verified: bishop key gates are blocked with message when missing key,
-#   allowed when present, and key is consumed.
+#   allowed when present, and key is consumed (OP_28 backpack).
 
 
 def format_triplet(t: tuple[int, int, int]) -> str:
@@ -391,13 +411,15 @@ def find_event_markers(script: bytes) -> list[int]:
 
 def split_script_segments(script: bytes) -> list[bytes]:
     # sub_17262 scans bytes and counts 0xFF separators to locate event script N.
+    # A pool that ends with 0xFF must NOT grow a trailing empty segment (encode
+    # would emit an extra 0xFF and shift the string anchor by one).
     segments: list[bytes] = []
     start = 0
     for i, b in enumerate(script):
         if b == 0xFF:
             segments.append(script[start:i])
             start = i + 1
-    if start <= len(script):
+    if start < len(script):
         segments.append(script[start:])
     return segments
 
@@ -694,7 +716,7 @@ def decompile_op(
     if op == 0x09:
         return "cond = prompt_yes_no()"
     if op == 0x0D and args:
-        return f"engine_call(0x{args[0]:02X})"
+        return f"play_sound_seq(#{args[0]})  # -$7E42→0x6FB8 audio"
     if op == 0x0F:
         return "end_script()"
     if op == 0x12 and len(args) >= 12:
@@ -709,7 +731,7 @@ def decompile_op(
     if op == 0x15 and len(args) >= 3:
         return f"apply_party(count=0x{args[0]:02X}, op=0x{args[1]:02X}, val=0x{args[2]:02X})"
     if op == 0x16 and len(args) >= 2:
-        return f"cond = check_monster_present(0x{args[0]:02X}, 0x{args[1]:02X})"
+        return f"cond = scan_party_items(id=0x{args[1]:02X})  # arg1=0x{args[0]:02X} discarded"
     if op == 0x18 and len(args) >= 4:
         return (
             f"apply_party_masked(count=0x{args[0]:02X}, set=0x{args[1]:02X}, "
@@ -802,14 +824,11 @@ def decompile_op(
     if op == 0x24:
         value = decode_u16_arg(op, args)
         if value is not None:
-            return f"cond = check_gold_at_least({value})"
+            return f"cond = pay_gold({value})  # pool-pay 0x6ACE"
     if op == 0x25:
         value = decode_u16_arg(op, args)
         if value is not None:
-            labels = {0: "flag_clear", 1: "flag_set", 2: "flag_alt"}
-            hint = labels.get(value, "")
-            suffix = f"  # {hint}" if hint else ""
-            return f"cond = check_code16(0x{value:04X}){suffix}"
+            return f"cond = pay_gems({value})  # pool-pay 0x6B9A"
     if op == 0x28:
         probe = args[0] if len(args) >= 1 else None
         item_id = args[1] if len(args) >= 2 else None
@@ -823,11 +842,13 @@ def decompile_op(
         return "load_special_block(...)"
     if op == 0x2B:
         n = args[0] if args else 0
-        return f"skip_tokens({n})"
+        return f"if combat_victory: skip_tokens({n})"
+    if op == 0x2F:
+        return "read_answer(buf[-$5C50], max=10)"
     if op == 0x31 and len(args) >= 3:
         return f"for_party(mask=0x{args[0]:02X}): call(0x{args[1]:02X},0x{args[2]:02X})"
     if op == 0x32 and args:
-        return f"cond = load_cond_from_var(0x{args[0]:02X})"
+        return f"cond = count_title_nibble(id=0x{args[0]:02X})"
 
     spec = OPCODES.get(op)
     name = str(spec["name"]) if spec else f"OP_{op:02X}"

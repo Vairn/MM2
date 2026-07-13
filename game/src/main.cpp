@@ -2,6 +2,7 @@
 
 #include "mm2/states/AppHost.h"
 #include "mm2/platform/Platform.h"
+#include "mm2/platform/Audio.h"
 #include "mm2/gfx/GfxBackend.h"
 #include "mm2/ui/CharacterUiKind.h"
 #include "mm2_pc_gfx_codec.h"
@@ -87,14 +88,17 @@ int SDL_main(int argc, char **argv)
         SDL_free(sdl_base);
     }
     mm2::gfx::initPcGfxFallbackDir(data_dir, exe_base[0] ? exe_base : nullptr);
+    (void)mm2::audio::init(data_dir);
 
     if (!mm2::platform::beginDisplay()) {
+        mm2::audio::shutdown();
         mm2::platform::shutdown();
         return 1;
     }
 
     const int rc = mm2_app_run(data_dir, static_cast<int>(ui_kind));
 
+    mm2::audio::shutdown();
     mm2::platform::shutdown();
     return rc;
 }

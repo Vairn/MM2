@@ -38,9 +38,10 @@ From `0x11866` / `0x1175C` — bar strings at `A4-$6F9C`:
 
 | Key | Action |
 |-----|--------|
-| A | Attack (single target) |
-| F | Fight (auto melee) |
-| S | Shoot (ranged / bow) |
+| A | Attack first target (no picker; `0x1162C` arg 0) |
+| F | Fight — pick target if >1 live (`0x1162C` arg `$FF`) |
+| S | Shoot — pick target if >1 live (`0x11610` arg `$FF`) |
+| Ctrl-A | Quick: Shoot if able, else Attack (`0x11A2A`) |
 | C | Cast spell → jump table `0xD000` |
 | U | Use item → `0x133EC` |
 | B | Block |

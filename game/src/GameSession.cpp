@@ -6,6 +6,7 @@
 #include "mm2/DataPath.h"
 #include "mm2/combat/EncounterPicker.h"
 #include "mm2/events/EventTownServices.h"
+#include "mm2/events/EventCombatEncounter.h"
 #include "mm2/events/EventVmHelpers.h"
 #include "mm2/gameplay/Movement.h"
 #include "mm2/gameplay/PlaySessionInput.h"
@@ -17,6 +18,7 @@
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/gfx/CombatPanel.h"
 
+#include "mm2/platform/Audio.h"
 #include "mm2/platform/Platform.h"
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
@@ -262,12 +264,12 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
         rng_.reseed(seed ? seed : 1u);
     }
 
-    /* Stock roster.dat keeps inn-stored starters at hp_current=0 with condition
-     * bit6 (0x40 unconscious). The party strip draws +$5E (hp_max), so they look
-     * healthy, but encounter_xp_budget_init @ 0x11E58 sums +$74 and the combat
-     * alive check uses the same field — budget 0 → empty random fights, and
-     * partySlotAlive() treats everyone as dead. Wake them on leave-inn / play
-     * start the same way Rest does (0x19BFC: restore current from max/aux). */
+    /* Stock roster.dat keeps inn-stored starters at hp_current(+$74)=0 with
+     * condition bit6 (0x40 unconscious). The party strip draws working HP at
+     * +$5E (codec hp_max), so they look healthy, but encounter_xp_budget_init
+     * @ 0x11E58 sums the +$74 ceiling — budget 0 → empty random fights. Wake
+     * them on leave-inn / play start the same way Rest does (0x19BFC: restore
+     * +$74 from +$60 aux, then 0x19C2A sync +$5E ← +$74 when not diseased). */
     for (int i = 0; i < launch_.party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
         const int idx = launch_.roster_slots[i];
         if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
@@ -285,6 +287,10 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
                     rec.hp_max = restore;
                 }
             }
+        }
+        /* Ensure working HP is present for combat (0x4AAA damages +$5E). */
+        if (rec.hp_max == 0 && rec.hp_current != 0) {
+            rec.hp_max = rec.hp_current;
         }
         rec.condition = static_cast<uint8_t>(rec.condition & static_cast<uint8_t>(~0x40u));
     }
@@ -496,6 +502,11 @@ void GameSession::shutdown()
     events_loaded_ = false;
     scripted_scene_.unload();
     scripted_loaded_ = false;
+    clearSearchContainerArt();
+    if (has_endgame_) {
+        mm2_image32_free(&endgame_);
+        has_endgame_ = false;
+    }
     if (gs_image_) {
         mm2::runtime::deallocate(gs_image_, kGsImageBytes);
         gs_image_ = nullptr;
@@ -661,12 +672,19 @@ void GameSession::finishCombat()
      * latch (0x16368-0x1637C). */
     mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 0);
     mm2_gs_set_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
-    if (data_dir_) {
+
+    /* Total wipe: retail plays funeral tones @ 0x7DCC then leaves corpses at the
+     * entry square for temple raise. Remake must not persist an all-dead party
+     * (finishCombat used to save immediately → soft-lock saves). */
+    const bool total_wipe =
+        combat_.lastOutcome() == combat::CombatOutcome::Defeated && partyAllDead();
+    if (!total_wipe && data_dir_) {
         char *const path = mm2_path_scratch_a();
         if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
             (void)mm2_roster_save_file(path, &roster_); /* persist combat XP/gold/HP */
         }
     }
+
     runPendingEvents();
     refreshWorldAfterEventTransition();
     /* Defeat @ 0x1164A may have restored coords from -$560C — refresh cell/gate. */
@@ -674,7 +692,43 @@ void GameSession::finishCombat()
         gameplay::syncCurrentCellFlags(gs_, world_);
         gameplay::sessionInteractionGate(gs_);
     }
+    if (total_wipe) {
+        beginPartyWipeGameOver();
+    } else if (fd_await_combat_) {
+        resumeOp0eFdAfterCombat();
+    }
     markDirty();
+}
+
+bool GameSession::partyAllDead() const
+{
+    return events::eventVmCountLivingPartyMembers(gs_.valid() ? gs_.a4() : nullptr, &roster_,
+                                                  &launch_) == 0;
+}
+
+void GameSession::beginPartyWipeGameOver()
+{
+    if (overlay_ == PlayOverlay::GameOver) {
+        return;
+    }
+    /* 0x7DCC funeral tones are generative play_tone voices; remake stand-in is
+     * play_sound_seq id 6 (same family as party KO @ 0xFE0C). */
+    audio::playSoundSeq(6, gs_.soundsEnabled(), gs_.walkBeepEnabled());
+    /* 0x11646 / 0x7DCC funeral presentation — message band, then title on dismiss. */
+    std::snprintf(status_message_, sizeof(status_message_),
+                  "The party has been defeated...\nAll members have died!");
+    overlay_ = PlayOverlay::GameOver;
+}
+
+void GameSession::maybeBeginPartyWipeGameOver()
+{
+    /* Overworld / post-event wipe @ 0x9F22 — same funeral as combat defeat. */
+    if (overlay_ == PlayOverlay::GameOver || combat_.active()) {
+        return;
+    }
+    if (partyAllDead()) {
+        beginPartyWipeGameOver();
+    }
 }
 
 void GameSession::runPendingEvents()
@@ -696,6 +750,7 @@ void GameSession::runPendingEvents()
         if (events_.blocksMovement() != blocking_before || events_.blocksMovement()) {
             markDirty();
         }
+        maybeBeginPartyWipeGameOver();
     }
 }
 
@@ -725,6 +780,8 @@ void GameSession::tickEventInput(const platform::KeyState &keys)
     events_.continueInput(gs_, world_, keys);
     refreshWorldAfterEventTransition();
     maybeFinishInnRegistry();
+    maybeOpenDeathStrikes();
+    maybeOpenFdPrintChrome();
     maybeOpenTownServiceMenu();
     if (events_.blocksMovement() != blocking_before || events_.textView().layerCount() != layers_before ||
         events_.textView().textEntryRevision() != entry_rev_before) {
@@ -742,6 +799,94 @@ void GameSession::showStatusMessage(const char *msg)
     }
     std::snprintf(status_message_, sizeof(status_message_), "%s", msg);
     overlay_ = PlayOverlay::StatusMessage;
+    markDirty();
+}
+
+void GameSession::beginExchangeOrder()
+{
+    /* 0x20F58: prompt both slots via 0x20DE0 (arg=$FF). Host: status-line digits. */
+    if (launch_.party_count < 1) {
+        return;
+    }
+    exchange_first_slot_ = -1;
+    std::snprintf(status_message_, sizeof(status_message_), "Exchange (1 - %d)",
+                  launch_.party_count);
+    overlay_ = PlayOverlay::ExchangeOrder;
+    markDirty();
+}
+
+void GameSession::exchangeExplorePartySlots(int slot_a, int slot_b)
+{
+    /* 0x20F94..0x20FD0: swap word -$796A[a] ↔ -$796A[b]. */
+    if (slot_a < 0 || slot_b < 0 || slot_a >= launch_.party_count || slot_b >= launch_.party_count) {
+        return;
+    }
+    if (slot_a == slot_b) {
+        return;
+    }
+    const int16_t tmp = launch_.roster_slots[slot_a];
+    launch_.roster_slots[slot_a] = launch_.roster_slots[slot_b];
+    launch_.roster_slots[slot_b] = tmp;
+    const uint16_t wa = mm2_gs_u16(gs_.a4(), MM2_GS_ROSTER_INDEX_TBL + slot_a * 2);
+    const uint16_t wb = mm2_gs_u16(gs_.a4(), MM2_GS_ROSTER_INDEX_TBL + slot_b * 2);
+    mm2_gs_set_u16(gs_.a4(), MM2_GS_ROSTER_INDEX_TBL + slot_a * 2, wb);
+    mm2_gs_set_u16(gs_.a4(), MM2_GS_ROSTER_INDEX_TBL + slot_b * 2, wa);
+    /* 0x20FE0: jsr -$7EA2 party panel redraw when slots differ. */
+}
+
+void GameSession::beginDismissHireling()
+{
+    /* 0x141F4: "Dismiss whom (1-N)?"; only roster index >= $18. */
+    if (launch_.party_count < 1) {
+        return;
+    }
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 1); /* 0x1421E -$7950 := 1 */
+    std::snprintf(status_message_, sizeof(status_message_), "Dismiss whom (1 - %d)?",
+                  launch_.party_count);
+    overlay_ = PlayOverlay::DismissHireling;
+    markDirty();
+}
+
+bool GameSession::removeHirelingFromParty(int16_t roster_index)
+{
+    /* 0x362C: find slot with matching -$796A word; FFFF it; compact; dec count. */
+    if (roster_index < 0) {
+        return false;
+    }
+    int found = -1;
+    for (int i = 0; i < launch_.party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        if (launch_.roster_slots[i] == roster_index) {
+            found = i;
+            break;
+        }
+    }
+    if (found < 0) {
+        return false;
+    }
+    for (int i = found; i < launch_.party_count - 1 && i < MM2_PARTY_LAUNCH_SLOTS - 1; ++i) {
+        launch_.roster_slots[i] = launch_.roster_slots[i + 1];
+        const uint16_t w = mm2_gs_u16(gs_.a4(), MM2_GS_ROSTER_INDEX_TBL + (i + 1) * 2);
+        mm2_gs_set_u16(gs_.a4(), MM2_GS_ROSTER_INDEX_TBL + i * 2, w);
+    }
+    const int last = launch_.party_count - 1;
+    if (last >= 0 && last < MM2_PARTY_LAUNCH_SLOTS) {
+        launch_.roster_slots[last] = -1;
+        mm2_gs_set_u16(gs_.a4(), MM2_GS_ROSTER_INDEX_TBL + last * 2, 0xFFFF);
+    }
+    /* 0x36A0: -$795C := $FFFF; subq -$795A. */
+    mm2_gs_set_u16(gs_.a4(), -0x795C, 0xFFFF);
+    if (launch_.party_count > 0) {
+        --launch_.party_count;
+    }
+    mm2_gs_set_u16(gs_.a4(), MM2_GS_PARTY_COUNT, static_cast<uint16_t>(launch_.party_count));
+    return true;
+}
+
+void GameSession::applyExitFlagCleanup()
+{
+    /* 0x171AC / -$7D40: chrome redraws (status/roster/divider) are host markDirty;
+     * GS leaf is clr.b -$7950. Bit2 viewport blit is presentation-only. */
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
     markDirty();
 }
 
@@ -770,10 +915,10 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
         markDirty();
         break;
     case gameplay::PlaySessionAction::DismissHireling:
-        showStatusMessage("Dismiss hireling (GAP 0x141F4).");
+        beginDismissHireling();
         break;
     case gameplay::PlaySessionAction::ExchangeOrder:
-        showStatusMessage("Exchange order (GAP 0x20F58).");
+        beginExchangeOrder();
         break;
     case gameplay::PlaySessionAction::Automap:
         if (!assets_ok_ || !env_.automapReady()) {
@@ -799,6 +944,7 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
                           prep.container_name);
             std::snprintf(status_message_, sizeof(status_message_), "%s", prep.msg);
             overlay_ = PlayOverlay::SearchIdentify;
+            armSearchContainerArt();
         } else {
             showStatusMessage(prep.msg);
         }
@@ -861,28 +1007,12 @@ int unlockThieveryFor(const Mm2RosterRecord &rec)
     return rec.thievery_percent;
 }
 
-int bestPartyUnlockThievery(const Mm2PartyLaunch &launch, const Mm2RosterFile &roster)
-{
-    int best = 0;
-    for (int i = 0; i < launch.party_count; ++i) {
-        const int idx = launch.roster_slots[i];
-        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
-            continue;
-        }
-        const int skill = unlockThieveryFor(roster.records[idx]);
-        if (skill > best) {
-            best = skill;
-        }
-    }
-    return best;
-}
-
 }  // namespace
 
 void GameSession::applyDoorTrapDamage()
 {
-    /* Trap victim pick @ 0x1A9A6 + damage @ 0x1A90E (rng 1..100). Full ASM path
-     * prints party status and sets -$7950 := 3; here we apply HP loss only. */
+    /* Trap victim pick @ 0x1A9A6 + damage @ 0x1A90E (rng 1..100).
+     * 0x20DA2: -$7950 := 3 then -$7D40 cleanup. */
     if (launch_.party_count <= 0) {
         return;
     }
@@ -895,12 +1025,16 @@ void GameSession::applyDoorTrapDamage()
 
     const int damage = rng_.range(1, 100);
     Mm2RosterRecord &rec = roster_.records[idx];
-    if (rec.hp_current > static_cast<uint16_t>(damage)) {
-        rec.hp_current = static_cast<uint16_t>(rec.hp_current - static_cast<uint16_t>(damage));
-    } else {
-        rec.hp_current = 0;
-    }
-    markDirty();
+    /* 0x1A902 → -$7F08 → 0x4952/0x4AAA: subtract from +$5E (working HP). */
+    events::eventVmApplyOp31Damage(&rec, static_cast<uint16_t>(damage));
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 3);
+    applyExitFlagCleanup();
+    char name[MM2_ROSTER_NAME_SIZE + 1];
+    mm2_roster_name_to_cstr(&rec, name, sizeof(name));
+    char buf[96];
+    std::snprintf(buf, sizeof(buf), "Trap! %s takes %d damage.", name, damage);
+    showStatusMessage(buf);
+    maybeBeginPartyWipeGameOver();
 }
 
 void GameSession::handleBashDoor()
@@ -992,16 +1126,29 @@ void GameSession::handleUnlockDoor()
         return;
     }
 
-    /* GAP: the "who tries to unlock" character picker (0x1AE2E) is its own modal
-     * UI (not yet ported); use the party member with the highest +$1E / +$16 skill. */
-    const int thievery = bestPartyUnlockThievery(launch_, roster_);
-    if (thievery <= 0) {
-        showStatusMessage(gameplay::obstructionMessage(gameplay::ObstructionMsg::Locked));
+    /* 0x20D0E → 0x1AE2E who-tries picker (condition & $F0 == 0). */
+    if (launch_.party_count < 1) {
         return;
     }
+    std::snprintf(status_message_, sizeof(status_message_), "Who will try (1 - %d)?",
+                  launch_.party_count);
+    overlay_ = PlayOverlay::UnlockWho;
+    markDirty();
+}
 
+void GameSession::finishUnlockWithPartySlot(int party_slot)
+{
+    /* 0x20D26.. after 0x1AE2E returns a live party slot. */
+    if (party_slot < 0 || party_slot >= launch_.party_count) {
+        return;
+    }
+    const int idx = launch_.roster_slots[party_slot];
+    if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+        return;
+    }
+    const int thievery = unlockThieveryFor(roster_.records[idx]);
     const int lock_d100 = rng_.range(1, 100);  /* 0x20D2E */
-    const int trap_d100 = rng_.range(1, 100);  /* 0x20D64 (only used on a failed pick) */
+    const int trap_d100 = rng_.range(1, 100);  /* 0x20D64 */
     const int trap_byte = mm2_attrib_door_trap_byte(&world_.attrib());
 
     const gameplay::UnlockDecision d =
@@ -1012,10 +1159,12 @@ void GameSession::handleUnlockDoor()
         return;
     }
 
+    const int x = gs_.coordX();
+    const int y = gs_.coordY();
+    const char facing = gs_.facingKey();
     if (d.clears_lock) {
         clearForwardDoorLock(world_, x, y, facing); /* -$7F02 @ 0x4B06 */
     }
-
     showStatusMessage(gameplay::obstructionMessage(d.msg));
 }
 
@@ -1034,33 +1183,13 @@ void GameSession::executeRest()
             hireling_pay += roster_.records[idx].gold; /* +$66 daily fee */
         }
     }
-    if (hireling_pay > 0) {
-        /* The pooled-gold spend routine -$7E6C (0x19B1E) is not traced; pool the
-         * party's gold to decide affordability. DEFER the exact distribution. */
-        uint32_t pool = 0;
-        for (int i = 0; i < launch_.party_count; ++i) {
-            const int idx = launch_.roster_slots[i];
-            if (idx >= 0 && idx < MM2_ROSTER_RECORD_COUNT) {
-                pool += roster_.records[idx].gold;
-            }
-        }
-        if (pool < hireling_pay) {
-            /* 0x19EA0 inline string. */
-            mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
-            showStatusMessage("Not enough gold - Dismiss hirelings");
-            return;
-        }
-        uint32_t remaining = hireling_pay;
-        for (int i = 0; i < launch_.party_count && remaining > 0; ++i) {
-            const int idx = launch_.roster_slots[i];
-            if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
-                continue;
-            }
-            const uint32_t take = roster_.records[idx].gold < remaining ? roster_.records[idx].gold
-                                                                        : remaining;
-            roster_.records[idx].gold -= take;
-            remaining -= take;
-        }
+    /* 0x19B1E: -$7E6C → 0x6ACE — heroes only (index < $18); pool remainder on first.
+     * Always called (even amount 0) so Rest consolidates hero gold like retail. */
+    if (!events::eventVmPartyTryPayGold(a4, &roster_, &launch_, hireling_pay)) {
+        /* 0x19EA0 inline string. */
+        mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
+        showStatusMessage("Not enough gold - Dismiss hirelings");
+        return;
     }
 
     /* --- 0x19D64 rest-interruption (encounter) check ---------------------- */
@@ -1210,6 +1339,8 @@ void GameSession::executeRest()
     mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
 
     showStatusMessage("Rest complete, no encounters."); /* 0x19D46 inline string */
+    /* Age-illness @ 0x19B96 can wipe the party outside combat (0x9F22 path). */
+    maybeBeginPartyWipeGameOver();
 }
 
 void GameSession::tickOverlayInput(const platform::KeyState &keys)
@@ -1257,7 +1388,9 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                     std::snprintf(status_message_, sizeof(status_message_), "%s", buf);
                 }
                 overlay_ = PlayOverlay::StatusMessage;
+                clearSearchContainerArt();
                 mm2_gs_set_u8(gs_.a4(), -0x79E4, 0);
+                maybeBeginPartyWipeGameOver();
                 markDirty();
             }
             return;
@@ -1266,6 +1399,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
             events::eventVmSearchLeave(gs_.a4());
             overlay_ = PlayOverlay::None;
             status_message_[0] = '\0';
+            clearSearchContainerArt();
             markDirty();
             return;
         }
@@ -1292,6 +1426,268 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         if (keys.escape || keys.any_key) {
             overlay_ = PlayOverlay::None;
             status_message_[0] = '\0';
+            markDirty();
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::DeathStrikes) {
+        /* 0x14106: wait key #$D (ENTER) then Goto Town @ 0x1A1F8. */
+        const char ch = static_cast<char>(keys.last_ascii);
+        if (ch == '\r' || ch == '\n' || keys.enter) {
+            overlay_ = PlayOverlay::None;
+            status_message_[0] = '\0';
+            events_.armInnGotoTown();
+            maybeFinishInnRegistry();
+            markDirty();
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::FdPrintChrome) {
+        /* 0x14A8E -$7DDC: scripted buffer first (incl. bit7 -$7FBC places), else real keys. */
+        platform::KeyState fd_keys = keys;
+        events::ScriptedKeyPlace place{};
+        const int sk = events::eventVmScriptedKeyPoll(gs_.a4(), &place);
+        if (place.active && events_loaded_) {
+            if (place.clear) {
+                events_.textView().clearServiceSignSprite();
+            } else if (events_.textView().hasServicePortrait()) {
+                events_.textView().applyScriptedSignPlace(place.placement, place.dst_x, place.dst_y);
+            }
+            markDirty();
+        }
+        if (sk == ' ' || sk == '\r' || sk == '\n') {
+            fd_keys.space = true;
+            fd_keys.any_key = true;
+            fd_keys.enter = (sk == '\r' || sk == '\n');
+        } else if (sk == 0x1B) {
+            fd_keys.escape = true;
+        } else if (sk > 0 && fd_print_stage_ == 3) {
+            fd_keys.last_ascii = static_cast<char>(sk);
+            fd_keys.any_key = true;
+        }
+        const char ch = static_cast<char>(fd_keys.last_ascii);
+
+        if (fd_print_stage_ == 3) {
+            /* 0x14FC0 -$7F92: 10-char WAFE preamble entry. */
+            if (fd_keys.escape || ch == 0x1B) {
+                overlay_ = PlayOverlay::None;
+                status_message_[0] = '\0';
+                fd_name_len_ = 0;
+                fd_name_buf_[0] = '\0';
+                fd_print_stage_ = 0;
+                mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 3);
+                events_.armDeathStrikes();
+                maybeOpenDeathStrikes();
+                markDirty();
+                return;
+            }
+            if (fd_keys.backspace && fd_name_len_ > 0) {
+                fd_name_buf_[--fd_name_len_] = '\0';
+                markDirty();
+                return;
+            }
+            if ((fd_keys.enter || ch == '\r' || ch == '\n') && fd_name_len_ > 0) {
+                char padded[11];
+                for (int i = 0; i < 10; ++i) {
+                    padded[i] = (i < fd_name_len_) ? fd_name_buf_[i] : ' ';
+                }
+                padded[10] = '\0';
+                fd_name_len_ = 0;
+                fd_name_buf_[0] = '\0';
+                if (op0eFdPasswordOk(padded)) {
+                    fd_print_stage_ = 4;
+                    loadFdPrintChromePage();
+                } else {
+                    /* 0x15474: print Incorrect!; RTS out of 0x14EA4. */
+                    std::snprintf(status_message_, sizeof(status_message_), "Incorrect!");
+                    fd_print_stage_ = 7; /* dismiss on SPACE */
+                }
+                markDirty();
+                return;
+            }
+            if (ch >= 32 && ch < 127 && fd_name_len_ < 10) {
+                fd_name_buf_[fd_name_len_++] = ch;
+                fd_name_buf_[fd_name_len_] = '\0';
+                markDirty();
+            }
+            return;
+        }
+
+        if (fd_keys.escape) {
+            overlay_ = PlayOverlay::None;
+            status_message_[0] = '\0';
+            fd_print_stage_ = 0;
+            markDirty();
+            return;
+        }
+        if (fd_keys.space || fd_keys.any_key) {
+            if (fd_print_stage_ == 0) {
+                /* 0x14A8E key → 0x14A92 fight arm. */
+                overlay_ = PlayOverlay::None;
+                status_message_[0] = '\0';
+                startOp0eFdEncounter();
+                markDirty();
+                return;
+            }
+            if (fd_print_stage_ == 2) {
+                fd_print_stage_ = 3;
+                fd_name_len_ = 0;
+                fd_name_buf_[0] = '\0';
+                std::snprintf(status_message_, sizeof(status_message_),
+                              "Answer= Preamble     Code=");
+                markDirty();
+                return;
+            }
+            if (fd_print_stage_ == 4) {
+                fd_print_stage_ = 5;
+                loadFdPrintChromePage();
+                if (status_message_[0] == '\0') {
+                    fd_print_stage_ = 6;
+                    loadFdPrintChromePage();
+                }
+                markDirty();
+                return;
+            }
+            if (fd_print_stage_ == 5) {
+                fd_print_stage_ = 6;
+                loadFdPrintChromePage();
+                markDirty();
+                return;
+            }
+            if (fd_print_stage_ >= 6) {
+                if (fd_print_stage_ == 7) {
+                    /* Incorrect! dismiss — SCRIPT_ABORT stays 1. */
+                    overlay_ = PlayOverlay::None;
+                    status_message_[0] = '\0';
+                    fd_print_stage_ = 0;
+                    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 1);
+                    markDirty();
+                    return;
+                }
+                overlay_ = PlayOverlay::None;
+                status_message_[0] = '\0';
+                fd_print_stage_ = 0;
+                mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 2);
+                mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_ID,
+                              mm2_gs_u8(gs_.a4(), MM2_GS_SAVED_TOWN_ID));
+                gs_.setScreenId(mm2_gs_u8(gs_.a4(), MM2_GS_SAVED_TOWN_ID));
+                mm2_gs_set_u16(gs_.a4(), MM2_GS_OP0E_SUBMODE, 1);
+                events_.armInnGotoTown();
+                maybeFinishInnRegistry();
+                markDirty();
+                return;
+            }
+            markDirty();
+        }
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::ExchangeOrder) {
+        /* 0x20DE0: two -$7F98('1',max) reads; ESC aborts (0x20F84). */
+        const char ch = static_cast<char>(keys.last_ascii);
+        if (keys.escape || ch == 0x1B) {
+            exchange_first_slot_ = -1;
+            overlay_ = PlayOverlay::None;
+            status_message_[0] = '\0';
+            markDirty();
+            return;
+        }
+        if (ch < '1' || ch > '9') {
+            return;
+        }
+        const int slot = ch - '1';
+        if (slot < 0 || slot >= launch_.party_count) {
+            return;
+        }
+        if (exchange_first_slot_ < 0) {
+            exchange_first_slot_ = slot;
+            std::snprintf(status_message_, sizeof(status_message_), "with (1 - %d)",
+                          launch_.party_count);
+            markDirty();
+            return;
+        }
+        exchangeExplorePartySlots(exchange_first_slot_, slot);
+        exchange_first_slot_ = -1;
+        overlay_ = PlayOverlay::None;
+        status_message_[0] = '\0';
+        markDirty();
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::DismissHireling) {
+        /* 0x141F4: digit pick; only -$796A[slot] >= $18; else re-prompt. */
+        const char ch = static_cast<char>(keys.last_ascii);
+        if (keys.escape || ch == 0x1B) {
+            mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+            overlay_ = PlayOverlay::None;
+            status_message_[0] = '\0';
+            markDirty();
+            return;
+        }
+        if (ch < '1' || ch > '9') {
+            return;
+        }
+        const int slot = ch - '1';
+        if (slot < 0 || slot >= launch_.party_count) {
+            return; /* 0x14298 → re-prompt */
+        }
+        const int16_t ridx = launch_.roster_slots[slot];
+        if (ridx < 0x18) {
+            return; /* not a hireling — re-prompt */
+        }
+        if (!removeHirelingFromParty(ridx)) {
+            return;
+        }
+        mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 3); /* 0x1428A */
+        applyExitFlagCleanup(); /* 0x1429E → -$7D40 */
+        showStatusMessage("Come back real soon."); /* $142A6 */
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::UnlockWho) {
+        /* 0x1AE2E: '1'..'8'; slot < count; condition & $F0 == 0; ESC → $1B. */
+        const char ch = static_cast<char>(keys.last_ascii);
+        if (keys.escape || ch == 0x1B) {
+            overlay_ = PlayOverlay::None;
+            status_message_[0] = '\0';
+            markDirty();
+            return;
+        }
+        if (ch < '1' || ch > '8') {
+            return;
+        }
+        const int slot = ch - '1';
+        if (slot < 0 || slot >= launch_.party_count) {
+            return; /* re-prompt */
+        }
+        const int idx = launch_.roster_slots[slot];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            return;
+        }
+        if ((roster_.records[idx].condition & 0xF0) != 0) {
+            return; /* 0x1AE9E — not eligible; re-prompt */
+        }
+        overlay_ = PlayOverlay::None;
+        status_message_[0] = '\0';
+        finishUnlockWithPartySlot(slot);
+        return;
+    }
+
+    if (overlay_ == PlayOverlay::GameOver) {
+        /* Dismiss → title. Reload roster.dat so the menu sees the last good save
+         * (total wipe deliberately skipped the post-combat write). */
+        if (keys.escape || keys.any_key) {
+            if (data_dir_) {
+                char *const path = mm2_path_scratch_a();
+                if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
+                    (void)mm2_roster_load_file(path, &roster_);
+                }
+            }
+            status_message_[0] = '\0';
+            overlay_ = PlayOverlay::None;
+            back_to_title_ = true;
             markDirty();
         }
         return;
@@ -1653,6 +2049,9 @@ void GameSession::tickOverlayAnimations()
                 changed |= events_.textView().tickAnimation();
             }
         }
+        if (overlay_ == PlayOverlay::SearchIdentify && search_container_.loaded()) {
+            changed |= search_container_.tick();
+        }
     }
     if (changed) {
 #if MM2_HOST_AMIGA
@@ -1728,7 +2127,8 @@ void GameSession::tick(const platform::KeyState &keys)
             return;
         }
         const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
-        if (ch == 'V' && combat_.awaitingCommand()) {
+        /* 0x11B6E: V or Q → -$7E00 view active slot (digit = '1'+-$4F5); turn not spent. */
+        if ((ch == 'V' || ch == 'Q') && combat_.awaitingCommand()) {
             const int slot = combat_.activePartySlot();
             sheet_session_.party_slot = (slot >= 0 && slot < launch_.party_count) ? slot : 0;
             sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
@@ -1782,6 +2182,8 @@ void GameSession::tick(const platform::KeyState &keys)
     mm2_gs_set_u16(gs_.a4(), MM2_GS_ENCOUNTER_REDRAW, 0);
 
     maybeFinishInnRegistry();
+    maybeOpenDeathStrikes();
+    maybeOpenFdPrintChrome();
 
     if (overlay_ != PlayOverlay::None) {
         tickOverlayInput(keys);
@@ -1844,6 +2246,7 @@ void GameSession::tick(const platform::KeyState &keys)
                           prep.container_name);
             std::snprintf(status_message_, sizeof(status_message_), "%s", prep.msg);
             overlay_ = PlayOverlay::SearchIdentify;
+            armSearchContainerArt();
         } else if (prep.msg[0]) {
             showStatusMessage(prep.msg);
         }
@@ -1860,7 +2263,207 @@ void GameSession::tick(const platform::KeyState &keys)
         gameplay::syncCurrentCellFlags(gs_, world_);
         gameplay::sessionInteractionGate(gs_);
     }
+    maybeOpenDeathStrikes();
+    maybeOpenFdPrintChrome();
     maybeOpenTownServiceMenu();
+}
+
+void GameSession::maybeFinishInnRegistry()
+{
+    if (!events_.takePendingInnGotoTown()) {
+        return;
+    }
+    /* ASM @ 0x1A1CE: roster+$0B <- A4-$79F2+1 (town map index 0..4, not event.dat id).
+     * 0x1A1E2: -$79AC := -$79F2 before Goto Town. */
+    const int map_id = static_cast<int>(gs_.screenId());
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_SAVED_TOWN_ID, static_cast<uint8_t>(gs_.screenId()));
+    events::eventInnApplyRegistry(&roster_, &launch_, map_id);
+    if (map_id >= 0 && map_id < 5) {
+        goto_town_filter_ = static_cast<uint8_t>(map_id + 1);
+    }
+    if (data_dir_) {
+        char *const path = mm2_path_scratch_a();
+        if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
+            (void)mm2_roster_save_file(path, &roster_);
+        }
+    }
+    /* 0x1A1F8 Goto Town epilogue GS (UI chrome omitted): */
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_PREV, 0xFF);
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_ID, 0xFF);
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_SIGN_ENV_ID, 7);
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+    mm2_gs_set_u8(gs_.a4(), -0x79E4, 0);
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+    back_to_goto_town_ = true;
+}
+
+void GameSession::maybeOpenDeathStrikes()
+{
+    if (!events_.takePendingDeathStrikes() || overlay_ != PlayOverlay::None) {
+        return;
+    }
+    events::eventVmDeathStrikesLines(status_message_, sizeof(status_message_));
+    overlay_ = PlayOverlay::DeathStrikes;
+    markDirty();
+}
+
+void GameSession::loadFdPrintChromePage()
+{
+    /* 0x1493C / 0x14EA4 print consumers. */
+    status_message_[0] = '\0';
+    char a[200];
+    char b[200];
+    a[0] = b[0] = '\0';
+    switch (fd_print_stage_) {
+    case 0:
+        events::eventVmFormatOp0eFdPtrTable(gs_.a4(), MM2_GS_OP0E_FD_PTR0, 4, status_message_,
+                                           sizeof(status_message_));
+        break;
+    case 2: {
+        events::eventVmFormatOp0eFdPtrTable(gs_.a4(), MM2_GS_OP0E_FD_PTR1, 4, a, sizeof(a));
+        std::snprintf(status_message_, sizeof(status_message_),
+                      "A vaccuum tube sucks the party into\n"
+                      "        the control room...\n%s",
+                      a[0] ? a : "");
+        break;
+    }
+    case 4:
+        std::snprintf(status_message_, sizeof(status_message_),
+                      "         Thank you.\n"
+                      "Recalculating trajectory now...\n"
+                      "Error, Error!  Computer malfunction.\n"
+                      "    Internal program override...");
+        break;
+    case 5:
+        events::eventVmFormatOp0eFdPtrTable(gs_.a4(), MM2_GS_OP0E_FD_PTR2, 14, a, sizeof(a));
+        events::eventVmFormatOp0eFdPtrTable(gs_.a4(), MM2_GS_OP0E_FD_PTR3, 4, b, sizeof(b));
+        if (a[0] && b[0]) {
+            std::snprintf(status_message_, sizeof(status_message_), "%s\n%s", a, b);
+        } else if (a[0]) {
+            std::snprintf(status_message_, sizeof(status_message_), "%s", a);
+        } else {
+            std::snprintf(status_message_, sizeof(status_message_), "%s", b);
+        }
+        break;
+    case 6:
+        events::eventVmFormatOp0eFdPtrTable(gs_.a4(), MM2_GS_OP0E_FD_PTR4, 11, a, sizeof(a));
+        events::eventVmFormatOp0eFdPtrTable(gs_.a4(), MM2_GS_OP0E_FD_PTR5, 10, b, sizeof(b));
+        if (a[0] && b[0]) {
+            std::snprintf(status_message_, sizeof(status_message_), "%s\n%s", a, b);
+        } else if (a[0]) {
+            std::snprintf(status_message_, sizeof(status_message_), "%s", a);
+        } else {
+            std::snprintf(status_message_, sizeof(status_message_), "%s", b);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+void GameSession::startOp0eFdEncounter()
+{
+    fd_await_combat_ = true;
+    fd_print_stage_ = 1;
+    events::eventRunOp0eFdEncounter(gs_, has_monsters_ ? &combat_ : nullptr, &world_);
+    if (!combat_.active()) {
+        /* Fight refused (no monsters.dat) — skip to defeat path. */
+        fd_await_combat_ = false;
+        fd_print_stage_ = 0;
+        mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 1);
+        showStatusMessage("Encounter! (monsters.dat missing — fight skipped)");
+    }
+}
+
+void GameSession::resumeOp0eFdAfterCombat()
+{
+    fd_await_combat_ = false;
+    if (mm2_gs_u8(gs_.a4(), MM2_GS_COMBAT_VICTORY_LATCH) != 0) {
+        /* 0x14AD8 victory → 0x14EA4 control-room + endgame.32 + PTR1 + WAFE. */
+        ensureEndgameArtLoaded();
+        fd_print_stage_ = 2;
+        loadFdPrintChromePage();
+        overlay_ = PlayOverlay::FdPrintChrome;
+    } else {
+        /* 0x14AF6: SCRIPT_ABORT=1 */
+        fd_print_stage_ = 0;
+        mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 1);
+    }
+}
+
+bool GameSession::op0eFdPasswordOk(const char *typed) const
+{
+    /* 0x15060: strcmp vs "WAFE      ".
+     * 0x15034 also requires a party member with +$81 bit5, then 0x15074 re-checks
+     * the count. CODE never bset bit5 (only bit3 @ 0x1528C after success); stock
+     * roster.dat +$81 is all-zero — enforcing bit5 makes the hosted endgame
+     * unwinnable. Remake: password match is the completable gate. */
+    static const char kWafe[11] = "WAFE      ";
+    if (!typed) {
+        return false;
+    }
+    for (int i = 0; i < 10; ++i) {
+        if (typed[i] != kWafe[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void GameSession::ensureEndgameArtLoaded()
+{
+    /* 0x14EC2: -$7C2C(A4-$77D2) loads endgame.32; blit -$7C20 frame0 @ (x=$20,y=$40). */
+    if (has_endgame_ || !data_dir_) {
+        return;
+    }
+    char *path = mm2_path_scratch_a();
+    if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "endgame.32")) {
+        return;
+    }
+    if (mm2_image32_load_file(path, &endgame_) == MM2_IMAGE32_OK && endgame_.frame_count > 0) {
+        has_endgame_ = true;
+    }
+}
+
+void GameSession::armSearchContainerArt()
+{
+    /* 0x1B2CE: jsr -$7FC2(id) — same sign_sprite_load path as OP_0B. */
+    clearSearchContainerArt();
+    if (!data_dir_ || !gs_.valid()) {
+        return;
+    }
+    const int id = events::eventVmSearchContainerAnmId(gs_.a4());
+    /* id $47 → 71.anm: absent from retail ADF + repo; loadFromTableId no-ops. */
+    (void)search_container_.loadFromTableId(data_dir_, id, gfx::AnmLoopMode::Loop, false);
+}
+
+void GameSession::clearSearchContainerArt()
+{
+    if (search_container_.loaded()) {
+        search_container_.unload();
+    }
+}
+
+void GameSession::maybeOpenFdPrintChrome()
+{
+    if (overlay_ != PlayOverlay::None) {
+        return;
+    }
+    if (!events_.takePendingOp0eFdPrintChrome()) {
+        return;
+    }
+    fd_print_stage_ = 0;
+    fd_await_combat_ = false;
+    fd_name_len_ = 0;
+    fd_name_buf_[0] = '\0';
+    events::eventVmScriptedKeyReset(gs_.a4());
+    loadFdPrintChromePage();
+    if (status_message_[0] == '\0') {
+        /* Empty PTR0 — still arm fight after a blank SPACE page. */
+        std::snprintf(status_message_, sizeof(status_message_), "(continue)");
+    }
+    overlay_ = PlayOverlay::FdPrintChrome;
+    markDirty();
 }
 
 void GameSession::maybeOpenTownServiceMenu()
@@ -1874,26 +2477,6 @@ void GameSession::maybeOpenTownServiceMenu()
     town_service_ui_.begin();
     overlay_ = PlayOverlay::TownService;
     markDirty();
-}
-
-void GameSession::maybeFinishInnRegistry()
-{
-    if (!events_.takePendingInnGotoTown()) {
-        return;
-    }
-    /* ASM @ 0x1A1CE: roster+$0B <- A4-$79F2+1 (town map index 0..4, not event.dat id). */
-    const int map_id = static_cast<int>(gs_.screenId());
-    events::eventInnApplyRegistry(&roster_, &launch_, map_id);
-    if (map_id >= 0 && map_id < 5) {
-        goto_town_filter_ = static_cast<uint8_t>(map_id + 1);
-    }
-    if (data_dir_) {
-        char *const path = mm2_path_scratch_a();
-        if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
-            (void)mm2_roster_save_file(path, &roster_);
-        }
-    }
-    back_to_goto_town_ = true;
 }
 
 void GameSession::renderView3D()
@@ -2237,8 +2820,103 @@ void GameSession::renderOverlays()
         compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 128, 255);
         compositor_.drawText(8, 18 * 8, "(ESC to dismiss)", 180, 180, 180, 255);
         break;
+    case PlayOverlay::ExchangeOrder:
+        /* 0x20DE0 strings A4-$6482 / -$647E — host status-line digits. */
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 2);
+        compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 128, 255);
+        compositor_.drawText(8, 18 * 8, "(1-N / ESC)", 180, 180, 180, 255);
+        break;
+    case PlayOverlay::DismissHireling:
+    case PlayOverlay::UnlockWho:
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 2);
+        compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 128, 255);
+        compositor_.drawText(8, 18 * 8, "(1-N / ESC)", 180, 180, 180, 255);
+        break;
+    case PlayOverlay::GameOver: {
+        /* Funeral band after combat_defeat_retreat @ 0x11646 / tones @ 0x7DCC. */
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 4);
+        int row = 0x11;
+        const char *p = status_message_;
+        while (*p && row <= 0x14) {
+            char line[40];
+            int n = 0;
+            while (*p && *p != '\n' && n < 38) {
+                line[n++] = *p++;
+            }
+            line[n] = '\0';
+            if (*p == '\n') {
+                ++p;
+            }
+            compositor_.drawText(8, row * 8, line, 255, 80, 80, 255);
+            ++row;
+        }
+        compositor_.drawText(8, row * 8, "(any key — return to title)", 180, 180, 180, 255);
+        break;
+    }
+    case PlayOverlay::DeathStrikes: {
+        /* 0x14106: win_open(7,6,$21,$11) then print -$6D60[0..9] at (2,1+i). */
+        compositor_.drawConsoleBox(6, 7, 0x1B, 0x0C, 255, 0, 0);
+        gfx::fillCellRect(compositor_, 8, 7, 0x19, 0x0A);
+        int row = 7;
+        const char *p = status_message_;
+        while (*p && row <= 0x10) {
+            char line[40];
+            int n = 0;
+            while (*p && *p != '\n' && n < 38) {
+                line[n++] = *p++;
+            }
+            line[n] = '\0';
+            if (*p == '\n') {
+                ++p;
+            }
+            compositor_.drawText(16, row * 8, line, 255, 255, 255, 255);
+            ++row;
+        }
+        break;
+    }
+    case PlayOverlay::FdPrintChrome: {
+        /* 0x14EA4: endgame.32 @ (32,64) then message band; stage 3 = WAFE entry. */
+        if (has_endgame_ && fd_print_stage_ >= 2 && fd_print_stage_ != 7) {
+#if MM2_HOST_AMIGA
+            platform::blitImage32(&endgame_, 0, 0x20, 0x40, 0);
+#else
+            if (endgame_.frames && endgame_.frame_count > 0 && endgame_.frames[0].rgba) {
+                compositor_.blitRgba(endgame_.frames[0].rgba, endgame_.frames[0].width,
+                                     endgame_.frames[0].height, 0x20, 0x40);
+            }
+#endif
+        }
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 8);
+        int row = 0x11;
+        const char *p = status_message_;
+        while (*p && row <= 0x17) {
+            char line[40];
+            int n = 0;
+            while (*p && *p != '\n' && n < 38) {
+                line[n++] = *p++;
+            }
+            line[n] = '\0';
+            if (*p == '\n') {
+                ++p;
+            }
+            compositor_.drawText(8, row * 8, line, 255, 255, 128, 255);
+            ++row;
+        }
+        if (fd_print_stage_ == 3) {
+            compositor_.drawText(8, row * 8, fd_name_buf_, 255, 255, 255, 255);
+            compositor_.drawGlyph((2 + fd_name_len_) * 8, row * 8, 0x0C, 255, 255, 255);
+        } else if (fd_print_stage_ != 7) {
+            compositor_.drawText(8, 0x18 * 8, "('Space' to continue)", 180, 180, 180, 255);
+        } else {
+            compositor_.drawText(8, 0x18 * 8, "('Space' to dismiss)", 180, 180, 180, 255);
+        }
+        break;
+    }
     case PlayOverlay::SearchIdentify: {
-        /* Identify menu @ 0x1B3F2 — multi-line console band (Search… + 4 options). */
+        /* Identify menu @ 0x1B3F2 — container -$7FC2 over viewport + console band. */
+        if (search_container_.loaded()) {
+            search_container_.blitCentered(compositor_, 0);
+        }
         gfx::fillCellRect(compositor_, 1, 0x11, 38, 8);
         int row = 0x11;
         const char *p = status_message_;
@@ -2411,8 +3089,11 @@ void GameSession::renderFrame(bool overlay_anim_only)
         }
 
         if (overlay_ == PlayOverlay::None || overlay_ == PlayOverlay::StatusMessage ||
-            overlay_ == PlayOverlay::QuitConfirm || overlay_ == PlayOverlay::RestConfirm ||
-            overlay_ == PlayOverlay::TownService || overlay_ == PlayOverlay::SearchIdentify) {
+            overlay_ == PlayOverlay::GameOver || overlay_ == PlayOverlay::QuitConfirm ||
+            overlay_ == PlayOverlay::RestConfirm || overlay_ == PlayOverlay::TownService ||
+            overlay_ == PlayOverlay::SearchIdentify || overlay_ == PlayOverlay::ExchangeOrder ||
+            overlay_ == PlayOverlay::DismissHireling || overlay_ == PlayOverlay::UnlockWho ||
+            overlay_ == PlayOverlay::DeathStrikes || overlay_ == PlayOverlay::FdPrintChrome) {
             /* Status-line prompts and town services draw in the lower console band
              * only (faithful, not fullscreen modals) — keep 3D view + right column. */
             const bool protect_panel = panel == gfx::PlayRightPanel::Protect;

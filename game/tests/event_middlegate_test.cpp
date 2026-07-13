@@ -676,7 +676,7 @@ void testSmithTransactions(int &fails, const Mm2ItemsFile &items)
                "weapon meta 3 -> base*2 + 2000", fails);
         expect(mm2_smith_sell_price(100u) == 50u, "sell price is half buy-style price", fails);
         expect(mm2_smith_identify_cost(0) == 10u, "identify plain item costs 10 gp", fails);
-        expect(mm2_smith_identify_cost(3) == 150u, "identify +3 uses midpoint of 1..300", fails);
+        expect(mm2_smith_identify_cost(3) == 300u, "identify +3 costs meta*100", fails);
     }
 
     /* ---- Buy: deduct items.dat gold, add item to first empty backpack slot. ---- */

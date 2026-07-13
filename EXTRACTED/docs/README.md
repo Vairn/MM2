@@ -36,7 +36,7 @@ Source of truth: `EXTRACTED/docs/`, `EXTRACTED/mm2-ANALYSIS.md`, `tools/`, `edit
 | [`43-exploration-input-and-ingame-options.md`](43-exploration-input-and-ingame-options.md) | **Exploration key dispatch `$1482`** — full key table, Options/Protect panels, Controls screen, char-sheet/cast entry |
 | [`04-party-and-session.md`](04-party-and-session.md) | New game, party copy, session restart |
 | [`05-open-questions.md`](05-open-questions.md) | Unknowns and next trace targets |
-| [`08-event-runtime.md`](08-event-runtime.md) | Event VM dispatch and collision triggers |
+| [`08-event-runtime.md`](08-event-runtime.md) | Event VM — **C++ `EventRuntime` is authoritative**; ASM map + scanner |
 | [`13-time-era-calendar.md`](13-time-era-calendar.md) | In-game calendar, day/night, era |
 | [`14-game-state-struct.md`](14-game-state-struct.md) | `A4` field layout and party state |
 | [`49-data-hunk-mm2_data_00.md`](49-data-hunk-mm2_data_00.md) | **`mm2_data_00.bin` reference** — initialized `A4` data hunk + jump table, `file_offset==EA`, decoded static tables |
@@ -59,7 +59,7 @@ Source of truth: `EXTRACTED/docs/`, `EXTRACTED/mm2-ANALYSIS.md`, `tools/`, `edit
 | [`19-spells-and-item-use.md`](19-spells-and-item-use.md) | `spells.dat` + item use-byte spell index |
 | [`21-map-dat-format.md`](21-map-dat-format.md) | `map.dat` — 60 screens, visual + collision pages |
 | [`06-event-dat-format.md`](06-event-dat-format.md) | `event.dat` — 71-location container format |
-| [`07-event-script-opcodes.md`](07-event-script-opcodes.md) | Script VM opcodes `0x00..0x32` |
+| [`07-event-script-opcodes.md`](07-event-script-opcodes.md) | Script VM opcodes `0x00..0x32` — **matched to `EventRuntime::dispatchOp`** |
 | [`45-event-graphics-opcodes.md`](45-event-graphics-opcodes.md) | **Event VM sprite/sign ops** — `OP_0B`, Corak/Pegasus paths |
 | [`42-event-dsl-format.md`](42-event-dsl-format.md) | **`.mm2evt` script DSL** — `tools/mm2_event_lang/` decompile/patch/roundtrip |
 | [`16-monster-ability-format.md`](16-monster-ability-format.md) | `monsters.dat` — 256 × 26-byte records |
@@ -133,21 +133,23 @@ Remake: `game/src/TitleScreen.cpp` — **320×200**, `Mm2Font8x8.inc`, menu on *
 | **[`events/README.md`](events/README.md)** | **Index of all 71 locations** — triggers, scripts, strings per map |
 | [`40-events-by-location.md`](40-events-by-location.md) | Hub link into `events/` + format cross-refs |
 | [`06-event-dat-format.md`](06-event-dat-format.md) | Location header, triplets, string banks |
-| [`07-event-script-opcodes.md`](07-event-script-opcodes.md) | Opcode argc, names, pseudo-code — **OP_2A/OP_19 found-item buffer** |
+| [`07-event-script-opcodes.md`](07-event-script-opcodes.md) | Opcode argc/names — **source of truth: `game/src/events/EventRuntime.cpp`** |
 | [`42-event-dsl-format.md`](42-event-dsl-format.md) | `.mm2evt` readable script format + patch CLI |
-| [`08-event-runtime.md`](08-event-runtime.md) | Collision `0x80` → interpreter @ `0x172CA` |
+| [`08-event-runtime.md`](08-event-runtime.md) | Loader/scanner/VM — **C++ port map** + ASM `0x172CA` |
 | [`30-event-to-string-path.md`](30-event-to-string-path.md) | When scripts use `str.dat` vs exe text |
 | [`44-event-text-rendering.md`](44-event-text-rendering.md) | **Pixel-exact event text** — draw thunks, window kernel, per-op dest rects, prompt loops |
 | [`37-mount-farview-class-quest-event.md`](37-mount-farview-class-quest-event.md) | Class quests + Juror turn-in (loc 34) |
 | [`36-class-quest-hp-bug.md`](36-class-quest-hp-bug.md) | Class-quest reward HP bug @ `0x9D76` |
 | [`53-nordon-nordonna-quests.md`](53-nordon-nordonna-quests.md) | **Nordon goblet** `0x0A` `(10,2)`, **Nordonna** `(1,2)`, **Feldecarb** `0x0E` `(15,15)` |
 
-**Remake port (2026-07):** town-service menus in `TownServiceMenu.cpp` +
-`PlayTownServiceUi.cpp`; wiki walker in `townServices.js`. Pub/temple intro y/n
-→ menu; blacksmith direct shop — [`28-town-services.md`](28-town-services.md) §1.4.3.
-**Arena Games (`OP_0E 0x08`, ticket items) and Feldecarb Fountain farthing-flick
-(`0x0A` @ Middlegate `(2,10)`) are unrelated** — see doc 28 §5.2.1. Most
-per-location scripts remain unported.
+**Remake port (2026-07):** event VM is implemented in
+`game/src/events/EventRuntime.cpp` (+ helpers) at ~99% ASM fidelity — treat that
+as the opcode/runtime source of truth; docs 07/08 were rewritten to match.
+Town-service menus in `TownServiceMenu.cpp` + `PlayTownServiceUi.cpp`; wiki
+walker in `townServices.js`. Pub/temple intro y/n → menu; blacksmith direct shop
+— [`28-town-services.md`](28-town-services.md) §1.4.3. **Arena Games
+(`OP_0E 0x08`, ticket items) and Feldecarb Fountain farthing-flick (`0x0E` @
+Middlegate `(2,10)`) are unrelated** — see doc 28 §5.2.1.
 
 ---
 
@@ -177,10 +179,11 @@ per-location scripts remain unported.
 
 | Doc | Description |
 |-----|-------------|
-| [`25-audio-sounds-music.md`](25-audio-sounds-music.md) | Paula tones, Controls menu, walk beep |
-| [`25-mm2-music-format.md`](25-mm2-music-format.md) | In-game music blob format |
-| [`26-audio-callpaths-title-death-shared.md`](26-audio-callpaths-title-death-shared.md) | Title music, death tone, shared backend |
-| [`27-mm2-known-songs-catalog.md`](27-mm2-known-songs-catalog.md) | Song id catalog |
+| [`58-amiga-audio-in-exe.md`](58-amiga-audio-in-exe.md) | **Current** — Paula wavetable; 10 DATA sequences + title; remake `mm2::audio` |
+| [`25-audio-sounds-music.md`](25-audio-sounds-music.md) | Controls menu Sounds/Walk Beep (still useful) |
+| [`25-mm2-music-format.md`](25-mm2-music-format.md) | **Superseded / wrong** — mistook save-state + blits for music |
+| [`26-audio-callpaths-title-death-shared.md`](26-audio-callpaths-title-death-shared.md) | **Superseded / wrong** — title “song” was graphics |
+| [`27-mm2-known-songs-catalog.md`](27-mm2-known-songs-catalog.md) | **Superseded** — see doc 58 sequence table |
 
 ---
 

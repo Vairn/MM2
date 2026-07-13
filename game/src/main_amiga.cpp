@@ -2,6 +2,7 @@
 #include "mm2/CppStdCompat.h"
 #include "mm2/states/AppHost.h"
 #include "mm2/platform/Platform.h"
+#include "mm2/platform/Audio.h"
 #include "mm2/ui/CharacterUiKind.h"
 #include "mm2/Mm2Dbg.h"
 
@@ -61,13 +62,17 @@ int main(int argc, char **argv)
     }
 
     if (!mm2::platform::beginDisplay()) {
+        mm2::audio::shutdown();
         mm2::platform::shutdown();
         return 1;
     }
 
+    (void)mm2::audio::init(data_dir);
+
     MM2_DBG("MM2 DBG: entering ACE state loop\n");
     const int rc = mm2_app_run(data_dir, static_cast<int>(ui_kind));
     MM2_DBG("MM2 DBG: app quit\n");
+    mm2::audio::shutdown();
     mm2::platform::shutdown();
     return rc;
 }

@@ -1,21 +1,13 @@
 #pragma once
-// Structured node-graph editor for event.dat, built on imnodes.
-//
-// Each location is a graph of: trigger nodes (tiles that fire an event id) ->
-// event-script nodes (the decoded opcode chain, with editable argument bytes)
-// -> string nodes (text-table entries referenced by show_text opcodes).
-// Argument-byte edits write back into the in-memory file (length-preserving)
-// and persist on Save.
-//
-// DSL: Export/Import .mm2evt via Python mm2_event_lang. Block view shows
-// readable lifted script statements instead of hex opcode rows.
+// Event scripting toolkit: outline | .mm2evt editor | inspector.
 
-#include <map>
 #include <string>
 #include <vector>
 
 #include "app/Section.h"
 #include "core/EventFile.h"
+#include "eventlang/Ast.h"
+#include "widgets/Mm2EvtEditor.h"
 
 namespace mm2 {
 
@@ -30,19 +22,32 @@ public:
     void draw(App& app) override;
 
 private:
-    void drawGraph(App& app, EventLocation& loc);
+    void refreshAst();
+    void syncScriptBuffer();
+    bool compileFromScript(App& app);
     void exportDsl(App& app);
     void importDsl(App& app);
-    void refreshDslCache(App& app);
-    void drawBlockScript(int evt, const std::vector<std::string>& lines);
+    void applyAstToFile(App& app);
+    void ensureSelectedEvent();
+    void selectEvent(int eventId);
+    void drawToolbar(App& app);
+    void drawOutline();
+    void drawEditor();
+    void drawInspector();
+    void drawStmtTree(const std::vector<eventlang::Stmt>& stmts, int depth);
+    void drawProblems();
 
     EventFile file_;
+    eventlang::Location ast_;
+    std::string scriptBuf_;
+    std::string compileError_;
+    std::string compileOkMsg_;
+    Mm2EvtEditor scriptEditor_;
     int selectedLoc_ = 0;
-    int layoutForLoc_ = -1;   // location whose initial node layout was applied
-    bool showStrings_ = true;
-    bool blockView_ = false;
-    int dslCacheLoc_ = -1;
-    std::map<int, std::vector<std::string>> dslScriptBlocks_;
+    int astLoc_ = -1;
+    int selectedEvent_ = -1;
+    bool scriptDirty_ = false;
+    bool outlineFilterScripts_ = true;
 };
 
 }  // namespace mm2

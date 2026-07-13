@@ -108,13 +108,15 @@ public:
         mm2_gs_set_u16(a4_, MM2_GS_TIME_SUBDAY, 1);
     }
 
-    /* Controls defaults @ 0x13CCE: sounds/walk-beep on, disposition 1, delay 0. */
+    /* Controls defaults @ 0x13CCE: sounds/walk-beep on, disposition 1.
+     * Retail delay is 0; on a modern vsync display that is ~2 frames and combat
+     * hit/miss lines are unreadable. Default to 3 (still 0..9 via Controls). */
     void initControlsDefaults()
     {
         mm2_gs_set_u8(a4_, MM2_GS_SOUNDS_FLAG, 1);
         mm2_gs_set_u8(a4_, MM2_GS_WALK_BEEP_FLAG, 1);
         mm2_gs_set_u8(a4_, MM2_GS_DISPOSITION, 1);
-        mm2_gs_set_u8(a4_, MM2_GS_DELAY, 0);
+        mm2_gs_set_u8(a4_, MM2_GS_DELAY, 3);
     }
 
     /* New game @ 0x19B28 clears protect vars -$79A6..-$79AB; panel mode 1. */

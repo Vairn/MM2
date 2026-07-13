@@ -37,4 +37,9 @@ void eventRunFixedEncounter(GameStateView &gs, EventTextView &text, EventVmWait 
 void eventRunTileAmbientEncounter(GameStateView &gs, combat::CombatSession *combat,
                                   const world::MapWorld *world);
 
+/** OP_0E 0xFD / 0x1493C @ 0x14A92: fixed endgame fight — slots
+ *  $FF,$E1,$C2,$C1,$E0, mode $83, clear 5..10, jsr -$7EDE. */
+void eventRunOp0eFdEncounter(GameStateView &gs, combat::CombatSession *combat,
+                             const world::MapWorld *world);
+
 }  // namespace mm2::events

@@ -57,6 +57,7 @@ DOC_SOURCES: list[tuple[str, str]] = [
     ("EXTRACTED/docs/26-combat-overview.md", "Combat-Overview"),
     ("EXTRACTED/docs/26-spell-cast-asm.md", "Spell-Cast-ASM"),
     ("EXTRACTED/docs/35-encounter-tables.md", "Encounter-Tables"),
+    ("EXTRACTED/docs/58-amiga-audio-in-exe.md", "Amiga-Audio-In-Exe"),
     ("EXTRACTED/docs/25-audio-sounds-music.md", "Audio-Sounds-Music"),
     ("EXTRACTED/docs/25-mm2-music-format.md", "MM2-Music-Format"),
     ("EXTRACTED/docs/26-audio-callpaths-title-death-shared.md", "Audio-Title-Death-Paths"),
@@ -372,7 +373,7 @@ def write_home(*, out: Path = OUT) -> None:
 <li><a href="{WIKI_BASE}/Combat-Overview">Combat overview</a> · <a href="{WIKI_BASE}/Combat-System">full ASM trace</a></li>
 <li><a href="{WIKI_BASE}/Town-Services">Town services</a> — pub, temple, guild, training</li>
 <li><a href="{WIKI_BASE}/Spell-Sources">Spell sources</a> — where every spell is obtained</li>
-<li><a href="{WIKI_BASE}/Audio-Sounds-Music">Audio / SFX / music</a> — <code>audio.device</code>, Controls menu</li>
+<li><a href="{WIKI_BASE}/Amiga-Audio-In-Exe">Amiga audio (Paula / DATA)</a> — 10 SFX + title theme · <a href="{WIKI_BASE}/Audio-Sounds-Music">Controls toggles</a></li>
 <li><a href="{WIKI_BASE}/3D-View-and-Game-Screen">3D view &amp; collision</a> — wall pages, auto-map · <a href="{WIKI_BASE}/Exploration-Input-and-Options">exploration keys</a></li>
 <li><a href="{WIKI_BASE}/Events-by-Location">Events per map</a> · <a href="{WIKI_BASE}/Event-Script-Opcodes">opcodes</a> · <a href="{WIKI_BASE}/Event-Text-Rendering">text rendering</a> · <a href="{WIKI_BASE}/Event-to-String-Path">script → text</a></li>
 <li><a href="{WIKI_BASE}/Data-Hunk-mm2-data-00">Data hunk</a> — static <code>A4</code> tables · <a href="{WIKI_BASE}/Town-Services">town services</a></li>
@@ -445,7 +446,7 @@ def write_home(*, out: Path = OUT) -> None:
 > **New here?** Start with [Getting Started](Getting-Started) → [Overview](Overview) → [format inventory](dat-Files-and-Formats).
 > Editing data files? Jump to [MM2ED Editor](MM2ED-Editor).
 > Tracing combat or scripts? [Combat Overview](Combat-Overview) · [Combat System](Combat-System) · [Event Script Opcodes](Event-Script-Opcodes).
-> Audio? [Audio Sounds Music](Audio-Sounds-Music).
+> Audio? [Amiga Audio In Exe](Amiga-Audio-In-Exe) (Paula / remake) · [Controls](Audio-Sounds-Music).
 
 > [!IMPORTANT]
 > **Endianness** — MM2 `.dat` multibyte fields are **little-endian on disk**
@@ -461,7 +462,7 @@ def write_home(*, out: Path = OUT) -> None:
 | Edit `.dat` files | [MM2ED Editor](MM2ED-Editor) + sidebar *Data formats* |
 | Trace combat or scripts | [Combat Overview](Combat-Overview) · [Events by location](Events-by-Location) · [Event Script Opcodes](Event-Script-Opcodes) |
 | Town shops &amp; services | [Town Services](Town-Services) · [Spell Sources](Spell-Sources) · [Event to String Path](Event-to-String-Path) |
-| Audio / walk beep / SFX | [Audio Sounds Music](Audio-Sounds-Music) |
+| Audio / walk beep / SFX | [Amiga Audio In Exe](Amiga-Audio-In-Exe) · [Controls](Audio-Sounds-Music) |
 | Exe-embedded UI strings | [Embedded Exe Strings](Embedded-Exe-Strings) |
 | MM1 (DOS) maps &amp; art | [MM1 Overview](MM1-Overview) · [MAZEDATA](MM1-MAZEDATA-Format) · [MM1 map walker ↗](MM1-Map-Walker) |
 | Browse decoded art | [Gallery](Gallery) |
@@ -552,10 +553,11 @@ def write_sidebar() -> None:
 - [Spells and item use](Spells-and-Item-Use)
 
 #### Audio
-- [Audio, sounds, music](Audio-Sounds-Music)
-- [MM2 music format](MM2-Music-Format)
-- [Title/death audio paths](Audio-Title-Death-Paths)
-- [Known songs catalog](Known-Songs-Catalog)
+- [Amiga audio in exe](Amiga-Audio-In-Exe) ← **Paula / DATA / remake**
+- [Controls: Sounds / Walk Beep](Audio-Sounds-Music)
+- [MM2 music format](MM2-Music-Format) *(superseded)*
+- [Title/death audio paths](Audio-Title-Death-Paths) *(superseded)*
+- [Known songs catalog](Known-Songs-Catalog) *(superseded)*
 
 #### Game systems
 - [Town Services](Town-Services)

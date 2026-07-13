@@ -284,8 +284,8 @@ struct TownSvcSpecialtyResult {
     int menu = -1; /* 0..2 = A..C */
 };
 
-TownSvcSpecialtyResult townSvcTavernSpecialty(Mm2RosterRecord &rec, int map_id, int menu /*0..2*/,
-                                              gameplay::Rng *rng);
+TownSvcSpecialtyResult townSvcTavernSpecialty(uint8_t *a4, Mm2RosterRecord &rec, int map_id,
+                                              int menu /*0..2*/, gameplay::Rng *rng);
 
 /* Food encoder 0x18EC0 + party write 0x019030 (selector 0xC9 A–C). No A4-$6760
  * gold deduct. Writes encoding to every party +$78; +$7C bit0 cleared (food).
@@ -305,6 +305,32 @@ TownSvcFoodEncodeResult townSvcFoodEncodePurchase(Mm2RosterFile *roster,
 TownSvcFoodEncodeResult townSvcDrinkEncodePurchase(Mm2RosterFile *roster,
                                                    const Mm2PartyLaunch *launch, int drink /*0..5*/,
                                                    gameplay::Rng *rng);
+
+/* OP_0E 0xC9/0xCA key D @ 0x191A6: arm Lord's Quest on +$7C (bit2 + mode bit;
+ * food clears bit0 / sets bit3 mask path; drink keeps bit0 / bit4). Returns
+ * members newly armed, or -1 if none (ASM re-prompts A–D). */
+int townSvcQuestLordArm(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool drink);
+
+/* 0x18FBA: party must hold items 0xE2/0xE3/0xE4 (Valor/Honor/Nobility); if so
+ * consume all three and return true. Hoardall completion gate. */
+bool townSvcQuestHoardallItemsReady(Mm2RosterFile *roster, const Mm2PartyLaunch *launch);
+
+/* 0x193AC (+ apply 0x19516): bit2 quest-complete reward then encoding apply.
+ * Food XP $186A0 / drink $F4240; sets bit3 (food) or bit4 (drink), clears bit2.
+ * Returns ASM-style activity count (non-zero → skip A–D picker @ 0x1980A). */
+struct TownSvcQuestCompleteResult {
+    int activity = 0;
+    int members_rewarded = 0;
+    int encodings_applied = 0;
+    uint32_t xp_each = 0;
+};
+
+TownSvcQuestCompleteResult townSvcQuestCompleteReward(Mm2RosterFile *roster,
+                                                     const Mm2PartyLaunch *launch, bool drink,
+                                                     const Mm2ItemsFile *items);
+
+/* 0x1961E gate: any party member with bit2 or +$78 matching drink mode → busy. */
+bool townSvcQuestBusy(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool drink);
 
 /* Combat attack phase @ 0x10C66: if +$78 == monster type and +$7C bit0 (drink),
  * bset +$7C bit1 (armed for gold apply). */

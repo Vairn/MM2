@@ -1,13 +1,14 @@
 #pragma once
 // event.dat script interpreter opcode metadata.
 //
-// Ported from tools/decode_event.py (OPCODES / decompile_op) which was in turn
-// derived from the 68k dispatcher at 0x172CA, jump table 0x17494, handler stubs
-// 0x172D8..0x17484. Opcodes are 0x00..0x32; 0xFF terminates a script record.
+// Truth sources (not EXTRACTED/docs):
+//   - ASM dispatcher 0x172CA, jump table 0x17494, handlers 0x15924..0x17190
+//   - game EventRuntime::dispatchOp / skipTokens
+//   - ROM opcode_len_tbl @ A4-$6CC8 (see eventlang/OpcodeTable + EventVmHelpers)
 //
-// argc < 0 marks the variable-length token-skip family (0x10/0x11/0x2B): the
-// handler reads one selector byte then walks a token stream whose exact length
-// the static decoder cannot resolve, so we consume just the selector byte.
+// Opcodes are 0x00..0x32; 0xFF terminates a script record.
+// argc < 0 marks the token-skip family (0x10/0x11/0x2B): linear parse consumes
+// the selector byte only; CFG lift uses ROM tokenDelta to resolve skip targets.
 
 #include <cstdint>
 #include <cstdio>
@@ -42,7 +43,7 @@ inline const OpcodeInfo& opcodeInfo(uint8_t op) {
         {"OP_0A_PROMPT_YN_B", 0},             // 0A
         {"OP_0B_SHOW_SERVICE_WINDOW", 2},     // 0B
         {"OP_0C_MAP_TRANSITION", 2},          // 0C
-        {"OP_0D_PLAY_SEQUENCE", 1},           // 0D
+        {"OP_0D_PLAY_SOUND_SEQ", 1},          // 0D  → 0x6FB8 audio (not graphics)
         {"OP_0E_EXEC_SELECTOR", 1},           // 0E
         {"OP_0F_END_SCRIPT", 0},              // 0F
         {"OP_10_IF_TRUE_SKIPTOK", -1},        // 10
@@ -51,7 +52,7 @@ inline const OpcodeInfo& opcodeInfo(uint8_t op) {
         {"OP_13_ENCOUNTER_SETUP_B", 10},      // 13
         {"OP_14_CLEAR_TILE_EVENT", 0},        // 14
         {"OP_15_APPLY_PARTY", 3},             // 15
-        {"OP_16_CHECK_MONSTER_PRESENT", 2},   // 16
+        {"OP_16_SCAN_PARTY_ITEMS", 2},        // 16  item id in arg2; equipped+backpack
         {"OP_17_LOAD_VAR_RAW_TO_COND", 2},    // 17
         {"OP_18_APPLY_PARTY_MASKED", 4},      // 18
         {"OP_19_ADD_PARTY_ENTITY", 4},        // 19
@@ -65,18 +66,18 @@ inline const OpcodeInfo& opcodeInfo(uint8_t op) {
         {"OP_21_SET_TILE", 3},                // 21
         {"OP_22_CHECK_ERA_RANGE", 2},         // 22
         {"OP_23_CHECK_DAY_RANGE", 2},         // 23
-        {"OP_24_CHECK_GOLD_TO_COND", 2},      // 24
-        {"OP_25_CHECK_CODE16_TO_COND", 2},    // 25 (linear argc=2; OP_10/11/2B token-skip table length is opcode+1)
+        {"OP_24_PAY_GOLD_TO_COND", 2},        // 24  pool-pay via 0x6ACE
+        {"OP_25_PAY_GEMS_TO_COND", 2},        // 25  pool-pay via 0x6B9A (skip-table quirk)
         {"OP_26_SELECT_MEMBER", 0},           // 26
         {"OP_27_SELECT_MEMBER_B", 0},         // 27
         {"OP_28_CONSUME_ITEM_TO_COND", 2},    // 28
         {"OP_29_SET_ABORT", 0},               // 29
         {"OP_2A_SET_TREASURE", 14},           // 2A
-        {"OP_2B_SKIPTOK", -1},                // 2B
+        {"OP_2B_SKIPTOK_IF_VICTORY", -1},     // 2B  gated by A4-$77BD
         {"OP_2C_ADD_WORD_COUNTER", 1},        // 2C
         {"OP_2D_CHECK_MEMBER_ATTR", 2},       // 2D
         {"OP_2E_OR_MEMBER_FIELD", 2},         // 2E
-        {"OP_2F_CLEAR_INPUT_BUF", 0},         // 2F
+        {"OP_2F_READ_ANSWER", 0},             // 2F  fills -$5C50 (not a silent clear)
         {"OP_30_CHECK_ANSWER", 10},           // 30
         {"OP_31_PARTY_ITERATE_CALL", 3},      // 31
         {"OP_32_COUNT_TITLE_NIBBLE", 1},      // 32
@@ -208,7 +209,7 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
                 return buf;
             }
             break;
-        case 0x0D: if (!args.empty()) { snprintf(buf, sizeof(buf), "play_sequence(#%d)  # canned on-screen sequence @0x06FB8; presentation-only, no game-state writes", args[0]); return buf; } break;
+        case 0x0D: if (!args.empty()) { snprintf(buf, sizeof(buf), "play_sound_seq(#%d)  # -$7E42→0x6FB8 audio; not graphics", args[0]); return buf; } break;
         case 0x0E: if (!args.empty()) {
             static const struct { uint8_t id; const char* name; } kSel[] = {
                 {0x01, "inn"}, {0x02, "training"}, {0x03, "tavern"}, {0x04, "temple"},
@@ -228,7 +229,7 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
         case 0x13: return "encounter_setup_b(10 bytes)";
         case 0x14: return "clear_current_tile_event_flag()";
         case 0x15: if (args.size() >= 3) { snprintf(buf, sizeof(buf), "apply_party(count=0x%02X, 0x%02X, 0x%02X)", args[0], args[1], args[2]); return buf; } break;
-        case 0x16: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "cond = check_monster_present(0x%02X, 0x%02X)", args[0], args[1]); return buf; } break;
+        case 0x16: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "cond = scan_party_items(id=0x%02X)  # arg1=0x%02X discarded", args[1], args[0]); return buf; } break;
         case 0x17: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "cond = var8_raw(id=0x%02X)  # raw variable byte, not a bool (2nd byte 0x%02X discarded)", args[0], args[1]); return buf; } break;
         case 0x18: if (args.size() >= 4) { snprintf(buf, sizeof(buf), "apply_party_masked(count=0x%02X, set=0x%02X, and=0x%02X, or=0x%02X)", args[0], args[1], args[2], args[3]); return buf; } break;
         case 0x19: if (args.size() >= 4) { snprintf(buf, sizeof(buf), "add_party_entity(0x%02X, f3a=0x%02X, f40=0x%02X, f46=0x%02X)", args[0], args[1], args[2], args[3]); return buf; } break;
@@ -248,8 +249,8 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
             break;
         case 0x22: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "cond = (era in [%d..%d])", args[0], args[1]); return buf; } break;
         case 0x23: if (args.size() >= 2) { snprintf(buf, sizeof(buf), "cond = check_day_of_year(0x%02X, 0x%02X)", args[0], args[1]); return buf; } break;
-        case 0x24: { int v = decodeU16Arg(op, args); if (v >= 0) { snprintf(buf, sizeof(buf), "cond = check_gold_at_least(%d)", v); return buf; } } break;
-        case 0x25: { int v = decodeU16Arg(op, args); if (v >= 0) { snprintf(buf, sizeof(buf), "cond = check_code16(0x%04X)", v); return buf; } } break;
+        case 0x24: { int v = decodeU16Arg(op, args); if (v >= 0) { snprintf(buf, sizeof(buf), "cond = pay_gold(%d)  # pool-pay 0x6ACE", v); return buf; } } break;
+        case 0x25: { int v = decodeU16Arg(op, args); if (v >= 0) { snprintf(buf, sizeof(buf), "cond = pay_gems(%d)  # pool-pay 0x6B9A", v); return buf; } } break;
         case 0x26: return "selected = select_party_member()";
         case 0x27: return "selected = select_party_member(mode=1)";
         case 0x28:
@@ -262,7 +263,7 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
             break;
         case 0x29: return "set_abort_and_exit()";
         case 0x2A: return "load_special_block(...)";
-        case 0x2B: { int n = args.empty() ? 0 : args[0]; snprintf(buf, sizeof(buf), "skip_tokens(%d)", n); return buf; }
+        case 0x2B: { int n = args.empty() ? 0 : args[0]; snprintf(buf, sizeof(buf), "if combat_victory: skip_tokens(%d)", n); return buf; }
         case 0x2C: if (!args.empty()) { snprintf(buf, sizeof(buf), "word_counter[-$79B8] += %d  # u16 counter, flag redraw", args[0]); return buf; } break;
         case 0x2D: if (args.size() >= 2) {
             // arg1 bit7=race(+0xE)/bit6=sex(+0xC)/else class(+0xF); bit5=any-mode(else all);
@@ -281,7 +282,7 @@ inline std::string describeOp(uint8_t op, const std::vector<uint8_t>& args,
             snprintf(buf, sizeof(buf), "member[+0x%02X] |= 0x%02X  # classes %s", fieldOff, args[1], hi ? "{3,1}" : "{4,2}");
             return buf;
         } break;
-        case 0x2F: return "clear_input_buffer()";
+        case 0x2F: return "read_answer(buf[-$5C50], max=10)";
         case 0x30: {
             // Stored answer: byte = 0x11A - ascii (0xFA == trailing space).
             std::string decoded;

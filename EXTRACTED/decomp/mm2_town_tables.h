@@ -170,8 +170,7 @@ uint32_t mm2_smith_price(uint32_t base_gold, uint8_t meta);
 uint32_t mm2_smith_sell_price(uint32_t buy_style_price);
 
 /* Identify fee (0x1BF16 category 6 @ 0x1BF48): flags & 0x3F == 0 -> 10 gp; else
- * rng(1, meta*100). The port uses the deterministic midpoint until shop RNG is
- * wired through TownServiceContext. */
+ * meta*100 via mul -$7B54 (0x24C74). Not shop RNG. */
 uint32_t mm2_smith_identify_cost(uint8_t backpack_flags);
 
 /* ------------------------------------------------------------------------- *

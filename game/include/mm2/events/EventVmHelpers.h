@@ -169,7 +169,7 @@ uint32_t eventVmDeductPartyGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2Par
 void eventVmApplyTreasure(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                           const uint8_t block[14]);
 
-/** OP_0D engine_call index → side effects (0x09 = refresh hooks). */
+/** OP_0D → play_sound_seq @ 0x6FB8 (ids 0..9). Index 0x09 also sets exit bit0. */
 void eventVmExecEngineCall(uint8_t *a4, uint8_t index, world::MapWorld *world);
 
 /** OP_24 @ 0x16B54 → -$7E6C → 0x6ACE: if party gold (sum +$66 over slots with
@@ -285,9 +285,11 @@ uint32_t eventVmHealingCostPerChar(int level, int town_index);
  *  Decode: (byte+0x1C), then 0x1D→NUL into A4-$ED2; 0x976E walks C-strings. */
 constexpr int kStrDatSize = 0x1E80;
 constexpr int kStrBankSpan = 0x924;
-/** ASM-clear bank starts: jokes @0, tavern/tip pool @0x5BA (Children/Slayer fill). */
-constexpr uint16_t kStrBankOffs[] = {0x0000, 0x05BA, 0x0EDE, 0x1802, 0x1E80};
+/** DATA hunk A4-$71E8 (mm2_data_00.bin @ 0xE16, BE words): bank0..3 starts,
+ *  bank3 end sentinel, then str.dat size. 0x9666 copies $924 from start. */
+constexpr uint16_t kStrBankOffs[] = {0x0000, 0x063C, 0x0F5C, 0x1286, 0x1844, 0x1E80};
 constexpr int kStrBankCount = 4;
+constexpr int kStrBankTableWords = 6;
 
 /** Seed A4-$71E8 bank offsets (call once after loading str.dat into -$ED6). */
 void eventVmInitStrBankOffsets(uint8_t *a4);
@@ -297,5 +299,45 @@ void eventVmDecodeStrBank(uint8_t *a4, int bank_index, const uint8_t *str_dat, s
 
 /** 0x976E: next C-string in decode buf; advances -$71EA. Returns nullptr at end. */
 const char *eventVmNextStrBankCString(uint8_t *a4);
+
+/** 0x1493C GS: decode bank 3, fill OP_0E FD ptr tables via 0x976E, set -$71DC=$FD,
+ *  clr -$11DE[0..10]. Ptr slots store A4-relative int32 (Amiga stores abs addrs). */
+void eventVmFillOp0eFdStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_len);
+
+/** 0x1D208 GS: decode bank 1, fill tavern rumor/tip/food ptr tables, set -$71DC=$FD. */
+void eventVmFillTavernStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_len);
+
+/** Resolve A4-relative C-string ptr stored by fill helpers. */
+const char *eventVmGsRelCString(const uint8_t *a4, uint32_t rel_u32);
+
+/** Join `count` C-strings from an OP_0E FD ptr table (A4-relative longs) into
+ *  `out`, separated by newlines. Empty slots become blank lines (ASM print loop).
+ *  Used by 0x14A58 (PTR0×4), 0x14F98 (PTR1×4), 0x15142 (PTR2×14 + PTR3×4),
+ *  0x1531E (PTR4×11 + PTR5×10). */
+int eventVmFormatOp0eFdPtrTable(const uint8_t *a4, int32_t table_base, int count, char *out,
+                                size_t out_cap);
+
+/** 0x14106 Death Strikes panel lines (CODE @$1405A..$140F4 via A4-$6D60). */
+void eventVmDeathStrikesLines(char *out, size_t out_cap);
+
+/** 0x1B0B6: env A4-$79E3 → sign_sprite_load id ($46..$4A → NN.anm). */
+int eventVmSearchContainerAnmId(const uint8_t *a4);
+
+/** Pending -$7FBC sign_sprite_place from bit7 choreography @ 0x9888. */
+struct ScriptedKeyPlace {
+    bool active = false;
+    bool clear = false; /* place(-1) → drop handle */
+    uint8_t placement = 0;
+    uint16_t dst_x = 0x40; /* arg2 (-$71DA) */
+    uint16_t dst_y = 0x28; /* arg3 (-$71D8) + 8 @ 0x23E24 */
+};
+
+/** -$7DDC @ 0x97A2 host: pop next plain ASCII from -$119A, or -1 for real input.
+ *  Honors -$71DB delay (0x993e) and bit7 → 0x9888 place stream (-$7FBC).
+ *  Optional `place` receives one sprite place per poll when choreography fires. */
+int eventVmScriptedKeyPoll(uint8_t *a4, ScriptedKeyPlace *place = nullptr);
+void eventVmScriptedKeyReset(uint8_t *a4);
+/** Write up to 255 bytes into -$119A, append $FF, reset cursors. */
+void eventVmScriptedKeyQueue(uint8_t *a4, const uint8_t *bytes, int len);
 
 }  // namespace mm2::events

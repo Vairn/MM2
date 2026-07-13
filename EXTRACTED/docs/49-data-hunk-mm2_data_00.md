@@ -369,7 +369,7 @@ Representative thunks (offset = EA = file offset):
 | `-$7FD4` | `0x002A` | `4EF9` JMP | `0x01D0A` | `walk_beep` (footstep) | Inferred |
 | `-$7F20` | `0x00DE` | `4EF9` JMP | `0x0477E` | `get_party_member_ptr` (×22 calls) | Confirmed |
 | `-$7EDE` | `0x0120` | `4EF9` JMP | `0x051C2` | combat-engine entry (OP_12/13 `jsr -$7EDE`) | Confirmed |
-| `-$7E42` | `0x01BC` | `4EF9` JMP | `0x06FB8` | OP_0D canned on-screen sequence | Confirmed |
+| `-$7E42` | `0x01BC` | `4EF9` JMP | `0x06FB8` | OP_0D `play_sound_seq` (audio; not graphics) | Confirmed |
 | `-$7DFA` | `0x0204` | `4EF9` JMP | `0x092F2` | `event_dat_loader` | Confirmed |
 | `-$7D3A` | `0x02C4` | `4EF9` JMP | `0x175E2` | `event_tile_scanner` thunk | Confirmed |
 | `-$7C62` | `0x039C` | `4EF9` JMP | `0x218EA` | draw-char/glyph (×92 calls) | Inferred |

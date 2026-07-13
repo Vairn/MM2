@@ -91,9 +91,13 @@ void EventRuntime::unload()
     text_.reset();
     pending_town_menu_ = PendingTownMenu::None;
     pending_inn_goto_town_ = false;
+    pending_death_strikes_ = false;
+    pending_fd_print_chrome_ = false;
     pending_skill_buy_member_ = false;
     pending_general_store_member_ = false;
     pending_circus_attr_ = false;
+    pending_quest_encode_stage_ = 0;
+    pending_quest_drink_ = false;
     pending_skill_id_ = 0;
     pending_skill_cost_ = 0;
     ::memset(work_buf_, 0, sizeof(work_buf_));
@@ -133,9 +137,13 @@ bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world
     text_.reset();
     pending_town_menu_ = PendingTownMenu::None;
     pending_inn_goto_town_ = false;
+    pending_death_strikes_ = false;
+    pending_fd_print_chrome_ = false;
     pending_skill_buy_member_ = false;
     pending_general_store_member_ = false;
     pending_circus_attr_ = false;
+    pending_quest_encode_stage_ = 0;
+    pending_quest_drink_ = false;
     pending_skill_id_ = 0;
     pending_skill_cost_ = 0;
     return true;
@@ -144,9 +152,11 @@ bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world
 void EventRuntime::initParsed(GameStateView &gs)
 {
     /* event_system_init @ 0x1754A: walk triplets until 00 00 00.
-     * Castle blobs (locs 63/65/68) have no terminator — leave anchor $FFFF
-     * so the scanner skips normal init and uses queued dispatch only. */
-    if (loc_ && loc_->kind == MM2_EVENT_KIND_CASTLE_BLOB) {
+     * Castle blobs (locs 63/65/68) and overlay banks (60..70) are not
+     * map-entered via this path — leave anchor $FFFF. Overlay string
+     * resolve uses LE@0 from runQueuedDispatch @ 0x176B6 instead. */
+    if (loc_ && (loc_->kind == MM2_EVENT_KIND_CASTLE_BLOB ||
+                 loc_->kind == MM2_EVENT_KIND_OVERLAY_BANK)) {
         string_anchor_ = 0xFFFF;
         mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR, 0xFFFF);
         mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_START, 0);
@@ -552,12 +562,18 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         wait_ = EventVmWait::Space;
         break;
     case 0x08:
+        /* OP_08 @ 0x15D26: -$71DC←$FD then SPACE via -$7DDC scripted buffer. */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPTED_KEY_MODE, 0xFD);
         text_.showSpacePrompt();
         wait_ = EventVmWait::Space;
         break;
     case 0x09:
     case 0x0A:
-        /* OP_09 @ 0x15D3C: clears cond, polls Y/N — draws nothing (doc 44 §3.7). */
+        /* OP_09 @ 0x15D3C: clears cond, polls Y/N — draws nothing (doc 44 §3.7).
+         * OP_0A: -$71DC←$FD then same with scripted source. */
+        if (op == 0x0A) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPTED_KEY_MODE, 0xFD);
+        }
         mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
         wait_ = EventVmWait::YesNo;
         break;
@@ -602,8 +618,10 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
     case 0x0E: {
         /* event_op0e_selector_dispatch @ 0x160C2: SCRIPT_ABORT=1 at entry so
          * the current script ends after the selector returns; default-range
-         * bins set QUEUED_EVENT_ID for the scanner epilogue @ 0x176B6. */
+         * bins set QUEUED_EVENT_ID for the scanner epilogue @ 0x176B6.
+         * 0x160D4: -$7946 = 2 (inn/0xFD overwrite to 1 before their jsr). */
         mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_OP0E_SUBMODE, 2);
         const uint8_t sel = readU8(gs);
         eventExecTownSelector(*this, gs, world, sel, roster_, launch_, items_, text_, wait_,
                               location_id_, service_title_, rng_);
@@ -657,9 +675,7 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
         break;
     case 0x0D: {
-        /* OP_0D @ 0x15EC4 -> thunk -$7E42 -> 0x06FB8: play canned on-screen
-         * sequence #idx (presentation only; no game-state side effects — see
-         * eventVmExecEngineCall). The handler consumes the 1 index byte. */
+        /* OP_0D @ 0x15EC4 -> thunk -$7E42 -> play_sound_seq @ 0x6FB8 (ids 0..9). */
         const uint8_t idx = readU8(gs);
         eventVmExecEngineCall(gs.a4(), idx, &world);
         break;
@@ -1247,7 +1263,9 @@ bool EventRuntime::runQueuedDispatch(GameStateView &gs, world::MapWorld &world)
 
     /* ASM @ 0x176EA: reload home location via event_dat_loader + init.
      * Overlay swap is restored when the overlay script goes idle. */
-    if (saved_loc_ == nullptr && loc_ && loc_->kind != MM2_EVENT_KIND_CASTLE_BLOB) {
+    if (saved_loc_ == nullptr && loc_ &&
+        loc_->kind != MM2_EVENT_KIND_CASTLE_BLOB &&
+        loc_->kind != MM2_EVENT_KIND_OVERLAY_BANK) {
         initParsed(gs);
     } else {
         restoreOverlayIfIdle(gs);
@@ -1270,8 +1288,9 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
     mm2_gs_set_u8(gs.a4(), MM2_GS_SAVED_COND_FLAG, 0);
 
     if (mm2_gs_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR) == 0xFFFF) {
-        if (loc_->kind == MM2_EVENT_KIND_CASTLE_BLOB) {
-            /* No triplet table — fall through to queued path only. */
+        if (loc_->kind == MM2_EVENT_KIND_CASTLE_BLOB ||
+            loc_->kind == MM2_EVENT_KIND_OVERLAY_BANK) {
+            /* No map triplet table — fall through to queued path only. */
         } else {
             initParsed(gs);
         }
@@ -1291,8 +1310,9 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
         text_.clearPersistentOverlays();
     }
 
-    /* Castle blobs have no 00 00 00 terminator — skip the triplet walk. */
+    /* Castle/overlay banks have no map triplet table — skip the walk. */
     if (loc_->kind != MM2_EVENT_KIND_CASTLE_BLOB &&
+        loc_->kind != MM2_EVENT_KIND_OVERLAY_BANK &&
         mm2_gs_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR) != 0xFFFF) {
         int pos = 0;
         while (pos + 2 < MM2_GS_EVENT_WORK_SIZE) {
@@ -1361,7 +1381,18 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
     }
 
     if (wait_ == EventVmWait::Space) {
-        if (!keys.space && !keys.enter && !keys.any_key) {
+        /* OP_07 real keys; OP_08 / FD mode → -$7DDC; ASM loops until $20. */
+        events::ScriptedKeyPlace place{};
+        const int sk = eventVmScriptedKeyPoll(gs.a4(), &place);
+        if (place.active) {
+            if (place.clear) {
+                text_.clearServiceSignSprite();
+            } else if (text_.hasServicePortrait()) {
+                text_.applyScriptedSignPlace(place.placement, place.dst_x, place.dst_y);
+            }
+        }
+        const bool scripted_space = (sk == ' ' || sk == '\r' || sk == '\n');
+        if (!scripted_space && !keys.space && !keys.enter && !keys.any_key) {
             return true;
         }
         text_.clearSpacePrompt();
@@ -1400,12 +1431,45 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
     }
 
     if (wait_ == EventVmWait::YesNo) {
-        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        events::ScriptedKeyPlace place{};
+        const int sk = eventVmScriptedKeyPoll(gs.a4(), &place);
+        if (place.active) {
+            if (place.clear) {
+                text_.clearServiceSignSprite();
+            } else if (text_.hasServicePortrait()) {
+                text_.applyScriptedSignPlace(place.placement, place.dst_x, place.dst_y);
+            }
+        }
+        char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (sk > 0) {
+            ch = static_cast<char>(std::toupper(static_cast<unsigned char>(sk)));
+        }
         if (ch != 'Y' && ch != 'N') {
             return true;
         }
         mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, ch == 'Y' ? 1 : 0);
-        if (hasPendingTownMenu()) {
+        if (pending_quest_encode_stage_ == 1) {
+            if (ch == 'Y') {
+                pending_quest_encode_stage_ = 2;
+                /* 0x198A0..0x19912: difficulty caption + A–D labels (exe 0x18B5A..). */
+                const char *lord = pending_quest_drink_ ? "Slayer" : "Hoardall";
+                char buf[320];
+                std::snprintf(buf, sizeof(buf),
+                              "At what level of difficulty do you\n"
+                              "wish to aid Lord %s?\n"
+                              "A) Page's Quest\n"
+                              "B) Squire's Quest\n"
+                              "C) Knight's Quest\n"
+                              "D) Lord's Quest\n"
+                              "%s (A-D)?",
+                              lord, lord);
+                text_.showOp02(buf, 19);
+                wait_ = EventVmWait::LetterSelect;
+            } else {
+                pending_quest_encode_stage_ = 0;
+                wait_ = EventVmWait::None;
+            }
+        } else if (hasPendingTownMenu()) {
             finishPendingTownMenu(gs, ch == 'Y');
         } else {
             wait_ = EventVmWait::None;
@@ -1557,6 +1621,49 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
         return true;
     }
 
+    if (wait_ == EventVmWait::LetterSelect) {
+        /* 0x19962: ESC / A–D; A–C → 0x19030 encode; D → 0x191A6 lord arm. */
+        if (keys.escape || keys.last_ascii == 27) {
+            pending_quest_encode_stage_ = 0;
+            wait_ = EventVmWait::None;
+            text_.showOp02("Then begone, knave!", 19);
+            text_.showSpacePrompt();
+            wait_ = EventVmWait::Space;
+            return true;
+        }
+        const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        if (ch < 'A' || ch > 'D') {
+            return true;
+        }
+        const int choice = ch - 'A';
+        pending_quest_encode_stage_ = 0;
+        wait_ = EventVmWait::None;
+        if (choice <= 2) {
+            if (roster_ && launch_) {
+                if (pending_quest_drink_) {
+                    (void)townSvcDrinkEncodePurchase(roster_, launch_, choice, rng_);
+                } else {
+                    (void)townSvcFoodEncodePurchase(roster_, launch_, choice, rng_);
+                }
+            }
+            text_.showOp02("The quest I have decided upon for your\n"
+                           "party, is to seek the target.",
+                           19);
+        } else {
+            const int armed = townSvcQuestLordArm(roster_, launch_, pending_quest_drink_);
+            if (armed < 0) {
+                /* ASM returns -1 → re-prompt A–D. */
+                pending_quest_encode_stage_ = 2;
+                wait_ = EventVmWait::LetterSelect;
+                return true;
+            }
+            text_.showOp02("Lord's Quest accepted.", 19);
+        }
+        text_.showSpacePrompt();
+        wait_ = EventVmWait::Space;
+        return true;
+    }
+
     if (wait_ == EventVmWait::HexDigit) {
         /* OP_0E 0x7E @ 0xD5D0 / 0xD5FA: -$7F8C digit; reject > $F. */
         int digit = -1;
@@ -1606,6 +1713,26 @@ void EventRuntime::armFreeTeleportUi()
     pending_free_teleport_x_ = 0;
     text_.showOp02("What is the magical location:\n       X ( 0-15 ) ?", 19);
     wait_ = EventVmWait::HexDigit;
+}
+
+void EventRuntime::armQuestEncodeUi(bool drink)
+{
+    /* 0x1980A: intro from A4-$6B8E then Y/N @ 0x197D4; A–D @ 0x19962. */
+    pending_quest_encode_stage_ = 1;
+    pending_quest_drink_ = drink;
+    if (drink) {
+        text_.showOp02("Heads of monstrous beasts adorn the\n"
+                       "walls in this room.  Will you gather\n"
+                       "more trophies for Lord Slayer (y/n)?",
+                       19);
+    } else {
+        text_.showOp02("The huge chamber is overstocked with\n"
+                       "many unusual items.  Lord Hoardall\n"
+                       "begs your party for a favor.  Will\n"
+                       "you gather more items for him (y/n)?",
+                       19);
+    }
+    wait_ = EventVmWait::YesNo;
 }
 
 }  // namespace mm2::events

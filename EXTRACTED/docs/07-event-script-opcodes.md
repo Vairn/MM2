@@ -1,97 +1,89 @@
 # event.dat Script Interpreter (Opcode Map)
 
-This note decodes the bytecode dispatcher used by the `event.dat` script section.
+Bytecode dispatcher for `event.dat` scripts (`0x00..0x32`; `0xFF` ends a record).
 
-Derived from:
-- dispatch loop at `0x172CA` / `0x1750C`
-- opcode jump table at `0x17494`
-- handler stubs at `0x172D8..0x17484`
+## Source of truth
+
+| Layer | Role |
+|-------|------|
+| **`game/src/events/EventRuntime.cpp`** (`dispatchOp`) | **Authoritative opcode semantics** for the remake (~99% ASM-faithful). Prefer this over older RE notes in this file. |
+| Helpers | `EventVmHelpers.cpp`, `EventTownServices.cpp`, `EventCombatEncounter.cpp`, `EventPartyEffects.cpp`, `ServiceSignResolver.cpp` |
+| Headers | `game/include/mm2/events/EventRuntime.h`, `EventVmHelpers.h`, `EventFieldMap.h` |
+| ASM provenance | handlers below; jump table `0x17494`; fetch loop `0x1750C` |
+
+When this doc and the C++ port disagree, **update the doc** (or document a deliberate port gap). Do not re-introduce superseded RE guesses (e.g. `OP_0D` as graphics, `OP_25` as tickets, `OP_32` as a var load, `OP_2F` as a silent clear).
 
 ## Core Behaviour
 
-- Bytecode opcodes are in range `0x00..0x32`.
-- `0xFF` terminates a script block.
-- Invalid opcodes branch to `0x1748C` and set abort flag `A4-$8616`.
-- After each opcode, control returns to `0x1750C` to fetch next byte.
+- Opcodes `0x00..0x32`; `0xFF` terminates a script block.
+- Invalid (`>= 0x33`) → abort (`A4-$79EA` / `MM2_GS_SCRIPT_ABORT`).
+- After each op, fetch resumes at `0x1750C` unless wait/abort/end.
+- Port waits: `EventVmWait::{Space,YesNo,MemberSelect,Answer,HexDigit,LetterSelect}`.
 
-## Verification Against ASM (cross-checked)
+## Layout / scanner (ASM + C++ agree)
 
-The following were re-confirmed directly from `mm2.capstone.asm`:
+- **Init `0x1754A` / `EventRuntime::initParsed`**: triplets `(pos, event, cond)` until `00 00 00`; string anchor = terminator + LE u16; script start = terminator+5.
+- **Pos** = `(y<<4)|x`. **Cond** AND-masked with facing context (`A4-$6BE6`); skip if zero.
+- **Pool seek `0x17262`**: skip N `0xFF`-delimited records. Mix of bytecode and plain text.
+- **Castle blobs** locs 63/65/68: no terminator → queued dispatch only (`runQueuedDispatch`).
 
-- **Tile-event scanner `0x1754A`**: triplet table is 3-byte groups `(pos, event, cond)`
-  read from offset 0, terminated by the first `00 00 00` group. String-table
-  offset = `(terminator+3) + str_rel_word`; script PC start = `terminator+5`.
-  This matches `decode_event.decode_location` exactly.
-- **Position byte** = `(row<<4)|col` i.e. `(y<<4)|x` (`0x17608`-`0x17618`),
-  confirming the `(y,x)` trigger order.
-- **Cond byte** is AND-masked with the direction/context byte and the event is
-  skipped when the result is zero (`0x17682` `and.b` + `beq`).
-- **Event id** selects a record in one `0xFF`-delimited pool (skip loop at
-  `0x17262`). The pool mixes opcode scripts and plain-text records.
-- **Dispatch** `0x172CA` -> table `0x17494`; valid opcode range `0x00..0x32`
-  (`cmp.l #$33` at `0x174FA`).
-- **`argc` fix**: `OP_03` reads 1 byte (was previously logged as 0).
-- **Special records**: locations 63, 65, 68 contain no `00 00 00` terminator and
-  are *not* processed by the tile-event scanner (castle / Hall-of-Spells style
-  data); the decoder now flags these as unreliable.
+## Opcode Table (matches C++ `dispatchOp`)
 
-## Opcode Table (Current Decode)
+`argc` = argument bytes after the opcode (token-skip ops: 1 count byte + variable walk). Token-skip **table** lengths: `eventVmTokenDelta` / `EXTRACTED/event_token_len_table.json` (not always `1+argc` — see §SKIPTOK).
 
-`argc` is inferred from `read_u8/read_u16/read_u24` helper usage in each handler.
-
-| Op | Handler | argc | Notes |
-|----|---------|------|-------|
-| `00` | `0x1748C` | 0 | invalid/abort |
-| `01` | `0x15924` | 1 | show text; `u8` string index (via `0x15884`->`0x155BE`) |
-| `02` | `0x15942` | 1 | show text block; `u8` string index (stub also pushes const `0x13`) |
-| `03` | `0x159CE` | 1 | show text; calls `0x15942` (const `0x11`) which reads `u8` string index |
-| `04` | `0x159F4` | 1 | show text above door; `u8` string index |
-| `05` | `0x15A46` | 1 | show text popup A; `u8` string index |
-| `06` | `0x15AEE` | 1 | show text popup B; `u8` string index |
-| `07` | `0x15CE6` | 0 | wait-loop until SPACE key, then continue |
-| `08` | `0x15D26` | 0 | wait for key (sets cursor mode `0xFD`, calls wait helper `0x15CE6`) |
-| `09` | `0x15D3C` | 0 | y/n prompt, writes result into condition flag |
-| `0A` | `0x15D9A` | 0 | y/n prompt variant (mode `0xFD`, calls `0x15D3C`) |
-| `0B` | `0x15DB0` | 2 | service signboard sprite: `u8` **sign index** (mapped to a sign `.anm` id by `0x15756`, **not** a string-table index), `u8` placement; **only VM opcode that blits a `.anm` signboard** — see [45-event-graphics-opcodes.md](45-event-graphics-opcodes.md) |
-| `0C` | `0x15E12` | 2 | map transition to `(u8 dest, u8)` |
-| `0D` | `0x15EC4` | 1 | `u8` index 0..9 -> thunk `-$7E42` -> `0x06FB8`: play canned on-screen sequence (table `-$7232[idx]`, glyph table `-$7252`, render `0x77AA`); **no game-state side effects** |
-| `0E` | `0x160C2` | 1 | selector dispatch (see selector table below) |
-| `0F` | `0x162A6` | 0 | **end/return script** (sets stop flag, calls cleanup `0x171AC`) |
-| `10` | `0x162B8` | var | IF(cond) skip N token-stream entries |
-| `11` | `0x162DC` | var | IF(!cond) skip N token-stream entries |
-| `12` | `0x16300` | **12** | fixed encounter: 10 monster-type ids → `A4-$11DE[0..9]`; mode `A4-$796B`=`0x80`; tail1 → `A4-$11D4` (overflow/breed type), tail2 → `A4-$77BE` (live count); then `jsr -$7EDE` combat + abort. See §"OP_12/OP_13 encounter setup" |
-| `13` | `0x16386` | **10** | seeded-random encounter: calls `0x16300` with flag=1 → mode `A4-$796B`=`0`, no tail bytes (clears `-$11D4`/`-$77BE`); random picker `0x1213E` augments the 10 seeded slots |
-| `14` | `0x16398` | 0 | clear current tile event high-bit / clear runtime event flag |
-| `15` | `0x16426` | **3** | apply state to party members (`u8 count, u8, u8`; 4th byte only when flag=1) |
-| `16` | `0x16520` | 2 | scan party members for item arg2: reads 2 bytes (arg1 discarded, only arg2 used); for each member (bound `A4-$795A`, ptr via `0x477E`) `cond += Σ_{m=0..5}(rec[0x3A+m]==arg2 ‖ rec[0x28+m]==arg2)`, break at first matching member. `+0x28`/`+0x3A` = equipped/backpack item-id runs |
-| `17` | `0x165A4` | 2 | load condition byte from resolved variable pointer |
-| `18` | `0x165C6` | **4** | `OP_15` handler with flag=1 (`u8 count, set, and, or`) -> masked party apply |
-| `19` | `0x165D8` | 4 | **give item to party**: `arg1, id, charges, flags`. cond=0 on entry; if `arg1>=0x80` id = cond_flag (pre-clear). Place in first member's first empty backpack id slot: `id→rec[0x3A+m]`, `charges→rec[0x40+m]`, `flags→rec[0x46+m]` (SoA), cond=1. All-full → found-item buffer `A4-$3F1C`/`A4-$794C` |
-| `1A` | `0x166F8` | 2 | store `u8` into resolved variable pointer |
-| `1B` | `0x16724` | 1 | clear cond unless `cond >= u8` (threshold gate) |
-| `1C` | `0x16742` | 1 | `cond_flag = rng_roll(1,u8)` via `-$7BB4`→`0x22BC6` (raw roll byte, not boolean) |
-| `1D` | `0x16762` | 1 | `(*A4-$7E84)(u8*7+1)` — engine dispatch via runtime A4 pointer; no VM-level state change |
-| `1E` | `0x16780` | 1 | busy-wait `u8` iterations: each `(*A4-$7BC0)(10)` delay + `(*A4-$7BD2)` input poll, break on keypress. Presentation/timing only |
-| `1F` | `0x1690E` | 6 | apply effect to party members (selector + values via `0x167B0`) |
-| `20` | `0x16A22` | **6** | party-effect variant (calls `0x1690E` with mode=1) |
-| `21` | `0x16A34` | 3 | set tile data at `(y,x)` (arg1 nibbles) into arrays `-$55BA`/`-$54BA` |
-| `22` | `0x16A9E` | 2 | set condition if **current era** (`-$79B5`, low byte of era word) is in `[lo, hi]` — era/time-range gate |
-| `23` | `0x16ADA` | 2 | day-of-year gate. day = low byte of `-$79DE[era]`; **arg1=`0xB5`** → cond=(day odd), **arg1=`0xB6`** → cond=(day even), else cond=(`arg1<=day<=arg2`). See §OP_23 |
-| `24` | `0x16B54` | 2 | party gold pool-pay (`-$7E6C`→`0x6ACE`): sum `+$66`, deduct amount, pool remainder → cond |
-| `25` | `0x16B82` | 2 | party gems pool-pay (`-$7E66`→`0x6B9A`): sum `+$5C`, deduct amount, pool remainder → cond (`hi,lo`) |
-| `26` | `0x16BC0` | 0 | prompt to select a party member (ESC `0x1B` ends script) |
-| `27` | `0x16BC0` | 0 | select-party-member variant (input mode 1) |
-| `28` | `0x16C86` | 2 | consume item id (arg1) from party inventory -> condition flag |
-| `29` | `0x16D08` | 0 | force abort/exit flag |
-| `2A` | `0x16D16` | 14 | fill found-item/treasure buffer: `u24 gold/exp→A4-$3F10, u16 gems→A4-$3F12, 3×(id→A4-$3F1C, charges→A4-$3F16, flags→A4-$3F19)`, sentinel `A4-$794C=$FF` (does NOT distribute; see §Found-item buffer) |
-| `2B` | `0x16D74` | var | `u8` + token-skip walk |
-| `2C` | `0x16D98` | 1 | add `u8` to state var `-$79B8`, flag redraw |
-| `2D` | `0x16DBA` | 2 | match party attribute vs nibble -> cond. arg1: bit7=race(`+0xE`)/bit6=sex(`+0xC`)/else class(`+0xF`); bit5=any-mode(else all); low nibble=val1; if `arg1&0xE0==0`, `arg2&0xF`=val2 |
-| `2E` | `0x16F50` | 2 | OR arg2 into member `+(uint8)(arg1-0x6E)+0x51` for classes {4,2} (or {3,1} if arg1>=0x80, arg1&=0x7F) |
-| `2F` | `0x16FEA` | 0 | clear/space-fill input buffer `-$5C50` |
-| `30` | `0x17034` | **10** | **answer/password check**: 10 bytes vs player input; `char = 0x11A - byte` (`0xFA`=space) |
-| `31` | `0x170BC` | 3 | sets `EXIT_FLAGS` bit1; reads member-spec byte + u16 value (`arg1>=0x80` → value from cond_flag); per resolved member calls engine op `(*A4-$7F08)(rec, value, &out×3)`, then `(*A4-$7F14)` → sets script-abort if nonzero |
-| `32` | `0x17190` | 1 | cond = party class-nibble count (`-$7F2C`→`0x04614`/`0x45C4`; record+0x50 nibbles == id, over living members) |
+| Op | Handler | argc | C++ / verified semantics |
+|----|---------|------|--------------------------|
+| `00` | `0x1748C` | 0 | invalid → `SCRIPT_ABORT` |
+| `01` | `0x15924` | 1 | show text `str[u8]`; `EXIT_FLAGS \|= 1` |
+| `02` | `0x15942` | 1 | text block `str[u8]` (window height const `0x13`); `EXIT_FLAGS \|= 2` |
+| `03` | `0x159CE` | 1 | tall text block `str[u8]` (prep + `OP_02` height `0x11`); `EXIT_FLAGS \|= 3` |
+| `04` | `0x159F4` | 1 | door label `str[u8]`; skip draw if `-$79E1` (can't-see) ≠ 0 |
+| `05` | `0x15A46` | 1 | popup A `str[u8]`; same can't-see gate |
+| `06` | `0x15AEE` | 1 | outdoor signpost `str[u8]`; `-`→`{` rewrite; can't-see gate |
+| `07` | `0x15CE6` | 0 | wait SPACE (`EventVmWait::Space`) |
+| `08` | `0x15D26` | 0 | wait key (same SPACE wait in port) |
+| `09` | `0x15D3C` | 0 | clear cond; Y/N → `cond_flag` (draws nothing) |
+| `0A` | `0x15D9A` | 0 | Y/N variant (same wait) |
+| `0B` | `0x15DB0` | 2 | **signboard `.anm` only**: `u8` sign index → `0x15756` table, `u8` placement; **not** a string index; `EXIT_FLAGS \|= 4`. [45-event-graphics-opcodes.md](45-event-graphics-opcodes.md) |
+| `0C` | `0x15E12` | 2 | map transition `(dest_screen, dest_tile)` + remaps; then end script |
+| `0D` | `0x15EC4` | 1 | **`play_sound_seq`** via `-$7E42`→`0x6FB8` (ids 0..9; walk-beep / Sounds gates). **Audio**, not a graphics sequence. Index `0x09` also sets exit bit0 in port |
+| `0E` | `0x160C2` | 1 | selector dispatch; sets `SCRIPT_ABORT` at entry; see §OP_0E |
+| `0F` | `0x162A6` | 0 | end script / cleanup `0x171AC` |
+| `10` | `0x162B8` | var | if `cond_flag` → skip N tokens (`0x157FC`) |
+| `11` | `0x162DC` | var | if !`cond_flag` → skip N tokens |
+| `12` | `0x16300` | **12** | fixed encounter: 10 monster ids + 2 tail bytes → combat setup. See §OP_12/13 |
+| `13` | `0x16386` | **10** | seeded-random encounter (10 ids; mode 0 + random picker) |
+| `14` | `0x16398` | 0 | clear tile event bit7 (`-$54BA` + `-$55D6`) |
+| `15` | `0x16426` | **3** | party field **test**: member-spec, selector, val → OR into `cond_flag` (`EventFieldMap`) |
+| `16` | `0x16520` | 2 | **party item scan** (arg1 discarded; arg2 = item id): equipped `+0x28` + backpack `+0x3A`; cond = match count on first hit member |
+| `17` | `0x165A4` | 2 | `cond_flag = *var(id)` **raw byte** (2nd arg discarded); `eventVmLoadVar` |
+| `18` | `0x165C6` | **4** | party field **masked write** `(f&and)\|or` (same engine as `OP_15`) |
+| `19` | `0x165D8` | 4 | give item: member-spec, id, charges, flags → first empty backpack; else found-item overflow; cond=1 if placed |
+| `1A` | `0x166F8` | 2 | store `u8` into var id (id, value — **no** index byte) |
+| `1B` | `0x16724` | 1 | if `cond < threshold` → clear cond |
+| `1C` | `0x16742` | 1 | `cond_flag = rng(1,u8)` **raw roll** |
+| `1D` | `0x16762` | 1 | audio wait helper `-$7E84`→`0x6798`(arg×7+1); no GS write |
+| `1E` | `0x16780` | 1 | timed busy-wait (presentation only; headless no-op) |
+| `1F` | `0x1690E` | 6 | party effect add/sub (`EventPartyEffects`) |
+| `20` | `0x16A22` | **6** | party effect variant (mode=1) |
+| `21` | `0x16A34` | 3 | patch map tile `(y,x)` visual+collision; `EXIT_FLAGS \|= 4` |
+| `22` | `0x16A9E` | 2 | `cond = (era_low ∈ [lo,hi])` |
+| `23` | `0x16ADA` | 2 | day gate: `0xB5`=odd, `0xB6`=even, else `[arg1,arg2]` inclusive. See §OP_23 |
+| `24` | `0x16B54` | 2 | **gold pool-pay** LE u16 via `0x6ACE` (check+deduct+pool); cond=success |
+| `25` | `0x16B82` | 2 | **gems pool-pay** BE u16 via `0x6B9A`; **not** tickets/keys. Skip-table quirk: see §SKIPTOK |
+| `26` | `0x16BC0` | 0 | select party member → `EventVmWait::MemberSelect` |
+| `27` | `0x16BC0` | 0 | same (alternate input path) |
+| `28` | `0x16C86` | 2 | backpack-only consume (arg1 discarded; arg2=id) → cond |
+| `29` | `0x16D08` | 0 | `SCRIPT_ABORT=1` |
+| `2A` | `0x16D16` | 14 | fill found-item buffer only (Search distributes later) |
+| `2B` | `0x16D74` | var | skip N tokens **only if** combat-victory latch `A4-$77BD` set |
+| `2C` | `0x16D98` | 1 | word counter `-$79B8 += u8`; `EXIT_FLAGS \|= 1` |
+| `2D` | `0x16DBA` | 2 | match party class/sex/race (any/all); see dispatch comments |
+| `2E` | `0x16F50` | 2 | OR arg2 into member field for class pair {4,2} or {3,1} |
+| `2F` | `0x16FEA` | 0 | **read answer** into `-$5C50` (up to 10 chars); `EventVmWait::Answer` — not a silent clear |
+| `30` | `0x17034` | **10** | password: `toupper(input[i]) == (0x11A - expected[i])` |
+| `31` | `0x170BC` | 3 | damage iterate (`0x4952`); living-party abort if none left |
+| `32` | `0x17190` | 1 | `cond =` count of living members' `record+0x50` nibbles == id (titles: Crusader/Heroic/…) — **not** a var load |
 
 ## Notes on `*_SKIPTOK` Opcodes
 
@@ -115,18 +107,18 @@ It is **not** simply `1 + argc` for every opcode — 2 genuine ROM discrepancies
 - **`OP_00` (invalid):** ROM skip delta is **`0`**, not `1`. Only matters if a
   corrupt/pathological script skip-walks over a literal `0x00` byte (never
   legitimately emitted).
-- **`OP_25` (check-code16):** the handler reads **2** argument bytes when
-  *executed* (own length 3 = `event_op25_code_check` @ `0x16B82`, two `jsr
-  $155BE` byte reads combined into a `u16`), but the ROM's skip-table entry
-  is only **2** (opcode + 1 byte) — a genuine off-by-one in the original
-  game's static length table. A skip walk (`OP_10`/`OP_11`/`OP_2B`) that
-  passes **over** an `OP_25` token (rather than executing it) under-counts
-  by one byte and permanently desyncs the parse cursor by 1 for the rest of
-  that script. Confirmed **not reachable** in the shipped `event.dat` (no
-  location's `OP_10`/`OP_11`/`OP_2B` skip range ever contains an `OP_25`
-  token — verified by scanning every location/segment with the node-based
-  decoder), so this is a byte-exactness fix with no observable gameplay
-  effect today, kept for 100% ASM fidelity per CLAUDE.md.
+- **`OP_25` (gems pool-pay):** the handler reads **2** argument bytes when
+  *executed* (own length 3 = `event_op25` @ `0x16B82` → `0x6B9A`), but the
+  ROM's skip-table entry is only **2** (opcode + 1 byte) — a genuine
+  off-by-one in the original game's static length table. A skip walk
+  (`OP_10`/`OP_11`/`OP_2B`) that passes **over** an `OP_25` token (rather
+  than executing it) under-counts by one byte and permanently desyncs the
+  parse cursor by 1 for the rest of that script. Confirmed **not reachable**
+  in the shipped `event.dat` (no location's `OP_10`/`OP_11`/`OP_2B` skip
+  range ever contains an `OP_25` token — verified by scanning every
+  location/segment with the node-based decoder), so this is a byte-exactness
+  fix with no observable gameplay effect today, kept for 100% ASM fidelity
+  per CLAUDE.md.
 
 **Port:** `eventVmTokenDelta()` (`game/include/mm2/events/EventVmHelpers.h` /
 `.cpp`) is the byte-exact table, consumed by `EventRuntime::skipTokens` (via
@@ -236,14 +228,18 @@ glyph loop, service windows).
 | `0x5F` | `_` | Underline bar |
 | `0x40` | `@` | Line break (stored in strings; renderer sees `0x0A`) |
 
-## Semantics Confirmed in This Pass
+## Semantics Confirmed (C++ + ASM)
 
 - `0x22` (`0x16A9E`) range-checks current era (`A4-$79B5` low byte) against
   script `[lo, hi]` args and writes boolean to condition flag `A4-$7951`.
 - `0x10`/`0x11` branch via token-skip helper `0x157FC`, gated by `A4-$7951`.
 - `0x14` clears current tile's visited/event bit in `A4-$54BA` and clears runtime flag byte `A4-$55D6` bit 7.
 - `0x29` sets abort flag `A4-$79EA = 1`.
-- `0x32` copies a variable byte (via engine thunk `-$7F2C`) into condition flag `A4-$7951`.
+- `0x32` sets `cond_flag` to the living-party **title-nibble count**
+  (`-$7F2C`→`0x04614` / `record+0x50`) — **not** a variable load.
+- `0x0D` plays a sound sequence (`0x6FB8`) — **not** an on-screen graphics player.
+- `0x25` is gems pool-pay; arena tickets are `OP_0E 0x08` only.
+- `0x2F` reads a typed answer into `-$5C50` (then `OP_30` compares).
 
 ## `OP_0E` Selector Dispatch (`0x160C2`)
 
@@ -880,7 +876,7 @@ incomplete; **Unknown** = behaviour not traced.
 | `0A` | Partial | Y/N variant (mode `0xFD` wrapper) |
 | `0B` | Partial | Service/title window (`-$7FBC`/`-$7FC2`); arg2 position byte semantics |
 | `0C` | Verified | Map transition @ `0x15E12`: bit6 → `rng(1,20)+5` (+0x10 if ≥0x11) \| bit7; dest≥0x80 → `rng(1,255)` tile; dest&=0x3F; then `-$7FDA` map load; sets pending latch. Ported |
-| `0D` | Verified | `0x06FB8` canned on-screen sequence player (idx 0..9; idx 0 gated by `-$79AF`, 1..9 by `-$79B0`). Presentation-only, no GS writes → port stubs it logic-faithfully |
+| `0D` | Verified | `-$7E42`→`0x6FB8` **`play_sound_seq`** (idx 0..9; idx 0 gated by Walk Beep `-$79AF`, 1..9 by Sounds `-$79B0`). **Audio**, not graphics. Port: `eventVmExecEngineCall` → `audio::playSoundSeq`; idx `0x09` also sets exit bit0 |
 | `0E` | Partial | Dispatch + default-range bins **Verified**. **Ported:** temple/training/smith/guild/tavern menus; **Feldecarb `0x0E`**; **Nordon `0x0A`**; **Nordonna `0x0B`**. **Partial:** tavern food/drink RNG, store `0xA62C`, inn hireling unlock, guild enroll edges. Inn rest = world Rest (`0x19E20`), not OP_0E `0x01` (registry) |
 | `0F` | Verified | End script / cleanup `0x171AC` |
 | `10`/`11` | Verified | Conditional token skip; full `-$6CC8` length table now extracted byte-exact and ported (`eventVmTokenDelta`, includes the `OP_00`/`OP_25` ROM quirks — see §Notes on `*_SKIPTOK` Opcodes) |
@@ -965,11 +961,11 @@ are mutually exclusive unless noted.
 **Scenario:** A tile runs script bytes but never opens a shop window (`OP_0E`).
 
 - **A.** Never — `OP_0D` is always followed by visible text you remember.
-- **B.** Yes — e.g. cruise/arena return: `engine_call(0x09)` then `map_transition`, with no shop selector.
+- **B.** Yes — e.g. cruise/arena return: `play_sound_seq(0x09)` then `map_transition`, with no shop selector.
 - **C.** Yes — chest/treasure UI opens directly from `OP_0D` alone.
 - **D.** `OP_0D` only appears in overlay banks 60–70, not walkable maps.
 
-**RE guess:** B — multiple overworld scripts call `engine_call(0x09)` paired with `map_transition` (e.g. cruise ride loc 14, Corak's Cave door loc 22); per-index table still **Unknown**.
+**Confirmed (C++):** B — `OP_0D` is audio (`0x6FB8`); older "canned on-screen sequence" label was wrong.
 
 **Your answer:** ___
 
@@ -1194,14 +1190,14 @@ incorrect.
 
 ### 11. Non-gold predicate codes (`OP_25` values `0`, `1`, `2`)
 
-**Scenario:** Our decoder labels `flag_clear` / `flag_set` / `flag_alt`.
+**Scenario:** Small gem amounts in scripts.
 
-- **A.** Generic script/state flags (quest done, already paid, etc.) — **not** item IDs.
+- **A.** `OP_25` is party **gems** pool-pay (`0x6B9A`); args are gem counts (often small).
 - **B.** Directly encode ticket colors (0=green … 2=black).
 - **C.** Bishop freed / arena won / goblet returned map 1:1 to codes 0/1/2.
 - **D.** You have never hit a gate you would attribute to `OP_25` — likely wrong decode.
 
-**RE guess:** A — `--predicates` finds **zero** recoverable `OP_25` hits in `event.dat`; small integer codes fit flag words, not items (**Partial**, high uncertainty).
+**Confirmed (C++):** A — gems pool-pay; tickets are **not** `OP_25`.
 
 **Your answer:** ___
 
@@ -1212,11 +1208,11 @@ incorrect.
 **Scenario:** Arena ticket turn-in vs bishop cage key.
 
 - **A.** Tickets: `OP_25` check then separate `OP_28` consume in the same script step.
-- **B.** Tickets: handled inside `OP_0E` arena selectors (engine inventory logic); keys: explicit `OP_28` in castle scripts.
+- **B.** Tickets: handled inside `OP_0E 0x08` arena engine (`0x9D76`); keys/quest items: explicit `OP_28` backpack consume.
 - **C.** Both tickets and keys use only `OP_25`; `OP_28` is for quest discs/rings.
 - **D.** Keys check without consume — you keep the key after freeing a bishop.
 
-**RE guess:** B — `OP_28` consume hits map to keys/discs/rings; no ticket item IDs (208–211) appear in `OP_28` contexts; arena tiles call `exec_selector` instead (**Partial**).
+**Confirmed (C++):** B.
 
 **Your answer:** ___
 
@@ -1227,11 +1223,11 @@ incorrect.
 **Scenario:** “Travel for 25 gold (y/n)?” — you accept and have enough gold.
 
 - **A.** `OP_24` is **check only** (gold ≥ amount); a later op/engine call deducts if you proceed.
-- **B.** `OP_24` both checks and subtracts gold immediately when true.
+- **B.** `OP_24` both checks and subtracts gold immediately when true (pool remainder onto first eligible member).
 - **C.** `OP_24` checks individual member gold, not party total.
 - **D.** Failed check still deducts partial gold.
 
-**RE guess:** A — scripts pair `check_gold_at_least(N)` with `if not cond: skip` then `map_transition` / `party_effect`; no subtract in the `OP_24` handler (**Partial**).
+**Confirmed (C++):** B — `0x6ACE` pool-pay; cond = success.
 
 **Your answer:** ___
 

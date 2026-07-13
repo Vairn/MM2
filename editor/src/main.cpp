@@ -14,6 +14,13 @@
 
 #include "app/App.h"
 #include "core/Mm2BitmapFont.h"
+#include "eventlang/Decompile.h"
+#include "eventlang/Encode.h"
+
+#include <fstream>
+#include <iterator>
+#include <string>
+#include <vector>
 
 static void glfwErrorCallback(int error, const char* desc) {
     std::fprintf(stderr, "GLFW error %d: %s\n", error, desc);
@@ -98,7 +105,49 @@ static void applyRedBlackTheme() {
     colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.20f, 0.04f, 0.04f, 0.46f);
 }
 
-int main(int, char**) {
+int main(int argc, char** argv) {
+    if (argc >= 3 && std::string(argv[1]) == "--roundtrip-events") {
+        const char* path = argv[2];
+        std::ifstream in(path, std::ios::binary);
+        if (!in) {
+            std::fprintf(stderr, "cannot open %s\n", path);
+            return 1;
+        }
+        std::vector<uint8_t> data((std::istreambuf_iterator<char>(in)),
+                                  std::istreambuf_iterator<char>());
+        mm2::eventlang::EventFileAst file;
+        if (!mm2::eventlang::loadEventRecords(data.data(), data.size(), file)) {
+            std::fprintf(stderr, "bad event.dat header\n");
+            return 1;
+        }
+        int ok = 0, fail = 0;
+        for (int i = 0; i < 71; ++i) {
+            auto loc = mm2::eventlang::decompileLocation(file.rawRecords[i].data(),
+                                                         file.rawRecords[i].size(), i);
+            auto rebuilt = mm2::eventlang::encodeLocation(loc);
+            if (rebuilt == file.rawRecords[i])
+                ++ok;
+            else {
+                ++fail;
+                std::fprintf(stderr, "loc %d: mismatch orig=%zu rebuilt=%zu\n", i,
+                             file.rawRecords[i].size(), rebuilt.size());
+            }
+        }
+        std::printf("roundtrip: %d/%d byte-identical\n", ok, ok + fail);
+        file.locations.clear();
+        for (int i = 0; i < 71; ++i)
+            file.locations.push_back(mm2::eventlang::decompileLocation(
+                file.rawRecords[i].data(), file.rawRecords[i].size(), i));
+        auto full = mm2::eventlang::encodeEventDat(file);
+        if (full == data) {
+            std::printf("full file: OK\n");
+        } else {
+            std::printf("full file: MISMATCH (%zu vs %zu)\n", full.size(), data.size());
+            return 1;
+        }
+        return fail ? 1 : 0;
+    }
+
     constexpr float kBaseUiFontPx = 16.0f;
     constexpr float kTargetUiFontPx = 32.0f;
 
@@ -160,6 +209,10 @@ int main(int, char**) {
     std::fprintf(stderr, "[mm2-font] cwd: %s\n", std::filesystem::current_path().string().c_str());
     ImFont* mm2Font = mm2::installMm2BitmapFont(io, kTargetUiFontPx);
     std::fprintf(stderr, "[mm2-font] install result: %s\n", mm2Font ? "success" : "failed");
+    // Dedicated monospace for script/hex panes (UI bitmap is too large + loose spacing).
+    constexpr float kCodeFontPx = 20.0f;
+    ImFont* codeFont = mm2::installMm2CodeFont(io, kCodeFontPx);
+    std::fprintf(stderr, "[mm2-font] code font: %s\n", codeFont ? "success" : "failed");
 
     mm2::App app;
     bool showFontDebug = true;

@@ -154,7 +154,13 @@ void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view)
 
         std::snprintf(buf, sizeof(buf), "%c%c) %s", line.show_checkmark ? kCheckGlyph : ' ',
                       line.letter ? line.letter : static_cast<char>('A' + i), field);
-        textAt(c, kCombatRightCol, row, buf);
+        /* 0x1061E: pen #$1 while 0x1265E redraws the acting slot, then pen 0. */
+        if (line.highlighted) {
+            c.fillRect(kCombatRightCol * 8, row * 8, kCombatRightWidthCells * 8, 8, 255, 255, 0, 255);
+            textAt(c, kCombatRightCol, row, buf, 0, 0, 0);
+        } else {
+            textAt(c, kCombatRightCol, row, buf);
+        }
     }
 
     if (view.overflow_more > 0) {
@@ -203,8 +209,12 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
         return;
     }
     if (view.show_cast_target) {
-        /* 0xD52E "What is the magical location?" family — combat path prompts monster letter. */
-        textAt(c, 1, kMessageRow, "Which monster?");
+        /* Cast: 0xD52E family. Fight/Shoot: status already "Fight/Shoot which (A-x)?". */
+        if (view.message[0] != '\0') {
+            textAt(c, 1, kMessageRow, view.message);
+        } else {
+            textAt(c, 1, kMessageRow, "Which monster?");
+        }
         return;
     }
     if (view.show_party_pick) {

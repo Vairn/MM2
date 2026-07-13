@@ -63,6 +63,10 @@ public:
     /** True when OP_0B loaded an .anm portrait/sign overlay. */
     bool hasServicePortrait() const { return sign_overlay_.loaded(); }
 
+    /** -$7FBC @ 0x3266 from scripted bit7 stream — reposition loaded sign. */
+    void applyScriptedSignPlace(uint8_t placement, uint16_t dst_x, uint16_t dst_y);
+    void clearServiceSignSprite();
+
     /** Loc 11 evt 04 OP_03 str[5]: Pegasus monster #131 → 21.anm over the 3D hood. */
     void showPegasusIllustration(const char *data_dir);
     bool hasPegasusIllustration() const { return pegasus_overlay_.loaded(); }
@@ -115,6 +119,9 @@ private:
     gfx::ViewportAnmOverlay sign_overlay_{};
     gfx::ViewportAnmOverlay pegasus_overlay_{};
     uint8_t sign_placement_ = 0;
+    bool sign_dst_override_ = false;
+    uint16_t sign_dst_x_ = 0x40;
+    uint16_t sign_dst_y_ = 0x28;
 };
 
 }  // namespace mm2::events

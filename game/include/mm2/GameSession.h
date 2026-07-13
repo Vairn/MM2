@@ -95,6 +95,12 @@ private:
         TownService,
         RestConfirm,
         SearchIdentify, /* 0x1B3F2 '1'..'4' after long-path rating */
+        ExchangeOrder,  /* 0x20F58: Exchange (1-N) / with (1-N) */
+        DismissHireling, /* 0x141F4: Dismiss whom (1-N)?; hireling only */
+        UnlockWho,      /* 0x1AE2E: who tries unlock (1-N) */
+        GameOver,       /* party wipe — no living members; return to title */
+        DeathStrikes,   /* 0x14106 OP_0E FD abort==3 panel; ENTER → Goto Town */
+        FdPrintChrome,  /* 0x1493C PTR0 / post-fight pages / WAFE name entry */
     };
 
     static const char *townName(uint8_t town_filter);
@@ -131,6 +137,18 @@ private:
     void handleBashDoor();
     void handleUnlockDoor();
     void applyDoorTrapDamage();
+    /** 0x20F58 explore Exchange: begin two-digit party-order prompt. */
+    void beginExchangeOrder();
+    /** Swap launch_ + GS -$796A[a/b] (0x20F94..0x20FD0). */
+    void exchangeExplorePartySlots(int slot_a, int slot_b);
+    /** 0x141F4: begin Dismiss whom prompt. */
+    void beginDismissHireling();
+    /** 0x362C: remove roster index from -$796A, compact, dec -$795A. */
+    bool removeHirelingFromParty(int16_t roster_index);
+    /** 0x171AC / -$7D40 GS: clear -$7950 after explore modal epilogue. */
+    void applyExitFlagCleanup();
+    /** 0x20D26+: finish unlock after 0x1AE2E party-slot pick. */
+    void finishUnlockWithPartySlot(int party_slot);
     /* Rest execution @ 0x19E20 -> 0x19AD6 (pay) / 0x19D64 (encounter) / 0x19B28
      * (heal + 0x55-tick advance), run after the Y/N confirm overlay resolves. */
     void executeRest();
@@ -138,6 +156,12 @@ private:
      * same-screen forward step; rate byte = attrib.dat 0x09 (doc 35). */
     void maybeTriggerStepEncounter();
     void finishCombat();
+    /** True when every party slot has (condition & 0xE0) != 0 — roster_count_living @ 0x47A2. */
+    bool partyAllDead() const;
+    /** Total wipe: funeral prompt, do not persist corpses, then title on dismiss. */
+    void beginPartyWipeGameOver();
+    /** If the party is fully dead and not already on GameOver, start the funeral. */
+    void maybeBeginPartyWipeGameOver();
     bool overlayBlocksInput() const;
     void tickEventInput(const platform::KeyState &keys);
     void tickOverlayAnimations();
@@ -151,6 +175,15 @@ private:
     /** Open the interactive town-service overlay when an OP_0E selector requested it. */
     void maybeOpenTownServiceMenu();
     void maybeFinishInnRegistry();
+    void maybeOpenDeathStrikes();
+    void maybeOpenFdPrintChrome();
+    void loadFdPrintChromePage();
+    void startOp0eFdEncounter();
+    void resumeOp0eFdAfterCombat();
+    bool op0eFdPasswordOk(const char *typed) const;
+    void ensureEndgameArtLoaded();
+    void armSearchContainerArt();
+    void clearSearchContainerArt();
     void showStatusMessage(const char *msg);
     void markDirty();
 #if MM2_HOST_AMIGA
@@ -194,12 +227,25 @@ private:
     gameplay::SheetSession sheet_session_{};
 
     PlayOverlay overlay_ = PlayOverlay::None;
-    char status_message_[160] = {};
+    char status_message_[320] = {};
+    /* 0x1493C stages: 0=PTR0 1=await combat 2=vacuum+PTR1 3=WAFE entry
+     * 4=thank-you 5=PTR2+3 6=PTR4+5 → Goto Town. */
+    int fd_print_stage_ = 0;
+    bool fd_await_combat_ = false;
+    char fd_name_buf_[11] = {};
+    int fd_name_len_ = 0;
     /** Long-path Search Identify @ 0x1B3F2: rating from 0x1B270; phase for member pick. */
     uint8_t search_identify_rating_ = 0;
     char search_identify_container_[24]{};
     bool search_identify_pick_member_ = false;
     bool search_identify_find_traps_ = false;
+    /** 0x1B2CE -$7FC2: container sign sprite (70..74.anm) over viewport. */
+    gfx::ViewportAnmOverlay search_container_{};
+    /** 0x14EC2 endgame.32 blit @ (x=$20,y=$40) during post-fight FD pages. */
+    mm2_image32_file endgame_{};
+    bool has_endgame_ = false;
+    /** 0x20F58: -1 = pick first slot; else 0-based first awaiting "with". */
+    int exchange_first_slot_ = -1;
 
     /* rng(min,max) source for Bash/Unlock/Rest rolls (0x22BC6 contract). */
     gameplay::Rng rng_;

@@ -1031,7 +1031,8 @@ bool townSvcPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch
 
 TownSvcDrinkResult townSvcPubDrink(Mm2RosterRecord &rec, int drink_idx, gameplay::Rng *rng)
 {
-    /* Caption stub — encode is townSvcDrinkEncodePurchase; apply is 0x18D3A. */
+    /* FAQ-era drink caption helper — encode/apply are townSvcDrinkEncodePurchase +
+     * townSvcApplyDrinkEncoding (0x18F78 / 0x18D3A). No base-stat mutate. */
     (void)rec;
     (void)rng;
     TownSvcDrinkResult r;
@@ -1053,7 +1054,7 @@ TownSvcStatBoostResult townSvcTavernStatBoost(uint8_t *a4, Mm2RosterRecord &rec,
         return r;
     }
     r.slot = slot;
-    r.cost = kStatBoostCosts[slot];
+    r.cost = a4 ? mm2_gs_u16(a4, MM2_GS_TAVERN_BOOST_GOLD + slot * 2) : kStatBoostCosts[slot];
     if (rec.condition != 0) {
         return r;
     }
@@ -1067,7 +1068,8 @@ TownSvcStatBoostResult townSvcTavernStatBoost(uint8_t *a4, Mm2RosterRecord &rec,
     if (a4) {
         count = mm2_gs_u16(a4, kGsTavernStatBuyCount + slot * 2);
     }
-    const uint16_t limit = kStatBoostLimits[slot];
+    const uint16_t limit =
+        a4 ? mm2_gs_u16(a4, MM2_GS_TAVERN_BOOST_LIMIT + slot * 2) : kStatBoostLimits[slot];
     if (count < limit) {
         /* 0x1CC1C: increment counter; skip apply + speed side-effect. */
         if (a4) {
@@ -1094,8 +1096,8 @@ TownSvcStatBoostResult townSvcTavernStatBoost(uint8_t *a4, Mm2RosterRecord &rec,
     return r;
 }
 
-TownSvcSpecialtyResult townSvcTavernSpecialty(Mm2RosterRecord &rec, int map_id, int menu,
-                                              gameplay::Rng *rng)
+TownSvcSpecialtyResult townSvcTavernSpecialty(uint8_t *a4, Mm2RosterRecord &rec, int map_id,
+                                              int menu, gameplay::Rng *rng)
 {
     /* 0x1CD2E / 0x1CEA4: pay A4-$6760; then sick OR mask — never both.
      * ASM @ 0x1CECA: -$7F56(+$73) +5 → RNG; ==1 → bset #2,$26 and skip 0x1C8D4.
@@ -1106,7 +1108,9 @@ TownSvcSpecialtyResult townSvcTavernSpecialty(Mm2RosterRecord &rec, int map_id, 
         return r;
     }
     r.menu = menu;
-    r.cost = kSpecialtyGold[town][menu];
+    const int idx = town * 3 + menu;
+    r.cost = a4 ? mm2_gs_u16(a4, MM2_GS_TAVERN_SPECIALTY_GOLD + idx * 2)
+                : kSpecialtyGold[town][menu];
     if (rec.condition != 0) {
         return r;
     }
@@ -1115,15 +1119,16 @@ TownSvcSpecialtyResult townSvcTavernSpecialty(Mm2RosterRecord &rec, int map_id, 
         return r;
     }
     r.paid = true;
-    /* Stub -$7F56 as endurance_base until that helper is traced. */
-    const int end_hi = static_cast<int>(rec.endurance_base) + 5;
+    /* 0x1CECA: -$7F56(+$73 endurance_base)+5 → rng(1,hi)==1 sick. */
+    const int end_hi = static_cast<int>(attrTableBonus(rec.endurance_base)) + 5;
     const int sick_roll = rng ? rng->range(1, end_hi > 0 ? end_hi : 1) : 2;
     if (sick_roll == 1) {
         r.sick = true;
         rec.condition = static_cast<uint8_t>(rec.condition | 0x04);
     } else {
-        rec.temp_score_word =
-            static_cast<uint16_t>(rec.temp_score_word | kSpecialtyMask[town][menu]);
+        const uint16_t mask = a4 ? mm2_gs_u16(a4, MM2_GS_TAVERN_SPECIALTY_MASK + idx * 2)
+                                 : kSpecialtyMask[town][menu];
+        rec.temp_score_word = static_cast<uint16_t>(rec.temp_score_word | mask);
     }
     r.ok = true;
     return r;
@@ -1145,6 +1150,161 @@ TownSvcFoodEncodeResult townSvcDrinkEncodePurchase(Mm2RosterFile *roster,
     TownSvcFoodEncodeResult r;
     writePartyEncoding(roster, launch, encodeDrinkByte(drink, rng), /*drink*/ true, r);
     return r;
+}
+
+int townSvcQuestLordArm(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool drink)
+{
+    /* 0x191A6: for each party slot, if +$7C lacks the mode mask bit, set bit2
+     * and food/drink mode on +$7C. Food mask $08 / drink mask $10. */
+    if (!roster || !launch) {
+        return -1;
+    }
+    const uint8_t mask = drink ? 0x10u : 0x08u;
+    const uint8_t mode_bit = drink ? 0x01u : 0x00u;
+    int armed = 0;
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch->roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        auto *raw = reinterpret_cast<uint8_t *>(&roster->records[idx]);
+        uint8_t flags = raw[0x7C];
+        if ((flags & mask) != 0) {
+            continue;
+        }
+        ++armed;
+        flags = static_cast<uint8_t>((flags & 0xFEu) | 0x04u | mode_bit);
+        raw[0x7C] = flags;
+    }
+    return armed > 0 ? armed : -1;
+}
+
+bool townSvcQuestHoardallItemsReady(Mm2RosterFile *roster, const Mm2PartyLaunch *launch)
+{
+    /* 0x18FBA: find 0xE2/0xE3/0xE4 via 0x18CE6; if all present, consume via 0x18D06. */
+    if (!roster || !launch) {
+        return false;
+    }
+    for (uint8_t id = 0xE2; id <= 0xE4; ++id) {
+        if (townSvcPartyFindBackpackItem(roster, launch, id) == 0) {
+            return false;
+        }
+    }
+    for (uint8_t id = 0xE2; id <= 0xE4; ++id) {
+        (void)townSvcPartyConsumeBackpackItem(roster, launch, id);
+    }
+    return true;
+}
+
+TownSvcQuestCompleteResult townSvcQuestCompleteReward(Mm2RosterFile *roster,
+                                                     const Mm2PartyLaunch *launch, bool drink,
+                                                     const Mm2ItemsFile *items)
+{
+    /* 0x193AC reward loop + 0x19516 encoding apply. */
+    TownSvcQuestCompleteResult r;
+    if (!roster || !launch) {
+        return r;
+    }
+
+    int items_gate = -1; /* -1 = not checked; 0/1 = 18fba result (food only) */
+    int activity = 0;
+
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch->roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        Mm2RosterRecord &rec = roster->records[idx];
+        auto *raw = reinterpret_cast<uint8_t *>(&rec);
+        const uint8_t flags = raw[0x7C];
+        if ((flags & 0x04) == 0) {
+            continue;
+        }
+        if (static_cast<bool>(flags & 0x01) != drink) {
+            continue;
+        }
+
+        int eligible = 0;
+        if (drink) {
+            /* Slayer: (flags & 0xE0) == 0xE0, then clear high bits; reward if bit4 clear. */
+            if ((flags & 0xE0) == 0xE0) {
+                raw[0x7C] = static_cast<uint8_t>(raw[0x7C] & 0x1F);
+                if ((flags & 0x10) == 0) {
+                    eligible = 1;
+                }
+            }
+        } else {
+            /* Hoardall: bit3 clear + 18fba swords gate. */
+            if ((flags & 0x08) == 0) {
+                if (items_gate < 0) {
+                    items_gate = townSvcQuestHoardallItemsReady(roster, launch) ? 1 : 0;
+                }
+                if (items_gate > 0) {
+                    eligible = 1;
+                }
+            }
+        }
+
+        if (eligible == 0) {
+            continue;
+        }
+
+        ++activity;
+        raw[0x7C] = static_cast<uint8_t>(raw[0x7C] & 0xFB); /* clear bit2 */
+        const uint8_t done_bit = drink ? 0x10u : 0x08u;
+        raw[0x7C] = static_cast<uint8_t>(raw[0x7C] | done_bit);
+        r.xp_each = drink ? 1000000u : 100000u;
+        rec.experience += r.xp_each;
+        ++r.members_rewarded;
+    }
+
+    /* 0x19516: apply encodings for every party member. */
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch->roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        Mm2RosterRecord &rec = roster->records[idx];
+        bool hit = false;
+        if (drink) {
+            hit = townSvcApplyDrinkEncoding(rec).applied;
+        } else {
+            hit = townSvcApplyFoodEncoding(items, rec).applied;
+        }
+        if (hit) {
+            ++r.encodings_applied;
+            ++activity;
+        }
+    }
+
+    r.activity = activity;
+    return r;
+}
+
+bool townSvcQuestBusy(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool drink)
+{
+    /* 0x1961E: bit2 or non-zero +$78 with matching mode bit0 → status / skip picker. */
+    if (!roster || !launch) {
+        return false;
+    }
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch->roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        auto *raw = reinterpret_cast<uint8_t *>(&roster->records[idx]);
+        const uint8_t flags = raw[0x7C];
+        if (static_cast<bool>(flags & 0x01) != drink) {
+            continue;
+        }
+        if ((flags & 0x04) != 0) {
+            return true;
+        }
+        if (raw[0x78] != 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 int townSvcTipDayPairBase(uint16_t day_of_year)

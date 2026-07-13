@@ -1,6 +1,8 @@
 #pragma once
-// Castle / scripted-scene graphics @ 0x6FB8 / 0x76AC, overlay @ 0x316E / mode $17,
-// text+wait @ 0x64F8. See EXTRACTED/docs/46-scripted-scene-graphics.md.
+// Castle / scripted-scene graphics: viewport overlay @ 0x316E / mode $17,
+// draw helpers 0x76AC / 0x738C, text+wait @ 0x64F8.
+// NOTE: 0x6FB8 is play_sound_seq (audio) — see docs/58-amiga-audio-in-exe.md.
+// See EXTRACTED/docs/46-scripted-scene-graphics.md.
 
 #include "mm2/Config.h"
 #include "mm2/CppStdCompat.h"

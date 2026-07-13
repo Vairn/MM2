@@ -132,11 +132,11 @@ export function smithSellPrice(buyStylePrice) {
   return (buyStylePrice / 2) | 0;
 }
 
-/** Identify fee midpoint of rng(1, meta*100); meta==0 → 10. */
+/** Identify fee 0x1BF48: meta==0 → 10; else meta*100 (mul -$7B54), not RNG. */
 export function smithIdentifyCost(flags) {
   const meta = flags & 0x3f;
   if (!meta) return 10;
-  return ((1 + meta * 100) / 2) | 0;
+  return (meta * 100) | 0;
 }
 
 /** Today's Specials date-roll @ 0x1C146. */

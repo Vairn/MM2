@@ -1,6 +1,7 @@
 #include "mm2/gameplay/Movement.h"
 
 #include "mm2/events/EventVmHelpers.h"
+#include "mm2/platform/Audio.h"
 #include "mm2_attrib_codec.h"
 #include "mm2_map_codec.h"
 #include "mm2_party_launch.h"
@@ -287,6 +288,8 @@ MoveResult turn(world::MapWorld &world, GameStateView &gs, bool right_cw)
     const char next = turnFacing(gs.facingKey(), right_cw);
     gs.setFacingKey(next);
     latchEventOnTurn(gs);
+    /* movement_turn @ 0x5838: JSR -$7E42(A4) with id 0 (walk beep). */
+    audio::playSoundSeq(0, gs.soundsEnabled(), gs.walkBeepEnabled());
     r.acted = true;
     r.turned = true;
     return r;
@@ -349,6 +352,8 @@ MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward, Mm2Rost
     r.acted = true;
     r.moved = true;
     r.screen_changed = screen_changed;
+    /* movement_step @ 0x5758 / 0x580c: JSR -$7E42(A4) id 0 after coords change. */
+    audio::playSoundSeq(0, gs.soundsEnabled(), gs.walkBeepEnabled());
     return r;
 }
 

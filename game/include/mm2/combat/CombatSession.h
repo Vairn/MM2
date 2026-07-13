@@ -1,6 +1,6 @@
 #pragma once
 // Combat session — faithful port of the encounter-entry + round-loop shell:
-//   -$7EDE -> 0x051C2  combat_encounter_entry (banner + turn-order prep)
+//   -$7EDE -> 0x051C2  combat_encounter_entry (play_sound_seq id2 "oh noes" @ 0x51D8)
 //   0x12CE0            live-count recompute
 //   0x1213E/.. 0x11F0A random picker (mm2/combat/EncounterPicker.h)
 //   0x12A22            round loop / initiative scan
@@ -8,11 +8,10 @@
 //   0x11646            combat_defeat_retreat (ends the fight when the whole
 //                       party is down; also used by a successful Run)
 //
-// Per-hit to-hit/damage math is NOT ASM-confirmed yet (doc 17 "to-hit/damage
-// math" open item, deferred to plan Phase 5). This MVP round loop uses a
-// documented, simplified roll (see CombatSession.cpp) so OP_12/13/arena/rest/
-// step encounters can actually resolve to a win/lose outcome and drive
-// victory rewards + OP_2B. Monster HP/XP ARE ASM-confirmed (0x4C8E unpacker,
+// Per-hit to-hit/damage dice math is ported from 0x10478 / 0x112DE (see
+// CombatSession.cpp). Party HP: combat damages roster +$5E (codec hp_max =
+// working HP); +$74 (hp_current) is the ceiling — matching 0x4AAA and
+// eventVmApplyOp31Damage. Monster HP/XP ARE ASM-confirmed (0x4C8E unpacker,
 // mm2_monster_decode_hp/_xp, doc 16). See EXTRACTED/docs/17-combat-system.md
 // and 35-encounter-tables.md for the full ASM trace.
 
@@ -36,12 +35,14 @@ enum class CombatState : uint8_t {
     AwaitingPartyOptions,     /* party-level A/B/H/R before round loop (0x12F74) */
     AwaitingBribeKind,        /* 0x12FB8: 1-Food 2-Gold 3-Gems / ESC */
     AwaitingBribeAmount,      /* 0x3EE0 digit entry after kind (max 4 digits) */
-    AwaitingCommand,          /* a living party member's turn; waiting for A/B/R */
+    AwaitingCommand,          /* a living party member's turn; waiting for A/F/S/C/… */
     AwaitingCastLevel,        /* combat 'C' @ 0x11A90 → 0x79EE level digit (no spell grid) */
     AwaitingCastNumber,       /* 0x79EE number digit after level */
     AwaitingCastTarget,       /* 0xD43C / 0xD464: 'A'..'J' monster letter (ESC=$1B cancel) */
+    AwaitingAttackTarget,     /* 0x111DA arg=$FF: Fight/Shoot 'which (A-x)?' */
     AwaitingPartyPick,        /* 0xD2EA / 0xD312: '1'..'N' party member (Heroism/Frenzy) */
     AwaitingItemPick,         /* 0xB56E: 'A'..'F' backpack letter (Recharge/Dup/Enchant/Uncurse) */
+    AwaitingExchangeWith,     /* 0x11B1A → 0x20FF2: 'with (1-N)?' (first slot = active) */
     AwaitingActionAck,        /* 0x132E6: delay(-$79AD)*$19+1 frames, or key advances */
 };
 
@@ -78,7 +79,8 @@ public:
                state_ == CombatState::AwaitingBribeKind || state_ == CombatState::AwaitingBribeAmount ||
                state_ == CombatState::AwaitingCommand || state_ == CombatState::AwaitingCastLevel ||
                state_ == CombatState::AwaitingCastNumber || state_ == CombatState::AwaitingCastTarget ||
-               state_ == CombatState::AwaitingPartyPick || state_ == CombatState::AwaitingItemPick ||
+               state_ == CombatState::AwaitingAttackTarget || state_ == CombatState::AwaitingPartyPick ||
+               state_ == CombatState::AwaitingItemPick || state_ == CombatState::AwaitingExchangeWith ||
                state_ == CombatState::AwaitingActionAck;
     }
     CombatState state() const { return state_; }
@@ -160,15 +162,29 @@ private:
     void resolvePartyRun(GameStateView &gs, const world::MapWorld &world);
     void runUntilDecisionOrEnd(GameStateView &gs, const world::MapWorld &world);
     bool checkOutcome(GameStateView &gs, const world::MapWorld &world);
-    void resolvePlayerAttack(GameStateView &gs, bool shooting);
+    void resolvePlayerAttack(GameStateView &gs, bool shooting, int target_slot);
+    /** 0x1162C / 0x11610: arg 0 = first target; arg $FF = picker (auto if 1 live). */
+    void beginPlayerStrike(GameStateView &gs, bool shooting, bool pick_target);
     void resolvePlayerBlock();
     void resolvePlayerRun(GameStateView &gs, const world::MapWorld &world);
+    /** 0x11B1A → -$7CC2 → 0x20FF2: prompt second slot, swap -$796A + -$5E40. */
+    void beginExchange();
+    bool tickExchange(GameStateView &gs, char key, bool escape);
+    /** Swap party order + acted/block mirrors (0x20FF2 body). */
+    void exchangePartySlots(GameStateView &gs, int slot_a, int slot_b);
+    /** 0x116B0 success: dec -$795A, move runner to end, set -$5E4C. */
+    void shrinkPartyAfterCharRun(GameStateView &gs, int runner_slot);
+    int partyCount() const { return party_count_; }
     /** Combat cast picker @ 0x11A90 / 0x79EE — level then number, no LAB_6622 grid. */
     void beginCastPicker();
     bool tickCastPicker(GameStateView &gs, char key);
     void resolvePlayerCast(GameStateView &gs, int flat0);
     /** 0xD464 letter pick → 0x133B6 damage word → 0x108BC apply to slot(s). */
     bool tickCastTarget(GameStateView &gs, char key);
+    /** 0x111DA Fight/Shoot letter pick when arg was $FF. */
+    bool tickAttackTarget(GameStateView &gs, char key);
+    int countAliveMonsters() const;
+    int nthAliveMonster(int n) const;
     /** 0xD2EA / heal-cure / Lloyd / Teleport / Fly aux digit-letter pick. */
     bool tickPartyPick(GameStateView &gs, char key);
     /** 0xB56E backpack A-F for Recharge/Duplication/Enchant/Uncurse. */
@@ -302,6 +318,8 @@ private:
     bool monster_acted_[MM2_GS_MONSTER_BATTLE_SLOTS]{};
     bool party_acted_[MM2_GS_PARTY_SIZE]{};
     bool party_blocking_[MM2_GS_PARTY_SIZE]{};
+    /** Live -$795A during fight (Char-Run shrinks; Exchange keeps). */
+    int party_count_ = 0;
 
     int active_party_slot_ = -1; /* party slot (0..7) awaiting a command */
     int active_monster_slot_ = -1; /* monster slot (0..10) acting this step (A4-$4F7) */
@@ -315,6 +333,7 @@ private:
     bool skip_cast_cost_ = false; /* F470 -$3F0C item-cast: skip SP/gem deduct */
     bool exploration_cast_ = false; /* sheet cast: don't enter combat ack states */
     int cast_target_slot_ = -1;  /* 0..9 after 'A'..'J' (0xD500 subi #$41) */
+    bool attack_pick_shooting_ = false; /* AwaitingAttackTarget: Shoot vs Fight */
     int cast_aux_ = -1;          /* Fly col 0..4, or multi-step cast scratch */
     int bribe_kind_ = 0;         /* 1=food 2=gold 3=gems (0x12FB8) */
     int bribe_digits_ = 0;       /* 0..4 entered digits for 0x3EE0 */

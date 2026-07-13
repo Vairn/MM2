@@ -1500,6 +1500,7 @@
 00107c  6700020a          beq.w     $1288
 001080  0c6d0050fffe      cmpi.w    #$50, -$2(a5)
 001086  67000200          beq.w     $1288
+; title_menu_key_dispatch @ 0x108A  (docs/39-character-ui-view-create.md)
 00108a  0c6d0051fffe      cmpi.w    #$51, -$2(a5)
 001090  670001f6          beq.w     $1288
 001094  7000              moveq     #$0, d0
@@ -1709,6 +1710,7 @@
 001328  0c6d001bfffe      cmpi.w    #$1b, -$2(a5)
 00132e  6606              bne.b     $1336
 001330  3b7c004efffe      move.w    #$4e, -$2(a5)
+; word_51 @ 0x1336  (docs/49-data-hunk-mm2_data_00.md)
 001336  0c6d0059fffe      cmpi.w    #$59, -$2(a5)
 00133c  6708              beq.b     $1346
 00133e  0c6d004efffe      cmpi.w    #$4e, -$2(a5)
@@ -1745,6 +1747,7 @@
 0013b8  60000138          bra.w     $14f2
 0013bc  4eba3fc4          jsr       $5382(pc)
 0013c0  4eac8038          jsr       -$7fc8(a4)
+; title_menu_create_character @ 0x13C4  (docs/39-character-ui-view-create.md)
 0013c4  6000012c          bra.w     $14f2
 0013c8  0c2c0001864e      cmpi.b    #$1, -$79b2(a4)
 0013ce  6616              bne.b     $13e6
@@ -1768,8 +1771,10 @@
 001406  600000ea          bra.w     $14f2
 00140a  4eba3f76          jsr       $5382(pc)
 00140e  3f2dfffe          move.w    -$2(a5), -(a7)
+; title_menu_view_party @ 0x1412  (docs/39-character-ui-view-create.md)
 001412  4eac8200          jsr       -$7e00(a4)
 001416  544f              addq.w    #$2, a7
+; byte_8 @ 0x1418  (docs/49-data-hunk-mm2_data_00.md)
 001418  600000d8          bra.w     $14f2
 00141c  4eac82d2          jsr       -$7d2e(a4)
 001420  4eba4094          jsr       $54b6(pc)
@@ -1817,6 +1822,7 @@
 0014a2  5380              subq.l    #$1, d0
 0014a4  6700ff0a          beq.w     $13b0
 0014a8  5180              subq.l    #$8, d0
+; title_menu_command_switch @ 0x14AA  (docs/39-character-ui-view-create.md)
 0014aa  6700ff10          beq.w     $13bc
 0014ae  5580              subq.l    #$2, d0
 0014b0  6700ff16          beq.w     $13c8
@@ -2333,6 +2339,13 @@
 001b14  7200              moveq     #$0, d1
 001b16  122c860f          move.b    -$79f1(a4), d1
 001b1a  d081              add.l     d1, d0
+;@LBL-START
+; ========================================================================
+; 001b1c  current_cell_collision_latch
+;   Writes current-cell collision/event bits into A4-$55D6.
+;   Feeds Rest ambush gate, Too-dangerous bit3, and darkness tests.
+; ========================================================================
+;@LBL-END
 001b1c  41ecab46          lea.l     -$54ba(a4), a0
 001b20  19700800aa2a      move.b    (a0, d0.l), -$55d6(a4)
 001b26  4e5d              unlk      a5
@@ -2467,6 +2480,7 @@
 001cfe  7365              .byte     0x73, 0x65
 001d00  20776169742e      movea.l   ([$742e, a7]), a0
 001d06  2e2e0000          move.l    $0(a6), d7
+; walk_beep @ 0x1D0A  (docs/43-exploration-input-and-ingame-options.md)
 001d0a  4e55fffe          link.w    a5, #$fffe
 001d0e  1b7c00ffffff      move.b    #$ff, -$1(a5)
 001d14  0c2c0010860f      cmpi.b    #$10, -$79f1(a4)
@@ -3388,9 +3402,8 @@
 ;@LBL-START
 ; ========================================================================
 ; 002900  frustum_wall_cell_builder  (LAB_2900)
-;   Reads map page-0 visual bytes around party (A4-$55C9..) into
+;   Reads map page-1 wall codes around party (A4-$55C9..) into
 ;   frustum slots A4-$F0D..-$F20 for the 3D painter's pass.
-;   (Page 1 at A4-$54BA is collision/events/darkness only.)
 ; ========================================================================
 ;@LBL-END
 ; hood_render_3d @ 0x2900  (tools/mm2_symbols.py (bootstrap))
@@ -4095,6 +4108,7 @@
 ;   using placement table A4-$7538.
 ; ========================================================================
 ;@LBL-END
+; sign_sprite_load @ 0x316E  (docs/44-event-text-rendering.md)
 00316e  4e55fffc          link.w    a5, #$fffc
 003172  4a2c861f          tst.b     -$79e1(a4)
 003176  671c              beq.b     $3194
@@ -4161,6 +4175,7 @@
 003260  6dde              blt.b     $3240
 003262  4e5d              unlk      a5
 003264  4e75              rts       
+; sign_sprite_place @ 0x3266  (docs/45-event-graphics-opcodes.md)
 003266  4e550000          link.w    a5, #$0
 00326a  3f2d000c          move.w    $c(a5), -(a7)
 00326e  3f2d000a          move.w    $a(a5), -(a7)
@@ -4173,7 +4188,6 @@
 003288  42ac8602          clr.l     -$79fe(a4)
 00328c  4e5d              unlk      a5
 00328e  4e75              rts       
-; Read @ 0x3290  (docs/06-roster-format.md)
 003290  4e55fffa          link.w    a5, #$fffa
 003294  3f3c1860          move.w    #$1860, -(a7)
 003298  4267              clr.w     -(a7)
@@ -4445,6 +4459,7 @@
 003622  31ad00080800      move.w    $8(a5), (a0, d0.l)
 003628  4e5d              unlk      a5
 00362a  4e75              rts       
+; remove_hireling_from_party @ 0x362C  (docs/43-exploration-input-and-ingame-options.md)
 00362c  4e55fffe          link.w    a5, #$fffe
 003630  3b7cfffffffe      move.w    #$ffff, -$2(a5)
 003636  3f2d0008          move.w    $8(a5), -(a7)
@@ -4664,6 +4679,7 @@
 0038e0  41ec8ae0          lea.l     -$7520(a4), a0
 0038e4  7200              moveq     #$0, d1
 0038e6  12300000          move.b    (a0, d0.w), d1
+; character_field_print @ 0x38EA  (docs/39-character-ui-view-create.md)
 0038ea  3f01              move.w    d1, -(a7)
 0038ec  4eac8404          jsr       -$7bfc(a4)
 0038f0  584f              addq.w    #$4, a7
@@ -4729,6 +4745,7 @@
 0039aa  4eac83ec          jsr       -$7c14(a4)
 0039ae  544f              addq.w    #$2, a7
 0039b0  4eba0878          jsr       $422a(pc)
+; character_sheet_draw @ 0x39B4  (docs/39-character-ui-view-create.md)
 0039b4  7000              moveq     #$0, d0
 0039b6  102c85ae          move.b    -$7a52(a4), d0
 0039ba  3f00              move.w    d0, -(a7)
@@ -5078,6 +5095,7 @@
 003dfa  302dfffc          move.w    -$4(a5), d0
 003dfe  4e5d              unlk      a5
 003e00  4e75              rts       
+; prompt_key_read @ 0x3E02  (docs/43-exploration-input-and-ingame-options.md)
 003e02  4e55fffe          link.w    a5, #$fffe
 003e06  6184              bsr.b     $3d8c
 003e08  1b40ffff          move.b    d0, -$1(a5)
@@ -5409,6 +5427,7 @@
 004246  3f3c0002          move.w    #$2, -(a7)
 00424a  3f3c0001          move.w    #$1, -(a7)
 00424e  4ebafeba          jsr       $410a(pc)
+; book_frame_blit_setup @ 0x4252  (docs/39-character-ui-view-create.md)
 004252  4fef0010          lea.l     $10(a7), a7
 004256  4e5d              unlk      a5
 004258  4e75              rts       
@@ -5435,6 +5454,7 @@
 0042a2  4eac8446          jsr       -$7bba(a4)
 0042a6  4e5d              unlk      a5
 0042a8  4e75              rts       
+; read_key_within_range @ 0x42AA  (docs/43-exploration-input-and-ingame-options.md)
 0042aa  4e55fffe          link.w    a5, #$fffe
 0042ae  4eac842e          jsr       -$7bd2(a4)
 0042b2  1b40ffff          move.b    d0, -$1(a5)
@@ -5457,9 +5477,11 @@
 ;   called from format_party_status_line ($5312).
 ; ========================================================================
 ;@LBL-END
+; red_border @ 0x42DC  (docs/43-exploration-input-and-ingame-options.md)
 0042dc  4e55fff2          link.w    a5, #$fff2
 0042e0  2b6c9e64fffc      move.l    -$619c(a4), -$4(a5)
 0042e6  206dfffc          movea.l   -$4(a5), a0
+; frame_index_scale @ 0x42EA  (docs/54-pc-dos-graphics-formats.md)
 0042ea  1b680012fffb      move.b    $12(a0), -$5(a5)
 0042f0  296c85c29e64      move.l    -$7a3e(a4), -$619c(a4)
 0042f6  206c9e68          movea.l   -$6198(a4), a0
@@ -5568,6 +5590,12 @@
 00443c  544f              addq.w    #$2, a7
 00443e  4e5d              unlk      a5
 004440  4e75              rts       
+;@LBL-START
+; ========================================================================
+; 004442  luck_bonus_table_walk
+;   Walks A4-$7486 luck threshold table; returns bonus used by Rest SP.
+; ========================================================================
+;@LBL-END
 004442  4e55fffc          link.w    a5, #$fffc
 004446  1b7c00fdffff      move.b    #$fd, -$1(a5)
 00444c  426dfffc          clr.w     -$4(a5)
@@ -5858,7 +5886,7 @@
 ; ========================================================================
 ;@LBL-END
 0047a2  4e55fff8          link.w    a5, #$fff8
-; get_party_member_ptr_by_slot @ 0x47A6  (EXTRACTED/mm2.asm)
+; roster_ptr_by_party_slot @ 0x47A6  (docs/06-roster-format.md)
 0047a6  426dfffc          clr.w     -$4(a5)
 0047aa  426dfffe          clr.w     -$2(a5)
 0047ae  602a              bra.b     $47da
@@ -5890,6 +5918,14 @@
 0047fa  4e75              rts       
 0047fc  7001              moveq     #$1, d0
 0047fe  60f8              bra.b     $47f8
+;@LBL-START
+; ========================================================================
+; 004800  search_key_handler
+;   S-key Search (also auto-run when A4-$794C == $FE).
+;   Prints 'Search...'; scans found-item buffer (-$3F1C/-$3F10/-$3F12);
+;   empty → 'Nothing Here!'; else jsr -$7D1C → search_payoff_ui.
+; ========================================================================
+;@LBL-END
 004800  4e55fffe          link.w    a5, #$fffe
 004804  4267              clr.w     -(a7)
 004806  4eac83c2          jsr       -$7c3e(a4)
@@ -6120,6 +6156,7 @@
 004af8  4268005e          clr.w     $5e(a0)
 004afc  396d000cf0f4      move.w    $c(a5), -$f0c(a4)
 004b02  6000fe66          bra.w     $496a
+; clear_lock @ 0x4B06  (docs/43-exploration-input-and-ingame-options.md)
 004b06  4e55fffe          link.w    a5, #$fffe
 004b0a  7000              moveq     #$0, d0
 004b0c  102c8610          move.b    -$79f0(a4), d0
@@ -6533,6 +6570,7 @@
 ;   play session is active (sky, walls, nwcp panel, …).
 ; ========================================================================
 ;@LBL-END
+; restore_completeness @ 0x5080  (docs/44-event-text-rendering.md)
 005080  4e550000          link.w    a5, #$0
 005084  4a2c8619          tst.b     -$79e7(a4)
 005088  67000124          beq.w     $51ae
@@ -6631,40 +6669,9 @@
 0051be  2e2e0000          move.l    $0(a6), d7
 ;@LBL-START
 ; ========================================================================
-; 0051c2  combat_encounter_entry  (LAB_51C2)  [RELABELED — was
-;   "party_setup_roster_copy"; that name does not match the behaviour below]
-;
-;   This is the target of the `-$7EDE(a4)` thunk (data-hunk offset 0x0120,
-;   byte-confirmed `4E F9 00 00 51 C2`), which is called from all 7 combat
-;   trigger sites (random step 0x11A2, arena win 0x9F0A, quest fight 0xD69C,
-;   scripted boss 0x14AD4, OP_12/13 0x1635E, tile collision 0x1771C, rest
-;   ambush 0x19E0E) and from nowhere else. Confirmed NOT new-game setup:
-;
-;     - 0x51CE: pushes the address of the null-terminated string "Encounter!"
-;       (bytes at 0x5306: 45 6e 63 6f 75 6e 74 65 72 21 00) and calls the
-;       print/banner thunk -$7EC0(a4) with it immediately on entry.
-;     - 0x51E2-0x520E: saves 8 words of `roster_index_tbl` (A4-$796A) into a
-;       scratch buffer (A4-$5E5E), plus the party-size field (A4-$795A) into
-;       A4-$5E60.
-;     - 0x521E-0x5264: for each party member (get_party_member_ptr via local
-;       call to $477E, i.e. the routine the -$7F20(a4) thunk also targets),
-;       copies record byte $27 -> $73 and $15 -> $70 (working combat-turn
-;       copies of two character fields).
-;     - 0x5266-0x5294: restores `roster_index_tbl` / party-size from the
-;       scratch copy saved above (so this save/restore is a *guard* around a
-;       call that may reorder the table, undone before returning).
-;     - 0x529C-0x5304: plays a sound (-$7FD4, footstep/beep thunk), redraws
-;       the party-status row (bsr $5312 = format_party_status_line — the
-;       existing comment there already notes "Callers land in 'Encounter!'
-;       string padding"), several redraw thunks, branches on the saved right
-;       panel mode (A4-$79B2 == 1 ? -$7EAE : local $5D54), then clears 5
-;       per-encounter scratch flags (A4-$7999.."$799D) before returning.
-;
-;   This routine only ARMS/DISPLAYS the encounter (banner + HUD refresh +
-;   turn-order scratch prep); it does not itself run the round loop
-;   (0x12A22) — that is picked up by the main scheduler once this returns
-;   and the right-panel mode is combat. See docs/35-encounter-tables.md and
-;   docs/17-combat-system.md.
+; 0051c2  party_setup_roster_copy  (LAB_51C2)
+;   New-game party setup: copies 8 roster slot words A4-$796A →
+;   A4-$5E5E, loads per-character records ($477E/$4476), engine init.
 ; ========================================================================
 ;@LBL-END
 0051c2  4e55fffa          link.w    a5, #$fffa
@@ -7046,6 +7053,7 @@
 005604  544f              addq.w    #$2, a7
 005606  4e5d              unlk      a5
 005608  4e75              rts       
+; bottom_chrome_redraw @ 0x560A  (docs/43-exploration-input-and-ingame-options.md)
 00560a  4e550000          link.w    a5, #$0
 00560e  7000              moveq     #$0, d0
 005610  102c85af          move.b    -$7a51(a4), d0
@@ -7129,6 +7137,7 @@
 00571a  6042              bra.b     $575e
 00571c  4ebaef54          jsr       $4672(pc)
 005720  486dfffc          pea.l     -$4(a5)
+; create_character_confirm @ 0x5724  (docs/39-character-ui-view-create.md)
 005724  486dfffd          pea.l     -$3(a5)
 005728  4ebaff68          jsr       $5692(pc)
 00572c  504f              addq.w    #$8, a7
@@ -7278,6 +7287,7 @@
 005934  4ebafbbc          jsr       $54f2(pc)
 005938  584f              addq.w    #$4, a7
 00593a  197c0001861b      move.b    #$1, -$79e5(a4)
+; view_party_session @ 0x5940  (docs/39-character-ui-view-create.md)
 005940  3f3c0001          move.w    #$1, -(a7)
 005944  4eac81be          jsr       -$7e42(a4)
 005948  544f              addq.w    #$2, a7
@@ -7299,6 +7309,7 @@
 00597a  544f              addq.w    #$2, a7
 00597c  4eac8086          jsr       -$7f7a(a4)
 005980  3f3c000b          move.w    #$b, -(a7)
+; party_roster_list_draw @ 0x5984  (docs/39-character-ui-view-create.md)
 005984  3f3c0027          move.w    #$27, -(a7)
 005988  4267              clr.w     -(a7)
 00598a  4eac807a          jsr       -$7f86(a4)
@@ -7519,6 +7530,7 @@
 005c54  2020              move.l    -(a0), d0
 005c56  2020              move.l    -(a0), d0
 005c58  4e61              move      a1, usp
+; gfx_format_class_check @ 0x5C5A  (docs/54-pc-dos-graphics-formats.md)
 005c5a  6d65              blt.b     $5cc1
 005c5c  2020              move.l    -(a0), d0
 005c5e  2020              move.l    -(a0), d0
@@ -7623,6 +7635,7 @@
 005d44  2020              move.l    -(a0), d0
 005d46  2000              move.l    d0, d0
 005d48  2320              move.l    -(a0), -(a1)
+; pick_frame_from_sheet @ 0x5D4A  (docs/54-pc-dos-graphics-formats.md)
 005d4a  56696577          addq.w    #$3, $6577(a1)
 005d4e  2043              movea.l   d3, a0
 005d50  6861              bvc.b     $5db3
@@ -7698,6 +7711,7 @@
 005e1a  4e75              rts       
 005e1c  27502720          move.l    (a0), $2720(a3)
 005e20  50726f7465637400  addq.w    #$8, $65637400(a2, invalid.w)
+; protect_panel_draw @ 0x5E28  (docs/43-exploration-input-and-ingame-options.md)
 005e28  4e55fffe          link.w    a5, #$fffe
 005e2c  3f3c000f          move.w    #$f, -(a7)
 005e30  3f3c0026          move.w    #$26, -(a7)
@@ -7898,6 +7912,7 @@
 0060b0  7469              moveq     #$69, d2
 0060b2  6f6e              ble.b     $6122
 0060b4  7300              .byte     0x73, 0x00
+; bottom_panel_fidelity @ 0x60B6  (docs/44-event-text-rendering.md)
 0060b6  4e550000          link.w    a5, #$0
 0060ba  3f3c000c          move.w    #$c, -(a7)
 0060be  3f3c0012          move.w    #$12, -(a7)
@@ -7946,6 +7961,7 @@
 00614a  544f              addq.w    #$2, a7
 00614c  4e5d              unlk      a5
 00614e  4e75              rts       
+; party_status_panel_redraw @ 0x6150  (docs/43-exploration-input-and-ingame-options.md)
 006150  4e55fff6          link.w    a5, #$fff6
 006154  1b7c0001fffd      move.b    #$1, -$3(a5)
 00615a  426dfffe          clr.w     -$2(a5)
@@ -8028,6 +8044,7 @@
 00624c  3b68005efffa      move.w    $5e(a0), -$6(a5)
 006252  0c6d03e7fffa      cmpi.w    #$3e7, -$6(a5)
 006258  630c              bls.b     $6266
+; pea @ 0x625A  (docs/15-3d-view-and-game-screen.md)
 00625a  487a0068          pea.l     $62c4(pc)
 00625e  4eac841c          jsr       -$7be4(a4)
 006262  584f              addq.w    #$4, a7
@@ -8160,6 +8177,7 @@
 00640a  302dfffe          move.w    -$2(a5), d0
 00640e  41ecc0e7          lea.l     -$3f19(a4), a0
 006412  42300000          clr.b     (a0, d0.w)
+; create_temp_slots_clear @ 0x6416  (docs/39-character-ui-view-create.md)
 006416  302dfffe          move.w    -$2(a5), d0
 00641a  41ecc0e4          lea.l     -$3f1c(a4), a0
 00641e  42300000          clr.b     (a0, d0.w)
@@ -8246,7 +8264,7 @@
 0064f2  1001              move.b    d1, d0
 0064f4  4e5d              unlk      a5
 0064f6  4e75              rts       
-; play_song_scripted @ 0x64F8  (tools/mm2_symbols.py (bootstrap))
+; scripted_text_scene @ 0x64F8  (tools/mm2_symbols.py (bootstrap))
 0064f8  4e55fffe          link.w    a5, #$fffe
 0064fc  1b7c0014ffff      move.b    #$14, -$1(a5)
 006502  0c2c0002864e      cmpi.b    #$2, -$79b2(a4)
@@ -8338,6 +8356,14 @@
 006616  544f              addq.w    #$2, a7
 006618  4eac808c          jsr       -$7f74(a4)
 00661c  3f3c0001          move.w    #$1, -(a7)
+;@LBL-START
+; ========================================================================
+; 006622  spell_grid_ui_build
+;   Builds spell picker grid from A4-$8C22/$8C2B tables and
+;   character spellbook field $51(A0). Called before -$7E12.
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 006620  3f3c0005          move.w    #$5, -(a7)
 006624  4eac8404          jsr       -$7bfc(a4)
 006628  584f              addq.w    #$4, a7
@@ -8451,7 +8477,7 @@
 006792  584f              addq.w    #$4, a7
 006794  4e5d              unlk      a5
 006796  4e75              rts       
-; audio_wait_helper @ 0x6798  (tools/mm2_symbols.py (bootstrap))
+; wait_frames_helper @ 0x6798  (tools/mm2_symbols.py (bootstrap))
 006798  4e55fffe          link.w    a5, #$fffe
 00679c  302d0008          move.w    $8(a5), d0
 0067a0  48c0              ext.l     d0
@@ -8619,6 +8645,7 @@
 0069d6  6dba              blt.b     $6992
 0069d8  4e5d              unlk      a5
 0069da  4e75              rts       
+; time_tick_light_drain @ 0x69DC  (docs/43-exploration-input-and-ingame-options.md)
 0069dc  4e55fffe          link.w    a5, #$fffe
 0069e0  0c6d00010008      cmpi.w    #$1, $8(a5)
 0069e6  661e              bne.b     $6a06
@@ -8898,6 +8925,7 @@
 006da0  584f              addq.w    #$4, a7
 006da2  4e5d              unlk      a5
 006da4  4e75              rts       
+; printer @ 0x6DA6  (docs/43-exploration-input-and-ingame-options.md)
 006da6  4e550000          link.w    a5, #$0
 006daa  3f3c0017          move.w    #$17, -(a7)
 006dae  3f3c000b          move.w    #$b, -(a7)
@@ -8934,6 +8962,14 @@
 006e22  3f3c001d          move.w    #$1d, -(a7)
 006e26  3f3c0007          move.w    #$7, -(a7)
 006e2a  3f3c000a          move.w    #$a, -(a7)
+;@LBL-START
+; ========================================================================
+; 006e30  spell_cast_session_explore
+;   Non-combat spell cast: UI setup, LAB_6622 grid, JSR -$7E12 picker,
+;   JSR LAB_CDB8 effect dispatch. See docs/26-spell-cast-asm.md.
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 006e2e  4eac838c          jsr       -$7c74(a4)
 006e32  504f              addq.w    #$8, a7
 006e34  294085be          move.l    d0, -$7a42(a4)
@@ -9057,6 +9093,7 @@
 006fb2  6569              bcs.b     $701d
 006fb4  6768              beq.b     $701e
 006fb6  7400              moveq     #$0, d2
+; play_sound_seq @ 0x6FB8  (tools/mm2_symbols.py (bootstrap))
 006fb8  4e55fff0          link.w    a5, #$fff0
 006fbc  1b7c00fffff4      move.b    #$ff, -$c(a5)
 006fc2  41edfff4          lea.l     -$c(a5), a0
@@ -9111,6 +9148,7 @@
 00706a  609e              bra.b     $700a
 00706c  4e5d              unlk      a5
 00706e  4e75              rts       
+; audio_device_init @ 0x7070  (tools/mm2_symbols.py (bootstrap))
 007070  4e55fffe          link.w    a5, #$fffe
 007074  487900010001      pea.l     $10001.l
 00707a  487802a8          pea.l     $2a8.w
@@ -9560,6 +9598,7 @@
 007668  6dbe              blt.b     $7628
 00766a  4e5d              unlk      a5
 00766c  4e75              rts       
+; wave_synth_init @ 0x766E  (tools/mm2_symbols.py (bootstrap))
 00766e  4e550000          link.w    a5, #$0
 007672  48780002          pea.l     $2.w
 007676  48780400          pea.l     $400.w
@@ -9579,6 +9618,7 @@
 0076a6  584f              addq.w    #$4, a7
 0076a8  4e5d              unlk      a5
 0076aa  4e75              rts       
+; scene_sheet_handles @ 0x76AC  (docs/46-scripted-scene-graphics.md)
 0076ac  4e55fff6          link.w    a5, #$fff6
 0076b0  302d000a          move.w    $a(a5), d0
 0076b4  48c0              ext.l     d0
@@ -9654,6 +9694,7 @@
 00779c  41ec8cf4          lea.l     -$730c(a4), a0
 0077a0  21adfff60800      move.l    -$a(a5), (a0, d0.l)
 0077a6  6000ff40          bra.w     $76e8
+; play_tone_env @ 0x77AA  (tools/mm2_symbols.py (bootstrap))
 0077aa  4e55fffa          link.w    a5, #$fffa
 0077ae  3b7c0020fffe      move.w    #$20, -$2(a5)
 0077b4  3b7c0006fffc      move.w    #$6, -$4(a5)
@@ -9748,6 +9789,7 @@
 0078de  7001              moveq     #$1, d0
 0078e0  60e8              bra.b     $78ca
 0078e2  3f3c0003          move.w    #$3, -(a7)
+; descriptor_type_1_not_combat_panel @ 0x78E6  (docs/46-scripted-scene-graphics.md)
 0078e6  4ebaec10          jsr       $64f8(pc)
 0078ea  544f              addq.w    #$2, a7
 0078ec  0c2d0002ffff      cmpi.b    #$2, -$1(a5)
@@ -9822,6 +9864,7 @@
 0079c0  4e75              rts       
 0079c2  7001              moveq     #$1, d0
 0079c4  60f8              bra.b     $79be
+; spell_level_number_prompt @ 0x79C6  (docs/43-exploration-input-and-ingame-options.md)
 0079c6  4e55ffc2          link.w    a5, #$ffc2
 0079ca  3b7c0015fff6      move.w    #$15, -$a(a5)
 0079d0  422c86a8          clr.b     -$7958(a4)
@@ -10127,7 +10170,7 @@
 007dc6  7001              moveq     #$1, d0
 007dc8  4e5d              unlk      a5
 007dca  4e75              rts       
-; play_death_tones @ 0x7DCC  (tools/mm2_symbols.py (bootstrap))
+; party_wipe_ui @ 0x7DCC  (tools/mm2_symbols.py (bootstrap))
 007dcc  4e55fff8          link.w    a5, #$fff8
 007dd0  3f2d0008          move.w    $8(a5), -(a7)
 007dd4  4eac80e0          jsr       -$7f20(a4)
@@ -10317,6 +10360,7 @@
 00804a  7001              moveq     #$1, d0
 00804c  4e5d              unlk      a5
 00804e  4e75              rts       
+; open_training @ 0x8050  (tools/mm2_symbols.py (bootstrap))
 008050  4e55fff8          link.w    a5, #$fff8
 008054  3f2d0008          move.w    $8(a5), -(a7)
 008058  4eac80e0          jsr       -$7f20(a4)
@@ -10463,7 +10507,7 @@
 008234  202d0008          move.l    $8(a5), d0
 008238  4e5d              unlk      a5
 00823a  4e75              rts       
-; audio_init @ 0x823C  (tools/mm2_symbols.py (bootstrap))
+; save_game_state @ 0x823C  (tools/mm2_symbols.py (bootstrap))
 00823c  4e55fff6          link.w    a5, #$fff6
 008240  2f2c883a          move.l    -$77c6(a4), -(a7)
 008244  4eac8368          jsr       -$7c98(a4)
@@ -12007,6 +12051,7 @@
 00979a  202dfffc          move.l    -$4(a5), d0
 00979e  4e5d              unlk      a5
 0097a0  4e75              rts       
+; op_08_op_0a_behaviour @ 0x97A2  (docs/44-event-text-rendering.md)
 0097a2  303c0000          move.w    #$0, d0
 0097a6  397c00408e26      move.w    #$40, -$71da(a4)
 0097ac  397c00208e28      move.w    #$20, -$71d8(a4)
@@ -12194,6 +12239,7 @@
 009a28  20696e20          movea.l   $6e20(a1), a0
 009a2c  5241              addq.w    #$1, d1
 009a2e  4d00              dc.w      $4d00
+; same @ 0x9A30  (docs/44-event-text-rendering.md)
 009a30  4e55fff2          link.w    a5, #$fff2
 009a34  426dfff6          clr.w     -$a(a5)
 009a38  2f2c86bc          move.l    -$7944(a4), -(a7)
@@ -12273,7 +12319,7 @@
 009b40  4eac813a          jsr       -$7ec6(a4)
 009b44  4e5d              unlk      a5
 009b46  4e75              rts       
-; training_mode_select @ 0x9B48  (tools/mm2_symbols.py (bootstrap))
+; bash_door_handler @ 0x9B48  (tools/mm2_symbols.py (bootstrap))
 009b48  4e55fffc          link.w    a5, #$fffc
 009b4c  426dfffc          clr.w     -$4(a5)
 009b50  7000              moveq     #$0, d0
@@ -12314,7 +12360,7 @@
 009bc0  4eac814c          jsr       -$7eb4(a4)
 009bc4  544f              addq.w    #$2, a7
 009bc6  600000e2          bra.w     $9caa
-; training_hp_restore @ 0x9BCA  (tools/mm2_symbols.py (bootstrap))
+; bash_door_resolve @ 0x9BCA  (tools/mm2_symbols.py (bootstrap))
 009bca  4267              clr.w     -(a7)
 009bcc  4eac80e0          jsr       -$7f20(a4)
 009bd0  544f              addq.w    #$2, a7
@@ -12463,6 +12509,7 @@
 009d6c  6f6e              ble.b     $9ddc
 009d6e  2028312d          move.l    $312d(a0), d0
 009d72  20293f00          move.l    $3f00(a1), d0
+; open_arena_shop @ 0x9D76  (tools/mm2_symbols.py (bootstrap))
 009d76  4e55ffee          link.w    a5, #$ffee
 009d7a  426dfffa          clr.w     -$6(a5)
 009d7e  08ec000186b0      bset.b    #$1, -$7950(a4)
@@ -13047,6 +13094,7 @@
 00a500  5c4f              addq.w    #$6, a7
 00a502  3f3c0001          move.w    #$1, -(a7)
 00a506  206d0008          movea.l   $8(a5), a0
+; MM2 @ 0xA50A  (docs/genesis-graphics.md)
 00a50a  48680027          pea.l     $27(a0)
 00a50e  4eac80bc          jsr       -$7f44(a4)
 00a512  5c4f              addq.w    #$6, a7
@@ -13133,6 +13181,7 @@
 00a624  4efb0000          jmp       $a626(pc,d0.w)
 00a628  4e5d              unlk      a5
 00a62a  4e75              rts       
+; open_general_store @ 0xA62C  (tools/mm2_symbols.py (bootstrap))
 00a62c  4e55fff8          link.w    a5, #$fff8
 00a630  3b7c0001fffc      move.w    #$1, -$4(a5)
 00a636  4a2c860e          tst.b     -$79f2(a4)
@@ -16189,6 +16238,13 @@
 00cf12  0002fe1c          ori.b     #$1c, d2
 00cf16  00020002          ori.b     #$2, d2
 00cf1a  0002fe24          ori.b     #$24, d2
+;@LBL-START
+; ========================================================================
+; 00cf1e  DATA_skill_spell_offsets_A
+;   Sparse word offsets consumed by $CFDE. Entry value +2 means
+;   fall-through to return ($CFF4), i.e. code has no handler.
+; ========================================================================
+;@LBL-END
 00cf1e  00020002          ori.b     #$2, d2
 00cf22  0002fe2c          ori.b     #$2c, d2
 00cf26  00020002          ori.b     #$2, d2
@@ -16247,14 +16303,21 @@
 ; ========================================================================
 ; 00cfd0  skill_spell_effect_dispatch  (LAB_CFD0)
 ;   Reads skill/spell index (arg +8) and runs the shared effect
-;   dispatcher: bra $D23E -> jmp via per-effect jsr-stub table.
-;   Fight stubs $B644.. ; Cast stubs $B982.. ; shared exit $D256.
+;   dispatcher. Two sparse executors are used: $CFDE (0..95 via $CF1E)
+;   and $D266 (post-subq domain via $D1AE).
 ; ========================================================================
 ;@LBL-END
 00cfd0  4e550000          link.w    a5, #$0
 00cfd4  302d0008          move.w    $8(a5), d0
 00cfd8  48c0              ext.l     d0
 00cfda  60000262          bra.w     $d23e
+;@LBL-START
+; ========================================================================
+; 00cfde  skill_spell_sparse_executor_A
+;   Validates D0 against #$60, then jmp's via word table at $CF1E
+;   to CDB8 jsr/bra stubs (43 live codes, sparse).
+; ========================================================================
+;@LBL-END
 00cfde  4ebae664          jsr       $b644(pc)
 00cfe2  60000272          bra.w     $d256
 00cfe6  4ebae69c          jsr       $b684(pc)
@@ -16267,8 +16330,8 @@
 ;@LBL-START
 ; ========================================================================
 ; 00d002  spell_effect_jump_table
-;   Cast-command dispatch: sequence of `jsr stub ; bra $D256` pairs
-;   for spell handlers in the $B900..$C800 block (doc 17).
+;   Dense `jsr stub ; bra $D27E` block ($D006..) for core spell handlers.
+;   Entered through sparse executor $D266 and table $D1AE.
 ; ========================================================================
 ;@LBL-END
 00d002  60000252          bra.w     $d256
@@ -16389,6 +16452,13 @@
 00d1a6  fdca              .byte     0xfd, 0xca
 00d1a8  0002fdd2          ori.b     #$d2, d2
 00d1ac  fdda              .byte     0xfd, 0xda
+;@LBL-START
+; ========================================================================
+; 00d1ae  DATA_skill_spell_offsets_B
+;   Sparse word offsets consumed by $D266; +2 entries return at $D27E.
+;   Targets include $D006..$D182 and extra handlers $D186..$D1AA.
+; ========================================================================
+;@LBL-END
 00d1ae  fde2              .byte     0xfd, 0xe2
 00d1b0  0002fdea          ori.b     #$ea, d2
 00d1b4  fdf2              .byte     0xfd, 0xf2
@@ -16443,8 +16513,8 @@
 ;@LBL-START
 ; ========================================================================
 ; 00d23e  skill_spell_jump_executor
-;   Indexes DATA_spell_effect_offset_table by effect number and
-;   jmp's to the matching stub; common landing for Fight + Cast.
+;   Legacy label area; active sparse executor is at $D266 using table
+;   $D1AE. Region still contains offset words used by dispatch logic.
 ; ========================================================================
 ;@LBL-END
 00d23e  5580              subq.l    #$2, d0
@@ -16621,6 +16691,13 @@
 00d454  1b7c0041fffe      move.b    #$41, -$2(a5)
 00d45a  6006              bra.b     $d462
 00d45c  1b7c001bfffe      move.b    #$1b, -$2(a5)
+;@LBL-START
+; ========================================================================
+; 00d464  spell_target_picker
+;   Combat target selection for spells; 'which (A-J)?' style UI.
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 00d462  60000090          bra.w     $d4f4
 00d466  1b6c8842ffff      move.b    -$77be(a4), -$1(a5)
 00d46c  0c2d000affff      cmpi.b    #$a, -$1(a5)
@@ -16946,6 +17023,7 @@
 00d896  7472              moveq     #$72, d2
 00d898  6170              bsr.b     $d90a
 00d89a  2100              move.l    d0, -(a0)
+; enroll_mages_guild @ 0xD89C  (tools/mm2_symbols.py (bootstrap))
 00d89c  4e55fff4          link.w    a5, #$fff4
 00d8a0  426dfff8          clr.w     -$8(a5)
 00d8a4  302d0008          move.w    $8(a5), d0
@@ -20885,6 +20963,13 @@
 0108b2  4a2cfae0          tst.b     -$520(a4)
 0108b6  6704              beq.b     $108bc
 0108b8  522dfffb          addq.b    #$1, -$5(a5)
+;@LBL-START
+; ========================================================================
+; 0108bc  spell_combat_apply
+;   Combat spell effect apply helper (party/monster arrays, RNG).
+;   Called from per-spell stubs after $133B6.
+; ========================================================================
+;@LBL-END
 0108bc  0c2c0002fac5      cmpi.b    #$2, -$53b(a4)
 0108c2  671e              beq.b     $108e2
 0108c4  4267              clr.w     -(a7)
@@ -22314,7 +22399,6 @@
 011aa0  422cfac5          clr.b     -$53b(a4)
 011aa4  197c00018617      move.b    #$1, -$79e9(a4)
 011aaa  7000              moveq     #$0, d0
-; 13517 @ 0x11AAC  (docs/26-spell-cast-asm.md)
 011aac  102cfb0b          move.b    -$4f5(a4), d0
 011ab0  3f00              move.w    d0, -(a7)
 011ab2  4eac80e0          jsr       -$7f20(a4)
@@ -22338,7 +22422,6 @@
 011aec  4eac81b8          jsr       -$7e48(a4)
 011af0  4eba0d56          jsr       $12848(pc)
 011af4  6004              bra.b     $11afa
-; unknown @ 0x11AF6  (docs/26-spell-cast-asm.md)
 011af6  426dfffc          clr.w     -$4(a5)
 011afa  422c8617          clr.b     -$79e9(a4)
 011afe  526dfffa          addq.w    #$1, -$6(a5)
@@ -22353,7 +22436,6 @@
 011b0a  4eac82a2          jsr       -$7d5e(a4)
 011b0e  4267              clr.w     -(a7)
 011b10  4eac83c2          jsr       -$7c3e(a4)
-; unknown @ 0x11B14  (docs/26-spell-cast-asm.md)
 011b14  544f              addq.w    #$2, a7
 011b16  60000108          bra.w     $11c20
 ;@LBL-START
@@ -22439,7 +22521,6 @@
 011bee  6700ff1a          beq.w     $11b0a
 011bf2  5380              subq.l    #$1, d0
 011bf4  6700ff24          beq.w     $11b1a
-; 13538 @ 0x11BF8  (docs/26-spell-cast-asm.md)
 011bf8  5380              subq.l    #$1, d0
 011bfa  6700ff50          beq.w     $11b4c
 011bfe  90bc0000000a      sub.l     #$a, d0
@@ -22644,19 +22725,6 @@
 011e4e  196c86a7a1b3      move.b    -$7959(a4), -$5e4d(a4)
 011e54  4e5d              unlk      a5
 011e56  4e75              rts       
-;@LBL-START
-; ========================================================================
-; 011e58  encounter_xp_budget_init  (LAB_11E58)
-;   Called from combat setup (0x12CF4) before the random picker. Sums
-;   party hp_current (record+0x74) into A4-$6FCA, divides by 8 (long
-;   divide thunk -$7B4E -> 0x24D9A), then scales by disposition
-;   (A4-$79AE): /4 more if 0, /2 more if 1, unchanged if 2, x2 (long
-;   multiply thunk -$7B54 -> 0x24C74) if 3 — i.e. total party HP / 32,
-;   /16, /8, /4 respectively. Also writes A4-$6FC2 = half the highest
-;   party level (record+0x71 >> 1), the tier-roll modifier consumed by
-;   monster_adds_friends @ 0x11F0A. See docs/35-encounter-tables.md.
-; ========================================================================
-;@LBL-END
 011e58  4e55fff8          link.w    a5, #$fff8
 011e5c  422dfffd          clr.b     -$3(a5)
 011e60  42ac9036          clr.l     -$6fca(a4)
@@ -22757,10 +22825,12 @@
 011f98  584f              addq.w    #$4, a7
 011f9a  1b40ffff          move.b    d0, -$1(a5)
 011f9e  102dffff          move.b    -$1(a5), d0
+; max_monsters_in_random_picker @ 0x11FA2  (docs/35-encounter-tables.md)
 011fa2  b02ca9f1          cmp.b     -$560f(a4), d0
 011fa6  6306              bls.b     $11fae
 011fa8  1b6ca9f1ffff      move.b    -$560f(a4), -$1(a5)
 011fae  102dffff          move.b    -$1(a5), d0
+; min_monsters_floor @ 0x11FB2  (docs/35-encounter-tables.md)
 011fb2  b02ca9f2          cmp.b     -$560e(a4), d0
 011fb6  6406              bcc.b     $11fbe
 011fb8  1b6ca9f2ffff      move.b    -$560e(a4), -$1(a5)
@@ -24288,6 +24358,13 @@
 0133ac  4a2dfffd          tst.b     -$3(a5)
 0133b0  6716              beq.b     $133c8
 0133b2  7000              moveq     #$0, d0
+;@LBL-START
+; ========================================================================
+; 0133b6  spell_effect_apply_loop
+;   Per-target spell effect loop using caster level and RNG -$7BB4.
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 0133b4  102d0009          move.b    $9(a5), d0
 0133b8  3f00              move.w    d0, -(a7)
 0133ba  3f3c0001          move.w    #$1, -(a7)
@@ -24582,6 +24659,14 @@
 013724  b26d0008          cmp.w     $8(a5), d1
 013728  670c              beq.b     $13736
 01372a  526dfffc          addq.w    #$1, -$4(a5)
+;@LBL-START
+; ========================================================================
+; 013730  spell_school_gate
+;   Compares picked spell index to 13 words at A4-$6D88;
+;   returns 1 -> cleric $CDB8, 0 -> sorcerer $CFF8.
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 01372e  0c6d000cfffc      cmpi.w    #$c, -$4(a5)
 013734  6dde              blt.b     $13714
 013736  0c6d000cfffc      cmpi.w    #$c, -$4(a5)
@@ -25225,7 +25310,6 @@
 013f64  302dfff2          move.w    -$e(a5), d0
 013f68  48c0              ext.l     d0
 013f6a  604c              bra.b     $13fb8
-; bchg @ 0x13F6C  (docs/25-audio-sounds-music.md)
 013f6c  086c00008650      bchg.b    #$0, -$79b0(a4)
 013f72  526dfffa          addq.w    #$1, -$6(a5)
 013f76  6058              bra.b     $13fd0
@@ -25441,6 +25525,7 @@
 0141ea  6f6d              ble.b     $14259
 0141ec  2028312d          move.l    $312d(a0), d0
 0141f0  20293f00          move.l    $3f00(a1), d0
+; dismiss @ 0x141F4  (docs/43-exploration-input-and-ingame-options.md)
 0141f4  4e55fffc          link.w    a5, #$fffc
 0141f8  4267              clr.w     -(a7)
 0141fa  4eac83c2          jsr       -$7c3e(a4)
@@ -27103,6 +27188,7 @@
 01574e  202dfffc          move.l    -$4(a5), d0
 015752  4e5d              unlk      a5
 015754  4e75              rts       
+; op_0b_title_text @ 0x15756  (docs/44-event-text-rendering.md)
 015756  4e55fffe          link.w    a5, #$fffe
 01575a  7000              moveq     #$0, d0
 01575c  102d0009          move.b    $9(a5), d0
@@ -27260,6 +27346,7 @@
 ;   Event opcode 0x01 handler: show one indexed string (u8 arg).
 ; ========================================================================
 ;@LBL-END
+; event_dat @ 0x15924  (docs/30-event-to-string-path.md)
 015924  4e550000          link.w    a5, #$0
 015928  08ec000086b0      bset.b    #$0, -$7950(a4)
 01592e  4ebaff54          jsr       $15884(pc)
@@ -27275,6 +27362,7 @@
 ;   OP_02: show text block (u8 string index; const $13).
 ; ========================================================================
 ;@LBL-END
+; event_dat @ 0x15942  (docs/30-event-to-string-path.md)
 015942  4e55fffa          link.w    a5, #$fffa
 015946  426dfffe          clr.w     -$2(a5)
 01594a  426dfffc          clr.w     -$4(a5)
@@ -27322,6 +27410,7 @@
 ;   OP_03: show text (u8 string index via $15942 const $11).
 ; ========================================================================
 ;@LBL-END
+; partial @ 0x159CE  (docs/56-event-system-remaining-gaps.md)
 0159ce  4e550000          link.w    a5, #$0
 0159d2  002c000386b0      ori.b     #$3, -$7950(a4)
 0159d8  4eac80a4          jsr       -$7f5c(a4)
@@ -27339,6 +27428,7 @@
 ;   OP_04: show text above door (u8 string index).
 ; ========================================================================
 ;@LBL-END
+; event_dat @ 0x159F4  (docs/30-event-to-string-path.md)
 0159f4  4e550000          link.w    a5, #$0
 0159f8  4ebafe8a          jsr       $15884(pc)
 0159fc  4ebafeca          jsr       $158c8(pc)
@@ -27372,6 +27462,7 @@
 ;   OP_05: show text popup A (u8 string index).
 ; ========================================================================
 ;@LBL-END
+; popup_a_large_plain_overlay @ 0x15A46  (docs/07-event-script-opcodes.md)
 015a46  4e55fffa          link.w    a5, #$fffa
 015a4a  4ebafe38          jsr       $15884(pc)
 015a4e  4ebafe78          jsr       $158c8(pc)
@@ -27431,6 +27522,7 @@
 ;   OP_06: show text popup B (u8 string index).
 ; ========================================================================
 ;@LBL-END
+; event_dat @ 0x15AEE  (docs/30-event-to-string-path.md)
 015aee  4e55fff6          link.w    a5, #$fff6
 015af2  426dfffe          clr.w     -$2(a5)
 015af6  4ebafd8c          jsr       $15884(pc)
@@ -27586,6 +27678,7 @@
 ;   OP_07: wait-loop until SPACE key pressed.
 ; ========================================================================
 ;@LBL-END
+; side_effect @ 0x15CE6  (docs/45-event-graphics-opcodes.md)
 015ce6  4e55fffe          link.w    a5, #$fffe
 015cea  4eac81ac          jsr       -$7e54(a4)
 015cee  4a2d0009          tst.b     $9(a5)
@@ -27611,6 +27704,7 @@
 ;   OP_08: wait for key (cursor mode $FD, calls $15CE6).
 ; ========================================================================
 ;@LBL-END
+; partial @ 0x15D26  (docs/56-event-system-remaining-gaps.md)
 015d26  4e550000          link.w    a5, #$0
 015d2a  197c00fd8e24      move.b    #$fd, -$71dc(a4)
 015d30  3f3c0001          move.w    #$1, -(a7)
@@ -27624,6 +27718,7 @@
 ;   OP_09: y/n prompt; writes result into condition flag.
 ; ========================================================================
 ;@LBL-END
+; byte_exact @ 0x15D3C  (docs/56-event-system-remaining-gaps.md)
 015d3c  4e55fffe          link.w    a5, #$fffe
 015d40  422c86af          clr.b     -$7951(a4)
 015d44  4a2d0009          tst.b     $9(a5)
@@ -27657,6 +27752,7 @@
 ;   OP_0A: y/n prompt variant (mode $FD, calls $15D3C).
 ; ========================================================================
 ;@LBL-END
+; partial @ 0x15D9A  (docs/56-event-system-remaining-gaps.md)
 015d9a  4e550000          link.w    a5, #$0
 015d9e  197c00fd8e24      move.b    #$fd, -$71dc(a4)
 015da4  3f3c0001          move.w    #$1, -(a7)
@@ -27707,6 +27803,7 @@
 ;   OP_0C: map transition to (u8 dest, u8).
 ; ========================================================================
 ;@LBL-END
+; indirect @ 0x15E12  (docs/45-event-graphics-opcodes.md)
 015e12  4e55fffe          link.w    a5, #$fffe
 015e16  4ebaf7a6          jsr       $155be(pc)
 015e1a  1b40ffff          move.b    d0, -$1(a5)
@@ -27764,6 +27861,7 @@
 ;   OP_0D: u8 -> engine thunk -$7E42 (generic engine call).
 ; ========================================================================
 ;@LBL-END
+; none @ 0x15EC4  (docs/45-event-graphics-opcodes.md)
 015ec4  4e550000          link.w    a5, #$0
 015ec8  4ebaf6f4          jsr       $155be(pc)
 015ecc  7200              moveq     #$0, d1
@@ -27773,6 +27871,7 @@
 015ed6  544f              addq.w    #$2, a7
 015ed8  4e5d              unlk      a5
 015eda  4e75              rts       
+; op_0e_default_range @ 0x15EDC  (tools/mm2_symbols.py (bootstrap))
 015edc  4e55fffe          link.w    a5, #$fffe
 015ee0  7000              moveq     #$0, d0
 015ee2  102d0009          move.b    $9(a5), d0
@@ -27914,12 +28013,11 @@
 0160c0  4e75              rts       
 ;@LBL-START
 ; ========================================================================
-; 0160c2  event_op0e_selector_dispatch
-;   Event opcode 0x0E: town-service selector dispatch (shops, temple,
-;   training, guilds, travel portals — see doc 07 OP_0E table).
+; 0160c2  op_0e_service_dispatch
+;   OP_0E town-service router: chained subtract on selector byte,
+;   then jsr to inn/training/tavern/temple/guild/smith/store/arena.
 ; ========================================================================
 ;@LBL-END
-; op_0e_service_dispatch @ 0x160C2  (tools/mm2_symbols.py (bootstrap))
 0160c2  4e55fffe          link.w    a5, #$fffe
 0160c6  197c00018616      move.b    #$1, -$79ea(a4)
 0160cc  4ebaf4f0          jsr       $155be(pc)
@@ -28057,6 +28155,7 @@
 ;   OP_0F: end/return script; sets stop flag, cleanup $171AC.
 ; ========================================================================
 ;@LBL-END
+; byte_exact @ 0x162A6  (docs/56-event-system-remaining-gaps.md)
 0162a6  4e550000          link.w    a5, #$0
 0162aa  197c00018616      move.b    #$1, -$79ea(a4)
 0162b0  4eba0efa          jsr       $171ac(pc)
@@ -28068,7 +28167,6 @@
 ;   OP_10: IF(cond) skip N token-stream entries (helper $157FC).
 ; ========================================================================
 ;@LBL-END
-; var @ 0x162B8  (docs/07-event-script-opcodes.md)
 0162b8  4e55fffe          link.w    a5, #$fffe
 0162bc  4ebaf300          jsr       $155be(pc)
 0162c0  1b40ffff          move.b    d0, -$1(a5)
@@ -28087,7 +28185,6 @@
 ;   OP_11: IF(!cond) skip N token-stream entries (helper $157FC).
 ; ========================================================================
 ;@LBL-END
-; var @ 0x162DC  (docs/07-event-script-opcodes.md)
 0162dc  4e55fffe          link.w    a5, #$fffe
 0162e0  4ebaf2dc          jsr       $155be(pc)
 0162e4  1b40ffff          move.b    d0, -$1(a5)
@@ -28107,6 +28204,7 @@
 ;   transitions into combat engine (doc 07).
 ; ========================================================================
 ;@LBL-END
+; partial @ 0x16300  (docs/56-event-system-remaining-gaps.md)
 016300  4e55fffe          link.w    a5, #$fffe
 016304  197c00808695      move.b    #$80, -$796b(a4)
 01630a  426cb0b2          clr.w     -$4f4e(a4)
@@ -28150,6 +28248,7 @@
 ;   OP_13: encounter setup variant (calls $16300 flag=1, 10-byte block).
 ; ========================================================================
 ;@LBL-END
+; partial @ 0x16386  (docs/56-event-system-remaining-gaps.md)
 016386  4e550000          link.w    a5, #$0
 01638a  3f3c0001          move.w    #$1, -(a7)
 01638e  4ebaff70          jsr       $16300(pc)
@@ -28162,6 +28261,7 @@
 ;   OP_14: clear current tile event high-bit / runtime event flag.
 ; ========================================================================
 ;@LBL-END
+; none @ 0x16398  (docs/45-event-graphics-opcodes.md)
 016398  4e550000          link.w    a5, #$0
 01639c  197c00018616      move.b    #$1, -$79ea(a4)
 0163a2  4eba0e08          jsr       $171ac(pc)
@@ -28211,7 +28311,7 @@
 ;   OP_15: apply state to party members (u8 count,u8,u8).
 ; ========================================================================
 ;@LBL-END
-; 3 @ 0x16426  (docs/07-event-script-opcodes.md)
+; byte_exact @ 0x16426  (docs/56-event-system-remaining-gaps.md)
 016426  4e55fffc          link.w    a5, #$fffc
 01642a  1b7c0001fffd      move.b    #$1, -$3(a5)
 016430  196c86afa2c1      move.b    -$7951(a4), -$5d3f(a4)
@@ -28444,7 +28544,6 @@
 ;   OP_1A: store u8 into resolved variable pointer.
 ; ========================================================================
 ;@LBL-END
-; 2 @ 0x166F8  (docs/07-event-script-opcodes.md)
 0166f8  4e55fffe          link.w    a5, #$fffe
 0166fc  4ebaeec0          jsr       $155be(pc)
 016700  1b40ffff          move.b    d0, -$1(a5)
@@ -28530,6 +28629,7 @@
 0167aa  60e0              bra.b     $1678c
 0167ac  4e5d              unlk      a5
 0167ae  4e75              rts       
+; event_party_effect_apply @ 0x167B0  (docs/07-event-script-opcodes.md)
 0167b0  4e55fffa          link.w    a5, #$fffa
 0167b4  42adfffc          clr.l     -$4(a5)
 0167b8  7000              moveq     #$0, d0
@@ -28883,6 +28983,7 @@
 ;   OP_26/27: prompt to select a party member (ESC ends script).
 ; ========================================================================
 ;@LBL-END
+; partial @ 0x16BC0  (docs/56-event-system-remaining-gaps.md)
 016bc0  4e55fff8          link.w    a5, #$fff8
 016bc4  302c86a6          move.w    -$795a(a4), d0
 016bc8  d07c0030          add.w     #$30, d0
@@ -29028,7 +29129,7 @@
 ;   OP_2B: u8 + token-skip walk (helper $157FC).
 ; ========================================================================
 ;@LBL-END
-; var @ 0x16D74  (docs/07-event-script-opcodes.md)
+; byte_exact @ 0x16D74  (docs/56-event-system-remaining-gaps.md)
 016d74  4e55fffe          link.w    a5, #$fffe
 016d78  4ebae844          jsr       $155be(pc)
 016d7c  1b40ffff          move.b    d0, -$1(a5)
@@ -29610,6 +29711,7 @@
 ;   Invalid opcode handler: sets abort flag A4-$8616 and exits script.
 ; ========================================================================
 ;@LBL-END
+; byte_exact @ 0x1748C  (docs/56-event-system-remaining-gaps.md)
 01748c  197c00018616      move.b    #$1, -$79ea(a4)
 017492  6078              bra.b     $1750c
 ;@LBL-START
@@ -32303,6 +32405,7 @@
 019804  7000              moveq     #$0, d0
 019806  4e5d              unlk      a5
 019808  4e75              rts       
+; tavern_food_drink_menu @ 0x1980A  (tools/mm2_symbols.py (bootstrap))
 01980a  4e55fff6          link.w    a5, #$fff6
 01980e  426dfffa          clr.w     -$6(a5)
 019812  197c00fd8e24      move.b    #$fd, -$71dc(a4)
@@ -32601,6 +32704,13 @@
 019c22  206dfffa          movea.l   -$6(a5), a0
 019c26  226dfffa          movea.l   -$6(a5), a1
 019c2a  33680074005e      move.w    $74(a0), $5e(a1)
+;@LBL-START
+; ========================================================================
+; 019c30  rest_sp_recompute
+;   Inside Rest: spell-level / SP recompute path.
+;   jsr -$7F56 → luck_bonus_table_walk; mulu with record +$20 → +$5A/+58.
+; ========================================================================
+;@LBL-END
 019c30  206dfffa          movea.l   -$6(a5), a0
 019c34  4a280023          tst.b     $23(a0)
 019c38  676a              beq.b     $19ca4
@@ -32690,6 +32800,13 @@
 019d5e  7465              moveq     #$65, d2
 019d60  7273              moveq     #$73, d1
 019d62  2e00              move.l    d0, d7
+;@LBL-START
+; ========================================================================
+; 019d64  rest_ambush_helper
+;   Rest ambush setup: wake living members (bset #4,$26), mode -$796B=3,
+;   clr -$77BE. Skips ambush when -$55D6 >= $80 (event-tile gate).
+; ========================================================================
+;@LBL-END
 019d64  4e55fff8          link.w    a5, #$fff8
 019d68  426dfffc          clr.w     -$4(a5)
 019d6c  7000              moveq     #$0, d0
@@ -32741,6 +32858,14 @@
 019e18  302dfffc          move.w    -$4(a5), d0
 019e1c  4e5d              unlk      a5
 019e1e  4e75              rts       
+;@LBL-START
+; ========================================================================
+; 019e20  world_rest
+;   R-key Rest (thunk -$7D2E). Inn lodging rest shares this leaf.
+;   btst #3,-$55D6 → 'Too dangerous!'; Y/N prompt; hireling pay check;
+;   then rest_ambush_helper + SP recompute (0x19C30 / 0x4442).
+; ========================================================================
+;@LBL-END
 019e20  4e55fffe          link.w    a5, #$fffe
 019e24  197c000186b0      move.b    #$1, -$7950(a4)
 019e2a  4267              clr.w     -(a7)
@@ -32789,7 +32914,6 @@
 019eb8  4e5d              unlk      a5
 019eba  4e75              rts       
 019ebc  546f6f20          addq.w    #$2, $6f20(a7)
-; open_inn_lodging @ 0x19EC0  (tools/mm2_symbols.py (bootstrap))
 019ec0  6461              bcc.b     $19f23
 019ec2  6e67              bgt.b     $19f2b
 019ec4  6572              bcs.b     $19f38
@@ -33031,6 +33155,15 @@
 01a128  2028792f          move.l    $792f(a0), d0
 01a12c  6e29              bgt.b     $1a157
 01a12e  3f22              move.w    -(a2), -(a7)
+;@LBL-START
+; ========================================================================
+; 01a132  open_inn_lodging
+;   OP_0E selector 0x01 — inn registry y/n (home-town write).
+;   Actual rest is world_rest @ 0x19E20. Capstone splits link.w across
+;   01a130/01a134 (entry is mid-instruction in the listing).
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 01a130  00004e55          ori.b     #$55, d0
 01a134  fffa              .byte     0xff, 0xfa
 01a136  197c000686b0      move.b    #$6, -$7950(a4)
@@ -33799,6 +33932,7 @@
 01a906  4fef0012          lea.l     $12(a7), a7
 01a90a  4e5d              unlk      a5
 01a90c  4e75              rts       
+; trap_damage_apply @ 0x1A90E  (docs/43-exploration-input-and-ingame-options.md)
 01a90e  4e55fffa          link.w    a5, #$fffa
 01a912  532d0009          subq.b    #$1, $9(a5)
 01a916  616c              bsr.b     $1a984
@@ -33847,6 +33981,7 @@
 01a9a0  544f              addq.w    #$2, a7
 01a9a2  4e5d              unlk      a5
 01a9a4  4e75              rts       
+; trap_victim_pick @ 0x1A9A6  (docs/43-exploration-input-and-ingame-options.md)
 01a9a6  4e55fffc          link.w    a5, #$fffc
 01a9aa  487a00b8          pea.l     $1aa64(pc)
 01a9ae  4eac8140          jsr       -$7ec0(a4)
@@ -34478,6 +34613,13 @@
 01b194  6561              bcs.b     $1b1f7
 01b196  7665              moveq     #$65, d3
 01b198  20697400          movea.l   $7400(a1), a0
+;@LBL-START
+; ========================================================================
+; 01b19c  search_payoff_ui
+;   Found-item presentation + distribution ('you found…' / Identify).
+;   Reached via -$7D1C from search_key_handler after loot predicate.
+; ========================================================================
+;@LBL-END
 01b19c  4e55fff0          link.w    a5, #$fff0
 01b1a0  422dfff7          clr.b     -$9(a5)
 01b1a4  422dfff6          clr.b     -$a(a5)
@@ -35473,6 +35615,7 @@
 01be3c  302dfffe          move.w    -$2(a5), d0
 01be40  4e5d              unlk      a5
 01be42  4e75              rts       
+; townSvcSmithBuy @ 0x1BE44  (docs/07-event-script-opcodes.md)
 01be44  4e55fffe          link.w    a5, #$fffe
 01be48  206ca5c2          movea.l   -$5a3e(a4), a0
 01be4c  4a280026          tst.b     $26(a0)
@@ -36340,6 +36483,7 @@
 01c9b8  302dfffe          move.w    -$2(a5), d0
 01c9bc  4e5d              unlk      a5
 01c9be  4e75              rts       
+; townSvcCharGoldDeduct @ 0x1C9C0  (docs/07-event-script-opcodes.md)
 01c9c0  4e55fffe          link.w    a5, #$fffe
 01c9c4  206d0008          movea.l   $8(a5), a0
 01c9c8  20280066          move.l    $66(a0), d0
@@ -36981,7 +37125,7 @@
 01d202  6de4              blt.b     $1d1e8
 01d204  4e5d              unlk      a5
 01d206  4e75              rts       
-; open_temple @ 0x1D208  (tools/mm2_symbols.py (bootstrap))
+; open_tavern_food @ 0x1D208  (tools/mm2_symbols.py (bootstrap))
 01d208  4e55ffee          link.w    a5, #$ffee
 01d20c  3b7c0001fff6      move.w    #$1, -$a(a5)
 01d212  3b7c0001fff4      move.w    #$1, -$c(a5)
@@ -37364,6 +37508,7 @@
 01d70e  4eac8224          jsr       -$7ddc(a4)
 01d712  4e5d              unlk      a5
 01d714  4e75              rts       
+; townSvcHeal @ 0x1D716  (docs/07-event-script-opcodes.md)
 01d716  4e550000          link.w    a5, #$0
 01d71a  2f2ca942          move.l    -$56be(a4), -(a7)
 01d71e  2f2d0008          move.l    $8(a5), -(a7)
@@ -37374,6 +37519,7 @@
 01d72c  2f2d0008          move.l    $8(a5), -(a7)
 01d730  4eba0616          jsr       $1dd48(pc)
 01d734  584f              addq.w    #$4, a7
+; townSvcRestoreCondition @ 0x1D736  (docs/07-event-script-opcodes.md)
 01d736  206d0008          movea.l   $8(a5), a0
 01d73a  42280026          clr.b     $26(a0)
 01d73e  3f3c0010          move.w    #$10, -(a7)
@@ -37832,6 +37978,7 @@
 01dd40  202dfffc          move.l    -$4(a5), d0
 01dd44  4e5d              unlk      a5
 01dd46  4e75              rts       
+; townSvcRestoreHp @ 0x1DD48  (docs/07-event-script-opcodes.md)
 01dd48  4e55fffc          link.w    a5, #$fffc
 01dd4c  206d0008          movea.l   $8(a5), a0
 01dd50  3b680060fffc      move.w    $60(a0), -$4(a5)
@@ -37850,6 +37997,7 @@
 01dd86  302dfffe          move.w    -$2(a5), d0
 01dd8a  4e5d              unlk      a5
 01dd8c  4e75              rts       
+; open_temple @ 0x1DD8E  (tools/mm2_symbols.py (bootstrap))
 01dd8e  4e55fff2          link.w    a5, #$fff2
 01dd92  3f2d0008          move.w    $8(a5), -(a7)
 01dd96  4eac80e0          jsr       -$7f20(a4)
@@ -38326,6 +38474,7 @@
 01e3de  4eac8152          jsr       -$7eae(a4)
 01e3e2  4e5d              unlk      a5
 01e3e4  4e75              rts       
+; open_mages_guild @ 0x1E3E6  (tools/mm2_symbols.py (bootstrap))
 01e3e6  4e55ffec          link.w    a5, #$ffec
 01e3ea  426dfff4          clr.w     -$c(a5)
 01e3ee  4eba04c0          jsr       $1e8b0(pc)
@@ -38660,7 +38809,6 @@
 01e862  ff7c              dc.w      $ff7c
 01e864  90bc00000041      sub.l     #$41, d0
 01e86a  b0bc00000007      cmp.l     #$7, d0
-; open_mages_guild @ 0x1E870  (tools/mm2_symbols.py (bootstrap))
 01e870  649c              bcc.b     $1e80e
 01e872  e380              asl.l     #$1, d0
 01e874  303b00e0          move.w    $1e856(pc, d0.w), d0
@@ -38763,6 +38911,7 @@
 01e9c8  6de0              blt.b     $1e9aa
 01e9ca  4e5d              unlk      a5
 01e9cc  4e75              rts       
+; indoor_input_read @ 0x1E9CE  (docs/43-exploration-input-and-ingame-options.md)
 01e9ce  4e55fffe          link.w    a5, #$fffe
 01e9d2  302c9986          move.w    -$667a(a4), d0
 01e9d6  526c9986          addq.w    #$1, -$667a(a4)
@@ -41646,6 +41795,7 @@
 020f52  584f              addq.w    #$4, a7
 020f54  4e5d              unlk      a5
 020f56  4e75              rts       
+; exchange @ 0x20F58  (docs/43-exploration-input-and-ingame-options.md)
 020f58  4e55fffa          link.w    a5, #$fffa
 020f5c  102c86a7          move.b    -$7959(a4), d0
 020f60  d03c0030          add.b     #$30, d0
@@ -42177,6 +42327,7 @@
 02161c  10adffff          move.b    -$1(a5), (a0)
 021620  4e5d              unlk      a5
 021622  4e75              rts       
+; open_window @ 0x21624  (docs/43-exploration-input-and-ingame-options.md)
 021624  4e55fffa          link.w    a5, #$fffa
 021628  426dfffe          clr.w     -$2(a5)
 02162c  302dfffe          move.w    -$2(a5), d0
@@ -42379,6 +42530,7 @@
 0218e4  584f              addq.w    #$4, a7
 0218e6  4e5d              unlk      a5
 0218e8  4e75              rts       
+; draw_char_glyph @ 0x218EA  (docs/49-data-hunk-mm2_data_00.md)
 0218ea  4e550000          link.w    a5, #$0
 0218ee  0c6d01000008      cmpi.w    #$100, $8(a5)
 0218f4  66000086          bne.w     $2197c
@@ -42629,6 +42781,7 @@
 021c18  544f              addq.w    #$2, a7
 021c1a  4e5d              unlk      a5
 021c1c  4e75              rts       
+; close_window @ 0x21C1E  (docs/43-exploration-input-and-ingame-options.md)
 021c1e  4e55fffa          link.w    a5, #$fffa
 021c22  426dfffc          clr.w     -$4(a5)
 021c26  422dfffb          clr.b     -$5(a5)
@@ -42944,6 +43097,7 @@
 022066  4fef000c          lea.l     $c(a7), a7
 02206a  4e5d              unlk      a5
 02206c  4e75              rts       
+; no_op @ 0x2206E  (docs/44-event-text-rendering.md)
 02206e  4e550000          link.w    a5, #$0
 022072  4e5d              unlk      a5
 022074  4e75              rts       
@@ -42969,6 +43123,7 @@
 0220b8  504f              addq.w    #$8, a7
 0220ba  4e5d              unlk      a5
 0220bc  4e75              rts       
+; highlight_on_off_for_next_print @ 0x220BE  (docs/43-exploration-input-and-ingame-options.md)
 0220be  4e550000          link.w    a5, #$0
 0220c2  4a6d0008          tst.w     $8(a5)
 0220c6  670c              beq.b     $220d4
@@ -42989,6 +43144,7 @@
 022100  8128000a          or.b      d0, $a(a0)
 022104  4e5d              unlk      a5
 022106  4e75              rts       
+; locate_cursor @ 0x22108  (docs/43-exploration-input-and-ingame-options.md)
 022108  4e550000          link.w    a5, #$0
 02210c  486d000b          pea.l     $b(a5)
 022110  486d0009          pea.l     $9(a5)
@@ -43178,6 +43334,7 @@
 022370  504f              addq.w    #$8, a7
 022372  4e5d              unlk      a5
 022374  4e75              rts       
+; print_string @ 0x22376  (docs/43-exploration-input-and-ingame-options.md)
 022376  4e55fff8          link.w    a5, #$fff8
 02237a  206c9e68          movea.l   -$6198(a4), a0
 02237e  7000              moveq     #$0, d0
@@ -43261,6 +43418,7 @@
 022478  6000ff18          bra.w     $22392
 02247c  4e5d              unlk      a5
 02247e  4e75              rts       
+; print_number @ 0x22480  (docs/43-exploration-input-and-ingame-options.md)
 022480  4e550000          link.w    a5, #$0
 022484  3f2d000c          move.w    $c(a5), -(a7)
 022488  3f2d000a          move.w    $a(a5), -(a7)
@@ -43335,6 +43493,7 @@
 022580  584f              addq.w    #$4, a7
 022582  4e5d              unlk      a5
 022584  4e75              rts       
+; spell_ui_tone @ 0x22586  (docs/49-data-hunk-mm2_data_00.md)
 022586  4e55fff8          link.w    a5, #$fff8
 02258a  426dfff8          clr.w     -$8(a5)
 02258e  206cfb78          movea.l   -$488(a4), a0
@@ -43784,6 +43943,7 @@
 022bc0  544f              addq.w    #$2, a7
 022bc2  4e5d              unlk      a5
 022bc4  4e75              rts       
+; rng_roll @ 0x22BC6  (docs/07-event-script-opcodes.md)
 022bc6  4e55fffa          link.w    a5, #$fffa
 022bca  302d000a          move.w    $a(a5), d0
 022bce  b06d0008          cmp.w     $8(a5), d0
@@ -43813,6 +43973,7 @@
 022c1a  d16dfffe          add.w     d0, -$2(a5)
 022c1e  302dfffe          move.w    -$2(a5), d0
 022c22  60b4              bra.b     $22bd8
+; gfx_primitive_dispatcher @ 0x22C24  (docs/44-event-text-rendering.md)
 022c24  302f0004          move.w    $4(a7), d0
 022c28  b07c0001          cmp.w     #$1, d0
 022c2c  6604              bne.b     $22c32
@@ -43864,6 +44025,7 @@
 022cc4  4efa0fc6          jmp       $23c8c(pc)
 022cc8  7000              moveq     #$0, d0
 022cca  4e75              rts       
+; select_active_rastport @ 0x22CCC  (docs/44-event-text-rendering.md)
 022ccc  4e550000          link.w    a5, #$0
 022cd0  4a6d000a          tst.w     $a(a5)
 022cd4  6606              bne.b     $22cdc
@@ -43874,6 +44036,7 @@
 022cea  7001              moveq     #$1, d0
 022cec  4e5d              unlk      a5
 022cee  4e75              rts       
+; setapen_both_buffers_setdrmd_jam2 @ 0x22CF0  (docs/44-event-text-rendering.md)
 022cf0  4e550000          link.w    a5, #$0
 022cf4  7000              moveq     #$0, d0
 022cf6  102d000b          move.b    $b(a5), d0
@@ -43899,6 +44062,7 @@
 022d3a  7001              moveq     #$1, d0
 022d3c  4e5d              unlk      a5
 022d3e  4e75              rts       
+; writepixel @ 0x22D40  (docs/44-event-text-rendering.md)
 022d40  4e550000          link.w    a5, #$0
 022d44  302d000c          move.w    $c(a5), d0
 022d48  5040              addq.w    #$8, d0
@@ -44143,6 +44307,7 @@
 023034  7001              moveq     #$1, d0
 023036  4e5d              unlk      a5
 023038  4e75              rts       
+; save_pixel_rect_to_alloc_d_buffer @ 0x2303A  (docs/44-event-text-rendering.md)
 02303a  4e55ffec          link.w    a5, #$ffec
 02303e  506d000c          addq.w    #$8, $c(a5)
 023042  506d0010          addq.w    #$8, $10(a5)
@@ -44350,6 +44515,7 @@
 0232d0  584f              addq.w    #$4, a7
 0232d2  7000              moveq     #$0, d0
 0232d4  6000ff2c          bra.w     $23202
+; scrollraster_rect_dy_n @ 0x232D8  (docs/44-event-text-rendering.md)
 0232d8  4e550000          link.w    a5, #$0
 0232dc  506d000c          addq.w    #$8, $c(a5)
 0232e0  506d0010          addq.w    #$8, $10(a5)
@@ -44791,6 +44957,7 @@
 023870  20746f206472      movea.l   $6472(a4, d6.l * 8), a0
 023876  6177              bsr.b     $238ef
 023878  2e00              move.l    d0, d7
+; glyph_at_window_cursor @ 0x2387A  (docs/44-event-text-rendering.md)
 02387a  4e55fff6          link.w    a5, #$fff6
 02387e  206c9e68          movea.l   -$6198(a4), a0
 023882  08280003000a      btst.b    #$3, $a(a0)
@@ -44917,6 +45084,7 @@
 023a12  7001              moveq     #$1, d0
 023a14  4e5d              unlk      a5
 023a16  4e75              rts       
+; sprite_anm_prep @ 0x23A18  (docs/44-event-text-rendering.md)
 023a18  4e55fff0          link.w    a5, #$fff0
 023a1c  4aad000a          tst.l     $a(a5)
 023a20  6606              bne.b     $23a28
@@ -45099,6 +45267,7 @@
 023c86  7469              moveq     #$69, d2
 023c88  6f6e              ble.b     $23cf8
 023c8a  2e00              move.l    d0, d7
+; overlay_sprite_place @ 0x23C8C  (docs/44-event-text-rendering.md)
 023c8c  4e55fff8          link.w    a5, #$fff8
 023c90  2b6c8602fff8      move.l    -$79fe(a4), -$8(a5)
 023c96  0c6dffff000a      cmpi.w    #$ffff, $a(a5)
@@ -45404,6 +45573,7 @@
 024086  29409f1e          move.l    d0, -$60e2(a4)
 02408a  4e5d              unlk      a5
 02408c  4e75              rts       
+; toupper_key_translate @ 0x2408E  (docs/43-exploration-input-and-ingame-options.md)
 02408e  7000              moveq     #$0, d0
 024090  102f0005          move.b    $5(a7), d0
 024094  b03c0060          cmp.b     #$60, d0
@@ -50536,6 +50706,7 @@
 027f30  4ebaf618          jsr       $2754a(pc)
 027f34  4a2dfffa          tst.b     -$6(a5)
 027f38  6720              beq.b     $27f5a
+; copy_protection_input_routine @ 0x27F3A  (docs/38-title-screen-and-intro-assets.md)
 027f3a  4ebaf15a          jsr       $27096(pc)
 027f3e  2f2d000e          move.l    $e(a5), -(a7)
 027f42  2f2d000a          move.l    $a(a5), -(a7)
@@ -50644,6 +50815,7 @@
 028080  4fef000a          lea.l     $a(a7), a7
 028084  0c2d0020fff0      cmpi.b    #$20, -$10(a5)
 02808a  660a              bne.b     $28096
+; copy_protection_input_space_key @ 0x2808C  (docs/38-title-screen-and-intro-assets.md)
 02808c  4ebaf008          jsr       $27096(pc)
 028090  1b7c000dfff0      move.b    #$d, -$10(a5)
 028096  0c2d000dfff0      cmpi.b    #$d, -$10(a5)
@@ -50923,6 +51095,7 @@
 028410  42aca9de          clr.l     -$5622(a4)
 028414  426ca9d4          clr.w     -$562c(a4)
 028418  426dfff2          clr.w     -$e(a5)
+; cgadd_cgdata_sequence @ 0x2841C  (docs/snes-graphics.md)
 02841c  0c6d00c5fff2      cmpi.w    #$c5, -$e(a5)
 028422  6c68              bge.b     $2848c
 028424  4ebafd8c          jsr       $281b2(pc)

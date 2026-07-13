@@ -1,6 +1,11 @@
-# MM2 known songs and SFX catalog (current extraction state)
+# MM2 known songs and SFX catalog (SUPERSEDED)
 
-## Scope
+> **SUPERSEDED (2026-07-10).** Title “song id `0x12D`” was a blit Y coordinate;
+> `audio_init@0x823C` / `master.32` claims were wrong. **Current catalog:**
+> [`58-amiga-audio-in-exe.md`](58-amiga-audio-in-exe.md) (10 DATA-hunk sequences +
+> title theme @ DATA `0x1D79`). Kept below for archaeology only.
+
+## Scope (historical)
 
 This is a factual catalog of what is currently identified from:
 

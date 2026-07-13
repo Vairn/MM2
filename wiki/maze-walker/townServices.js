@@ -688,6 +688,103 @@ export function svcFoodEncodePurchase(party, menuIdx) {
   return { ok: true, encoding: enc };
 }
 
+/** Selector 0xCA drink encode 0x18F78 → party +$78, +$7C bit0. Menu A–C = drink 0..2. */
+export function svcDrinkEncodePurchase(party, drinkIdx) {
+  const base = [48, 64, 48, 31, 79, 143];
+  const add = [31, 79, 143, 48, 64, 80];
+  const d = drinkIdx | 0;
+  const hi = base[d] || base[0];
+  const enc = ((Math.floor(Math.random() * hi) + 1) + (add[d] || add[0])) & 0xff;
+  for (const m of party || []) {
+    m.scriptWorkFlag = enc;
+    if (m.rawBytes) {
+      m.rawBytes[0x78] = enc;
+      m.rawBytes[0x7c] = (m.rawBytes[0x7c] & 0xfe) | 0x01;
+    }
+  }
+  return { ok: true, encoding: enc };
+}
+
+/** 0x191A6 Lord's Quest arm: set +$7C bit2 + mode; food mask $08 / drink $10. */
+export function svcQuestLordArm(party, drink) {
+  const mask = drink ? 0x10 : 0x08;
+  const modeBit = drink ? 0x01 : 0x00;
+  let armed = 0;
+  for (const m of party || []) {
+    if (!m.rawBytes) continue;
+    let flags = m.rawBytes[0x7c] | 0;
+    if (flags & mask) continue;
+    armed += 1;
+    flags = (flags & 0xfe) | 0x04 | modeBit;
+    m.rawBytes[0x7c] = flags;
+  }
+  return armed > 0 ? armed : -1;
+}
+
+/** 0x18FBA: Valor/Honor/Nobility (0xE2..0xE4) present → consume all. */
+export function svcQuestHoardallItemsReady(party) {
+  for (let id = 0xe2; id <= 0xe4; id++) {
+    if (!svcPartyFindBackpackItem(party, id)) return false;
+  }
+  for (let id = 0xe2; id <= 0xe4; id++) {
+    svcPartyConsumeBackpackItem(party, id);
+  }
+  return true;
+}
+
+/** 0x193AC + 0x19516: bit2 reward then encoding apply. */
+export function svcQuestCompleteReward(party, drink, manifest) {
+  let itemsGate = -1;
+  let activity = 0;
+  let membersRewarded = 0;
+  let encodingsApplied = 0;
+  let xpEach = 0;
+  for (const m of party || []) {
+    if (!m.rawBytes) continue;
+    const flags = m.rawBytes[0x7c] | 0;
+    if ((flags & 0x04) === 0) continue;
+    if (((flags & 0x01) !== 0) !== !!drink) continue;
+    let eligible = 0;
+    if (drink) {
+      if ((flags & 0xe0) === 0xe0) {
+        m.rawBytes[0x7c] = flags & 0x1f;
+        if ((flags & 0x10) === 0) eligible = 1;
+      }
+    } else if ((flags & 0x08) === 0) {
+      if (itemsGate < 0) itemsGate = svcQuestHoardallItemsReady(party) ? 1 : 0;
+      if (itemsGate > 0) eligible = 1;
+    }
+    if (!eligible) continue;
+    activity += 1;
+    m.rawBytes[0x7c] = (m.rawBytes[0x7c] & 0xfb) | (drink ? 0x10 : 0x08);
+    xpEach = drink ? 1000000 : 100000;
+    m.experience = ((m.experience | 0) + xpEach) >>> 0;
+    membersRewarded += 1;
+  }
+  for (const m of party || []) {
+    const hit = drink
+      ? svcApplyDrinkEncoding(m).applied
+      : svcApplyFoodEncoding(m, manifest).applied;
+    if (hit) {
+      encodingsApplied += 1;
+      activity += 1;
+    }
+  }
+  return { activity, membersRewarded, encodingsApplied, xpEach };
+}
+
+/** 0x1961E busy gate: bit2 or +$78 with matching mode. */
+export function svcQuestBusy(party, drink) {
+  for (const m of party || []) {
+    if (!m.rawBytes) continue;
+    const flags = m.rawBytes[0x7c] | 0;
+    if (((flags & 0x01) !== 0) !== !!drink) continue;
+    if (flags & 0x04) return true;
+    if (m.rawBytes[0x78]) return true;
+  }
+  return false;
+}
+
 /** Tavern B @ 0x1CAC4 — A–F costs A4-$6738; apply base-stat bump (0x1C7EC family). */
 const STAT_BOOST = [
   { key: "might", cost: 5, label: "Might" },
@@ -797,7 +894,7 @@ export function svcGeneralStoreConvert(member) {
 export function svcPubBuyDrink(member, drinkIdx, drinks) {
   const row = drinks[drinkIdx];
   if (!row) return { paid: false, cost: 0 };
-  (void)member;
+  void member;
   return { paid: true, cost: row.gold | 0, sick: false, name: row.name, encodeOnly: true };
 }
 

@@ -16,6 +16,7 @@ namespace {
 constexpr int kGlyphColumns = 16;
 constexpr int kGlyphCount = 128;
 std::string g_fontDebugStatus = "MM2 font: not initialized";
+ImFont* g_codeFont = nullptr;
 
 struct GlyphRect {
     int codepoint = 0;
@@ -192,6 +193,40 @@ ImFont* installMm2BitmapFont(ImGuiIO& io, float sizePixels) {
     g_fontDebugStatus = "MM2 font: LOADED (" + pngPath.string() + ")";
     return font;
 }
+
+ImFont* installMm2CodeFont(ImGuiIO& io, float sizePixels) {
+    const std::vector<std::filesystem::path> candidates = {
+        std::filesystem::path("editor/assets/fonts/mm2_bitmap_monospace.ttf"),
+        std::filesystem::path("assets/fonts/mm2_bitmap_monospace.ttf"),
+        std::filesystem::path("../assets/fonts/mm2_bitmap_monospace.ttf"),
+        std::filesystem::path("../editor/assets/fonts/mm2_bitmap_monospace.ttf"),
+        std::filesystem::path("../../editor/assets/fonts/mm2_bitmap_monospace.ttf"),
+    };
+    std::filesystem::path path;
+    for (const auto& p : candidates) {
+        if (std::filesystem::exists(p)) {
+            path = p;
+            break;
+        }
+    }
+    if (path.empty()) {
+        std::fprintf(stderr, "[mm2-font] code font: monospace ttf not found\n");
+        g_codeFont = nullptr;
+        return nullptr;
+    }
+    ImFontConfig cfg;
+    cfg.OversampleH = 1;
+    cfg.OversampleV = 1;
+    cfg.PixelSnapH = true;
+    cfg.SizePixels = sizePixels;
+    std::snprintf(cfg.Name, sizeof(cfg.Name), "MM2 Code %.0fpx", sizePixels);
+    g_codeFont = io.Fonts->AddFontFromFileTTF(path.string().c_str(), sizePixels, &cfg);
+    std::fprintf(stderr, "[mm2-font] code font: %s (%s)\n", g_codeFont ? "ok" : "failed",
+                 path.string().c_str());
+    return g_codeFont;
+}
+
+ImFont* mm2CodeFont() { return g_codeFont; }
 
 const char* mm2BitmapFontDebugStatus() {
     return g_fontDebugStatus.c_str();

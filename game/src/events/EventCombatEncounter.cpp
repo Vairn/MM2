@@ -74,4 +74,33 @@ void eventRunTileAmbientEncounter(GameStateView &gs, combat::CombatSession *comb
     }
 }
 
+void eventRunOp0eFdEncounter(GameStateView &gs, combat::CombatSession *combat,
+                             const world::MapWorld *world)
+{
+    uint8_t *a4 = gs.a4();
+    if (!a4) {
+        return;
+    }
+
+    /* 0x14A38..0x14A52: clr -$11DE[0..10] before seed (already done in caller
+     * path; re-clear for a standalone arm). */
+    for (int i = 0; i < 11; ++i) {
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, 0);
+    }
+    /* 0x14A92..0x14AB0: five seeded types + mode $83. */
+    static const uint8_t kSlots[5] = {0xFF, 0xE1, 0xC2, 0xC1, 0xE0};
+    for (int i = 0; i < 5; ++i) {
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, kSlots[i]);
+    }
+    mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_MODE, 0x83);
+    mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_OVERFLOW_TYPE, 0);
+    mm2_gs_set_u16(a4, MM2_GS_ENCOUNTER_REDRAW, 0);
+    /* 0x14AB6..0x14AD2: clr slots 5..10 (already 0). */
+    mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 0);
+
+    if (combat && world) {
+        combat->enter(gs, *world);
+    }
+}
+
 }  // namespace mm2::events

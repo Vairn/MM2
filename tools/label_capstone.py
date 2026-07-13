@@ -1017,6 +1017,73 @@ LABELS: dict[int, tuple[str, list[str]]] = {
             "when count_active_party_nibble_matches ($4614) returns nonzero.",
         ],
     ),
+
+    # --- Exploration: Search / Rest / cell latch (docs 43/56/57) ---
+    0x004800: (
+        "search_key_handler",
+        [
+            "S-key Search (also auto-run when A4-$794C == $FE).",
+            "Prints 'Search...'; scans found-item buffer (-$3F1C/-$3F10/-$3F12);",
+            "empty → 'Nothing Here!'; else jsr -$7D1C → search_payoff_ui.",
+        ],
+    ),
+    0x019E20: (
+        "world_rest",
+        [
+            "R-key Rest (thunk -$7D2E). Inn lodging rest shares this leaf.",
+            "btst #3,-$55D6 → 'Too dangerous!'; Y/N prompt; hireling pay check;",
+            "then rest_ambush_helper + SP recompute (0x19C30 / 0x4442).",
+        ],
+    ),
+    0x019D64: (
+        "rest_ambush_helper",
+        [
+            "Rest ambush setup: wake living members (bset #4,$26), mode -$796B=3,",
+            "clr -$77BE. Skips ambush when -$55D6 >= $80 (event-tile gate).",
+        ],
+    ),
+    0x001B1C: (
+        "current_cell_collision_latch",
+        [
+            "Writes current-cell collision/event bits into A4-$55D6.",
+            "Feeds Rest ambush gate, Too-dangerous bit3, and darkness tests.",
+        ],
+    ),
+    0x01B19C: (
+        "search_payoff_ui",
+        [
+            "Found-item presentation + distribution ('you found…' / Identify).",
+            "Reached via -$7D1C from search_key_handler after loot predicate.",
+        ],
+    ),
+    0x019C30: (
+        "rest_sp_recompute",
+        [
+            "Inside Rest: spell-level / SP recompute path.",
+            "jsr -$7F56 → luck_bonus_table_walk; mulu with record +$20 → +$5A/+58.",
+        ],
+    ),
+    0x004442: (
+        "luck_bonus_table_walk",
+        [
+            "Walks A4-$7486 luck threshold table; returns bonus used by Rest SP.",
+        ],
+    ),
+    0x01A132: (
+        "open_inn_lodging",
+        [
+            "OP_0E selector 0x01 — inn registry y/n (home-town write).",
+            "Actual rest is world_rest @ 0x19E20. Capstone splits link.w across",
+            "01a130/01a134 (entry is mid-instruction in the listing).",
+        ],
+    ),
+    0x0160C2: (
+        "op_0e_service_dispatch",
+        [
+            "OP_0E town-service router: chained subtract on selector byte,",
+            "then jsr to inn/training/tavern/temple/guild/smith/store/arena.",
+        ],
+    ),
 }
 
 ADDR_RE = re.compile(r"^([0-9a-fA-F]{6})\s")

@@ -115,11 +115,12 @@ static const int kPubFoodOptions = 3;
 static const int kPubStatBoostCount = 6;
 
 /* Per-location rumor/tip texts, food menu, and drink/stat-boost menus.
- * Filled by townSvcPubTables(). */
+ * Filled by townSvcPubTables(). food_joined hosts A/B/C from -$57F6 line pairs. */
 struct TavernMenuData {
     const char *rumors[kPubRumorCount]; /* E "Listen for rumors"  (A4-$594E) */
     const char *tips[kPubTipCount];     /* D "Tip the bartender"  (A4-$58AE) */
     TavernFoodView food;
+    char food_joined[kPubFoodOptions][96];
     TavernDrinkView drinks[kPubDrinkCount];
     TavernStatBoostView boosts[kPubStatBoostCount];
 };
@@ -230,7 +231,7 @@ void townSvcRunMageGuild(ITownServiceUi &ui, const TownServiceContext &ctx);
 void townSvcRunSmith(ITownServiceUi &ui, const TownServiceContext &ctx);
 
 /* Populate TavernMenuData for a given map_id (0-4 for the five towns). */
-void townSvcPubTables(int map_id, TavernMenuData &out);
+void townSvcPubTables(int map_id, TavernMenuData &out, uint8_t *a4 = nullptr);
 
 void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx);
 

@@ -52,23 +52,17 @@ _REJECT_NAMES = frozenset(
         "combat_only",
         "non_combat_only",
         "outdoor_only",
-        "open_tavern_food",  # OP_0E id, not a function — handler is separate
-        "open_inn_lodging",
-        "open_temple",
-        "open_training",
-        "open_mages_guild",
-        "open_blacksmith_shop",
-        "open_general_store",
+        # OP_0E decoder ids that are NOT code entry points (handlers use same
+        # names at real addresses — those must survive prune_symbols).
         "open_special_shop",
         "goblet_quest",
-        "enroll_mages_guild",
     }
 )
 
 # Harvested names that are doc artifacts (opcode argc labels, IRA gaps, mnemonics).
 _REJECT_NAME_PATTERNS = (
     re.compile(r"^\d+$"),
-    re.compile(r"^OP_\d", re.I),
+    re.compile(r"^OP_[0-9A-Fa-f]{1,2}$", re.I),  # bare opcode ids, not op_0e_* handlers
     re.compile(r"^var$", re.I),
     re.compile(r"^(bchg|addq|moveq|jsr|bra)$", re.I),
 )
@@ -93,6 +87,13 @@ def prune_symbols(data: dict) -> dict:
     data["functions"] = {
         k: v for k, v in funcs.items() if _accept_function_name(v.get("name", ""))
     }
+    # Drop known-misplaced labels (string data / wrong thunk targets).
+    for bad in (
+        "0x19EC0",  # Rest string bank — was mislabeled open_inn_lodging
+        "0x1E870",  # mid-function bcc — was mislabeled open_mages_guild
+        "0x1F800",  # no capstone boundary — was speculative open_training
+    ):
+        data["functions"].pop(bad, None)
     return data
 
 # Harvested slug → canonical name for combat / unnamed routines.
@@ -452,22 +453,41 @@ def build_bootstrap() -> dict:
         0x29868: ("load_spells_dat", "spells.dat loader path"),
         0x53A0: ("session_interaction_gate", "Darkness / modal gate"),
         0x545E: ("session_start_refresh", "Session restart refresh"),
-        0x823C: ("audio_init", "Master audio blob → A4 tables"),
-        0x64F8: ("play_song_scripted", "Scripted score playback"),
-        0x6798: ("audio_wait_helper", "Score wait/tempo helper"),
-        0x7DCC: ("play_death_tones", "Party wipe tone sequence"),
-        0x9BCA: ("training_hp_restore", "Training HP path"),
-        0x9B48: ("training_mode_select", "Stat vs HP training mode"),
-        0x1A132: ("open_tavern_food", "Pub / food / drinks"),
-        0x19EC0: ("open_inn_lodging", "Inn rest handler"),
-        0x1C54A: ("open_blacksmith_shop", "Blacksmith UI"),
+        0x823C: ("save_game_state", "Global save stream parse/serialize ($1860)"),
+        0x64F8: ("scripted_text_scene", "Draw box + print A4-$73C4 lines + wait (NOT music)"),
+        0x6798: ("wait_frames_helper", "Busy-wait helper (used by scripted scenes)"),
+        0x6FB8: ("play_sound_seq", "Play embedded seq id 0..9 via audio.device"),
+        0x7070: ("audio_device_init", "Open audio.device + 4 IO channels"),
+        0x766E: ("wave_synth_init", "Alloc/build 0x400 wavetable at A4-$EDA"),
+        0x77AA: ("play_tone_env", "Note+duration → Paula BeginIO"),
+        0x7DCC: ("party_wipe_ui", "Party wipe text/UI (not proven audio)"),
+        # Bash door (doc 43) — previously mislabeled as training
+        0x9B48: ("bash_door_handler", "B key bash door (doc 43 §8.1)"),
+        0x9BCA: ("bash_door_resolve", "Bash strength vs door field ahead"),
+        # Town services — OP_0E handlers (docs 07/28; absolute targets)
+        0x1A132: ("open_inn_lodging", "OP_0E 0x01 inn registry y/n; rest = world Rest"),
+        0x8050: ("open_training", "OP_0E 0x02 training hall (-$7CD4)"),
+        0x1D208: ("open_tavern_food", "OP_0E 0x03 pub / food / drinks / rumors"),
+        0x1DD8E: ("open_temple", "OP_0E 0x04 temple services (-$7D16)"),
+        0x1E3E6: ("open_mages_guild", "OP_0E 0x05 mage guild spell shop (-$7D10)"),
+        0x1C54A: ("open_blacksmith_shop", "OP_0E 0x06 blacksmith UI"),
+        0xA62C: ("open_general_store", "OP_0E 0x07 general store (-$7DB8)"),
+        0x9D76: ("open_arena_shop", "OP_0E 0x08 arena ticket-combat engine (-$7DBE)"),
+        0xD89C: ("enroll_mages_guild", "OP_0E 0x0D guild membership (-$7DA0)"),
+        0x15EDC: ("op_0e_default_range", "OP_0E default-range bins → event_dat_loader"),
+        0x1980A: ("tavern_food_drink_menu", "Food/drink A–D submenu (sel 0xC9/0xCA)"),
         0x1C898: ("training_stat_apply", "Stat training tables"),
-        0x1D208: ("open_temple", "Temple services"),
         0x1D872: ("shop_gold_debit", "Purchase gold debit"),
         0x1D97A: ("guild_spell_price", "Sorcerer spell price decode"),
         0x1DAC6: ("temple_spell_price", "Cleric spell price decode"),
-        0x1E870: ("open_mages_guild", "Mage guild entry (alt trace)"),
-        0x1F800: ("open_training", "Training menu entry (alt trace)"),
+        # Exploration — Rest / Search / cell latch (docs 43/56/57)
+        0x4800: ("search_key_handler", "S key / auto-Search when -$794C==$FE"),
+        0x19E20: ("world_rest", "R key Rest (thunk -$7D2E); inn rest shares this"),
+        0x19D64: ("rest_ambush_helper", "Rest ambush: mode=3, gate -$55D6>=$80"),
+        0x1B1C: ("current_cell_collision_latch", "Collision → -$55D6 latch (Rest/darkness)"),
+        0x1B19C: ("search_payoff_ui", "Search found-item / Identify UI (-$7D1C)"),
+        0x19C30: ("rest_sp_recompute", "Rest SP path; jsr -$7F56 → luck table walk"),
+        0x4442: ("luck_bonus_table_walk", "Walk A4-$7486 luck thresholds (Rest SP)"),
         0x1064C: ("combat_monster_turn", "Monster AI turn"),
         0x106A0: ("combat_monster_ai_dispatch", "Monster AI dispatch"),
         0x10B74: ("combat_reward_decode", "Per-monster rewards"),
@@ -492,6 +512,30 @@ def build_bootstrap() -> dict:
     for addr, (name, note) in curated.items():
         f[fmt_addr(addr)] = _entry(name, src, note)
 
+    # A4 workspace fields — align with EXTRACTED/decomp/mm2_gamestate.h
+    af = manual["a4_fields"]
+    for off, (name, note) in {
+        -0x79E1: ("cant_see_flag", "Darkness / interaction-suppress; OP_04/05/06 skip"),
+        -0x561A: ("attrib_buf", "Current-screen attrib.dat 64-byte buffer"),
+        -0x560C: ("entry_coord", "attrib+0x0E packed (Y<<4)|X; defeat restore"),
+        -0x560D: ("retreat_diff", "attrib+0x0D flee threshold"),
+        -0x794C: ("found_sentinel", "0xFF=loot filled, 0xFE=auto-Search pending"),
+        -0x77BD: ("combat_victory_latch", "OP_2B skip gate; set by victory"),
+        -0x7486: ("luck_thresh_tbl", "Luck→bonus table walked by 0x4442"),
+        -0x55D6: ("tile_runtime_flags", "Current-cell collision/event bits"),
+        -0x796B: ("encounter_mode", "0x80=fixed, 0=random, 3=rest ambush"),
+        -0x796C: ("shelter_flag", "Shelter; rest ambush gate"),
+        -0x77BE: ("monster_count", "Live monster count"),
+        -0x11DE: ("monster_slots", "Encounter setup monster-type ids[10]+overflow"),
+        -0x11D4: ("encounter_overflow_type", "Overflow/breed monster type"),
+        -0x3F1C: ("found_item_id", "Pending loot item ids[3]"),
+        -0x3F12: ("found_gems", "Pending loot gems (BE word)"),
+        -0x3F10: ("found_gold_exp", "Pending loot gold/exp (BE long)"),
+        -0x6FCA: ("party_xp_budget", "Random encounter picker XP budget"),
+        -0x6FC6: ("combat_xp_pool", "Fight XP accumulator"),
+    }.items():
+        af[fmt_a4_off(off)] = _entry(name, "EXTRACTED/decomp/mm2_gamestate.h", note)
+
     th = manual["a4_thunks"]
     for disp, (name, note) in {
         0x83C2: ("frame_input_pump", "Frame/input pump"),
@@ -509,10 +553,21 @@ def build_bootstrap() -> dict:
         0x7D3A: ("event_tile_scanner_thunk", "Thunk → event_tile_scanner"),
         0x7BB4: ("rng_roll", "RNG helper (1..max)"),
         0x7F20: ("get_party_member_ptr", "Character object by index"),
-        0x7C62: ("combat_fanfare", "Combat music fanfare"),
-        0x7BDE: ("play_tone", "Tone with duration"),
-        0x7BD2: ("spell_ui_tone", "Spell UI tone helper"),
-        0x7FD4: ("walk_beep", "Footstep beep"),
+        0x7E42: ("play_sound_seq", "Embedded seq id 0..9"),
+        0x7E3C: ("audio_device_init", "Open audio.device"),
+        0x7E2A: ("wave_synth_init", "Build wavetable"),
+        0x7E24: ("play_tone_env", "Single tone envelope"),
+        0x7E30: ("audio_stop_chans", "Stop active channels"),
+        0x7FD4: ("map_step_refresh", "Post-move refresh (NOT walk beep — see -$7E42 id0)"),
+        0x7BDE: ("play_tone_OLDNAME", "VERIFY — was mislabeled play_tone"),
+        0x7BD2: ("input_or_tone_helper", "VERIFY"),
+        0x7C62: ("ui_helper_7C62", "VERIFY — 224 calls, not combat fanfare"),
+        0x7D2E: ("world_rest_thunk", "Thunk → world_rest 0x19E20"),
+        0x7D1C: ("search_payoff_thunk", "Thunk → search_payoff_ui 0x1B19C"),
+        0x7CD4: ("open_training_thunk", "Thunk → open_training 0x8050"),
+        0x7D16: ("open_temple_thunk", "Thunk → open_temple 0x1DD8E"),
+        0x7D10: ("open_mages_guild_thunk", "Thunk → open_mages_guild 0x1E3E6"),
+        0x7F56: ("luck_bonus_table_walk_thunk", "Thunk → luck_bonus_table_walk 0x4442"),
     }.items():
         th[fmt_a4_off(-disp)] = _entry(name, "docs/02-runtime-memory-map.md", note)
 

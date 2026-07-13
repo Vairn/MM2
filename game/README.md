@@ -115,27 +115,22 @@ flowchart TB
    `ServiceSignResolver` + `ViewportAnmOverlay` (`62.anm` blacksmith demo). **GAP:**
    Corak ghost castle-bytecode confirm (remake uses **51.anm** candidate), mode `$17`
    placement table **A4-$56E**, party byte **`0x74` bit `0x40`** pegasus gate, castle tile hook **`0x78A8`**.
-5. **Event processing (Phase 4 — text ops)** — `events/EventRuntime` loads
-   `event.dat` per screen (`0x92F2`), tile scanner @ `0x175E2`, script VM @
-   `0x172CA` for **OP_01..OP_07**, **OP_09**, **OP_0F**, and **OP_10/OP_11**
-   token skip. Text draw via `events/EventTextView` + `PlayScreenChrome` cell
-   grid (doc [`44-event-text-rendering.md`](../EXTRACTED/docs/44-event-text-rendering.md)).
-   Wired into `GameSession::tick()` after movement (`-$7952` latch); movement
-   blocked while SPACE/Y/N wait active. **Middlegate acceptance:** door labels
-   (event 01 `OP_04` "Middlegate Inn" @ (7,5)/DIR_N?), city gates Y/N (event 20
-   `OP_01`+`OP_09`).    Offline: `event_middlegate_test`. **GAP:** OP_0E town services,
-   OP_0E town services, OP_0C map transition, OP_12 combat, str.dat cross-refs,
-   outdoor/overland events.
-   **Visual opcode demos:** `event_op_demo` renders OP_01..OP_07, OP_09, and OP_0B
-   (stub) on the Middlegate play-screen base frame → `build/event_demos/*.ppm`
-   (PNG if Pillow installed). OP_06 demo = B2 **Archers Only** outdoor signpost
-   (not the red character-UI frame). See `build/event_demos/README.md`:
-   `./build/event_op_demo.exe ..`
+5. **Event processing (Phase 4 — VM)** — `events/EventRuntime` is the
+   **authoritative** remake of the event VM (~99% ASM-faithful): loader
+   `0x92F2`, init `0x1754A`, scanner `0x175E2`, dispatch `0x172CA` for
+   opcodes `0x00..0x32` (`dispatchOp` + helpers). Docs
+   [`07-event-script-opcodes.md`](../EXTRACTED/docs/07-event-script-opcodes.md) /
+   [`08-event-runtime.md`](../EXTRACTED/docs/08-event-runtime.md) match the C++.
+   Text via `EventTextView`; town services via `EventTownServices` /
+   `TownServiceMenu`; encounters via `EventCombatEncounter`. Wired into
+   `GameSession::tick()` after movement (`-$7952` latch). Offline:
+   `event_middlegate_test`, `event_op_demo` → `build/event_demos/`.
 6. **Main loop** — `0x1280` mode dispatch (overland, town, combat, menus).
-7. **Events (services + combat ops)** — `OP_0E` town-service dispatch, full VM.
-8. **Combat** — round loop, player bar, monster AI, rewards.
-9. **Audio** — Paula tone path from `master.32` or MOD export fallback on desktop.
-10. **Copy protection** — externalize globe/disk strings (already extracted to `EXTRACTED/embedded_strings.json`).
+7. **Combat** — round loop, player bar, monster AI, rewards.
+8. **Audio** — Desktop: pre-rendered WAVs from `EXTRACTED/audio/` via SDL
+   (`mm2::audio`, see doc 58). Amiga: Paula/`audio.device` port still TODO
+   (`AudioStub.cpp` no-op).
+9. **Copy protection** — externalize globe/disk strings (already extracted to `EXTRACTED/embedded_strings.json`).
 
 RE references: [`EXTRACTED/docs/README.md`](../EXTRACTED/docs/README.md),
 `EXTRACTED/mm2.capstone.annotated.asm`, per-location events in `EXTRACTED/docs/events/`.

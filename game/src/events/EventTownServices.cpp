@@ -6,6 +6,8 @@
 #include "mm2/events/TownServiceTransactions.h"
 
 #include "mm2/CppStdCompat.h"
+#include "mm2/DataPath.h"
+#include "mm2/runtime/PathScratch.h"
 #include "mm2_items_codec.h"
 #include "mm2_town_tables.h"
 
@@ -255,6 +257,19 @@ bool runBoundMenu(EventRuntime &rt, GameStateView &gs, Mm2RosterFile *roster,
         townSvcRunMageGuild(*ui, ctx);
         break;
     case MenuKind::Tavern:
+        /* 0x1D208: bank-1 tip/rumor fill before menu. */
+        if (rt.dataDir() && gs.a4()) {
+            char *path = mm2_path_scratch_a();
+            if (mm2::joinDataPath(path, MM2_PATH_SCRATCH_CAP, rt.dataDir(), "str.dat")) {
+                FILE *fp = std::fopen(path, "rb");
+                if (fp) {
+                    uint8_t buf[kStrDatSize];
+                    const size_t n = std::fread(buf, 1, sizeof(buf), fp);
+                    std::fclose(fp);
+                    eventVmFillTavernStrTables(gs.a4(), buf, n);
+                }
+            }
+        }
         townSvcRunTavern(*ui, ctx);
         break;
     }
@@ -302,11 +317,11 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
 
     switch (sel) {
     case 0x01:
-        /* Inn — handler @ 0x160C2 case 1 → 0x1A132 (doc 28). Per-town exe
-         * innkeeper greet + registry y/n (0x19D00..0x1A200, doc 29). On Y the
-         * engine @ 0x1A1B2 writes roster+$0B home town for party members,
-         * saves roster (-$7FE0 @ 0x1A1FC), then returns to party choose (Goto
-         * Town). Rest/day-advance submenu is deferred. */
+        /* Inn @ 0x1A132: Stay/sign-in Y/N → registry @ 0x1A1B2 + roster save +
+         * Goto Town (0x1A1F8). World Rest is R @ 0x19E20 — not an inn submenu.
+         * 0x160E4: -$7946 = 1; 0x1A136: -$7950 = 6. */
+        mm2_gs_set_u16(gs.a4(), MM2_GS_OP0E_SUBMODE, 1);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 6);
         showServiceIntro(gs, text, wait, innIntro(location_id));
         rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Inn);
         break;
@@ -335,13 +350,8 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         }
         break;
     case 0x04:
-        /* Temple — handler @ 0x160C2 case 4 (doc 28 §5). DEFERRED: A) Restore Cond
-         * B) Restore Algn C) Donations D–F) cleric spell purchase (str.dat
-         * 362–367). Healing charges eventVmHealingCostPerChar() per selected
-         * character (FAQ level×index×10, ×10 dead / ×100 eradicated) inside this
-         * engine. Faithful priest intro + y/n; when a town-service UI backend is
-         * bound, the per-character heal / restore-condition / donation menu runs
-         * after the intro y/n (TownServiceMenu). Without a backend, defer. */
+        /* Temple — handler @ 0x160C2 case 4: A Restore Cond, B Restore Algn,
+         * C Donations, D–F cleric spell buy. Bound UI → TownServiceMenu. */
         showServiceIntro(gs, text, wait, templeIntro(location_id));
         if (canRunBoundMenu(rt, roster, launch, items, MenuKind::Temple)) {
             rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Temple);
@@ -518,31 +528,83 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
     }
     case 0xC9:
     case 0xCA: {
-        /* 0x19AB4 / 0x19AC4 → 0x1980A(food=0 / drink=1): encode 0x19030 + check
-         * 0x193AC / apply 0x19516. Full A–C / drink picker UI not hosted — apply
-         * food XP (0x18DE0 items.dat gold×8) / armed drink XP (0x18D3A). */
+        /* 0x19AB4/0x19AC4 → 0x1980A: 0x193AC reward+apply, 0x1961E busy gate,
+         * else Y/N + A–D (encode 0x19030 / lord arm 0x191A6). */
         const bool drink = (sel == 0xCA);
-        if (roster && launch) {
-            for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
-                const int idx = launch->roster_slots[i];
-                if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
-                    continue;
-                }
-                if (drink) {
-                    (void)townSvcApplyDrinkEncoding(roster->records[idx]);
-                } else {
-                    (void)townSvcApplyFoodEncoding(items, roster->records[idx]);
-                }
+        const TownSvcQuestCompleteResult done =
+            townSvcQuestCompleteReward(roster, launch, drink, items);
+        if (done.activity > 0) {
+            char msg[192];
+            if (done.members_rewarded > 0) {
+                std::snprintf(msg, sizeof(msg),
+                              "You have done everyone a great service\n"
+                              "and you shall be rewarded.\n"
+                              "  %u experience points!",
+                              static_cast<unsigned>(done.xp_each));
+            } else {
+                std::snprintf(msg, sizeof(msg), "Quest progress applied.");
             }
+            showServiceTitle(text, wait, msg);
+            break;
         }
-        (void)rt;
+        if (townSvcQuestBusy(roster, launch, drink)) {
+            showServiceTitle(text, wait,
+                             drink ? "Your party has already been quested\nto seek out the foe."
+                                   : "Your party has already been quested\nto seek out the item.");
+            break;
+        }
+        rt.armQuestEncodeUi(drink);
+        wait = rt.waitKind();
         (void)gs;
         (void)world;
-        (void)text;
-        (void)wait;
         (void)location_id;
         (void)title;
         (void)rng;
+        break;
+    }
+    case 0xFD: {
+        /* 0x161B2: jsr 0x1493C (bank-3 fill via -$7DE8/$7DE2), then SCRIPT_ABORT:
+         *   ==2: -$79AC→-$79F2, -$7946=1, jsr 0x1A1F8 Goto Town
+         *   ==3: jsr -$7ED2 → 0x5376 → 0x14106 (addq -$7972, town restore, Goto Town)
+         *   else: SCRIPT_ABORT=1
+         * Print/fight/name-entry @ 0x1493C hosted: PTR0 → fight ($83) → 0x14EA4
+         * endgame.32 + WAFE entry → remaining ptr pages. */
+        if (rt.dataDir()) {
+            char *path = mm2_path_scratch_a();
+            if (mm2::joinDataPath(path, MM2_PATH_SCRATCH_CAP, rt.dataDir(), "str.dat")) {
+                FILE *fp = std::fopen(path, "rb");
+                if (fp) {
+                    uint8_t buf[kStrDatSize];
+                    const size_t n = std::fread(buf, 1, sizeof(buf), fp);
+                    std::fclose(fp);
+                    eventVmFillOp0eFdStrTables(gs.a4(), buf, n);
+                }
+            }
+        }
+        rt.armOp0eFdPrintChrome();
+        const uint8_t abort = mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT);
+        if (abort == 2) {
+            /* Endgame success already printed PTR tables; Goto Town only. */
+            (void)rt.takePendingOp0eFdPrintChrome();
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SCREEN_MODE_ID,
+                          mm2_gs_u8(gs.a4(), MM2_GS_SAVED_TOWN_ID));
+            gs.setScreenId(mm2_gs_u8(gs.a4(), MM2_GS_SAVED_TOWN_ID));
+            mm2_gs_set_u16(gs.a4(), MM2_GS_OP0E_SUBMODE, 1);
+            rt.armInnGotoTown();
+        } else if (abort == 3) {
+            /* 0x14106: addq -$7972; Death Strikes panel; -$79AC→-$79F2; 0x1A1F8.
+             * Skip PTR print pages — endgame already consumed them before abort=3. */
+            (void)rt.takePendingOp0eFdPrintChrome();
+            const uint16_t ctr = mm2_gs_u16(gs.a4(), MM2_GS_OP0E_FD_CTR);
+            mm2_gs_set_u16(gs.a4(), MM2_GS_OP0E_FD_CTR,
+                           static_cast<uint16_t>(ctr < 0xFFFFu ? ctr + 1u : 0xFFFFu));
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SCREEN_MODE_ID,
+                          mm2_gs_u8(gs.a4(), MM2_GS_SAVED_TOWN_ID));
+            gs.setScreenId(mm2_gs_u8(gs.a4(), MM2_GS_SAVED_TOWN_ID));
+            rt.armDeathStrikes();
+        } else {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+        }
         break;
     }
     default:

@@ -787,7 +787,7 @@ void PlayTownServiceUi::applyTavernSpecialty(int food_idx)
     mm2_roster_name_to_cstr(rec, name, sizeof(name));
     /* 0x1CD2E only — no 0x18EC0 encode (that is selector 0xC9). */
     const mm2::events::TownSvcSpecialtyResult r =
-        mm2::events::townSvcTavernSpecialty(*rec, ctx_.map_id, food_idx, ctx_.rng);
+        mm2::events::townSvcTavernSpecialty(ctx_.a4, *rec, ctx_.map_id, food_idx, ctx_.rng);
     const char *food = tavern_data_.food.options[food_idx];
     if (!r.paid) {
         std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, r.cost);

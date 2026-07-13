@@ -172,8 +172,21 @@ KeyState pollInput()
         }
         s_prev_letter[i] = key_down;
     }
+    /* SDL_SCANCODE_1..9 are 30..38, then SDL_SCANCODE_0 is 39 — not 0+i.
+     * Same for KP_1..9 then KP_0. KP_2/4/6/8 are already movement aliases above. */
+    static const SDL_Scancode kRowDigit[10] = {
+        SDL_SCANCODE_0, SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4,
+        SDL_SCANCODE_5, SDL_SCANCODE_6, SDL_SCANCODE_7, SDL_SCANCODE_8, SDL_SCANCODE_9,
+    };
+    static const SDL_Scancode kKpDigit[10] = {
+        SDL_SCANCODE_KP_0, SDL_SCANCODE_KP_1, SDL_SCANCODE_KP_2, SDL_SCANCODE_KP_3, SDL_SCANCODE_KP_4,
+        SDL_SCANCODE_KP_5, SDL_SCANCODE_KP_6, SDL_SCANCODE_KP_7, SDL_SCANCODE_KP_8, SDL_SCANCODE_KP_9,
+    };
     for (int i = 0; i < 10; ++i) {
-        const bool key_down = kb[SDL_SCANCODE_0 + i] != 0 || kb[SDL_SCANCODE_KP_0 + i] != 0;
+        bool key_down = kb[kRowDigit[i]] != 0;
+        if (i != 2 && i != 4 && i != 6 && i != 8) {
+            key_down = key_down || kb[kKpDigit[i]] != 0;
+        }
         if (key_down && !s_prev_digit[i] && k.last_ascii == 0) {
             k.last_ascii = static_cast<char>('0' + i);
         }

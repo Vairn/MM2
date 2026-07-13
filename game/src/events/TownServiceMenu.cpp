@@ -1,9 +1,12 @@
 #include "mm2/events/TownServiceMenu.h"
 #include "mm2/events/TownServiceTransactions.h"
+#include "mm2/events/EventVmHelpers.h"
 
 #include "mm2/CppStdCompat.h"
 
 #include "mm2_gamestate.h"
+
+#include <cstdio>
 
 namespace mm2::events {
 
@@ -251,7 +254,8 @@ void townSvcRunSmith(ITownServiceUi &ui, const TownServiceContext &ctx)
  * -------------------------------------------------------------------------- */
 
 /* tip-cipher C-strings after 40 pre-rumor fills (0x1D2B0/0x1D2EE via -$7DE2).
- * Bank1 @ str.dat+$5BA (0x9666 / A4-$71E8[1]); day-pair {0,1}/{2,3}/{6,7}. */
+ * Bank1 @ str.dat+$5BA (0x9666 / A4-$71E8[1]); day-pair {0,1}/{2,3}/{6,7}.
+ * Fallback only — live path fills A4-$594E/-$58AE via eventVmFillTavernStrTables. */
 static const char *const kPubRumors[5][kPubRumorCount] = {
     {
         "Children at 0,15",
@@ -394,32 +398,69 @@ static const uint16_t kSpecialtyGoldTable[5][kPubFoodOptions] = {
     {10, 50, 100}, {1000, 2000, 3000}, {200, 100, 1000}, {5000, 500, 1000}, {20, 50, 250},
 };
 
-void townSvcPubTables(int map_id, TavernMenuData &out)
+void townSvcPubTables(int map_id, TavernMenuData &out, uint8_t *a4)
 {
     const int town = (map_id >= 0 && map_id < 5) ? map_id : 0;
     for (int i = 0; i < kPubRumorCount; ++i) {
-        out.rumors[i] = kPubRumors[town][i];
+        const char *s = nullptr;
+        if (a4) {
+            s = eventVmGsRelCString(
+                a4, mm2_gs_u32(a4, MM2_GS_TAVERN_RUMORS + town * 0x20 + i * 4));
+        }
+        /* nullptr = no GS; "" = real empty day-pair slot. */
+        out.rumors[i] = s ? s : kPubRumors[town][i];
     }
     for (int i = 0; i < kPubTipCount; ++i) {
-        out.tips[i] = kPubTips[town][i];
+        const char *s = nullptr;
+        if (a4) {
+            s = eventVmGsRelCString(a4, mm2_gs_u32(a4, MM2_GS_TAVERN_TIPS + town * 0x20 + i * 4));
+        }
+        /* Empty NUL slots are valid (day-pair second line often blank). */
+        out.tips[i] = s ? s : kPubTips[town][i];
     }
     for (int i = 0; i < kPubFoodOptions; ++i) {
-        out.food.options[i] = kPubFood[town][i];
-        out.food.costs[i] = kSpecialtyGoldTable[town][i];
+        /* 0x1CD76: print -$57F6[town][2*i] then [2*i+1] (two gotoxy lines). */
+        const char *a = nullptr;
+        const char *b = nullptr;
+        if (a4) {
+            a = eventVmGsRelCString(a4, mm2_gs_u32(a4, MM2_GS_TAVERN_FOOD + town * 0x18 + (2 * i) * 4));
+            b = eventVmGsRelCString(a4,
+                                    mm2_gs_u32(a4, MM2_GS_TAVERN_FOOD + town * 0x18 + (2 * i + 1) * 4));
+        }
+        out.food_joined[i][0] = '\0';
+        if (a && a[0]) {
+            if (b && b[0]) {
+                std::snprintf(out.food_joined[i], sizeof(out.food_joined[i]), "%s\n%s", a, b);
+            } else {
+                std::snprintf(out.food_joined[i], sizeof(out.food_joined[i]), "%s", a);
+            }
+            out.food.options[i] = out.food_joined[i];
+        } else {
+            out.food.options[i] = kPubFood[town][i];
+        }
+        out.food.costs[i] =
+            a4 ? mm2_gs_u16(a4, MM2_GS_TAVERN_SPECIALTY_GOLD + (town * 3 + i) * 2)
+               : kSpecialtyGoldTable[town][i];
     }
     for (int i = 0; i < kPubDrinkCount; ++i) {
-        out.drinks[i].label = kPubDrinks[i];
+        const char *s = nullptr;
+        if (a4) {
+            s = eventVmGsRelCString(a4, mm2_gs_u32(a4, MM2_GS_TAVERN_DRINK_LBL + i * 4));
+        }
+        out.drinks[i].label = (s && s[0]) ? s : kPubDrinks[i];
     }
     for (int i = 0; i < kPubStatBoostCount; ++i) {
+        /* -$580E after bank@0x63C is drink chrome; keep ASM-clear Might/… labels. */
         out.boosts[i].label = kStatBoostLabels[i];
-        out.boosts[i].cost = kStatBoostGold[i];
+        out.boosts[i].cost =
+            a4 ? mm2_gs_u16(a4, MM2_GS_TAVERN_BOOST_GOLD + i * 2) : kStatBoostGold[i];
     }
 }
 
 void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
 {
     TavernMenuData data{};
-    townSvcPubTables(ctx.map_id, data);
+    townSvcPubTables(ctx.map_id, data, ctx.a4);
 
     TavernOption opt = TavernOption::Exit;
     while (ui.chooseTavernOption(ctx, data, opt)) {
@@ -460,7 +501,7 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
                     Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
                     if (rec) {
                         const TownSvcSpecialtyResult r =
-                            townSvcTavernSpecialty(*rec, ctx.map_id, food, ctx.rng);
+                            townSvcTavernSpecialty(ctx.a4, *rec, ctx.map_id, food, ctx.rng);
                         ui.reportTavernSpecialty(r);
                     }
                 }

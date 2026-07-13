@@ -3,10 +3,12 @@
 #include "mm2/CppStdCompat.h"
 #include "mm2/events/EventFieldMap.h"
 #include "mm2/gameplay/ExploreActions.h"
+#include "mm2/platform/Audio.h"
 #include "mm2_found_items.h"
 #include "mm2_map_codec.h"
 
 #include <cstdio>
+#include <cstring>
 
 namespace mm2::events {
 
@@ -1237,23 +1239,17 @@ void eventVmExecEngineCall(uint8_t *a4, uint8_t index, world::MapWorld *world)
     if (!a4) {
         return;
     }
-    /* OP_0D (event_op0d @ 0x15EC4) calls engine thunk -$7E42 -> 0x06FB8 with this
-     * index (valid 0..9; index 0 gated by enable flag -$79AF, 1..9 by -$79B0).
-     * 0x06FB8 is a CANNED ON-SCREEN SEQUENCE PLAYER: it loads a draw-command list
-     * from ROM table -$7232[index], rendering (row, glyph/value) byte-pairs via
-     * 0x77AA until a 0xFF terminator (abortable via input poll -$7BD2). It touches
-     * ONLY local/stack state + the renderer — no game-state writes — so for game
-     * LOGIC fidelity this is safely a no-op; only the visual sequence is missing
-     * (presentation layer, like the Eagle/Wizard Eye overhead render).
-     * The index 0x09 redraw-exit-flag below is a pragmatic pre-transition refresh
-     * approximation, not an ASM-required side effect. */
-    switch (index) {
-    case 0x09:
+    /* OP_0D @ 0x15EC4 → thunk -$7E42 → play_sound_seq @ 0x6FB8 (ids 0..9).
+     * id 0 gated by Walk Beep (A4-$79AF); 1..9 by Sounds (A4-$79B0).
+     * Older comments mislabeled this as an on-screen draw sequence — ASM is audio. */
+    const bool sounds = (mm2_gs_u8(a4, MM2_GS_SOUNDS_FLAG) & 1) != 0;
+    const bool walk = (mm2_gs_u8(a4, MM2_GS_WALK_BEEP_FLAG) & 1) != 0;
+    audio::playSoundSeq(index, sounds, walk);
+
+    /* Index 0x09 also used as a pragmatic pre-transition refresh latch. */
+    if (index == 0x09) {
         mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS,
                       static_cast<uint8_t>(mm2_gs_u8(a4, MM2_GS_EXIT_FLAGS) | 1));
-        break;
-    default:
-        break;
     }
 }
 
@@ -1267,6 +1263,9 @@ bool eventVmPartyTryPayGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLa
                             uint32_t amount)
 {
     /* party_gold_pool_pay @ 0x6ACE (thunk -$7E6C). */
+    if (a4) {
+        mm2_gs_set_u8(a4, MM2_GS_COND_FLAG, 0); /* 0x6ADC clr -$7951 */
+    }
     const int count = partyActiveCount(a4, launch);
     uint32_t total = 0;
     for (int i = 0; i < count; ++i) {
@@ -1313,7 +1312,11 @@ bool eventVmPartyTryPayGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLa
             remain = 0;
         }
     }
-    return pooled || amount == 0;
+    const bool ok = pooled || amount == 0;
+    if (a4 && ok) {
+        mm2_gs_set_u8(a4, MM2_GS_COND_FLAG, 1); /* 0x6B2E */
+    }
+    return ok;
 }
 
 bool eventVmPartyTryPayGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
@@ -1559,16 +1562,30 @@ uint32_t eventVmHealingCostPerChar(int level, int town_index)
 
 void eventVmInitStrBankOffsets(uint8_t *a4)
 {
-    /* 0x9666 reads word[bank] from A4-$71E8; producer not in CODE — seed ASM-clear spans. */
+    /* 0x9666 reads word[bank] from A4-$71E8; DATA hunk @ 0xE16 (not CODE). */
     if (!a4) {
         return;
     }
-    for (int i = 0; i < kStrBankCount; ++i) {
+    for (int i = 0; i < kStrBankTableWords; ++i) {
         mm2_gs_set_u16(a4, MM2_GS_STR_BANK_OFFS + i * 2, kStrBankOffs[i]);
     }
-    /* Sentinel end-of-file for bank-length math (next-start − start). */
-    mm2_gs_set_u16(a4, MM2_GS_STR_BANK_OFFS + kStrBankCount * 2, kStrBankOffs[kStrBankCount]);
     mm2_gs_set_u16(a4, MM2_GS_STR_BANK_CURSOR, 0);
+
+    /* Tavern gold/limit/mask tables — DATA hunk seeds (0x1CEA4 / 0x1CAC4 / 0x1C8D4). */
+    static const uint16_t kSpecialtyGold[15] = {10, 50, 100, 1000, 2000, 3000, 200, 100, 1000,
+                                               5000, 500, 1000, 20, 50, 250};
+    static const uint16_t kSpecialtyMask[15] = {1, 2, 4, 4096, 8192, 16384, 64, 128, 256,
+                                               512, 1024, 2048, 8, 16, 32};
+    static const uint16_t kBoostGold[6] = {5, 5, 20, 20, 50, 100};
+    static const uint16_t kBoostLimit[6] = {2, 3, 3, 3, 3, 5};
+    for (int i = 0; i < 15; ++i) {
+        mm2_gs_set_u16(a4, MM2_GS_TAVERN_SPECIALTY_GOLD + i * 2, kSpecialtyGold[i]);
+        mm2_gs_set_u16(a4, MM2_GS_TAVERN_SPECIALTY_MASK + i * 2, kSpecialtyMask[i]);
+    }
+    for (int i = 0; i < 6; ++i) {
+        mm2_gs_set_u16(a4, MM2_GS_TAVERN_BOOST_GOLD + i * 2, kBoostGold[i]);
+        mm2_gs_set_u16(a4, MM2_GS_TAVERN_BOOST_LIMIT + i * 2, kBoostLimit[i]);
+    }
 }
 
 void eventVmDecodeStrBank(uint8_t *a4, int bank_index, const uint8_t *str_dat, size_t str_len)
@@ -1594,28 +1611,396 @@ void eventVmDecodeStrBank(uint8_t *a4, int bank_index, const uint8_t *str_dat, s
 
 const char *eventVmNextStrBankCString(uint8_t *a4)
 {
-    /* 0x976E: return ptr to current C-string in -$ED2; advance cursor past NUL. */
+    /* 0x976E: return ptr at cursor; advance past the terminating NUL.
+     * Empty slots (consecutive NULs) are real table entries — do not skip. */
     if (!a4) {
         return nullptr;
     }
     uint16_t cur = mm2_gs_u16(a4, MM2_GS_STR_BANK_CURSOR);
-    while (cur < kStrBankSpan && mm2_gs_u8(a4, -0x0ED2 + static_cast<int32_t>(cur)) == 0) {
-        ++cur;
-    }
     if (cur >= kStrBankSpan) {
-        mm2_gs_set_u16(a4, MM2_GS_STR_BANK_CURSOR, cur);
         return nullptr;
     }
     const char *out = reinterpret_cast<const char *>(a4 + (-0x0ED2) + static_cast<int32_t>(cur));
+    /* ASM: save start, then loop addq+tst until NUL read (inclusive advance). */
     uint16_t p = cur;
-    while (p < kStrBankSpan && mm2_gs_u8(a4, -0x0ED2 + static_cast<int32_t>(p)) != 0) {
+    for (;;) {
+        if (p >= kStrBankSpan) {
+            mm2_gs_set_u16(a4, MM2_GS_STR_BANK_CURSOR, p);
+            return out;
+        }
+        const uint8_t c = mm2_gs_u8(a4, -0x0ED2 + static_cast<int32_t>(p));
         ++p;
+        mm2_gs_set_u16(a4, MM2_GS_STR_BANK_CURSOR, p);
+        if (c == 0) {
+            break;
+        }
     }
-    if (p < kStrBankSpan) {
-        ++p;
-    }
-    mm2_gs_set_u16(a4, MM2_GS_STR_BANK_CURSOR, p);
     return out;
+}
+
+void eventVmFillOp0eFdStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_len)
+{
+    /* 0x1493C: jsr -$7DE8(#3) then 0x976E fills into -$5E26/-$5E16/-$5E06/-$5DCE/-$5DBE/-$5D92. */
+    if (!a4 || !str_dat) {
+        return;
+    }
+    eventVmDecodeStrBank(a4, 3, str_dat, str_len);
+
+    auto fill = [a4](int32_t base, int count) {
+        for (int i = 0; i < count; ++i) {
+            const char *s = eventVmNextStrBankCString(a4);
+            int32_t rel = 0;
+            if (s) {
+                rel = static_cast<int32_t>(reinterpret_cast<const uint8_t *>(s) - a4);
+            }
+            mm2_gs_set_u32(a4, base + i * 4, static_cast<uint32_t>(rel));
+        }
+    };
+    fill(MM2_GS_OP0E_FD_PTR0, 4);
+    fill(MM2_GS_OP0E_FD_PTR1, 4);
+    fill(MM2_GS_OP0E_FD_PTR2, 14);
+    fill(MM2_GS_OP0E_FD_PTR3, 4);
+    fill(MM2_GS_OP0E_FD_PTR4, 11);
+    fill(MM2_GS_OP0E_FD_PTR5, 10);
+
+    mm2_gs_set_u8(a4, MM2_GS_OP0E_FD_MODE, 0xFD);
+    for (int i = 0; i < 11; ++i) {
+        mm2_gs_set_u8(a4, -0x11DE + i, 0);
+    }
+}
+
+void eventVmFillTavernStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_len)
+{
+    /* 0x1D208: -$7DE8(#1) then linear 0x976E into tavern ptr banks. */
+    if (!a4 || !str_dat) {
+        return;
+    }
+    eventVmDecodeStrBank(a4, 1, str_dat, str_len);
+
+    auto store = [a4](int32_t slot, const char *s) {
+        int32_t rel = 0;
+        if (s) {
+            rel = static_cast<int32_t>(reinterpret_cast<const uint8_t *>(s) - a4);
+        }
+        mm2_gs_set_u32(a4, slot, static_cast<uint32_t>(rel));
+    };
+
+    /* -$59EE: 5 towns × 4 headers (index = town<<4 | i<<2). */
+    for (int town = 0; town < 5; ++town) {
+        for (int i = 0; i < 4; ++i) {
+            store(MM2_GS_TAVERN_HDR + town * 0x10 + i * 4, eventVmNextStrBankCString(a4));
+        }
+    }
+    for (int i = 0; i < 6; ++i) {
+        store(MM2_GS_TAVERN_DRINK_LBL + i * 4, eventVmNextStrBankCString(a4));
+    }
+    for (int i = 0; i < 14; ++i) {
+        store(MM2_GS_TAVERN_MISC14 + i * 4, eventVmNextStrBankCString(a4));
+    }
+    /* -$594E rumors / -$58AE tips: 5×8, town stride $20. */
+    for (int town = 0; town < 5; ++town) {
+        for (int i = 0; i < 8; ++i) {
+            store(MM2_GS_TAVERN_RUMORS + town * 0x20 + i * 4, eventVmNextStrBankCString(a4));
+        }
+    }
+    for (int town = 0; town < 5; ++town) {
+        for (int i = 0; i < 8; ++i) {
+            store(MM2_GS_TAVERN_TIPS + town * 0x20 + i * 4, eventVmNextStrBankCString(a4));
+        }
+    }
+    for (int i = 0; i < 6; ++i) {
+        store(MM2_GS_TAVERN_BOOST_LBL + i * 4, eventVmNextStrBankCString(a4));
+    }
+    /* -$57F6: 5 towns × 6 food lines (muls #$18). */
+    for (int town = 0; town < 5; ++town) {
+        for (int i = 0; i < 6; ++i) {
+            store(MM2_GS_TAVERN_FOOD + town * 0x18 + i * 4, eventVmNextStrBankCString(a4));
+        }
+    }
+    mm2_gs_set_u8(a4, MM2_GS_OP0E_FD_MODE, 0xFD);
+}
+
+const char *eventVmGsRelCString(const uint8_t *a4, uint32_t rel_u32)
+{
+    if (!a4 || rel_u32 == 0) {
+        return nullptr;
+    }
+    const int32_t rel = static_cast<int32_t>(rel_u32);
+    return reinterpret_cast<const char *>(a4 + rel);
+}
+
+int eventVmFormatOp0eFdPtrTable(const uint8_t *a4, int32_t table_base, int count, char *out,
+                                size_t out_cap)
+{
+    if (!out || out_cap == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (!a4 || count <= 0) {
+        return 0;
+    }
+    size_t pos = 0;
+    int lines = 0;
+    for (int i = 0; i < count; ++i) {
+        const uint32_t rel = mm2_gs_u32(a4, table_base + i * 4);
+        const char *s = eventVmGsRelCString(a4, rel);
+        if (!s) {
+            s = "";
+        }
+        const size_t slen = std::strlen(s);
+        if (pos + slen + 2 > out_cap) {
+            break;
+        }
+        if (pos > 0) {
+            out[pos++] = '\n';
+        }
+        std::memcpy(out + pos, s, slen);
+        pos += slen;
+        out[pos] = '\0';
+        ++lines;
+    }
+    return lines;
+}
+
+int eventVmSearchContainerAnmId(const uint8_t *a4)
+{
+    /* 0x1B0B6 jump table on A4-$79E3 → sign_sprite_load ids $46..$4A → NN.anm.
+     * Retail ADF Disk1+2 have 70/72/73/74.anm but NEVER 71.anm (also missing 64).
+     * Env 2/5 → $47 still requested; load fails until a fan asset appears. */
+    static const uint8_t kId[7] = {0x46, 0x48, 0x47, 0x49, 0x4A, 0x47, 0x4A};
+    const uint8_t env = a4 ? mm2_gs_u8(a4, MM2_GS_SIGN_ENV_ID) : 0;
+    if (env < 7) {
+        return kId[env];
+    }
+    return 0x46;
+}
+
+void eventVmScriptedKeyReset(uint8_t *a4)
+{
+    if (!a4) {
+        return;
+    }
+    mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_IDX, 0xFFFF);
+    mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_REP, 0xFFFF);
+    mm2_gs_set_u8(a4, MM2_GS_SCRIPTED_KEY_DLY, 0);
+    /* 0x97A6/0x97AC defaults (combat panel mode 2 uses $10/$C — left as defaults). */
+    mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_DY, 0x40);
+    mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_DX, 0x20);
+}
+
+void eventVmScriptedKeyQueue(uint8_t *a4, const uint8_t *bytes, int len)
+{
+    if (!a4) {
+        return;
+    }
+    if (len < 0) {
+        len = 0;
+    }
+    if (len > 255) {
+        len = 255;
+    }
+    for (int i = 0; i < len; ++i) {
+        mm2_gs_set_u8(a4, MM2_GS_SCRIPTED_KEY_BUF + i, bytes ? bytes[i] : 0);
+    }
+    mm2_gs_set_u8(a4, MM2_GS_SCRIPTED_KEY_BUF + len, 0xFF);
+    eventVmScriptedKeyReset(a4);
+}
+
+namespace {
+
+void scriptedKeySkipFfRecords(uint8_t *a4, int n)
+{
+    /* 0x989E: from -$71D6==$FFFF, advance until n $FF terminators seen. */
+    if (!a4 || n <= 0) {
+        return;
+    }
+    int rep = static_cast<int>(static_cast<int16_t>(mm2_gs_u16(a4, MM2_GS_SCRIPTED_KEY_REP)));
+    if (rep != -1) {
+        return;
+    }
+    rep = -1;
+    while (n > 0) {
+        ++rep;
+        if (rep < 0 || rep > 255) {
+            break;
+        }
+        if (mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_BUF + rep) == 0xFF) {
+            --n;
+        }
+    }
+    mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_REP, static_cast<uint16_t>(rep));
+}
+
+bool scriptedKeyPlaceOne(uint8_t *a4, ScriptedKeyPlace *place)
+{
+    /* 0x98C0: read placement, -$7FBC(pos, -$71DA, -$71D8), arm delay from next byte. */
+    if (!a4) {
+        return false;
+    }
+    int rep = static_cast<int>(static_cast<int16_t>(mm2_gs_u16(a4, MM2_GS_SCRIPTED_KEY_REP)));
+    ++rep;
+    if (rep < 0 || rep > 255) {
+        mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_REP, 0xFFFF);
+        return false;
+    }
+    uint8_t d1 = mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_BUF + rep);
+    if (d1 == 0xFF) {
+        mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_REP, 0xFFFF);
+        return false;
+    }
+    const uint8_t maxp = mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_MAXP);
+    if (maxp != 0 && maxp != 0xFF && d1 >= maxp) {
+        d1 = 0;
+    }
+    const uint16_t arg_y = mm2_gs_u16(a4, MM2_GS_SCRIPTED_KEY_DY); /* → dst_x @ 0x23E24 */
+    const uint16_t arg_x = mm2_gs_u16(a4, MM2_GS_SCRIPTED_KEY_DX); /* → dst_y-8 */
+    if (place) {
+        place->active = true;
+        place->clear = false;
+        place->placement = d1;
+        place->dst_x = arg_y;
+        place->dst_y = static_cast<uint16_t>(arg_x + 8u);
+    }
+    ++rep;
+    if (rep > 255) {
+        mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_REP, 0xFFFF);
+        return false;
+    }
+    const uint8_t dly = mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_BUF + rep);
+    if (dly == 0xFF) {
+        mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_REP, 0xFFFF);
+        return false;
+    }
+    mm2_gs_set_u8(a4, MM2_GS_SCRIPTED_KEY_DLY, dly);
+    mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_REP, static_cast<uint16_t>(rep));
+    return true;
+}
+
+}  // namespace
+
+int eventVmScriptedKeyPoll(uint8_t *a4, ScriptedKeyPlace *place)
+{
+    /* -$7DDC @ 0x97A2: delay, bit7→0x9888 place stream, plain ASCII keys. */
+    if (place) {
+        *place = ScriptedKeyPlace{};
+    }
+    if (!a4) {
+        return -1;
+    }
+    const uint8_t mode = mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_MODE);
+
+    uint8_t delay = mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_DLY);
+    if (delay != 0) {
+        const uint8_t burn = delay > 3 ? 3 : delay;
+        delay = static_cast<uint8_t>(delay - burn);
+        mm2_gs_set_u8(a4, MM2_GS_SCRIPTED_KEY_DLY, delay);
+        return -1;
+    }
+
+    /* 0x97F4: mid-choreography when -$71D6 != $FFFF → resume 0x98C0. */
+    int rep = static_cast<int>(static_cast<int16_t>(mm2_gs_u16(a4, MM2_GS_SCRIPTED_KEY_REP)));
+    if (rep != -1) {
+        if (!scriptedKeyPlaceOne(a4, place)) {
+            /* Choreography done — advance main idx past the bit7 opcode if still there. */
+        }
+        return -1;
+    }
+
+    int idx = static_cast<int>(static_cast<int16_t>(mm2_gs_u16(a4, MM2_GS_SCRIPTED_KEY_IDX)));
+    if (idx < 0) {
+        idx = 0;
+        mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_IDX, 0);
+        mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_REP, 0xFFFF);
+    }
+
+    for (int guard = 0; guard < 64; ++guard) {
+        if (idx < 0 || idx > 255) {
+            return -1;
+        }
+        const uint8_t b = mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_BUF + idx);
+        if (b == 0xFF) {
+            if (mode == 0xFD) {
+                idx = 0;
+                mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_IDX, 0);
+                continue;
+            }
+            return -1;
+        }
+        if (b == 0) {
+            return -1;
+        }
+
+        if ((b & 0x80) != 0) {
+            /* Bit7: n=b&$7F → skip n FF-records on -$71D6, then place stream. */
+            int n = static_cast<int>(b & 0x7F);
+            if (n <= 0) {
+                n = 1;
+            }
+            scriptedKeySkipFfRecords(a4, n);
+            (void)scriptedKeyPlaceOne(a4, place);
+            ++idx;
+            /* 0x984E: following main-stream byte is outer delay after 9888 returns. */
+            if (idx <= 255) {
+                const uint8_t d = mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_BUF + idx);
+                if (d != 0 && d != 0xFF) {
+                    /* Prefer secondary delay already armed; else use main-stream delay. */
+                    if (mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_DLY) == 0) {
+                        mm2_gs_set_u8(a4, MM2_GS_SCRIPTED_KEY_DLY, d);
+                    }
+                    ++idx;
+                }
+            }
+            mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_IDX, static_cast<uint16_t>(idx));
+            return -1;
+        }
+
+        const int key = static_cast<int>(b);
+        ++idx;
+        if (idx <= 255) {
+            const uint8_t d = mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_BUF + idx);
+            if (d != 0 && d != 0xFF) {
+                mm2_gs_set_u8(a4, MM2_GS_SCRIPTED_KEY_DLY, d);
+                ++idx;
+            }
+        }
+        mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_IDX, static_cast<uint16_t>(idx));
+        return key;
+    }
+    return -1;
+}
+
+void eventVmDeathStrikesLines(char *out, size_t out_cap)
+{
+    /* 0x14106 prints A4-$6D60[0..9] — DATA hunk seeds CODE string addrs. */
+    static const char *const kLines[10] = {
+        "     Death Strikes!",
+        "",
+        "Unfortunately, you were",
+        "not successful in your",
+        "     last endeavor.",
+        "",
+        " To resume adventuring",
+        "  at the inn in which",
+        "    you last stayed",
+        "      press ENTER",
+    };
+    if (!out || out_cap == 0) {
+        return;
+    }
+    out[0] = '\0';
+    size_t pos = 0;
+    for (int i = 0; i < 10; ++i) {
+        const size_t slen = std::strlen(kLines[i]);
+        if (pos + slen + 2 > out_cap) {
+            break;
+        }
+        if (pos > 0) {
+            out[pos++] = '\n';
+        }
+        std::memcpy(out + pos, kLines[i], slen);
+        pos += slen;
+        out[pos] = '\0';
+    }
 }
 
 }  // namespace mm2::events

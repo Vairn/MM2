@@ -114,7 +114,7 @@ column `$1C`, rows 1–15 by `$5D54`:
 
 | Func | Address | Behavior |
 |------|---------|----------|
-| Turn dispatch | `$5838` | `$F1`: facing `-$79B1` N→E→S→W (CW); `$F0`: N→W→S→E (CCW). Then `$5636` (facing → collision masks), `-$7E42(0)` (`0x6FB8` view/world refresh), `-$7FD4` (`0x1D0A` walk beep), `-$79E4 := 1` |
+| Turn dispatch | `$5838` | `$F1`: facing `-$79B1` N→E→S→W (CW); `$F0`: N→W→S→E (CCW). Then `$5636` (facing → collision masks), `-$7E42(0)` (`0x6FB8` **walk beep** / `play_sound_seq`), `-$7FD4` (`0x1D0A`), `-$79E4 := 1` |
 | Facing masks | `$5636` | `-$79B1` letter → `-$55D8` (direction bit mask: N=`$C0`, E=`$30`, S=`$0C`, W=`$03`) + `-$55D7` (shift: N=6, E=4, S=2, W=0) |
 | Step dispatch | `$5816` | `$F2` → `$56FC` forward; `$F3` → `$5762` back |
 | Step forward | `$56FC` | `$9424` passability test (−1 = pass, else obstruction index) → blocked: `$5918(idx)` prints from msg table; clear: facing delta via `$5692` (E:+x, W:−x, N:+y, S:−y), `-$79F1/-$79F0` updated, beep, `-$79E4:=1`, `-$4F4E:=1` (event latch set at loop tail), `$63EE`, `-$7E42(0)` |
@@ -374,7 +374,7 @@ Existing trace in doc 03 (`LAB_24C4` movement loop, ESC via `-$86B0`).
 | `-$7FC8` | `8038` | `0x223A` | Auto-map |
 | `-$7EAE` | `8152` | `0x5E28` | Protect panel draw |
 | `-$7E72` | `818E` | `0x69DC` | time tick / light drain |
-| `-$7E42` | `81BE` | `0x6FB8` | world/3D refresh after move |
+| `-$7E42` | `81BE` | `0x6FB8` | `play_sound_seq` (id 0 = walk beep after move) |
 | `-$7E12` | `81EE` | `0x79C6` | spell level+number prompt |
 | `-$7E4E` | `81B2` | `0x6DA6` | "('ESC' to go back)" printer |
 | `-$7EB4` | `814C` | `0x5918` | status message by index (`A4-$7436`) |
