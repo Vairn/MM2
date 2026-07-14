@@ -93,10 +93,16 @@ void mm2_statePopAll(Mm2StateManager *pStateManager)
         return;
     }
     while (pStateManager->pCurrent) {
-        if (pStateManager->pCurrent->cbDestroy) {
-            pStateManager->pCurrent->cbDestroy();
+        Mm2State *pState = pStateManager->pCurrent;
+        Mm2State *pPrev = pState->pPrev;
+        if (pState->cbDestroy) {
+            pState->cbDestroy();
         }
-        pStateManager->pCurrent = pStateManager->pCurrent->pPrev;
+        /* States are shared global singletons reused across pushes, so a stale
+         * pPrev can point back into the chain. Detach as we go and stop on a
+         * self-link so a cycle can never spin here forever (quit hang). */
+        pState->pPrev = NULL;
+        pStateManager->pCurrent = (pPrev == pState) ? NULL : pPrev;
     }
 }
 
@@ -114,7 +120,12 @@ void mm2_stateChange(Mm2StateManager *pStateManager, Mm2State *pState)
         pStateManager->pCurrent->cbDestroy();
     }
     if (pStateManager->pCurrent) {
-        pState->pPrev = pStateManager->pCurrent->pPrev;
+        /* Changing back to the state directly beneath the current one is a
+         * pop-to: keep its own pPrev. Overwriting it with current->pPrev (which
+         * *is* pState here) would self-link the node and hang statePopAll. */
+        if (pState != pStateManager->pCurrent->pPrev) {
+            pState->pPrev = pStateManager->pCurrent->pPrev;
+        }
     } else {
         pState->pPrev = NULL;
     }

@@ -77,7 +77,7 @@
 
         <section class="panel partyPanel">
           <h2>Party (roster.dat slots 0–5)</h2>
-          <p class="hint">Town services: pick A/B/C then member 1–6. Gold is per-character (record+$66).</p>
+          <p class="hint">Town shops: intro Y/N → inverse title + Gold= + G/# chrome; digits 1–8 switch the active buyer (no separate pick screen). Gold is per-character (record+$66).</p>
           <div class="partyStateWrap">
             <pre id="partyState"></pre>
           </div>
@@ -126,6 +126,9 @@
       </div>
     </main>
   </div>
-  <script type="module" src="walker.js"></script>
+  <script type="module">
+    import { BUILD_ID } from "./version.js";
+    await import(`./walker.js?v=${BUILD_ID}`);
+  </script>
 </body>
 </html>

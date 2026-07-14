@@ -364,8 +364,9 @@ private:
             char name[16];
             mm2_roster_name_to_cstr(&rec, name, sizeof(name));
             char line[96];
+            /* hp_max = live +$5E, hp_current = +$74 ceiling (codec names inverted). */
             std::snprintf(line, sizeof(line), "%2d %-11s Lv%2u HP%4u/%4u", slot, name, rec.level,
-                          rec.hp_current, rec.hp_max);
+                          rec.hp_max, rec.hp_current);
             const int y = 36 + row * line_h;
             if (row == cursor_) {
                 c.fillRect(6, y - 1, 308, line_h, 48, 64, 96, 255);
@@ -387,7 +388,7 @@ private:
         std::snprintf(buf, sizeof(buf), "%s / %s", className(rec.class_id), raceName(rec.race));
         c.drawText(8, y, buf, 220, 220, 220, 255);
         y += 12;
-        std::snprintf(buf, sizeof(buf), "Lv%2u  HP %u/%u  SP %u/%u", rec.level, rec.hp_current, rec.hp_max,
+        std::snprintf(buf, sizeof(buf), "Lv%2u  HP %u/%u  SP %u/%u", rec.level, rec.hp_max, rec.hp_current,
                       rec.sp_current, rec.sp_max);
         c.drawText(8, y, buf, 220, 220, 220, 255);
     }

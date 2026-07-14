@@ -82,7 +82,16 @@ void AppHost::shutdown()
     title_.shutdown();
 }
 
-void AppHost::pollInput() { keys_ = platform::pollInput(); }
+void AppHost::pollInput()
+{
+    keys_ = platform::pollInput();
+    /* Window close / OS quit is a global signal: honor it from any state
+     * (boot, title, menus, in-town play, combat) so the loop always exits.
+     * In-town play (GameSession::tick) does not inspect keys.quit itself. */
+    if (keys_.quit) {
+        quit_ = true;
+    }
+}
 
 void AppHost::framePresent()
 {

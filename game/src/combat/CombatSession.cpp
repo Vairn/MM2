@@ -14,14 +14,18 @@ namespace mm2::combat {
 
 namespace {
 
-/* doc 16: byte 0x14 "speed" = {low nibble+1, high nibble+1} (two paired
- * stats). Doc 17's round-loop trace (-$50E initiative) is not fully reduced
- * to a single confirmed source byte, so this MVP uses the low-nibble value
- * (the byte doc 16 names "speed") as the initiative stat. */
+/* Initiative (-$50E turn-order stat) is sourced by the unpacker 0x4C8E from
+ * byte 0x18 "speed2": -$11B1 = (speed2 & 0x1F)+1, ×10 (capped 250) if bit5
+ * (0x4FA2-0x4FD4), copied to -$50E[slot] at 0x11C68. Byte 0x14 "speed" is the
+ * SWINGS/charge byte (low4+1 / high4+1), NOT initiative — see loadMonsterCombatGlobals. */
 int decodeMonsterSpeed(const Mm2MonsterRecord &rec)
 {
-    const uint8_t b = rec.fields[MM2_MON_OFF_SPEED - MM2_MONSTER_NAME_SIZE];
-    return (b & 0x0F) + 1;
+    const uint8_t b = rec.fields[MM2_MON_OFF_SPEED2 - MM2_MONSTER_NAME_SIZE];
+    int v = (b & 0x1F) + 1;
+    if (b & 0x20) {
+        v = (v > 0x19) ? 0xFA : v * 10;
+    }
+    return v;
 }
 
 /* doc 16: byte 0x17 damage = low5+1, x10 if bit5, capped 250. Used by
@@ -2822,6 +2826,7 @@ void CombatSession::loadMonsterCombatGlobals(GameStateView &gs, int slot)
                   static_cast<uint8_t>(MM2_MON_ADD_FRIENDS_COUNT(&ab)));
     const uint8_t ac = rec.fields[MM2_MON_OFF_AC - MM2_MONSTER_NAME_SIZE];
     const uint8_t dmg = rec.fields[MM2_MON_OFF_DAMAGE - MM2_MONSTER_NAME_SIZE];
+    const uint8_t speed = rec.fields[MM2_MON_OFF_SPEED - MM2_MONSTER_NAME_SIZE];
     const uint8_t spd2 = rec.fields[MM2_MON_OFF_SPEED2 - MM2_MONSTER_NAME_SIZE];
     const uint8_t mres = rec.fields[MM2_MON_OFF_MRES - MM2_MONSTER_NAME_SIZE];
 
@@ -2837,10 +2842,12 @@ void CombatSession::loadMonsterCombatGlobals(GameStateView &gs, int slot)
         ac_val = static_cast<uint8_t>(ac_val * 10);
     }
     mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_AC, ac_val);
-    /* 0x4EAE: swings = (spd2 low4)+1. 0x4F52: dmg sides = (dmg low5)+1; ×10 if bit5. */
-    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SWINGS, static_cast<uint8_t>((spd2 & 0x0F) + 1));
-    /* 0x4EB8: -$11BA = (spd2>>4)+1 — special-charge seed for -$503. */
-    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_CHARGE_INIT, static_cast<uint8_t>((spd2 >> 4) + 1));
+    /* 0x4EAE: swings = (speed[0x14] low4)+1. Byte 0x18 (speed2) feeds initiative
+     * (-$11B1 @ 0x4FAA), NOT swings — reading spd2 here inflated melee damage
+     * (e.g. Orc speed2=0x0F → 16 swings instead of the correct 1). */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SWINGS, static_cast<uint8_t>((speed & 0x0F) + 1));
+    /* 0x4EB8: -$11BA = (speed[0x14]>>4)+1 — special-charge seed for -$503. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_CHARGE_INIT, static_cast<uint8_t>((speed >> 4) + 1));
     uint8_t sides = static_cast<uint8_t>((dmg & 0x1F) + 1);
     if (dmg & 0x20) {
         if (sides > 0x19) {
@@ -4852,37 +4859,55 @@ void CombatSession::appendSingleEffectFeea(GameStateView &gs, const char *victim
 
 int CombatSession::pickMonsterMeleeTarget103BA(GameStateView &gs)
 {
-    /* 0x103BA: advance -$4F8 within front-rank -$5E4D; skip cond & $C0. */
-    const int front = front_rank_count_ > 0 ? front_rank_count_ : 1;
-    const int pc = launch_ ? party_count_ : 0;
-    uint8_t cur = mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT);
-    for (int tries = 0; tries < MM2_GS_PARTY_SIZE + 2; ++tries) {
-        if (cur >= static_cast<uint8_t>(front)) {
-            uint8_t fr = static_cast<uint8_t>(front);
-            if (fr < static_cast<uint8_t>(pc)) {
-                fr = static_cast<uint8_t>(fr + 1);
+    /* 0x103BA, ported instruction-for-instruction. It runs on the same three
+     * game-state bytes as the ROM, with the ROM's unbounded loop (no cap, no
+     * early-out):
+     *   -$4F8  MM2_GS_COMBAT_TARGET_SLOT  target party slot (persists per call)
+     *   -$5E4D MM2_GS_FRONT_RANK_N        hand-to-hand front-rank cutoff
+     *   -$7959 low byte of the -$795A party-count word = active party size
+     *
+     * The stack-local counter t (-$1(a5)) drives the front-rank growth: only
+     * once t has walked the whole current rank without a live target
+     * (t >= -$5E4D) is -$5E4D widened by one, clamped to party size, so a
+     * back-rank member steps into hand-to-hand — exactly what happens as front
+     * members die/go unconscious. Dead/eradicated/stoned members (roster +$26
+     * & $C0) are skipped. Termination matches the ROM: monster turns only run
+     * while checkOutcome() has confirmed a member with condition <= $10 (hence
+     * & $C0 == 0) still fights, so a live target always exists in the window. */
+    uint8_t t = 0; /* 0x103BE clr.b -$1(a5) */
+    for (;;) {
+        if (t < mm2_gs_u8(gs.a4(), MM2_GS_FRONT_RANK_N)) { /* 0x103C6 t < -$5E4D */
+            /* 0x103E2: addq.b #1,-$4F8. */
+            mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT,
+                          static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT) + 1));
+        } else {
+            /* 0x103CC..0x103DA: addq.b #1,-$5E4D; clamp to party size -$7959. */
+            uint8_t front = static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_FRONT_RANK_N) + 1);
+            const uint8_t size = mm2_gs_u8(gs.a4(), -0x7959);
+            if (front > size) {
+                front = size;
             }
-            if (fr > static_cast<uint8_t>(pc)) {
-                fr = static_cast<uint8_t>(pc > 0 ? pc : 1);
-            }
-            mm2_gs_set_u8(gs.a4(), MM2_GS_FRONT_RANK_N, fr);
-            front_rank_count_ = fr;
-            cur = static_cast<uint8_t>(cur + 1);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_FRONT_RANK_N, front);
+            front_rank_count_ = front; /* keep the C++ mirror equal to -$5E4D */
         }
-        if (cur >= static_cast<uint8_t>(front_rank_count_) || cur >= static_cast<uint8_t>(pc)) {
-            cur = 0;
+        /* 0x103E6..0x103F0: if -$4F8 >= -$5E4D → 0. */
+        if (mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT) >= mm2_gs_u8(gs.a4(), MM2_GS_FRONT_RANK_N)) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT, 0);
         }
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT, cur);
+        /* 0x103F4..0x103FE: if -$4F8 >= party size -$7959 → 0. */
+        if (mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT) >= mm2_gs_u8(gs.a4(), -0x7959)) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT, 0);
+        }
+        t = static_cast<uint8_t>(t + 1); /* 0x10402 addq.b #1,-$1(a5) */
+        /* 0x10406..0x10422: roster record for -$4F8; test +$26 & $C0. */
+        const uint8_t cur = mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_TARGET_SLOT);
         const int ri = rosterIndexForPartySlot(static_cast<int>(cur));
-        if (ri >= 0) {
-            const uint8_t cond = roster_->records[ri].condition;
-            if ((cond & 0xC0) == 0) {
-                return static_cast<int>(cur);
-            }
+        const uint8_t cond = (ri >= 0) ? roster_->records[ri].condition : 0;
+        if ((cond & 0xC0) == 0) {
+            return static_cast<int>(cur); /* 0x10428 living hand-to-hand target */
         }
-        cur = static_cast<uint8_t>(cur + 1);
+        /* 0x10426: & $C0 nonzero → loop back to 0x103C2. */
     }
-    return -1;
 }
 
 uint16_t CombatSession::monsterMeleeDamage10478(GameStateView &gs, int mon_slot, int party_slot)

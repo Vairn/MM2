@@ -386,7 +386,7 @@ function pseudoLineSummary(line) {
 function execSelectorLabel(pseudo) {
   const m = pseudo?.match(/exec_selector\(0x[0-9A-Fa-f]+\)\s*(?:#\s*(.+))?/);
   if (m?.[1]) return m[1].trim().replace(/_/g, " ");
-  return "Town service";
+  return "Selector";
 }
 
 function serviceSignLabel(pseudo) {
@@ -790,4 +790,83 @@ export function resolveNarrativeLayoutOp(text, vmOp) {
 /** Pick OP_01 vs OP_02/03 from text alone (no VM opcode). */
 export function inferNarrativeOp(text) {
   return resolveNarrativeLayoutOp(text, null);
+}
+
+/* ---- Town shop chrome (PlayTownServiceUi @ 0x1C494 left / 0x1C6BE options) ---- */
+const SHOP_LEFT_COL = 0x02;
+const SHOP_OPT_COL = 0x10;
+const SHOP_BAND_FIRST = 0x11;
+const SHOP_BAND_LAST = 0x16;
+const SHOP_ESC_COL = 0x0b;
+const SHOP_ESC_ROW = 0x17;
+
+/** Inverse-video service title (0x1C494: -$7C08(1) around "Blacksmith"). */
+function drawInverseTitle(ctx, row, col, title) {
+  if (!title) return;
+  const px = col * 8;
+  const py = row * 8;
+  const w = title.length * 8;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(px, py, w, 8);
+  textAtCell(ctx, col, row, title, 0, 0, 0);
+}
+
+/**
+ * Two-column town-service menu — left chrome + right A–F options.
+ * Mirrors PlayTownServiceUi::drawShopLeftChrome / render.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{
+ *   title: string,
+ *   memberLine?: string,
+ *   goldLine?: string,
+ *   showGatherGold?: boolean,
+ *   selectPrompt?: string,
+ *   optionLines: string[],
+ *   status?: string,
+ * }} opts
+ */
+export function drawShopMenuPanel(ctx, opts) {
+  const {
+    title = "",
+    memberLine = "",
+    goldLine = "",
+    showGatherGold = false,
+    selectPrompt = "Select (A-F)",
+    optionLines = [],
+    status = "",
+  } = opts || {};
+
+  chromeMsgTop(ctx);
+  clearCells(ctx, 1, SHOP_BAND_FIRST, 38, SHOP_BAND_LAST);
+  clearCells(ctx, 1, SHOP_ESC_ROW, 38, SHOP_ESC_ROW);
+
+  drawInverseTitle(ctx, SHOP_BAND_FIRST, SHOP_LEFT_COL, title);
+  let foot = SHOP_BAND_FIRST + 1;
+  if (memberLine) textAtCell(ctx, SHOP_LEFT_COL, foot++, memberLine);
+  if (goldLine) textAtCell(ctx, SHOP_LEFT_COL, foot++, goldLine);
+  if (showGatherGold) textAtCell(ctx, SHOP_LEFT_COL, foot++, "G-Gather Gold");
+  textAtCell(ctx, SHOP_LEFT_COL, foot++, "#-Other Char");
+  if (selectPrompt) textAtCell(ctx, SHOP_LEFT_COL, foot, selectPrompt);
+
+  let row = SHOP_BAND_FIRST;
+  for (const line of optionLines) {
+    if (row > SHOP_BAND_LAST) break;
+    const parts = String(line).split("\n");
+    for (const part of parts) {
+      if (row > SHOP_BAND_LAST) break;
+      textAtCell(ctx, SHOP_OPT_COL, row++, part);
+    }
+  }
+
+  if (status) {
+    const parts = String(status).split("\n");
+    let srow = SHOP_BAND_LAST - (parts.length - 1);
+    if (srow < SHOP_BAND_FIRST) srow = SHOP_BAND_FIRST;
+    for (const part of parts) {
+      if (srow > SHOP_BAND_LAST) break;
+      textAtCell(ctx, SHOP_OPT_COL, srow++, part, 160, 255, 160);
+    }
+  }
+
+  textAtCell(ctx, SHOP_ESC_COL, SHOP_ESC_ROW, "( 'ESC' to go back )", 180, 180, 180);
 }

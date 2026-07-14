@@ -46,6 +46,68 @@ export function decodeStrBankStrings(strDat, bankIndex) {
 }
 
 /**
+ * 0x1D208 / eventVmFillTavernStrTables — decode bank 1, linear walk into
+ * rumor/tip (+ header/drink/misc/boost/food) tables on session.
+ * @param {object} session
+ * @param {Uint8Array|null} strDat
+ * @returns {boolean} true when bank walk filled tables
+ */
+export function fillTavernStrTables(session, strDat) {
+  if (!session) return false;
+  if (!strDat) {
+    session.tavernTables = null;
+    return false;
+  }
+  const strings = decodeStrBankStrings(strDat, 1);
+  let cursor = 0;
+  const take = (n) => {
+    const rows = [];
+    for (let i = 0; i < n; i++) rows.push(strings[cursor++] ?? "");
+    return rows;
+  };
+  const headers = [];
+  for (let t = 0; t < 5; t++) headers.push(take(4));
+  const drinkLabels = take(6);
+  const misc14 = take(14);
+  const rumors = [];
+  for (let t = 0; t < 5; t++) rumors.push(take(8));
+  const tips = [];
+  for (let t = 0; t < 5; t++) tips.push(take(8));
+  const boostLabels = take(6);
+  const food = [];
+  for (let t = 0; t < 5; t++) food.push(take(6));
+  session.tavernTables = { headers, drinkLabels, misc14, rumors, tips, boostLabels, food };
+  session.scriptedKeyMode = 0xfd;
+  return true;
+}
+
+/**
+ * Live tip pool for map, else TownServiceMenu.cpp fallback via pubTipPool.
+ * @param {object} session
+ * @param {number} mapId
+ * @param {(id:number)=>string[]} fallback
+ */
+export function tavernTipPool(session, mapId, fallback) {
+  const town = mapId >= 0 && mapId < 5 ? mapId : 0;
+  const live = session?.tavernTables?.tips?.[town];
+  if (live && live.length) return live;
+  return fallback(mapId);
+}
+
+/**
+ * Live rumor pool for map, else TownServiceMenu.cpp fallback via pubRumorPool.
+ * @param {object} session
+ * @param {number} mapId
+ * @param {(id:number)=>string[]} fallback
+ */
+export function tavernRumorPool(session, mapId, fallback) {
+  const town = mapId >= 0 && mapId < 5 ? mapId : 0;
+  const live = session?.tavernTables?.rumors?.[town];
+  if (live && live.length) return live;
+  return fallback(mapId);
+}
+
+/**
  * Fill session.fdPtrTables from bank-3 linear strings (counts match C++ fill).
  * @param {object} session
  * @param {Uint8Array|null} strDat

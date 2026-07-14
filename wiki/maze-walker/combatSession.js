@@ -416,56 +416,57 @@ export async function runCombatContract(ctx, enc, op) {
     return "refused";
   }
 
-  const { waitForCombatKey, waitForSpace, promptCombatResult } = ctx;
+  const { waitForCombatKey } = ctx;
   const sprite = ctx.sprite ?? enc?.sprite ?? null;
+  /* Keep monster portrait on the hood for the whole fight. */
+  if (sprite) ctx.onViewportOverlay?.(sprite);
 
-  /* Prefer real tick loop; fall back to legacy V/N/D only if no combat key host. */
-  if (typeof waitForCombatKey === "function") {
-    let guard = 0;
-    while (fight.state !== "Inactive" && guard++ < 10000) {
-      if (combatAwaitingInput(fight)) {
-        const text = combatPromptText(fight, enc);
-        const keys = await waitForCombatKey(text, sprite, op);
-        const ended = combatTick(fight, keys || {});
-        onSessionChange?.(session);
-        if (ended) break;
-      } else {
-        /* Should not idle without input; force ack advance. */
-        combatTick(fight, { space: true });
-      }
-    }
-    const result = fight.outcome || session.combatOutcome || "fled";
-    if (result === "defeated") {
-      ctx.onCombatDefeat?.();
-    }
-    note?.(
-      `${enc?.heading ?? "Encounter"}: ${result}` +
-        (result === "victory" ? ` XP=${session.combatXpPool | 0}` : "")
-    );
-    onSessionChange?.(session);
-    return result;
-  }
-
-  /* Legacy V/N/D host (tests / callers without waitForCombatKey). */
-  const modalText = `${enc?.text ?? "Encounter!"}\n\nV = victory\nN = flee\nD = defeat wipe`;
-  if (waitForSpace) await waitForSpace(modalText, sprite, op);
-  let result = "fled";
-  if (promptCombatResult) {
-    const won = await promptCombatResult(enc);
-    if (won) result = "victory";
-    else if (session.combatOutcome === "defeated") result = "defeated";
-    else result = "fled";
-  }
-  if (result === "victory") {
-    combatResolveVictoryKills(session, manifest, rng);
-    const r = combatFinishVictory(session, { manifest, rng });
-    note?.(`${enc?.heading ?? "Encounter"}: victory latch XP=${r.xp}`);
-  } else if (result === "defeated") {
-    note?.(`${enc?.heading ?? "Encounter"}: defeated`);
-  } else {
+  /* Prefer real tick loop; never fall back to fabricated V/N/D when host is present. */
+  if (typeof waitForCombatKey !== "function") {
+    note?.(`${enc?.heading ?? "Encounter"}: no waitForCombatKey host`);
     combatFinishLeave(session, true);
-    note?.(`${enc?.heading ?? "Encounter"}: fled — script ends`);
+    onSessionChange?.(session);
+    return "fled";
   }
+
+  let guard = 0;
+  let lastEndText = "";
+  while (fight.state !== "Inactive" && guard++ < 10000) {
+    if (combatAwaitingInput(fight)) {
+      const text = combatPromptText(fight, enc);
+      const keys = await waitForCombatKey(text, sprite, op);
+      /* GameSession.cpp:2130 — V/Q opens sheet for active slot; turn not spent. */
+      const upper = keys?.ascii ? String.fromCharCode(keys.ascii).toUpperCase() : "";
+      if (
+        fight.state === "AwaitingCommand" &&
+        (upper === "V" || upper === "Q") &&
+        typeof ctx.onCombatViewSheet === "function"
+      ) {
+        await ctx.onCombatViewSheet(fight.activePartySlot | 0);
+        onSessionChange?.(session);
+        continue;
+      }
+      const ended = combatTick(fight, keys || {});
+      onSessionChange?.(session);
+      if (ended) break;
+    } else {
+      /* Should not idle without input; force ack advance. */
+      combatTick(fight, { space: true });
+    }
+  }
+  /* finishVictory/finishLeave set status then Inactive — show once (C++ last frame). */
+  if (fight.statusLine && fight.statusLine !== lastEndText) {
+    lastEndText = fight.statusLine;
+    await waitForCombatKey(combatPromptText(fight, enc) || fight.statusLine, sprite, op);
+  }
+  const result = fight.outcome || session.combatOutcome || "fled";
+  if (result === "defeated") {
+    ctx.onCombatDefeat?.();
+  }
+  note?.(
+    `${enc?.heading ?? "Encounter"}: ${result}` +
+      (result === "victory" ? ` XP=${session.combatXpPool | 0}` : "")
+  );
   onSessionChange?.(session);
   return result;
 }

@@ -70,30 +70,33 @@ struct SmithItemView {
  *
  * ASM keys A–E (0x1D58E..):
  *   A 0x1CA2E Feeding frenzy
- *   B 0x1CAC4 Stat-boost submenu (A4-$580E / A4-$6738) — NOT drinks
+ *   B 0x1CAC4 "Have a drink" submenu — the six DRINK names (A4-$580E) with
+ *             costs A4-$6738; each drink boosts a stat (doc 34 §5)
  *   C 0x1CD2E Food/specialties (A4-$6760 prices + A4-$786C → +$76)
  *   D 0x1CFCA Tip bartender
  *   E 0x1D0B4 Rumors
- * Drinks live on selector 0xCA → 0x18F78 / 0x019030 (+$78 encoding), not key B.
+ * The 0x1CB26 caption loop prints A4-$580E[i] (MM2_GS_TAVERN_BOOST_LBL) = the
+ * drink names, NOT stat names; the older 0xCA encode path is a separate leaf.
  * -------------------------------------------------------------------------- */
 enum class TavernOption : uint8_t {
     FeedingFrenzy = 0, /* A) Feeding frenzy (all you can carry) */
-    StatBoost,         /* B) Buy (A-F) — A4-$6738 costs / 0x1C7EC apply */
+    StatBoost,         /* B) Have a drink (A-F drinks) — A4-$6738 costs / 0x1C7EC apply */
     Specialties,       /* C) Specialties — A4-$6760 + meal effect */
     Tip,               /* D) Tip the bartender */
     Rumors,            /* E) Listen for rumors */
     Exit,
 };
 
-/* Drink menu items (str.dat ~208-213) — used by selector 0xCA encode path, not
- * tavern key B. Kept for UI that still surfaces drinks via that leaf. */
+/* Drink menu items (MM2_GS_TAVERN_DRINK_LBL/-$599E group) — the older 0xCA encode
+ * path. Note: tavern key B's captions come from -$580E (TavernStatBoostView). */
 struct TavernDrinkView {
     const char *label; /* "Orc Beer", "Straight shot", ... */
 };
 
-/* Stat-boost submenu (tavern B @ 0x1CAC4): six A–F options, costs A4-$6738. */
+/* Tavern B "Have a drink" submenu (0x1CAC4): six A–F drinks, captions A4-$580E
+ * (MM2_GS_TAVERN_BOOST_LBL) = drink names, costs A4-$6738; each boosts a stat. */
 struct TavernStatBoostView {
-    const char *label; /* presentation caption (A4-$580E); FAQ-ish until decoded */
+    const char *label; /* drink name caption (A4-$580E), e.g. "Orc Beer" */
     uint16_t cost;     /* A4-$6738 BE u16 */
 };
 

@@ -52,6 +52,7 @@ import { runCombatContract } from "./combatSession.js";
 import { waitSpaceWithScriptedKey } from "./scriptedKey.js";
 import { resolveOp0bSprite, signEnvIdForScreen } from "./serviceSignResolver.js";
 import { runOp0eFdPrintChrome } from "./op0eFdChrome.js";
+import { TOWN_NAMES } from "./townTables.js";
 
 /** @deprecated use runDefaultRangeOverlay — kept for tests referencing combat bytes. */
 const LOC_61_COMBAT_OVERLAY = {
@@ -164,6 +165,7 @@ async function runOp12Combat(ctx, args) {
   const { session, manifest, note, onSessionChange } = ctx;
   sessionSeedFixedEncounter(session, args, false);
   const enc = describeEncounter(manifest, 0x12, args, "");
+  ctx.sprite = ctx.sprite ?? enc.sprite ?? null;
   const outcome = await runCombatContract(ctx, enc, 0x12);
   if (outcome === "victory") {
     /* latch already set inside combatFinishVictory */
@@ -184,7 +186,6 @@ export async function runTileAmbientEncounter(ctx) {
   const notes = [];
   sessionSeedTileAmbientEncounter(session);
   const enc = describeEncounter(manifest, 0x13, [], "");
-  enc.text = `${enc.text}\n\n(tile-flag @ 0x176F2 — random monsters)`;
   const outcome = await runCombatContract(ctx, enc, 0x13);
   if (outcome === "victory") notes.push("Tile-flag encounter: victory latch set");
   else if (outcome === "refused") notes.push("Tile-flag encounter: enter refused (live=0)");
@@ -255,11 +256,18 @@ const SELECTOR_SPRITES = {
   0x05: "37_anm", 0x06: "62_anm", 0x07: null, 0x08: null,
 };
 
-const SELECTOR_LABEL = {
-  0x01: "Inn", 0x02: "Training hall", 0x03: "Tavern", 0x04: "Temple",
-  0x05: "Mages guild", 0x06: "Blacksmith", 0x07: "General store", 0x08: "Arena / special shop",
-  0x64: "Circus",
+/** PlayTownServiceUi::serviceTitle — menu chrome only (not a pre-event prompt). */
+const MENU_KIND_TITLE = {
+  0x02: "Training",
+  0x03: "Tavern",
+  0x04: "Temple",
+  0x05: "Mage Guild",
+  0x06: "Blacksmith",
 };
+
+function townName(screenId) {
+  return TOWN_NAMES[screenId] ?? TOWN_NAMES[0] ?? "Town";
+}
 
 const TAVERN_INTRO = [
   "A low mumble emerges from the middle\nof the road crowd.  Amber, a sultry\nwaitress asks, \"Do you wish to order\nfrom our vast menu of drinks (y/n)?\"",
@@ -374,6 +382,7 @@ function formatEncounterNameList(mNames) {
 
 export function describeEncounter(manifest, op, args, pseudo = "") {
   const isRandom = op === 0x13;
+  /* Heading is for map-sidebar / notes only — never combat chrome (CombatSession has none). */
   const heading = isRandom ? "Random encounter" : "Fixed encounter";
   const ids = encounterSlotIds(op, args, pseudo);
   const mNames = [];
@@ -390,13 +399,14 @@ export function describeEncounter(manifest, op, args, pseudo = "") {
       }
     }
   }
+  /* Combat uses monster names alone (right column); keep a plain list for callers. */
   let text;
-  if (mNames.length) text = `${heading}:\n${formatEncounterNameList(mNames)}`;
+  if (mNames.length) text = formatEncounterNameList(mNames);
   else if (isRandom && ids.length) {
-    text = `${heading} (seed: ${ids.map((id) => id.toString(16).toUpperCase().padStart(2, "0")).join(" ")})`;
+    text = ids.map((id) => id.toString(16).toUpperCase().padStart(2, "0")).join(" ");
   } else if (ids.length) {
-    text = `${heading}:\n${ids.map((id) => id.toString(16).toUpperCase().padStart(2, "0")).join(" ")}`;
-  } else text = `${heading}!`;
+    text = ids.map((id) => id.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+  } else text = "";
   return { text, sprite, heading, names: mNames };
 }
 
@@ -404,7 +414,7 @@ export function formatEncounterFlowLine(manifest, node) {
   const pseudo = node.pseudo || (node.op === 0x13 ? "encounter_setup_b(...)" : "encounter_setup(...)");
   const { text, names } = describeEncounter(manifest, node.op, node.args, pseudo);
   if (names.length) return `${pseudo} — ${formatEncounterNameList(names).replace(/\n/g, ", ")}`;
-  if (text.includes("(seed:")) return `${pseudo} — ${text}`;
+  if (text) return `${pseudo} — ${text}`;
   return pseudo;
 }
 
@@ -481,12 +491,6 @@ function remapOp0cDest(destScreen, destTile, rng = null) {
 
 function townIntroSlot(screenId) {
   return screenId >= 0 && screenId < 5 ? screenId : 0;
-}
-
-function captureServiceTitle(text, buf) {
-  if (!text) return buf.title || "";
-  const line = String(text).split("\n")[0].trim();
-  return line || buf.title || "";
 }
 
 function signSpriteFromPseudo(pseudo) {
@@ -592,7 +596,7 @@ async function runTownService(ctx, sel, title, sprite) {
     return;
   }
   if (sel === 0x02) {
-    await waitForSpace(title, sprite, 0x0e);
+    /* Bound Training menu @ EventTownServices — no showServiceTitle when UI runs. */
     await runTrainingService(ctx);
     return;
   }
@@ -688,19 +692,14 @@ async function runTownService(ctx, sel, title, sprite) {
     const introSlot = townIntroSlot(ctx.screenId);
     const yes = await ctx.promptYesNo(TAVERN_INTRO[introSlot], sprite, 0x0e);
     if (!yes) {
-      ctx.note(`${title}: declined`);
+      ctx.note(`Tavern: declined`);
       return;
     }
     await runTavernService(ctx);
     return;
   }
   if (sel === 0x05) {
-    const introSlot = townIntroSlot(ctx.screenId);
-    const yes = await ctx.promptYesNo(MAGE_GUILD_INTRO[introSlot], sprite, 0x0e);
-    if (!yes) {
-      ctx.note(`${title}: declined`);
-      return;
-    }
+    /* Bound Mage Guild menu — C++ runBoundMenu skips hall intro when UI is bound. */
     await runGuildService(ctx);
     return;
   }
@@ -874,7 +873,16 @@ async function runTownService(ctx, sel, title, sprite) {
     if (queueDefaultRangeOverlay(ctx, sel)) {
       return;
     }
-    await waitForSpace(title, sprite, 0x0e);
+    if (sel >= 0x26 && sel <= 0x29) {
+      await waitForSpace(
+        "Combat could not start.\n(monsters.dat missing or overlay failed)",
+        sprite,
+        0x0e
+      );
+      return;
+    }
+    /* C++ default fallback: showServiceTitle(townName) — never "Town service". */
+    await waitForSpace(townName(screenId), sprite, 0x0e);
     ctx.note(`exec_selector(0x${sel.toString(16)}) — default-range overlay missing`);
     return;
   }
@@ -919,7 +927,6 @@ export async function runEventScript(ctx) {
   const notes = [];
   /** @type {object[]} */
   const trace = [];
-  let serviceTitle = "";
   let lastSignSprite = null;
   let teleported = false;
   let ended = false;
@@ -997,7 +1004,6 @@ export async function runEventScript(ctx) {
         if (op === 0x04) {
           if (!cantSee) {
             onViewportOverlay?.({ type: "door", text });
-            serviceTitle = captureServiceTitle(text, { title: serviceTitle });
           }
         } else if (op === 0x05) {
           if (!cantSee) onViewportOverlay?.({ type: "wall", text });
@@ -1054,7 +1060,8 @@ export async function runEventScript(ctx) {
       }
 
       case 0x0b: {
-        /* OP_0B @ 0x15DB0: ServiceSignResolver → .anm; EXIT_FLAGS bit2. */
+        /* OP_0B @ 0x15DB0: ServiceSignResolver → .anm only; EXIT_FLAGS bit2.
+         * No text capture, no SPACE wait — C++ showOp0B continues into OP_0E. */
         vmStep(nodeIndex, op, node.pseudo || "service_sign");
         session.exitFlags = (session.exitFlags | 4) & 0xff;
         session.signEnvId = signEnvIdForScreen(screenId);
@@ -1067,7 +1074,6 @@ export async function runEventScript(ctx) {
           sprite.placement = placement;
           ctx.onViewportOverlay?.(sprite);
         }
-        await waitForSpace("", sprite, 0x0b);
         break;
       }
 
@@ -1109,7 +1115,9 @@ export async function runEventScript(ctx) {
         const fallbackSheet = SELECTOR_SPRITES[sel];
         const sprite = lastSignSprite ?? (fallbackSheet ? { sheet: fallbackSheet, frame: "0" } : null);
         lastSignSprite = null;
-        const title = serviceTitle || SELECTOR_LABEL[sel] || "Town service";
+        /* C++ service_title_ is never written (OP_0B is sign-only). Fallback =
+         * townName; menu chrome uses MENU_KIND_TITLE — never "Town service". */
+        const title = MENU_KIND_TITLE[sel] || townName(screenId);
         aborted = true; /* ASM sets -$79EA at OP_0E entry */
 
         ctx.tileX = tileX;
@@ -1119,7 +1127,7 @@ export async function runEventScript(ctx) {
         if (sel === 0x04) {
           const yes = await promptYesNo(TEMPLE_INTRO[slot], sprite, op);
           if (!yes) {
-            note(`${title}: declined`);
+            note(`Temple: declined`);
             ended = true;
             return { teleported, ended, aborted, notes, trace };
           }
@@ -1128,7 +1136,7 @@ export async function runEventScript(ctx) {
         if (sel === 0x06) {
           const yes = await promptYesNo(SMITH_INTRO[slot], sprite, op);
           if (!yes) {
-            note(`${title}: declined`);
+            note(`Blacksmith: declined`);
             ended = true;
             return { teleported, ended, aborted, notes, trace };
           }
@@ -1158,9 +1166,6 @@ export async function runEventScript(ctx) {
           isTownServiceSelector(sel);
 
         if (serviceHandled) {
-          if (sel === 0x02) {
-            await waitForSpace(title, sprite, op);
-          }
           await runTownService(ctx, sel, title, sprite);
           /* abortScript @ 0x17540: clear SCRIPT_ABORT; keep EXIT_FLAGS (no $171AC). */
           session.scriptAbort = 0;
@@ -1174,7 +1179,7 @@ export async function runEventScript(ctx) {
           return { teleported, ended, aborted, notes, trace };
         }
 
-        await waitForSpace(`${title}\n(selector 0x${sel.toString(16)})`, sprite, op);
+        await waitForSpace(`(selector 0x${sel.toString(16)})`, sprite, op);
         note(`exec_selector(0x${sel.toString(16)}) — unhandled`);
         session.scriptAbort = 0;
         ended = true;

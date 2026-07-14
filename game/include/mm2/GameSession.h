@@ -264,9 +264,6 @@ private:
 
     events::ScriptedSceneEngine scripted_scene_;
     bool scripted_loaded_ = false;
-    /* Port-side one-shot for the Corak new-game prologue scene scheduling (the
-     * classic intro is not a per-character quest bit). */
-    bool corak_intro_seen_ = false;
 
     /** Torch flicker phase (A4-$667A) — advanced each indoor viewport tick. */
     int torch_phase_ = 0;

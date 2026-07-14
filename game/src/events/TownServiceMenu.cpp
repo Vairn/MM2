@@ -377,7 +377,8 @@ static const char *const kPubFood[5][kPubFoodOptions] = {
     {"Gourmet Dinner", "Wyrm Chop Suey", "Steak and Taters"},
 };
 
-/* str.dat ~208-213: drink labels (selector 0xCA encode path — not tavern B). */
+/* str.dat ~208-213: the six drink names. These are the tavern key-B captions
+ * (A4-$580E / MM2_GS_TAVERN_BOOST_LBL); headless fallback when no live str.dat. */
 static const char *const kPubDrinks[kPubDrinkCount] = {
     "Orc Beer",
     "Straight shot",
@@ -387,16 +388,34 @@ static const char *const kPubDrinks[kPubDrinkCount] = {
     "Mystic Brew",
 };
 
-/* A4-$6738 costs; captions approximate A4-$580E (0x1C7EC field order). */
-static const char *const kStatBoostLabels[kPubStatBoostCount] = {
-    "Might", "Accuracy", "Personality", "Intelligence", "Level", "Spell Level",
-};
+/* Tavern key B @ 0x1CAC4 prints the six A4-$580E captions — the DRINK names
+ * ("A) Orc Beer" … "F) Mystic Brew"), each of which boosts a stat when drunk
+ * (doc 34 §5 / FAQ §3-10-3). Fallback for the headless path (no live str.dat);
+ * costs are A4-$6738. */
 static const uint16_t kStatBoostGold[kPubStatBoostCount] = {5, 5, 20, 20, 50, 100};
 
 /* A4-$6760 specialties gold (town × menu). */
 static const uint16_t kSpecialtyGoldTable[5][kPubFoodOptions] = {
     {10, 50, 100}, {1000, 2000, 3000}, {200, 100, 1000}, {5000, 500, 1000}, {20, 50, 250},
 };
+
+/* str.dat specialty lines already embed an "A) "/"B) "/"C) " label (retail 0x1CD76
+ * prints them verbatim). The UI adds its own "%c)" prefix, so drop the embedded one
+ * here to avoid a doubled "A) A)" label. */
+static const char *stripSpecialtyLabel(const char *s, int index)
+{
+    if (!s) {
+        return s;
+    }
+    const char letter = static_cast<char>('A' + index);
+    if (s[0] == letter && s[1] == ')') {
+        s += 2;
+        while (*s == ' ') {
+            ++s;
+        }
+    }
+    return s;
+}
 
 void townSvcPubTables(int map_id, TavernMenuData &out, uint8_t *a4)
 {
@@ -427,12 +446,13 @@ void townSvcPubTables(int map_id, TavernMenuData &out, uint8_t *a4)
             b = eventVmGsRelCString(a4,
                                     mm2_gs_u32(a4, MM2_GS_TAVERN_FOOD + town * 0x18 + (2 * i + 1) * 4));
         }
+        const char *a_txt = stripSpecialtyLabel(a, i);
         out.food_joined[i][0] = '\0';
-        if (a && a[0]) {
+        if (a_txt && a_txt[0]) {
             if (b && b[0]) {
-                std::snprintf(out.food_joined[i], sizeof(out.food_joined[i]), "%s\n%s", a, b);
+                std::snprintf(out.food_joined[i], sizeof(out.food_joined[i]), "%s\n%s", a_txt, b);
             } else {
-                std::snprintf(out.food_joined[i], sizeof(out.food_joined[i]), "%s", a);
+                std::snprintf(out.food_joined[i], sizeof(out.food_joined[i]), "%s", a_txt);
             }
             out.food.options[i] = out.food_joined[i];
         } else {
@@ -450,8 +470,14 @@ void townSvcPubTables(int map_id, TavernMenuData &out, uint8_t *a4)
         out.drinks[i].label = (s && s[0]) ? s : kPubDrinks[i];
     }
     for (int i = 0; i < kPubStatBoostCount; ++i) {
-        /* -$580E after bank@0x63C is drink chrome; keep ASM-clear Might/… labels. */
-        out.boosts[i].label = kStatBoostLabels[i];
+        /* 0x1CB26: caption = A4-$580E[i] (MM2_GS_TAVERN_BOOST_LBL) = the drink name,
+         * NOT a stat name. The live str.dat text embeds its own "A) "/"B) " letter
+         * (like specialties), so strip it — the UI adds its own "%c)" prefix. */
+        const char *s = nullptr;
+        if (a4) {
+            s = eventVmGsRelCString(a4, mm2_gs_u32(a4, MM2_GS_TAVERN_BOOST_LBL + i * 4));
+        }
+        out.boosts[i].label = stripSpecialtyLabel((s && s[0]) ? s : kPubDrinks[i], i);
         out.boosts[i].cost =
             a4 ? mm2_gs_u16(a4, MM2_GS_TAVERN_BOOST_GOLD + i * 2) : kStatBoostGold[i];
     }
@@ -476,7 +502,7 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
             break;
         }
         case TavernOption::StatBoost: {
-            /* B @ 0x1CAC4 — A–F stat boost, NOT drinks. */
+            /* B @ 0x1CAC4 — "Have a drink": A–F drinks (each boosts a stat). */
             int slot = -1;
             if (ui.chooseTavernStatBoost(ctx, data, slot) && slot >= 0 &&
                 slot < kPubStatBoostCount) {

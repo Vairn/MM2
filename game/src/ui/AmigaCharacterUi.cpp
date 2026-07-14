@@ -1594,9 +1594,11 @@ private:
         // Middle column — HP/SP/AC+SL/thievery/skills/dotted rule (WinUAE layout).
         // Each row: label+current at kSheetStatColMid, companion value at kSheetStatColSlash.
         // Row 2 (Int= row) has no mid/right content — natural gap.
-        std::snprintf(buf, sizeof(buf), "HP=%u", rec.hp_current);
+        /* hp_max = live +$5E (damaged in combat/traps), hp_current = +$74 ceiling
+         * — codec names are inverted vs the ASM, so show current=$5E / max=$74. */
+        std::snprintf(buf, sizeof(buf), "HP=%u", rec.hp_max);
         drawCellText(c, r0 + 0, kSheetStatColMid, buf);
-        std::snprintf(buf, sizeof(buf), "/%u", rec.hp_max);
+        std::snprintf(buf, sizeof(buf), "/%u", rec.hp_current);
         drawCellText(c, r0 + 0, kSheetStatColSlash, buf);
         std::snprintf(buf, sizeof(buf), "SP=%u", rec.sp_current);
         drawCellText(c, r0 + 1, kSheetStatColMid, buf);

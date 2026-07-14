@@ -24,6 +24,9 @@
 #include <cstring>
 #endif
 
+#include <chrono>
+#include <cstdio>
+
 namespace mm2::gfx {
 
 namespace {
@@ -31,6 +34,24 @@ namespace {
 /* Flipbook fallback when no sequence_blob: 5 ticks/step matches common sign seq delays (e.g. 62.anm). */
 
 constexpr int kFlipbookDelayTicks = 5;
+
+// #region agent log
+inline void agentDbgLog(const char *hyp, const char *loc, const char *msg, const char *data_json)
+{
+    FILE *f = std::fopen("C:/_20260421_/D-REC/development/MM2/debug-5e7785.log", "a");
+    if (!f) {
+        return;
+    }
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count();
+    std::fprintf(f,
+                 "{\"sessionId\":\"5e7785\",\"hypothesisId\":\"%s\",\"location\":\"%s\",\"message\":\"%s\","
+                 "\"data\":%s,\"timestamp\":%lld}\n",
+                 hyp, loc, msg, data_json ? data_json : "{}", static_cast<long long>(ms));
+    std::fclose(f);
+}
+// #endregion
 
 bool joinAnmPath(char *path, size_t cap, const char *data_dir, int disk_index)
 
@@ -50,125 +71,50 @@ bool joinAnmPath(char *path, size_t cap, const char *data_dir, int disk_index)
 
 }
 
-#if !MM2_HOST_AMIGA
-
-/** Tight-crop 96×96 MONSTERS composite to opaque pixels; replaces *rgba and updates w/h. */
-
-bool cropPcRgbaToOpaqueBbox(uint8_t **rgba, int *w, int *h)
-
+/* Play every non-empty FF-delimited sequence block (doc 07). Frame indices in
+ * the stream may exceed header frame_count (63.anm block2 → 6/7/8); wrap. */
+int wrapAnmFrame(const mm2_anm_file *anm, int fr)
 {
-
-    if (!rgba || !*rgba || !w || !h) {
-
-        return false;
-
+    if (!anm || anm->frame_count == 0) {
+        return 0;
     }
-
-    constexpr int full_w = MM2_PC_COMBAT_CANVAS_W;
-
-    constexpr int full_h = MM2_PC_COMBAT_CANVAS_H;
-
-    const uint8_t *src = *rgba;
-
-    int min_x = full_w;
-
-    int min_y = full_h;
-
-    int max_x = -1;
-
-    int max_y = -1;
-
-    for (int y = 0; y < full_h; ++y) {
-
-        for (int x = 0; x < full_w; ++x) {
-
-            if (src[(y * full_w + x) * 4 + 3] == 0) {
-
-                continue;
-
-            }
-
-            if (x < min_x) {
-
-                min_x = x;
-
-            }
-
-            if (y < min_y) {
-
-                min_y = y;
-
-            }
-
-            if (x > max_x) {
-
-                max_x = x;
-
-            }
-
-            if (y > max_y) {
-
-                max_y = y;
-
-            }
-
-        }
-
+    const int n = static_cast<int>(anm->frame_count);
+    if (fr < 0) {
+        return 0;
     }
-
-    if (max_x < min_x || max_y < min_y) {
-
-        *w = 0;
-
-        *h = 0;
-
-        return false;
-
+    if (fr >= n) {
+        return fr % n;
     }
-
-    const int crop_w = max_x - min_x + 1;
-
-    const int crop_h = max_y - min_y + 1;
-
-    if (crop_w == full_w && crop_h == full_h) {
-
-        *w = full_w;
-
-        *h = full_h;
-
-        return true;
-
-    }
-
-    uint8_t *cropped = static_cast<uint8_t *>(std::malloc(static_cast<size_t>(crop_w) * crop_h * 4u));
-
-    if (!cropped) {
-
-        return false;
-
-    }
-
-    for (int y = 0; y < crop_h; ++y) {
-
-        const uint8_t *row = src + static_cast<size_t>((min_y + y) * full_w + min_x) * 4u;
-
-        std::memcpy(cropped + static_cast<size_t>(y) * crop_w * 4u, row, static_cast<size_t>(crop_w) * 4u);
-
-    }
-
-    std::free(*rgba);
-
-    *rgba = cropped;
-
-    *w = crop_w;
-
-    *h = crop_h;
-
-    return true;
-
+    return fr;
 }
 
-#endif
+bool seqBlockHasPairs(const mm2_anm_sequence_table *seq, int block)
+{
+    return seq && block >= 0 && block < seq->block_count &&
+           mm2_anm_seq_block_pair_count(seq, block) > 0;
+}
+
+int nextSeqBlock(const mm2_anm_sequence_table *seq, int cur)
+{
+    if (!seq || seq->block_count <= 0) {
+        return 0;
+    }
+    for (int n = 1; n <= seq->block_count; ++n) {
+        const int b = ((cur < 0 ? -1 : cur) + n) % seq->block_count;
+        if (seqBlockHasPairs(seq, b)) {
+            return b;
+        }
+    }
+    return cur >= 0 ? cur : 0;
+}
+
+int firstSeqBlock(const mm2_anm_sequence_table *seq)
+{
+    if (seqBlockHasPairs(seq, 0)) {
+        return 0;
+    }
+    return nextSeqBlock(seq, -1);
+}
 
 }  // namespace
 
@@ -221,6 +167,7 @@ void ViewportAnmOverlay::unload()
     use_sequence_ = false;
     animating_ = false;
     composed_frame_ = 0;
+    seq_block_ = 0;
     seq_step_ = 0;
     delay_remaining_ = 0;
     w_ = 0;
@@ -312,17 +259,24 @@ bool ViewportAnmOverlay::setPcComposedFrame(int frame_idx)
 
     }
 
+    /* Retail (and the .anm path) blits the whole fixed canvas. Cropping to the
+     * per-frame opaque bbox and then trying to re-anchor it is what made the
+     * innkeep/barmaid/sign jump — leave the 96×96 intact; blitRgba already
+     * skips transparent pixels. */
     w_ = MM2_PC_COMBAT_CANVAS_W;
 
     h_ = MM2_PC_COMBAT_CANVAS_H;
 
-    if (!cropPcRgbaToOpaqueBbox(&rgba_, &w_, &h_)) {
-
-        return false;
-
-    }
-
 #endif
+
+    // #region agent log
+    if (!same) {
+        char data[128];
+        std::snprintf(data, sizeof(data), "{\"frame\":%d,\"w\":%d,\"h\":%d,\"disk\":%d}", frame_idx, w_,
+                      h_, disk_index_);
+        agentDbgLog("B", "ViewportAnmOverlay.cpp:setPcComposedFrame", "pc_frame_change", data);
+    }
+    // #endregion
 
     composed_frame_ = frame_idx;
 
@@ -524,6 +478,31 @@ bool ViewportAnmOverlay::setComposedFrame(int frame_idx)
     rgba_ = comp.rgba;
     w_ = comp.width;
     h_ = comp.height;
+    // #region agent log
+    {
+        uint32_t hsh = 2166136261u;
+        int opaque = 0;
+        const size_t n = static_cast<size_t>(w_) * static_cast<size_t>(h_) * 4u;
+        for (size_t i = 0; i < n; i += 4) {
+            if (rgba_[i + 3] != 0) {
+                ++opaque;
+                hsh ^= rgba_[i];
+                hsh *= 16777619u;
+                hsh ^= rgba_[i + 1];
+                hsh *= 16777619u;
+                hsh ^= rgba_[i + 2];
+                hsh *= 16777619u;
+            }
+        }
+        char data[192];
+        std::snprintf(data, sizeof(data),
+                      "{\"frame\":%d,\"w\":%d,\"h\":%d,\"opaque\":%d,\"rgba_hash\":%u,"
+                      "\"disk\":%d,\"seq_block\":%d,\"seq_step\":%d,\"blocks\":%d}",
+                      frame_idx, w_, h_, opaque, hsh, disk_index_, seq_block_, seq_step_,
+                      seq_.block_count);
+        agentDbgLog("K", "ViewportAnmOverlay.cpp:setComposedFrame", "anm_compose_hash", data);
+    }
+    // #endregion
 #endif
 
     composed_frame_ = frame_idx;
@@ -563,19 +542,33 @@ void ViewportAnmOverlay::resetPlayback(AnmLoopMode loop)
 
     loop_mode_ = loop;
     mm2_anm_build_sequence_table(anm, &seq_);
-    use_sequence_ = mm2_anm_seq_block_pair_count(&seq_, 0) > 0;
+    seq_block_ = firstSeqBlock(&seq_);
+    use_sequence_ = seqBlockHasPairs(&seq_, seq_block_);
     animating_ = mm2_anm_has_animatable_frames(anm) != 0;
     seq_step_ = 0;
     delay_remaining_ = 0;
 
     if (use_sequence_) {
-        composed_frame_ = mm2_anm_seq_frame_at(&seq_, 0, 0);
-        delay_remaining_ = mm2_anm_seq_delay_at(&seq_, 0, 0);
+        composed_frame_ = wrapAnmFrame(anm, mm2_anm_seq_frame_at(&seq_, seq_block_, 0));
+        delay_remaining_ = mm2_anm_seq_delay_at(&seq_, seq_block_, 0);
     } else {
         composed_frame_ = mm2_anm_default_overlay_composed_frame(anm);
         seq_step_ = composed_frame_;
         delay_remaining_ = kFlipbookDelayTicks;
     }
+
+    // #region agent log
+    {
+        char data[192];
+        std::snprintf(data, sizeof(data),
+                      "{\"disk\":%d,\"blocks\":%d,\"seq_block\":%d,\"use_seq\":%d,\"frame\":%d,"
+                      "\"raw_frame\":%d,\"loop\":%d,\"fc\":%u}",
+                      disk_index_, seq_.block_count, seq_block_, use_sequence_ ? 1 : 0, composed_frame_,
+                      use_sequence_ ? mm2_anm_seq_frame_at(&seq_, seq_block_, 0) : composed_frame_,
+                      loop_mode_ == AnmLoopMode::Loop ? 1 : 0, static_cast<unsigned>(anm->frame_count));
+        agentDbgLog("K", "ViewportAnmOverlay.cpp:resetPlayback", "anm_seq_reset", data);
+    }
+    // #endregion
 
     setComposedFrame(composed_frame_);
 }
@@ -767,7 +760,7 @@ bool ViewportAnmOverlay::tick()
     }
 
     if (use_sequence_) {
-        const int pair_count = mm2_anm_seq_block_pair_count(&seq_, 0);
+        int pair_count = mm2_anm_seq_block_pair_count(&seq_, seq_block_);
         if (pair_count <= 0) {
             animating_ = false;
             return false;
@@ -779,13 +772,37 @@ bool ViewportAnmOverlay::tick()
                 seq_step_ = pair_count - 1;
                 animating_ = false;
             } else {
+                /* Loop: every FF block in the stream, then wrap. */
+                const int prev_block = seq_block_;
+                seq_block_ = nextSeqBlock(&seq_, seq_block_);
                 seq_step_ = 0;
+                // #region agent log
+                if (seq_block_ != prev_block) {
+                    char data[128];
+                    std::snprintf(data, sizeof(data),
+                                  "{\"disk\":%d,\"from_block\":%d,\"to_block\":%d,\"blocks\":%d}",
+                                  disk_index_, prev_block, seq_block_, seq_.block_count);
+                    agentDbgLog("K", "ViewportAnmOverlay.cpp:tick", "anm_seq_block_advance", data);
+                }
+                // #endregion
             }
         }
 
-        next_frame = mm2_anm_seq_frame_at(&seq_, 0, seq_step_);
+        {
+            const int raw = mm2_anm_seq_frame_at(&seq_, seq_block_, seq_step_);
+            next_frame = wrapAnmFrame(anmFile(), raw);
+            // #region agent log
+            if (raw != next_frame) {
+                char data[96];
+                std::snprintf(data, sizeof(data),
+                              "{\"disk\":%d,\"raw\":%d,\"wrapped\":%d,\"block\":%d}", disk_index_, raw,
+                              next_frame, seq_block_);
+                agentDbgLog("K", "ViewportAnmOverlay.cpp:tick", "anm_frame_wrap", data);
+            }
+            // #endregion
+        }
         if (animating_) {
-            delay_remaining_ = mm2_anm_seq_delay_at(&seq_, 0, seq_step_);
+            delay_remaining_ = mm2_anm_seq_delay_at(&seq_, seq_block_, seq_step_);
         }
     } else {
         const mm2_anm_file *anm = anmFile();
@@ -820,13 +837,19 @@ bool ViewportAnmOverlay::tick()
     if (animating_) {
         int warm_frame = next_frame;
         if (use_sequence_) {
-            const int pair_count = mm2_anm_seq_block_pair_count(&seq_, 0);
+            const int pair_count = mm2_anm_seq_block_pair_count(&seq_, seq_block_);
             if (pair_count > 0) {
                 int warm_step = seq_step_ + 1;
+                int warm_block = seq_block_;
                 if (warm_step >= pair_count) {
-                    warm_step = (loop_mode_ == AnmLoopMode::Loop) ? 0 : pair_count - 1;
+                    if (loop_mode_ == AnmLoopMode::Loop) {
+                        warm_block = nextSeqBlock(&seq_, seq_block_);
+                        warm_step = 0;
+                    } else {
+                        warm_step = pair_count - 1;
+                    }
                 }
-                warm_frame = mm2_anm_seq_frame_at(&seq_, 0, warm_step);
+                warm_frame = wrapAnmFrame(anmFile(), mm2_anm_seq_frame_at(&seq_, warm_block, warm_step));
             }
         } else {
             const mm2_anm_file *warm_anm = anmFile();
@@ -924,6 +947,12 @@ void ViewportAnmOverlay::blitAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) 
 
 }
 
+void ViewportAnmOverlay::blitCanvasAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) const
+{
+    /* Scripted OP_0B place: canvas origin == blit origin (whole-canvas blit). */
+    blitAt(c, dst_x, dst_y);
+}
+
 void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_index) const
 {
     constexpr int kView3DViewportBottomY = 127;
@@ -932,7 +961,8 @@ void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_in
 }
 
 void ViewportAnmOverlay::blitCenteredInViewport(gfx::ScreenCompositor &c, int placement_index, int slot_x,
-                                                int slot_y, int slot_w, int slot_h) const
+                                                int slot_y, int slot_w, int slot_h,
+                                                bool apply_content_offset) const
 {
     if (w_ <= 0 || h_ <= 0) {
         return;
@@ -943,6 +973,38 @@ void ViewportAnmOverlay::blitCenteredInViewport(gfx::ScreenCompositor &c, int pl
     int dst_y = 0;
     resolveViewportSignPlacement(placement_index, w_, 0, 0, &dst_x, &dst_y);
 
+    /* Service signs / scripted overlays: plant at retail coords and let the
+     * framebuffer clip (full 96×96 hangs 8px past y=127). Slot-clamping a
+     * fixed-size canvas is stable, but we skip it so placement matches ASM.
+     * Combat gallery passes apply_content_offset=false and keeps the clamp. */
+    if (apply_content_offset) {
+        // #region agent log
+        {
+            static int s_ldx = -9999, s_ldy = -9999, s_lw = -1, s_lh = -1, s_lp = -1, s_n = 0;
+            if (dst_x != s_ldx || dst_y != s_ldy || w_ != s_lw || h_ != s_lh ||
+                placement_index != s_lp || (s_n++ % 30) == 0) {
+                s_ldx = dst_x;
+                s_ldy = dst_y;
+                s_lw = w_;
+                s_lh = h_;
+                s_lp = placement_index;
+                char data[192];
+                std::snprintf(data, sizeof(data),
+                              "{\"dst_x\":%d,\"dst_y\":%d,\"w\":%d,\"h\":%d,\"place\":%d,"
+                              "\"pc\":%s,\"frame\":%d,\"disk\":%d,\"clamped\":false}",
+                              dst_x, dst_y, w_, h_, placement_index, pc_mode_ ? "true" : "false",
+                              composed_frame_, disk_index_);
+                agentDbgLog("B", "ViewportAnmOverlay.cpp:blitCenteredInViewport", "blit_service",
+                            data);
+            }
+        }
+        // #endregion
+        blitAt(c, dst_x, dst_y);
+        return;
+    }
+
+    const int raw_x = dst_x;
+    const int raw_y = dst_y;
     if (dst_x < slot_x) {
         dst_x = slot_x;
     }
@@ -955,6 +1017,15 @@ void ViewportAnmOverlay::blitCenteredInViewport(gfx::ScreenCompositor &c, int pl
     if (dst_y + h_ > slot_y + slot_h) {
         dst_y = slot_y + slot_h - h_;
     }
+    // #region agent log
+    if (pc_mode_ && (dst_x != raw_x || dst_y != raw_y)) {
+        char data[160];
+        std::snprintf(data, sizeof(data),
+                      "{\"raw_x\":%d,\"raw_y\":%d,\"dst_x\":%d,\"dst_y\":%d,\"w\":%d,\"h\":%d}", raw_x,
+                      raw_y, dst_x, dst_y, w_, h_);
+        agentDbgLog("B", "ViewportAnmOverlay.cpp:blitCenteredInViewport", "blit_clamped", data);
+    }
+    // #endregion
     blitAt(c, dst_x, dst_y);
 }
 

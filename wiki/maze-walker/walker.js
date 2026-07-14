@@ -30,6 +30,7 @@ import {
   resolveEventText,
   drawViewportOverlay,
   drawNarrativePanel,
+  drawShopMenuPanel,
   resolveNarrativeLayoutOp,
   buildMinimapMarkers,
   drawMinimapMarker,
@@ -56,8 +57,8 @@ import {
   sessionSearchDetectMagic,
   sessionSearchLeave,
   sessionInteractionGate,
-  sessionFinishCombatDefeat,
   restoreEntryCoord,
+  ensureParty,
 } from "./sessionState.js";
 import { scriptedKeyPoll } from "./scriptedKey.js";
 import {
@@ -70,7 +71,14 @@ import {
   drawPlayRightColumn,
   buildPlayPartySlots,
 } from "./playScreen.js";
-import { renderQuickRef, renderCharacterSheet } from "./inGameSheet.js";
+import {
+  renderQuickRef,
+  renderCharacterSheet,
+  createSheetSession,
+  handleSheetKey,
+  SheetSubMode,
+} from "./inGameSheet.js";
+import { dispatchSheetCast, dispatchSheetUse, tickSheetCastAux, combatSpellApi } from "./combatRuntime.js";
 import {
   ExploreRng,
   WALL_OPEN,
@@ -152,6 +160,12 @@ let exploreRng = new ExploreRng();
 let playOverlay = "none";
 /** @type {number} */
 let sheetPartySlot = 0;
+/** Combat V/Q sheet — InGameCharacterSheet combat_mode (footer V-only). */
+let sheetCombatMode = false;
+/** @type {ReturnType<typeof createSheetSession>} */
+let sheetSession = createSheetSession(0);
+/** @type {null | (() => void)} */
+let combatViewSheetResolve = null;
 /** @type {object[] | null} */
 let lastVmTrace = null;
 /** @type {number | null} */
@@ -287,7 +301,7 @@ async function loadData() {
     maps: await loadJson("maps.json"),
     manifest: await loadJson("sprites.json"),
     sprites: null,
-    overlays: {},
+    overlays: await loadJson("overlays.json").catch(() => ({})),
   };
 }
 
@@ -522,7 +536,7 @@ function renderMinimap(sc) {
   miniCtx.strokeRect(0, 0, w, h);
 }
 
-/** @type {{ type: 'text'|'prompt'|'menu'|'answer'|'combat', layoutOp: number, vmOp: number | null, text: string, showSpace: boolean, resolve: Function, sprite?: object, answerBuf?: string, validKeys?: string, combatPrompt?: boolean } | null} */
+/** @type {{ type: 'text'|'prompt'|'menu'|'answer'|'combat', layoutOp: number, vmOp: number | null, text: string, showSpace: boolean, resolve: Function, sprite?: object, answerBuf?: string, validKeys?: string } | null} */
 let uiState = null;
 
 function drawUI() {
@@ -532,6 +546,23 @@ function drawUI() {
     return;
   }
   uiCanvas.style.pointerEvents = "auto";
+
+  if (uiState.type === "shop") {
+    const shop = uiState.shop;
+    const party = session?.party || [];
+    const slot = Math.max(0, Math.min(party.length - 1, shop.activeSlot | 0));
+    const mem = party[slot];
+    drawShopMenuPanel(uiCtx, {
+      title: shop.title || "",
+      memberLine: mem ? `${slot + 1}) ${mem.name}` : "",
+      goldLine: mem ? `Gold=${mem.gold | 0}` : "",
+      showGatherGold: !!shop.showGatherGold,
+      selectPrompt: shop.selectPrompt ?? "Select (A-F)",
+      optionLines: shop.optionLines || [],
+      status: shop.status || "",
+    });
+    return;
+  }
 
   if (uiState.type === "text" || uiState.type === "prompt" || uiState.type === "menu" ||
       uiState.type === "answer" || uiState.type === "combat") {
@@ -614,21 +645,12 @@ function waitForSpace(text, sprite = null, vmOp = null) {
   });
 }
 
+/**
+ * Legacy test hook — production fights use waitForCombatKey + combatRuntime tick.
+ * Kept only so older callers that pass promptCombatResult do not throw.
+ */
 function promptCombatResult(enc) {
-  const text = `${enc.heading}!\n\nPress V = victory (set combat latch)\nPress N = flee (abort script)\nPress D = defeat wipe → entry_coord`;
-  return new Promise((resolve) => {
-    uiState = {
-      type: "prompt",
-      layoutOp: 0x02,
-      vmOp: 0x12,
-      text,
-      showSpace: false,
-      resolve: (v) => resolve(v),
-      combatPrompt: true,
-    };
-    draw();
-    updateUI();
-  });
+  return Promise.resolve(false);
 }
 
 /**
@@ -731,16 +753,89 @@ function promptMenuKey(text, validKeys, sprite = null, vmOp = null) {
   });
 }
 
+/**
+ * PlayTownServiceUi shop menu: left chrome (title/member/gold/G/#) + right options.
+ * Digits 1–8 and # switch active member without leaving the menu (A4-$5A3A).
+ * G shows active-member gold when showGatherGold (temple/smith).
+ * @param {{
+ *   title: string,
+ *   optionLines: string[],
+ *   validKeys: string,
+ *   selectPrompt?: string,
+ *   showGatherGold?: boolean,
+ *   activeSlot?: number,
+ *   status?: string,
+ *   sprite?: object|null,
+ * }} opts
+ * @returns {Promise<{key: string|null, activeSlot: number, status: string}>}
+ */
+function promptShopMenu(opts) {
+  const party = ensureParty(session);
+  let activeSlot = Math.max(0, Math.min(Math.max(0, party.length - 1), opts.activeSlot | 0));
+  let status = opts.status || "";
+  return new Promise((resolve) => {
+    uiState = {
+      type: "shop",
+      sprite: opts.sprite ?? null,
+      shop: {
+        title: opts.title || "",
+        optionLines: opts.optionLines || [],
+        selectPrompt: opts.selectPrompt ?? "Select (A-F)",
+        showGatherGold: !!opts.showGatherGold,
+        activeSlot,
+        status,
+      },
+      validKeys: String(opts.validKeys || "").toLowerCase(),
+      resolve: (key) => resolve({ key, activeSlot, status }),
+      _shopSetSlot: (s) => {
+        activeSlot = s;
+        if (uiState?.type === "shop") uiState.shop.activeSlot = s;
+      },
+      _shopSetStatus: (s) => {
+        status = s || "";
+        if (uiState?.type === "shop") uiState.shop.status = status;
+      },
+      _shopGetSlot: () => activeSlot,
+    };
+    draw();
+    updateUI();
+  });
+}
+
 function viewportHiddenByOverlay() {
   return playOverlay === "quickRef" || playOverlay === "characterSheet";
+}
+
+function openCharacterSheet(slot, combatMode) {
+  sheetPartySlot = Math.max(0, Math.min((session.party?.length ?? 1) - 1, slot | 0));
+  sheetCombatMode = !!combatMode;
+  sheetSession = createSheetSession(sheetPartySlot);
+  playOverlay = "characterSheet";
 }
 
 function handlePlayOverlayKey(ev) {
   if (playOverlay === "none") return false;
 
   if (ev.key === "Escape") {
+    if (
+      playOverlay === "characterSheet" &&
+      sheetSession.subMode !== SheetSubMode.Normal
+    ) {
+      /* GameSession tickCombatCharacterSheetInput: Esc clears sub-mode first. */
+      sheetSession.subMode = SheetSubMode.Normal;
+      sheetSession.statusLine = "";
+      draw();
+      return true;
+    }
     playOverlay = "none";
+    sheetCombatMode = false;
+    sheetSession = createSheetSession(sheetPartySlot);
     uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+    if (combatViewSheetResolve) {
+      const done = combatViewSheetResolve;
+      combatViewSheetResolve = null;
+      done();
+    }
     draw();
     return true;
   }
@@ -750,8 +845,7 @@ function handlePlayOverlayKey(ev) {
     if (digit >= "1" && digit <= "8") {
       const slot = Number(digit) - 1;
       if (slot < (session.party?.length ?? 0)) {
-        sheetPartySlot = slot;
-        playOverlay = "characterSheet";
+        openCharacterSheet(slot, false);
         draw();
       }
       return true;
@@ -760,18 +854,62 @@ function handlePlayOverlayKey(ev) {
   }
 
   if (playOverlay === "characterSheet") {
-    if (ev.key.toLowerCase() === "q") {
-      playOverlay = "quickRef";
+    /* Exploration sheet Cast aux targeting (GameSession sheetCastPending). */
+    if (
+      !sheetCombatMode &&
+      session._sheetFight?.explorationCast &&
+      ev.key.length === 1
+    ) {
+      tickSheetCastAux(session._sheetFight, combatSpellApi(session._sheetFight), ev.key);
+      if (session._sheetFight.statusLine) {
+        sheetSession.statusLine = session._sheetFight.statusLine;
+      }
       draw();
       return true;
     }
+
+    if (ev.key.toLowerCase() === "q" && !sheetCombatMode) {
+      playOverlay = "quickRef";
+      sheetCombatMode = false;
+      draw();
+      return true;
+    }
+
+    const pending = sheetSession.subMode !== SheetSubMode.Normal;
     const digit = ev.key.length === 1 ? ev.key : "";
-    if (digit >= "1" && digit <= "8") {
+    if (!pending && digit >= "1" && digit <= "8") {
       const slot = Number(digit) - 1;
       if (slot < (session.party?.length ?? 0)) {
         sheetPartySlot = slot;
+        sheetSession.partySlot = slot;
+        sheetSession.subMode = SheetSubMode.Normal;
+        sheetSession.statusLine = "";
         draw();
       }
+      return true;
+    }
+
+    if (ev.key.length === 1) {
+      const outcome = handleSheetKey(ev.key, sheetSession, session, sheetCombatMode);
+      if (outcome === "cast" && sheetSession.castSpellFlat >= 0) {
+        const flat = sheetSession.castSpellFlat;
+        sheetSession.castSpellFlat = -1;
+        /* Combat mode never reaches here (handleSheetKey breaks on C). */
+        const status = dispatchSheetCast(session, sheetSession.partySlot, flat, {
+          manifest,
+          rng: (lo, hi) => exploreRng.range(lo, hi),
+        });
+        if (status) sheetSession.statusLine = status;
+      } else if (outcome === "use" && sheetSession.pendingUseSlot >= 0) {
+        const u = sheetSession.pendingUseSlot;
+        sheetSession.pendingUseSlot = -1;
+        const status = dispatchSheetUse(session, sheetSession.partySlot, u, {
+          manifest,
+          rng: (lo, hi) => exploreRng.range(lo, hi),
+        });
+        if (status) sheetSession.statusLine = status;
+      }
+      draw();
       return true;
     }
     return true;
@@ -844,6 +982,68 @@ function handleUIKey(ev) {
     }
     return true;
   }
+  if (uiState.type === "shop") {
+    const k = ev.key.length === 1 ? ev.key.toLowerCase() : "";
+    if (ev.key === "Escape" || k === "0") {
+      const resolve = uiState.resolve;
+      const slot = uiState._shopGetSlot?.() ?? 0;
+      uiState = null;
+      uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      resolve({ key: null, activeSlot: slot, status: "" });
+      draw();
+      return true;
+    }
+    const party = ensureParty(session);
+    /* Digits 1..8 switch shop member (PlayTownServiceUi A4-$5A3A). */
+    if (k >= "1" && k <= "8") {
+      const slot = k.charCodeAt(0) - 49;
+      if (party[slot]) {
+        uiState._shopSetSlot(slot);
+        uiState._shopSetStatus("");
+        draw();
+        updateUI();
+      }
+      return true;
+    }
+    if (k === "#") {
+      const cur = uiState._shopGetSlot();
+      const n = party.length;
+      if (n > 0) {
+        for (let step = 1; step <= n; step++) {
+          const next = (cur + step) % n;
+          if (party[next]) {
+            uiState._shopSetSlot(next);
+            uiState._shopSetStatus("");
+            break;
+          }
+        }
+        draw();
+        updateUI();
+      }
+      return true;
+    }
+    if (k === "g" && uiState.shop?.showGatherGold) {
+      const slot = uiState._shopGetSlot();
+      const mem = party[slot];
+      if (mem) {
+        uiState._shopSetStatus(`${mem.name}: ${mem.gold | 0} gold`);
+        draw();
+        updateUI();
+      }
+      return true;
+    }
+    if (k && uiState.validKeys.includes(k)) {
+      const resolve = uiState.resolve;
+      const slot = uiState._shopGetSlot?.() ?? 0;
+      const st = uiState.shop?.status || "";
+      uiState = null;
+      uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      resolve({ key: k, activeSlot: slot, status: st });
+      draw();
+      return true;
+    }
+    return true;
+  }
   if (uiState.type === "answer") {
     if (ev.key === "Escape") {
       const resolve = uiState.resolve;
@@ -880,38 +1080,6 @@ function handleUIKey(ev) {
     return true;
   }
   if (uiState.type === "prompt") {
-    if (uiState.combatPrompt) {
-      if (ev.key.toLowerCase() === "v") {
-        const resolve = uiState.resolve;
-        uiState = null;
-        uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
-        resolve(true);
-        draw();
-        return true;
-      }
-      if (ev.key.toLowerCase() === "d") {
-        /* combat_defeat_retreat @ 0x1164A — restore attrib entry_coord. */
-        restoreEntryCoord(state, maps.screens[state.screen]);
-        sessionFinishCombatDefeat(session);
-        sessionInteractionGate(session, maps.screens[state.screen], state.x, state.y);
-        const resolve = uiState.resolve;
-        uiState = null;
-        uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
-        statusEl.textContent = `Defeat wipe → entry ${tileLabel(state.x, state.y)}`;
-        resolve(false);
-        draw();
-        return true;
-      }
-      if (ev.key.toLowerCase() === "n" || ev.code === "Space" || ev.key === "Escape") {
-        const resolve = uiState.resolve;
-        uiState = null;
-        uiCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
-        resolve(false);
-        draw();
-        return true;
-      }
-      return true;
-    }
     /* OP_09/0A: EventRuntime polls scripted buffer before real Y/N. */
     if ((session.scriptedKeyMode | 0) === 0xfd) {
       const { key, place } = scriptedKeyPoll(session);
@@ -967,7 +1135,10 @@ function drawPlayOverlay() {
   if (playOverlay === "quickRef") {
     renderQuickRef(uiCtx, session, manifest);
   } else if (playOverlay === "characterSheet") {
-    renderCharacterSheet(uiCtx, session, sheetPartySlot, manifest);
+    renderCharacterSheet(uiCtx, session, sheetPartySlot, manifest, {
+      combatMode: sheetCombatMode,
+      sheetSession,
+    });
   }
 }
 
@@ -1326,11 +1497,18 @@ function buildEventVmCtx() {
     promptYesNo,
     promptAnswer,
     promptMenuKey,
+    promptShopMenu,
     promptCombatResult,
     onCombatDefeat: () => {
       restoreEntryCoord(state, maps.screens[state.screen]);
       sessionInteractionGate(session, maps.screens[state.screen], state.x, state.y);
     },
+    onCombatViewSheet: (slot) =>
+      new Promise((resolve) => {
+        openCharacterSheet(slot, true);
+        combatViewSheetResolve = resolve;
+        draw();
+      }),
     onDraw: () => draw(),
     onSessionChange: () => syncPartyEditorsFromSession(),
     onVmStep: ({ trace, cond }) => {
@@ -1527,6 +1705,7 @@ function bindControls() {
       if (ev.key.toLowerCase() === "q") {
         ev.preventDefault();
         playOverlay = "quickRef";
+        sheetCombatMode = false;
         draw();
         return;
       }
@@ -1535,8 +1714,7 @@ function bindControls() {
         const slot = Number(digit) - 1;
         if (slot < (session.party?.length ?? 0)) {
           ev.preventDefault();
-          sheetPartySlot = slot;
-          playOverlay = "characterSheet";
+          openCharacterSheet(slot, false);
           draw();
           return;
         }

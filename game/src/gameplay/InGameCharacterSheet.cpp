@@ -286,6 +286,44 @@ int firstEmptyBackpack(const Mm2RosterRecord &rec)
     return -1;
 }
 
+/* Rebuild the equip-derived weapon combat fields the combat code reads for
+ * player melee/missile damage: roster +$4C..+$4F (aliased as spells[0..3]).
+ *   +$4C melee die   / +$4D melee bonus   ← item id 0x01..0x5B  (0xF6B4 band)
+ *   +$4E missile die / +$4F missile bonus ← item id 0x5C..0x72  (0xF630 band)
+ * Die = items.dat byte 0x10 (raw); bonus = equipped_flags & 0x3F (per-instance,
+ * 0xF36C reads $34(a0)&0x3F). Armor ids 0x73..0x9F drive AC (+$1F), not damage.
+ *
+ * The retail engine mutates these per-slot on each equip/unequip (0xF36C set /
+ * 0xF270 clear). We instead rebuild from all six equipped slots so combat always
+ * reflects current gear regardless of the mutation path; net result matches for
+ * the normal one-weapon loadout. Combat previously never ran this rebuild, so a
+ * weapon equipped in-game had no effect on damage. */
+void recomputeWeaponFields(Mm2RosterRecord &rec, const Mm2ItemsFile *items)
+{
+    if (!items) {
+        return;
+    }
+    rec.spells[0] = 0;
+    rec.spells[1] = 0;
+    rec.spells[2] = 0;
+    rec.spells[3] = 0;
+    for (int slot = 0; slot < MM2_ROSTER_ITEM_SLOTS; ++slot) {
+        const uint8_t id = rec.equipped_id[slot];
+        if (id < 0x01 || id > 0x72) {
+            continue; /* empty / armor / non-weapon band */
+        }
+        const uint8_t die = items->records[id].damage;
+        const uint8_t bonus = static_cast<uint8_t>(rec.equipped_flags[slot] & 0x3F);
+        if (id <= 0x5B) {
+            rec.spells[0] = die;
+            rec.spells[1] = bonus;
+        } else {
+            rec.spells[2] = die;
+            rec.spells[3] = bonus;
+        }
+    }
+}
+
 void setStatus(SheetSession &session, const char *msg)
 {
     if (!msg) {
@@ -395,7 +433,10 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
     std::snprintf(buf, sizeof(buf), "Lck=%u", rec.luck_base);
     drawCellText(c, r0 + 7, kSheetStatColLeft, buf);
 
-    drawSlashStat(c, r0 + 0, kSheetStatColMid, kInGameSheetSlashCol, "HP=", rec.hp_current, rec.hp_max);
+    /* Codec HP names are inverted vs the ASM: hp_max is roster +$5E (LIVE HP that
+     * combat/traps subtract @ 0x4AAA), hp_current is +$74 (the ceiling). Display
+     * current/max = ($5E, $74) so the "HP=" number tracks damage. */
+    drawSlashStat(c, r0 + 0, kSheetStatColMid, kInGameSheetSlashCol, "HP=", rec.hp_max, rec.hp_current);
     drawSlashStat(c, r0 + 1, kSheetStatColMid, kInGameSheetSlashCol, "SP=", rec.sp_current, rec.sp_max);
     std::snprintf(buf, sizeof(buf), "AC=%u", rec.armor_class);
     drawCellText(c, r0 + 3, kSheetStatColMid, buf);
@@ -498,7 +539,8 @@ void InGameCharacterSheet::renderQuickRef(gfx::ScreenCompositor &c, const Mm2Ros
         char line1[32];
         std::snprintf(line1, sizeof(line1), "%d)  %-11s", i + 1, name);
         drawCellText(c, row1, kQuickRefColIndex, line1);
-        drawQuickRefSlashPair(c, row1, kQuickRefColHpSlash, rec.hp_current, rec.hp_max);
+        /* hp_max = live +$5E, hp_current = +$74 ceiling (codec names inverted). */
+        drawQuickRefSlashPair(c, row1, kQuickRefColHpSlash, rec.hp_max, rec.hp_current);
         drawQuickRefSlashPair(c, row1, kQuickRefColSpSlash, rec.sp_current, rec.sp_max);
 
         const int row2 = kQuickRefDataRow2Base + i;
@@ -625,6 +667,7 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
             }
             mm2_roster_set_equipped(rec, eq, src);
             mm2_roster_set_backpack(rec, bp, Mm2RosterItemSlot{});
+            recomputeWeaponFields(*rec, items);
             setStatus(session, "Equipped.");
             return SheetKeyOutcome::None;
         }
@@ -666,6 +709,7 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
             }
             mm2_roster_set_backpack(rec, bp, src);
             mm2_roster_set_equipped(rec, eq, Mm2RosterItemSlot{});
+            recomputeWeaponFields(*rec, items);
             setStatus(session, "Removed.");
             return SheetKeyOutcome::None;
         }
@@ -681,6 +725,7 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
                 setStatus(session, "Empty slot.");
             } else {
                 mm2_roster_set_equipped(rec, eq, Mm2RosterItemSlot{});
+                recomputeWeaponFields(*rec, items);
                 setStatus(session, "Dropped.");
             }
             return SheetKeyOutcome::None;

@@ -19,7 +19,7 @@ namespace mm2::events {
 
 enum class ScriptedSceneId : uint8_t {
     None = 0,
-    CorakIntro,   /* Middlegate first visit: ghost overlay + loc 60 str[8] */
+    CorakIntro,   /* Middlegate first visit: ghost overlay + loc 60 str[1] */
     PegasusC2,    /* Overland C2 (map 11) evt 04 @ (4,7): 21.anm sprite + loc 11 str[5] */
 };
 

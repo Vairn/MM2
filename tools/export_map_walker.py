@@ -826,9 +826,12 @@ def export_map_walker(
         overlays = build_overlays_payload(event_data, event_header, items)
     write_embedded_bundle(out_dir, maps, manifest, sprites, overlays)
 
-    if split:
+    if (split):
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "maps.json").write_text(json.dumps(maps, separators=(",", ":")), encoding="utf-8")
+        (out_dir / "overlays.json").write_text(
+            json.dumps(overlays, separators=(",", ":")), encoding="utf-8"
+        )
         sprite_root = out_dir / "sprites"
         for cache_key, data_url in sprites.items():
             key, fi = cache_key.rsplit(":", 1)
@@ -846,7 +849,7 @@ def export_map_walker(
         (out_dir / "sprites.json").write_text(
             json.dumps(split_manifest, separators=(",", ":")), encoding="utf-8"
         )
-        print(f"  split: maps.json + sprites.json + {len(sprites)} PNGs")
+        print(f"  split: maps.json + overlays.json + sprites.json + {len(sprites)} PNGs")
 
     if not skip_pc:
         export_pc_walker_gfx(out_dir, data, pc_gog)

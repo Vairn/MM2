@@ -11,6 +11,21 @@ export const SMITH_IDS = [[[4, 6, 7, 10, 12, 13], [15, 19, 20, 17, 16, 10], [8, 
 export const SMITH_META = [[[0, 0, 0, 0, 0, 0], [3, 2, 2, 3, 3, 5], [1, 0, 0, 0, 0, 0], [1, 1, 2, 2, 4, 1], [0, 0, 0, 0, 0, 0]], [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]], [[0, 0, 0, 0, 0, 0], [4, 1, 3, 2, 1, 1], [0, 0, 0, 0, 0, 1], [2, 1, 1, 1, 1, 1], [0, 0, 0, 0, 0, 0]], [[1, 20, 3, 0, 1, 0], [2, 50, 0, 25, 20, 0], [5, 8, 20, 8, 20, 10], [5, 2, 20, 35, 5, 0], [3, 1, 20, 250, 50, 0]]];
 export const PUB_FOOD = [[{"menu": "A", "text": "Horrors d'oeuvres", "gold": 10}, {"menu": "B", "text": "Soup de Ghoul w/garlic toast", "gold": 50}, {"menu": "C", "text": "Dragon Steak Tartar", "gold": 100}], [{"menu": "A", "text": "Lightly salted tongue of toad", "gold": 1000}, {"menu": "B", "text": "Puree of Gnome", "gold": 2000}, {"menu": "C", "text": "Devils Food Brownie", "gold": 3000}], [{"menu": "A", "text": "Sizzling Swine Soup", "gold": 200}, {"menu": "B", "text": "Red Hot Wolf Nipple Chips", "gold": 100}, {"menu": "C", "text": "Roast Leg of Wyvern", "gold": 1000}], [{"menu": "A", "text": "Pickled Pixie Brains", "gold": 5000}, {"menu": "B", "text": "Deep fried Troll liver", "gold": 500}, {"menu": "C", "text": "Cream of Kobold soup", "gold": 1000}], [{"menu": "A", "text": "Gourmet Dinner B Wyrm Chop Suey", "gold": 20}, {"menu": "B", "text": "Roast Peasant under glass", "gold": 50}, {"menu": "C", "text": "Phantom Pudding (Very Low-cal)", "gold": 250}]];
 export const PUB_DRINKS = [{"name": "Orc Beer", "gold": 0}, {"name": "Straight shot", "gold": 0}, {"name": "Id Elixir", "gold": 0}, {"name": "Academic Ale", "gold": 0}, {"name": "Rare Vintage", "gold": 0}, {"name": "Mystic Brew", "gold": 0}];
+/* Fallback tip/rumor pools ≡ TownServiceMenu.cpp kPubRumors / kPubTips (GS empty). */
+export const PUB_RUMORS = [
+  ["Children at 0,15", "Goblets at 0,7", "Meal A, then C1 2,10", "Meal B, then C1 2,6", "Time travel at", "Pinehurst", "Meal B, then A2", "14,10"],
+  ["S7,1 B2 15,11", "Meal C, then C1 1,8", "'Murray's rejuvenates'", "Hirelings at 15,10", "Cast C2,3 day 93", "gain S9,3", "Meal C-an experience", "B2, day 140-170,"],
+  ["14,4", "C3,6 C2 11,1", "Lord Haart B1 5,5", "Meal B is a riot", "Mandagaul D2 6,8", "The Gourmet A3 7,6", "C9,2 C1 south", "Meal C, 7,3-Sarakin"],
+  ["See Nordon at 10,2", "Donate at all", "temples", "Nordon has S2,1", "Meal C, then D1 2,7", "Hirelings at 0,14", "Transmutations 8,8", "the corners"],
+  ["Castle Xabran holds", "all clues", "Meal A, then C4 14,8", "C2,3 C3 1,9", "Hoardall seeks items", "Keys add castle gold", "Meal B, then C3 1,9", "Visit Dawn's, D4 3,7"],
+];
+export const PUB_TIPS = [
+  ["Slayer seeks death", "S5,2 C1 1,8", "Meal C, then E1 2,3", "Tavern drinks give a", "bonus", "S3,6 7,4", "Meal A, then 3,11", "Meal B, then E4 3,10"],
+  ["A) Orc Beer      - ", "B) Straight shot - ", "C) Id Elixir     - ", "D) Academic Ale  - ", "E) Rare Vintage  - ", "F) Mystic Brew   - ", "A) Horrors", "d'oeuvres"],
+  ["B) Soup de Ghoul", "w/garlic toast", "C) Dragon Steak", "Tartar", "A) Lightly salted", "tongue of toad", "B) Puree of Gnome", "C) Devils Food"],
+  ["Brownie", "A) Sizzling", "Swine Soup", "B) Red Hot Wolf", "Nipple Chips", "C) Roast Leg of", "Wyvern", "A) Pickled Pixie"],
+  ["Brains", "B) Deep fried", "Troll liver", "C) Cream of", "Kobold soup", "A) Gourmet Dinner", "B Wyrm Chop Suey", "B) Roast Peasant"],
+];
 export const MAGE_GUILD = [[{"flat": 0, "gold": 10, "label": "S1/1 Awaken", "key": "A"}, {"flat": 2, "gold": 1000, "label": "S1/3 Energy Blast", "key": "B"}, {"flat": 6, "gold": 50, "label": "S1/7 Sleep", "key": "C"}, {"flat": 9, "gold": 100, "label": "S2/3 Identify Monster", "key": "D"}], [{"flat": 41, "gold": 50000, "label": "S8/2 Mega Volts", "key": "A"}, {"flat": 42, "gold": 50000, "label": "S8/3 Meteor Shower", "key": "B"}, {"flat": 44, "gold": 100000, "label": "S9/1 Implosion", "key": "C"}, {"flat": 45, "gold": 100000, "label": "S9/2 Inferno", "key": "D"}], [{"flat": 21, "gold": 600, "label": "S4/2 Feeble Mind", "key": "A"}, {"flat": 22, "gold": 2000, "label": "S4/3 Fire Ball", "key": "B"}, {"flat": 26, "gold": 3000, "label": "S5/1 Disrupt", "key": "C"}, {"flat": 28, "gold": 3000, "label": "S5/3 Sand Storm", "key": "D"}], [{"flat": 31, "gold": 5000, "label": "S6/1 Disintegration", "key": "A"}, {"flat": 33, "gold": 5000, "label": "S6/3 Fantastic Freeze", "key": "B"}, {"flat": 35, "gold": 5000, "label": "S6/5 Super Shock", "key": "C"}, {"flat": 37, "gold": 25000, "label": "S7/2 Duplication", "key": "D"}], [{"flat": 13, "gold": 400, "label": "S2/7 Protection from Magic", "key": "A"}, {"flat": 14, "gold": 200, "label": "S3/1 Acid Stream", "key": "B"}, {"flat": 17, "gold": 1000, "label": "S3/4 Lightning Bolt", "key": "C"}, {"flat": 20, "gold": 500, "label": "S4/1 Cold Beam", "key": "D"}]];
 export const TEMPLE_SPELLS = [[{"flat": 0, "gold": 10, "label": "Apparition", "key": "D"}, {"flat": 1, "gold": 10, "label": "Awaken", "key": "E"}, {"flat": 5, "gold": 1000, "label": "Power Cure", "key": "F"}], [{"flat": 42, "gold": 20000, "label": "Mass Distortion", "key": "D"}, {"flat": 46, "gold": 50000, "label": "Resurrection", "key": "E"}, {"flat": 47, "gold": 100000, "label": "Uncurse Item", "key": "F"}], [{"flat": 14, "gold": 400, "label": "Cold Ray", "key": "D"}, {"flat": 18, "gold": 100, "label": "Lasting Light", "key": "E"}, {"flat": 23, "gold": 500, "label": "Restore Alignment", "key": "F"}], [{"flat": 25, "gold": 2000, "label": "Holy Bonus", "key": "D"}, {"flat": 30, "gold": 3000, "label": "Remove Condition", "key": "E"}, {"flat": 37, "gold": 10000, "label": "Fiery Flail", "key": "F"}], [{"flat": 8, "gold": 250, "label": "Heroism", "key": "D"}, {"flat": 11, "gold": 300, "label": "Protection From Elements", "key": "E"}, {"flat": 13, "gold": 200, "label": "Weaken", "key": "F"}]];
 export const MAGE_GUILD_MEMBER_MASK = [2, 4, 8, 16, 32];
@@ -155,12 +170,40 @@ export function pubFoodMenu(mapId) {
   return PUB_FOOD[mapId] ?? PUB_FOOD[0] ?? [];
 }
 
+export function pubRumorPool(mapId) {
+  return PUB_RUMORS[mapId] ?? PUB_RUMORS[0] ?? [];
+}
+
+export function pubTipPool(mapId) {
+  return PUB_TIPS[mapId] ?? PUB_TIPS[0] ?? [];
+}
+
+/** Join day-pair tip/rumor lines (TownServiceMenu tip/rumor report). */
+export function formatDayPairLines(pool, pairBase) {
+  const a = pool[pairBase];
+  const b = pool[pairBase + 1];
+  const ok = (s) => s && s[0] && s[0] !== "(";
+  if (ok(a) && ok(b)) return `${a}\n${b}`;
+  if (ok(a)) return a;
+  return "";
+}
+
 export function mageGuildStock(mapId) {
   return MAGE_GUILD[mapId] ?? MAGE_GUILD[0] ?? [];
 }
 
 export function templeSpellStock(mapId) {
   return TEMPLE_SPELLS[mapId] ?? TEMPLE_SPELLS[0] ?? [];
+}
+
+/** @deprecated use pubRumorPool */
+export function pubRumors(mapId) {
+  return pubRumorPool(mapId);
+}
+
+/** @deprecated use pubTipPool */
+export function pubTips(mapId) {
+  return pubTipPool(mapId);
 }
 
 /** Portal at current town tile (FAQ §4-1), or null. */

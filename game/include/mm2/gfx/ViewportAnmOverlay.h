@@ -64,13 +64,19 @@ public:
     /** Advance one VBlank-tick of sequence delay; true when the visible cel changed. */
     bool tick();
 
-    /** OP_0B / mode $17 @ 0x23C8C, clamped to viewport (8,8)–(215,127).
-     *  Simple path @ 0x23E24: sign_sprite_place(pos,$40,$20) → dst (64, 40). */
+    /** OP_0B / mode $17 @ 0x23C8C. Simple path @ 0x23E24 → dst (64, 40). */
     void blitCentered(gfx::ScreenCompositor &c, int placement_index = 0) const;
+    /** apply_content_offset=true: retail place, no slot clamp (service signs).
+     *  false: clamp into the slot (combat gallery). */
     void blitCenteredInViewport(gfx::ScreenCompositor &c, int placement_index, int slot_x, int slot_y,
-                                int slot_w, int slot_h) const;
+                                int slot_w, int slot_h, bool apply_content_offset = true) const;
 
+    /** Raw blit at (dst_x, dst_y). */
     void blitAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) const;
+
+    /** Scripted OP_0B place (0x3266): whole-canvas origin (same as blitAt now
+     *  that PC pictures keep their fixed 96×96 canvas). */
+    void blitCanvasAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) const;
 
 private:
     bool loadFromPath(const char *path, AnmLoopMode loop, bool apply_hw_palette);
@@ -111,6 +117,7 @@ private:
     AnmLoopMode loop_mode_ = AnmLoopMode::Loop;
     int disk_index_ = -1;
     int composed_frame_ = 0;
+    int seq_block_ = 0; /* FF-delimited sequence index (63.anm has idle + activity) */
     int seq_step_ = 0;
     int delay_remaining_ = 0;
     int w_ = 0;

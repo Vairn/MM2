@@ -1064,7 +1064,28 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
                         shown = mm2::events::townSvcSmithMerchantSellPrice(shown, *buyer);
                     }
                 }
-                std::snprintf(line, sizeof(line), "%c) %-13s %u gp", char('A' + i), item, shown);
+                /* Weapons/armor carry a magic "+" bonus (0x1BF16 drives the price
+                 * from it); show it in the name like the identify path does, else
+                 * the inflated price looks like a bug. Misc charges are not a '+'. */
+                char name_bonus[28];
+                const uint8_t plus = static_cast<uint8_t>(smith_view_[i].bonus & 0x3Fu);
+                if (plus != 0) {
+                    std::snprintf(name_bonus, sizeof(name_bonus), "%s +%u", item,
+                                  static_cast<unsigned>(plus));
+                } else {
+                    std::snprintf(name_bonus, sizeof(name_bonus), "%s", item);
+                }
+                char price_str[16];
+                std::snprintf(price_str, sizeof(price_str), "%u gp", shown);
+                /* 24-col option band (cols 0x10..0x27): name left, price right-aligned. */
+                char body[40];
+                const int body_len =
+                    std::snprintf(body, sizeof(body), "%c) %s", char('A' + i), name_bonus);
+                int gap = 24 - body_len - static_cast<int>(std::strlen(price_str));
+                if (gap < 1) {
+                    gap = 1;
+                }
+                std::snprintf(line, sizeof(line), "%s%*s%s", body, gap, "", price_str);
                 drawCell(c, row++, kOptCol, line);
             } else {
                 std::snprintf(line, sizeof(line), "%c) ---", char('A' + i));
@@ -1109,7 +1130,7 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
         } else if (kind_ == Kind::Tavern) {
             drawCell(c, kBandRowFirst, kOptCol, "A) Feeding frenzy (all");
             drawCell(c, kBandRowFirst + 1, kOptCol, "   you can carry");
-            drawCell(c, kBandRowFirst + 2, kOptCol, "B) Buy (stat boost)");
+            drawCell(c, kBandRowFirst + 2, kOptCol, "B) Have a drink");
             drawCell(c, kBandRowFirst + 3, kOptCol, "C) Specialties");
             drawCell(c, kBandRowFirst + 4, kOptCol, "D) Tip the bartender");
             drawCell(c, kBandRowFirst + 5, kOptCol, "E) Listen for rumors");

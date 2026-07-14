@@ -114,12 +114,13 @@ inline int opcodeStringArg(uint8_t op, const std::vector<uint8_t>& args) {
 //   * arg0 >= 0x80 -> sign id 0x4B                          (0x15760/0x15766)
 //   * else sign id = TABLE[env][arg0 - 1]                   (0x1576C subq #1)
 //   * env id = area_env_lookup(screen) (0x18AE); env -> one of five 24-byte
-//     tables (A4-$6C62..-$6C02). The env->table mapping and the table bytes
-//     mirror game/src/events/ServiceSignResolver.cpp (test-validated against the
-//     real `.anm` assets), so the editor view matches the game port:
-//       env 0 Middlegate(0), 1 Atlantium(22), 2 Tundara(44), 3 Vulcania(66),
-//       4/5 Sandsobar(88), 6 Vulcania(66)  [offsets into the 112-byte block].
-//     The tables overlap by 2 bytes (bases 0x16 apart) -> one shared block.
+//     tables (A4-$6C62/$6C4C/$6C32/$6C1A/$6C02). The OP_0B jump table @ 0x157D2
+//     maps env->table in a SCRAMBLED order (NOT sequential by town), verified in
+//     mm2.capstone.asm; this mirrors game/src/events/ServiceSignResolver.cpp:
+//       env0 -> $6C62(0), env1 -> $6C32(48), env2 -> $6C02(96),
+//       env3 -> $6C4C(22), env4 -> $6C1A(72), env5 -> $6C02(96), env6 -> $6C1A(72)
+//     [offsets into the packed data block]. Bases are unevenly strided
+//     (22/26/24/24), so tables partially overlap in the shared block.
 inline int signEnvForScreen(int screen) {
     static const uint8_t lo[] = {0, 5, 17, 33, 41, 45, 55};
     static const uint8_t hi[] = {4, 16, 32, 40, 44, 54, 59};
@@ -134,18 +135,19 @@ inline int signEnvForScreen(int screen) {
 inline int serviceSignId(int loc, uint8_t strIdx) {
     if (strIdx >= 0x80) return 0x4B;
     if (loc < 0) return -1;
-    static const uint8_t kBlock[112] = {
+    static const uint8_t kBlock[120] = {
         70, 62, 63, 66, 67, 68, 65,  2, 19, 26, 51, 54, 53, 12, 60, 27, 39,  4, 45, 37, 57, 47, 73, 33,
         42, 43, 17, 14, 69, 34,  9, 26, 24, 52, 53, 21, 25, 28, 44, 49, 11, 31, 55, 36,  1, 61,
         18, 47, 72, 16, 10, 23,  6, 51, 15,  8,  5, 49, 40, 11, 30, 39,  4, 46, 20, 36,  1, 57,
         13, 58, 18, 47, 74, 42,  2, 17, 14, 69, 19, 34,  9, 26, 24, 52, 54,  8, 21, 25,  3, 29,
         44, 50, 27, 39, 61, 48, 71, 59, 33, 19, 35, 10, 24,  6, 75, 51, 15,  7, 60, 56, 29,  5,
+        22, 50, 30, 41, 46, 37, 58,  0,
     };
-    static const int envOffset[7] = {0, 22, 44, 66, 88, 88, 66};
+    static const int envOffset[7] = {0, 48, 96, 22, 72, 96, 72};
     const int env = signEnvForScreen(loc);
     if (env < 0 || env > 6) return -1;
     const int i = envOffset[env] + (static_cast<int>(strIdx) - 1);  // 0x1576C subq #1
-    if (i < 0 || i >= 112) return -1;
+    if (i < 0 || i >= 120) return -1;
     return kBlock[i];
 }
 

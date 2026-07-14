@@ -345,7 +345,7 @@ constexpr DemoCase kDemos[] = {
     {"op07_space_prompt", "OP_07", "Hillstone str[14] loot + SPACE prompt", setup_op07, nullptr, nullptr},
     {"op09_yn_prompt", "OP_09", "Middlegate event 20 — Y/N input only (no extra draw)", setup_op09, nullptr,
      nullptr},
-    {"scripted_corak", "ScriptedScene", "Corak ghost overlay + loc 60 str[8] + SPACE (doc 46)", nullptr,
+    {"scripted_corak", "ScriptedScene", "Corak ghost overlay + loc 60 str[1] + SPACE (doc 46)", nullptr,
      prepare_scripted_corak_gs, nullptr, events::ScriptedSceneId::CorakIntro},
     {"scripted_pegasus", "ScriptedScene", "C2 outdoor @ (4,7) + 21.anm (#131) + loc 11 str[5] OP_03 (doc 46)",
      nullptr, prepare_scripted_pegasus_gs, nullptr, events::ScriptedSceneId::PegasusC2},
@@ -443,7 +443,7 @@ int main(int argc, char **argv)
         std::fprintf(readme, "\n## Scripted scenes (doc 46)\n\n");
         std::fprintf(readme, "| File | Scene | Source |\n");
         std::fprintf(readme, "|------|-------|--------|\n");
-        std::fprintf(readme, "| `scripted_corak` | Corak intro | loc 60 str[8], ghost 51.anm candidate |\n");
+        std::fprintf(readme, "| `scripted_corak` | Corak intro | loc 60 str[1], ghost 51.anm candidate |\n");
         std::fprintf(readme, "| `scripted_pegasus` | Pegasus C2 | 21.anm over outdoor 3D, loc 11 str[5] OP_03 @ (4,7) |\n");
         std::fprintf(readme, "\n## Not rendered\n\n");
         std::fprintf(readme, "- **OP_08** / **OP_0A** — scripted-input variants of OP_07 / OP_09; "

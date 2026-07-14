@@ -94,7 +94,7 @@
 #define MM2_GS_MONSTER_AC_BIT6  (-0x11AB)  /* byte  ($EE55) AC bit6 (0x4C8E) */
 #define MM2_GS_MONSTER_AC_BIT7  (-0x11AC)  /* byte  ($EE54) AC bit7 (0x4C8E) */
 #define MM2_GS_MONSTER_AC       (-0x11B4)  /* byte  ($EE4C) AC low5+1 (×10 if bit5) @ 0x4F0A */
-#define MM2_GS_MONSTER_SWINGS   (-0x11B2)  /* byte  ($EE4E) speed2 low4+1 @ 0x4EAE */
+#define MM2_GS_MONSTER_SWINGS   (-0x11B2)  /* byte  ($EE4E) speed[0x14] low4+1 @ 0x4EAE */
 #define MM2_GS_MONSTER_DMG_SIDES (-0x11B3) /* byte  ($EE4D) damage low5+1 (×10 if bit5) @ 0x4F52 */
 #define MM2_GS_MONSTER_HIT_TBL  (-0x6F16)  /* byte[16] ($90EA) type>>4 → to-hit chance @ 0x104B2 */
 #define MM2_GS_COMBAT_TARGET_SLOT (-0x04F8) /* byte ($FB08) party slot under attack @ 0x103BA */

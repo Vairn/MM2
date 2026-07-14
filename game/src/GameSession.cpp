@@ -596,24 +596,15 @@ void GameSession::maybeQueueScriptedScenes(bool on_start)
     if ((start_flags_ & kStartSkipScriptedIntros) != 0) {
         return;
     }
-    if (!scripted_loaded_ || !gs_.valid() || scripted_scene_.active()) {
+    if (!gs_.valid()) {
         return;
     }
 
-    /* Area enter @ 0x6E84: first_time_flag until Corak prologue at (7,4) (FAQ x,y).
-     * corak_intro_seen_ is a port-side one-shot (the prologue is scene scheduling,
-     * not a per-character quest bit). */
-    if (on_start && gs_.screenId() == 0 && !corak_intro_seen_) {
+    /* Corak copy comes from event.dat (Middlegate evt 18 @ (7,4) N → OP_0E 0x09
+     * → loc-60 OP_03 str[1]), not a ScriptedSceneEngine string-index shortcut.
+     * Area-enter first_time_flag @ 0x6E84 still arms so retail gates fire. */
+    if (on_start && gs_.screenId() == 0) {
         gs_.setFirstTimeFlag(true);
-        return;
-    }
-
-    if (!on_start && gs_.screenId() == 0 && gs_.coordX() == 7 && gs_.coordY() == 4 &&
-        gs_.firstTimeFlag() && !corak_intro_seen_) {
-        scripted_scene_.queueScene(events::ScriptedSceneId::CorakIntro);
-        corak_intro_seen_ = true;
-        gs_.setFirstTimeFlag(false);
-        markDirty();
     }
 }
 
@@ -2716,56 +2707,41 @@ void GameSession::refreshCombatSprites()
         return;
     }
     const gfx::CombatPanelView view = combat_.panelView();
-    if (view.sprite_slot_count <= 0) {
+
+    /* Retail centers a single leader sprite (the first alive battle slot's
+     * picture), not a gallery of every distinct monster type — see
+     * 41-aga-port-plan §8.2 and the 0x316E sprite placer. panelView() still
+     * builds the full sprite_slots[] metadata; we render only the leader. */
+    const int leader_disk =
+        view.sprite_slot_count > 0 ? view.sprite_slots[0].disk_index : view.sprite_disk_index;
+    if (leader_disk < 0) {
         unloadCombatSprites();
         return;
     }
 
-    bool same = view.sprite_slot_count == combat_sprite_count_;
-    if (same) {
-        for (int i = 0; i < view.sprite_slot_count; ++i) {
-            if (view.sprite_slots[i].disk_index != combat_sprite_disks_[i] ||
-                !combat_sprites_[i].loaded()) {
-                same = false;
-                break;
-            }
-        }
-    }
-    if (same) {
-        for (int i = 0; i < combat_sprite_count_; ++i) {
-            combat_sprite_stacks_[i] = view.sprite_slots[i].stack_count;
-        }
-        return;
-    }
-
-    /* Reload only slots whose disk index changed - keep AnmPlanarPool refs warm. */
-    const int want = view.sprite_slot_count < gfx::kAgaCombatSpriteCap ? view.sprite_slot_count
-                                                                       : gfx::kAgaCombatSpriteCap;
-    for (int i = want; i < gfx::kAgaCombatSpriteCap; ++i) {
+    /* Drop any extra BOBs left over from a prior multi-sprite frame. */
+    for (int i = 1; i < gfx::kAgaCombatSpriteCap; ++i) {
         combat_sprites_[i].unload();
         combat_sprite_disks_[i] = -1;
         combat_sprite_stacks_[i] = 0;
     }
-    combat_sprite_count_ = 0;
-    for (int i = 0; i < want; ++i) {
-        const int disk = view.sprite_slots[i].disk_index;
-        if (disk < 0) {
-            combat_sprites_[i].unload();
-            combat_sprite_disks_[i] = -1;
-            combat_sprite_stacks_[i] = 0;
-            continue;
-        }
-        if (combat_sprite_disks_[i] != disk || !combat_sprites_[i].loaded()) {
-            if (!combat_sprites_[i].loadFromDiskIndex(data_dir_, disk, gfx::AnmLoopMode::Loop, false)) {
-                combat_sprite_disks_[i] = -1;
-                combat_sprite_stacks_[i] = 0;
-                continue;
-            }
-            combat_sprite_disks_[i] = disk;
-        }
-        combat_sprite_stacks_[i] = view.sprite_slots[i].stack_count;
-        combat_sprite_count_ = i + 1;
+
+    const int leader_stack = view.sprite_slot_count > 0 ? view.sprite_slots[0].stack_count : 1;
+
+    /* Reuse the warm pool ref when the leader picture is unchanged. */
+    if (combat_sprite_count_ == 1 && combat_sprite_disks_[0] == leader_disk &&
+        combat_sprites_[0].loaded()) {
+        combat_sprite_stacks_[0] = leader_stack;
+        return;
     }
+
+    if (!combat_sprites_[0].loadFromDiskIndex(data_dir_, leader_disk, gfx::AnmLoopMode::Loop, false)) {
+        unloadCombatSprites();
+        return;
+    }
+    combat_sprite_disks_[0] = leader_disk;
+    combat_sprite_stacks_[0] = leader_stack;
+    combat_sprite_count_ = 1;
 }
 
 void GameSession::blitCombatSprites()
@@ -2790,13 +2766,15 @@ void GameSession::blitCombatSprites()
         /* Always clamp into the active hood — oversized .anm cels must not paint
          * the roster band (cols 0x10+). Multi-BOB uses layout offsets as bias. */
         if (combat_sprite_count_ == 1) {
-            combat_sprites_[i].blitCenteredInViewport(compositor_, 0, slot_x, slot_y, slot_w, slot_h);
+            combat_sprites_[i].blitCenteredInViewport(compositor_, 0, slot_x, slot_y, slot_w, slot_h,
+                                                      /*apply_content_offset=*/false);
         } else {
             const int layout_i = i % gfx::play_layout::kAgaCombatSpriteLayoutCount;
             const gfx::play_layout::AgaCombatSpriteLayout &lay =
                 gfx::play_layout::kAgaCombatSpriteLayout[layout_i];
             combat_sprites_[i].blitCenteredInViewport(compositor_, 0, slot_x + lay.x, slot_y + lay.y,
-                                                      slot_w - lay.x, slot_h - lay.y);
+                                                      slot_w - lay.x, slot_h - lay.y,
+                                                      /*apply_content_offset=*/false);
         }
     }
 }

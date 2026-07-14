@@ -19,9 +19,69 @@ import {
   exportPabilTables,
   castSpellFromSheet,
   tickSheetCastAux,
+  applyItemUse,
 } from "./combatSpells.js";
 
-export { castSpellFromSheet, tickSheetCastAux };
+export { castSpellFromSheet, tickSheetCastAux, applyItemUse };
+
+export function combatSpellApi(fight) {
+  return spellApi(fight);
+}
+
+/**
+ * Inactive CombatSession stand-in for exploration sheet Cast/Use
+ * (GameSession CharacterSheet → castSpellFromSheet / applyItemUse).
+ */
+export function ensureExplorationSheetFight(session, opts = {}) {
+  const active = session._combatFight;
+  if (active && active.state && active.state !== STATE.Inactive) {
+    return active;
+  }
+  const party = ensureParty(session);
+  const fight = {
+    state: STATE.Inactive,
+    session,
+    manifest: opts.manifest ?? session.manifest ?? null,
+    rng: opts.rng ?? null,
+    party,
+    partyCount: party.length,
+    activePartySlot: -1,
+    monsterSlots: [],
+    statusLine: "",
+    outcome: "none",
+    explorationCast: false,
+    pendingCastFlat: -1,
+    pendingCastSchool: -1,
+    castAux: -1,
+    forceCastSchool: -1,
+    skipCastCost: false,
+    castLevel: 0,
+    castTargetSlot: -1,
+    spellActed: 0,
+    msgQueue: [],
+    msgIdx: 0,
+    ackFrames: 0,
+  };
+  seedCombatGs(fight);
+  session._sheetFight = fight;
+  return fight;
+}
+
+/** GameSession.cpp:1859 — sheet Cast → CombatSession::castSpellFromSheet. */
+export function dispatchSheetCast(session, partySlot, flat0, opts = {}) {
+  const fight = ensureExplorationSheetFight(session, opts);
+  castSpellFromSheet(fight, spellApi(fight), partySlot, flat0);
+  return fight.statusLine || "";
+}
+
+/** GameSession.cpp:1867 — sheet Use → CombatSession::applyItemUse. */
+export function dispatchSheetUse(session, partySlot, useSlot, opts = {}) {
+  const fight = ensureExplorationSheetFight(session, opts);
+  const backpack = useSlot >= 6;
+  const slot = backpack ? useSlot - 6 : useSlot;
+  applyItemUse(fight, spellApi(fight), partySlot, backpack, slot);
+  return fight.statusLine || "";
+}
 
 const STATE = {
   Inactive: "Inactive",
@@ -968,27 +1028,42 @@ function beginRound(fight) {
   syncMonsterSlots(fight);
 }
 
+function endFightVictory(fight) {
+  const result = combatFinishVictory(fight.session, { manifest: fight.manifest, rng: fight.rng });
+  const xp = (result?.xp ?? fight.session.combatXpPool ?? 0) >>> 0;
+  const gold = (result?.gold ?? 0) >>> 0;
+  fight.state = STATE.Inactive;
+  fight.outcome = "victory";
+  /* CombatSession::finishVictory status_line_ */
+  if (gold > 0) {
+    setStatus(fight, `You are victorious! ${xp} XP earned. Winner, you receive ${gold} gold.`);
+  } else {
+    setStatus(fight, `You are victorious! ${xp} experience points earned.`);
+  }
+}
+
+function endFightLeave(fight, fled) {
+  combatFinishLeave(fight.session, !!fled);
+  fight.state = STATE.Inactive;
+  fight.outcome = fled ? "fled" : "defeated";
+  /* CombatSession::finishLeave — overwrites any prior Success! line. */
+  setStatus(fight, fled ? "The party flees!" : "The party has been defeated...");
+}
+
 function checkOutcome(fight) {
   if (firstAliveMonster(fight) < 0) {
-    combatFinishVictory(fight.session, { manifest: fight.manifest, rng: fight.rng });
-    fight.state = STATE.Inactive;
-    fight.outcome = "victory";
-    setStatus(fight, "You are victorious!");
+    endFightVictory(fight);
     return true;
   }
   if (fight.partyCount <= 0) {
     const fled = fight.partyRanLatch || fight.timeDistort;
-    combatFinishLeave(fight.session, !!fled);
-    fight.state = STATE.Inactive;
-    fight.outcome = fled ? "fled" : "defeated";
+    endFightLeave(fight, !!fled);
     return true;
   }
   for (let i = 0; i < fight.partyCount; i++) {
     if (partyInFight(fight, i)) return false;
   }
-  combatFinishLeave(fight.session, false);
-  fight.state = STATE.Inactive;
-  fight.outcome = "defeated";
+  endFightLeave(fight, false);
   return true;
 }
 
@@ -1015,9 +1090,7 @@ function runUntilDecisionOrEnd(fight) {
     }
     if (bestMon < 0 && bestParty < 0) {
       if (fight.partyRanLatch || fight.timeDistort) {
-        combatFinishLeave(fight.session, true);
-        fight.state = STATE.Inactive;
-        fight.outcome = "fled";
+        endFightLeave(fight, true);
         return;
       }
       beginRound(fight);
@@ -1204,10 +1277,7 @@ function resolveBribeTry(fight) {
       sessionTryPayGems(session, fight.bribeAmount);
   }
   if (paid) {
-    combatFinishLeave(session, true);
-    fight.state = STATE.Inactive;
-    fight.outcome = "fled";
-    setStatus(fight, "Success!");
+    endFightLeave(fight, true);
     return;
   }
   setStatus(fight, "Your bribe is refused!");
@@ -1262,10 +1332,7 @@ function resolvePartyHide(fight) {
   let thresh = n > 0 ? (sum / n) | 0 : 0;
   if (thresh > 0xff) thresh = 0xff;
   if (roll < thresh) {
-    combatFinishLeave(fight.session, true);
-    fight.state = STATE.Inactive;
-    fight.outcome = "fled";
-    setStatus(fight, "Success!");
+    endFightLeave(fight, true);
     return;
   }
   setStatus(fight, "You failed to hide!");
@@ -1280,9 +1347,7 @@ function resolvePartyRun(fight) {
     ok = roll < (fight.retreatDiff | 0);
   }
   if (ok) {
-    combatFinishLeave(fight.session, true);
-    fight.state = STATE.Inactive;
-    fight.outcome = "fled";
+    endFightLeave(fight, true);
     return;
   }
   setStatus(fight, "The party fails to run!");
@@ -1473,67 +1538,105 @@ export function combatAwaitingInput(fight) {
 
 export function combatPromptText(fight, enc) {
   if (!fight) return "";
-  const heading = enc?.heading || enc?.text || "Combat";
-  const lines = [heading, fight.statusLine || ""].filter(Boolean);
-  const alive = [];
-  for (let i = 0; i < 11; i++) {
-    if (!fight.slots[i]?.alive) continue;
-    const n = monsterDef(fight.manifest, fight.slots[i].type)?.name?.trim() || `Mon#${fight.slots[i].type}`;
-    alive.push(`${String.fromCharCode(0x41 + alive.length)}) ${n} HP${fight.slots[i].hp}`);
+  /* Mirror gfx::drawCombatOptionsBar + drawCombatRightColumn text — no walker chrome. */
+  void enc;
+  const lines = [];
+  const labeled =
+    fight.state !== STATE.Inactive &&
+    fight.state !== STATE.AwaitingPartyOptions &&
+    fight.state !== STATE.AwaitingBribeKind &&
+    fight.state !== STATE.AwaitingBribeAmount &&
+    fight.state !== STATE.AwaitingSurpriseDismiss &&
+    fight.state !== STATE.AwaitingPartyPick &&
+    fight.state !== STATE.AwaitingItemPick;
+
+  /* Right-column monster list (CombatPanel.cpp). Pre-round: names only. Round: " A) Name". */
+  const monLines = [];
+  if (fight.state !== STATE.Inactive) {
+    let listed = 0;
+    for (let i = 0; i < 11 && listed < 10; i++) {
+      if (!fight.slots[i]?.alive) continue;
+      const n =
+        monsterDef(fight.manifest, fight.slots[i].type)?.name?.trim() || `Mon#${fight.slots[i].type}`;
+      if (labeled) {
+        const letter = String.fromCharCode(0x41 + listed);
+        const check = listed < (fight.meleeRangeCount | 0) ? "\u0017" : " ";
+        const hurt =
+          fight.slots[i].hp > 0 && fight.slots[i].hp < fight.slots[i].maxHp ? "/Hurt" : "";
+        monLines.push(`${check}${letter}) ${n}${hurt}`);
+      } else {
+        monLines.push(n);
+      }
+      listed++;
+    }
   }
-  if (alive.length) lines.push(alive.join("  "));
+  if (monLines.length) lines.push(monLines.join("\n"));
+
+  if (fight.state === STATE.Inactive) {
+    if (fight.statusLine) lines.push(fight.statusLine);
+    return lines.filter((s) => s != null && s !== "").join("\n");
+  }
+
   switch (fight.state) {
     case STATE.AwaitingSurpriseDismiss:
-      lines.push("", "Any key…");
+      if (fight.statusLine) lines.push(fight.statusLine);
       break;
     case STATE.AwaitingPartyOptions:
-      lines.push("", "A)ttack  B)ribe  H)ide  R)un");
+      /* string @ 0x13222 */
+      lines.push("Options: A-Attack B-Bribe H-Hide R-Run");
       break;
     case STATE.AwaitingBribeKind:
-      lines.push("", "Bribe: 1-Food 2-Gold 3-Gems  Esc=cancel");
+      /* string @ 0x13249 */
+      lines.push("Bribe with:  1-Food  2-Gold  3-Gems");
       break;
     case STATE.AwaitingBribeAmount:
-      lines.push("", `Amount: ${fight.bribeAmount || ""}  (digits, Space/Enter=ok, Esc=cancel)`);
+      /* string @ 0x1326D — digits accumulate off-band in C++ */
+      lines.push(`How much?${fight.bribeAmount ? ` ${fight.bribeAmount}` : ""}`);
       break;
     case STATE.AwaitingCommand: {
       const rec = partyMember(fight, fight.activePartySlot);
       const flags = commandFlags(fight);
-      const opts = [];
-      if (flags.melee) opts.push("A)ttack", "F)ight");
-      if (flags.shoot) opts.push("S)hoot");
-      if (flags.cast) opts.push("C)ast");
-      opts.push("D)efend", "R)un", "E)xchange");
-      lines.push("", `${rec?.name || "Hero"}'s turn: ${opts.join("  ")}`);
+      /* combat_command_bar_build @ 0x11866 */
+      lines.push(" Options for:");
+      lines.push(` ${rec?.name || "Hero"}`);
+      const cmds = [];
+      if (flags.melee) {
+        cmds.push("A-Attack", "F-Fight");
+      }
+      if (flags.shoot) cmds.push("S-Shoot");
+      if (flags.cast) cmds.push("C-Cast");
+      cmds.push("U-Use", "B-Block", "R-Run", "E-Exch", "V-View");
+      lines.push(cmds.join("  "));
       break;
     }
     case STATE.AwaitingCastLevel:
-      lines.push("", "Cast level (1-9)?");
+      lines.push(" Spell Level: ");
       break;
     case STATE.AwaitingCastNumber:
-      lines.push("", `Level ${fight.castLevel} — spell number (1-7)?`);
+      lines.push(` Spell Level: ${fight.castLevel}`);
+      lines.push("Number: ");
       break;
     case STATE.AwaitingCastTarget:
-      lines.push("", fight.statusLine || "Which monster (A-J)?");
+    case STATE.AwaitingAttackTarget:
+      lines.push(fight.statusLine || "Which monster?");
       break;
     case STATE.AwaitingPartyPick:
-      lines.push("", fight.statusLine || `On whom (1-${fight.partyCount})?`);
+      if (fight.statusLine) lines.push(fight.statusLine);
       break;
     case STATE.AwaitingItemPick:
-      lines.push("", fight.statusLine || "Use which (1-6/A-F)?");
-      break;
-    case STATE.AwaitingAttackTarget:
-      lines.push("", fight.statusLine || "Which (A-J)?");
+      lines.push(fight.statusLine || "Use which (1-6/A-F)?");
       break;
     case STATE.AwaitingExchangeWith:
-      lines.push("", `Exchange with (1-${fight.partyCount})?`);
+      lines.push(fight.statusLine || `Exchange with (1-${fight.partyCount})?`);
       break;
     case STATE.AwaitingActionAck:
-      lines.push("", "Space / any key…");
+      if (fight.statusLine) lines.push(fight.statusLine);
       break;
     default:
+      if (fight.statusLine) lines.push(fight.statusLine);
       break;
   }
-  return lines.join("\n");
+  return lines.filter((s) => s != null && s !== "").join("\n");
 }
 
 /**

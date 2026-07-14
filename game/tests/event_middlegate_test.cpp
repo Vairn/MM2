@@ -1980,14 +1980,16 @@ int main(int argc, char **argv)
     expect(!still_waiting_n, "Y/N answered N — script ended", fails);
     expect(gs.screenId() == 0, "N stays in Middlegate", fails);
 
-    /* C2 portcullis loc 11 evt 01: OP_0B str[24] → 29.anm (env 3 Vulcania @ 0x15756). */
+    /* C2 loc 11 evt 01: OP_0B str[24] → 61.anm City overland icon. env 3 uses the
+     * A4-$6C4C table (OP_0B jump table @ 0x157D2 is scrambled; env3 -> $6C4C, not
+     * $6C1A "Vulcania"). $6C4C[23] = 61. */
     expect(mm2::events::ServiceSignResolver::envIdForScreen(11, nullptr) == 3,
-           "C2 screen 11 area_env_lookup -> env 3 Vulcania", fails);
+           "C2 screen 11 area_env_lookup -> env 3", fails);
     world.enterScreen(11);
-    expect(mm2::events::ServiceSignResolver::resolveForScreen(11, &world.attribFile().records[11], 24) == 29,
-           "C2 OP_0B str[24] resolves to 29.anm portcullis", fails);
-    expect(mm2::events::ServiceSignResolver::resolveForScreen(11, &world.attribFile().records[11], 24) != 61,
-           "C2 OP_0B str[24] must not use wrong env 61.anm warrior", fails);
+    expect(mm2::events::ServiceSignResolver::resolveForScreen(11, &world.attribFile().records[11], 24) == 61,
+           "C2 OP_0B str[24] resolves to 61.anm City", fails);
+    expect(mm2::events::ServiceSignResolver::resolveForScreen(11, &world.attribFile().records[11], 24) != 29,
+           "C2 OP_0B str[24] must not use wrong-env 29.anm", fails);
 
     /* Town screens 0..4 share area_env_lookup range 0 → env 0 (Middlegate table @ 0x15756).
      * Blacksmith OP_0B str[2] → id 62; str[3] Slaughtered Lamb → 63; evt 26 str[6] → 68.
@@ -2028,15 +2030,16 @@ int main(int argc, char **argv)
     gs.setFacingKey('S');
     mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
     expect(runtime.scanAndRun(gs, world), "C2 portcullis evt 01 fires at (3,7) facing S", fails);
-    expect(runtime.textView().hasServicePortrait(), "C2 portcullis OP_0B loads 29.anm overlay", fails);
+    expect(runtime.textView().hasServicePortrait(), "C2 portcullis OP_0B loads 61.anm overlay", fails);
     expect(runtime.textView().containsText("portcullis"), "C2 portcullis OP_02 text", fails);
     expect(runtime.blocksMovement(), "C2 portcullis waits for Y/N", fails);
 
-    /* Hillstone Lord Slayer evt 15: OP_0B str[14] → 49.anm (env 2 Tundara table @ 0x15756). */
-    expect(mm2::events::ServiceSignResolver::resolveForScreen(55, &world.attribFile().records[55], 14) == 49,
-           "Hillstone OP_0B str[14] resolves to 49.anm", fails);
-    expect(mm2::events::ServiceSignResolver::resolveForScreen(55, &world.attribFile().records[55], 14) != 53,
-           "Hillstone OP_0B str[14] must not resolve to 53.anm (Middlegate str[13] mummy)", fails);
+    /* Hillstone (castle) evt 15: OP_0B str[14] → 56.anm King NPC. env 2 uses the
+     * A4-$6C02 table (jump table @ 0x157D2: env2 -> $6C02); $6C02[13] = 56. */
+    expect(mm2::events::ServiceSignResolver::resolveForScreen(55, &world.attribFile().records[55], 14) == 56,
+           "Hillstone OP_0B str[14] resolves to 56.anm King", fails);
+    expect(mm2::events::ServiceSignResolver::resolveForScreen(55, &world.attribFile().records[55], 14) != 49,
+           "Hillstone OP_0B str[14] must not use wrong-env 49.anm", fails);
     world.enterScreen(55);
     gs.setScreenId(55);
     runtime.enterLocation(55, gs, world);
