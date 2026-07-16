@@ -1,0 +1,44 @@
+#pragma once
+/* Amiga / MM2_NO_STL: Bartman m68k toolchain ships no libstdc++ <initializer_list>.
+ * GCC expects this layout so brace-init range-for (`for (T x : {a,b})`) works. */
+#include <stddef.h>
+
+namespace std {
+
+template <typename E>
+class initializer_list {
+public:
+    using value_type = E;
+    using reference = const E &;
+    using const_reference = const E &;
+    using size_type = size_t;
+    using iterator = const E *;
+    using const_iterator = const E *;
+
+    constexpr initializer_list() noexcept : begin_(nullptr), size_(0) {}
+
+    /* Public so GCC can emit brace-init lists without a libstdc++ friend. */
+    constexpr initializer_list(const E *first, size_t n) noexcept : begin_(first), size_(n) {}
+
+    constexpr size_t size() const noexcept { return size_; }
+    constexpr const E *begin() const noexcept { return begin_; }
+    constexpr const E *end() const noexcept { return begin_ + size_; }
+
+private:
+    const E *begin_;
+    size_t size_;
+};
+
+template <typename E>
+constexpr const E *begin(initializer_list<E> il) noexcept
+{
+    return il.begin();
+}
+
+template <typename E>
+constexpr const E *end(initializer_list<E> il) noexcept
+{
+    return il.end();
+}
+
+}  // namespace std

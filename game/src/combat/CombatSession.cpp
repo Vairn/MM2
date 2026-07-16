@@ -260,6 +260,7 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
     msg_queue_len_ = 0;
     msg_queue_idx_ = 0;
     outcome_ = CombatOutcome::None;
+    round_layout_active_ = false;
     active_party_slot_ = -1;
     active_monster_slot_ = -1;
     melee_range_count_ = 0;
@@ -368,13 +369,18 @@ void CombatSession::recomputeRangeCounts(GameStateView &gs)
     const uint8_t handicap = mm2_gs_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE);
     const int party_count = launch_ ? party_count_ : 0;
 
-    /* A4-$524: monsters within melee reach. Indoor rng(10,39)/10+3 = 4..6;
-     * outdoor party/2 + rng(10,69)/10 (0x11D1C / 0x11D38). */
-    int melee;
-    if (view_mode == 0) {
-        melee = rng_->range(10, 39) / 10 + 3;
-    } else {
-        melee = party_count / 2 + rng_->range(10, 69) / 10;
+    /* A4-$524: monsters within melee reach. 0x11D10: if already nonzero, skip
+     * the roll (keep prior base) but still apply surprise handicaps below. */
+    int melee = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_MELEE_RANGE_N));
+    if (melee == 0) {
+        /* Indoor rng(10,39)/10+3 = 4..6; outdoor party/2 + rng(10,69)/10
+         * (0x11D1C / 0x11D38). */
+        if (view_mode == 0) {
+            melee = rng_->range(10, 39) / 10 + 3;
+        } else {
+            melee = party_count / 2 + rng_->range(10, 69) / 10;
+        }
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MELEE_RANGE_N, static_cast<uint8_t>(melee)); /* 0x11D60 */
     }
     if (handicap == 2) {
         melee /= 2; /* 0x11D66 party surprised */
@@ -445,7 +451,10 @@ void CombatSession::commandFlagsForActiveSlot(bool &melee, bool &shoot, bool &ca
 
 void CombatSession::startRoundLoop(GameStateView &gs, const world::MapWorld &world)
 {
+    /* 0x12A22 → 0x135BE chrome; 0x11D0C range roll once per fight (not each round). */
+    round_layout_active_ = true;
     recomputeRangeCounts(gs);
+    beginRound(gs); /* 0x12A6A: clr acted / status lottery / seed -$4F8 */
     runUntilDecisionOrEnd(gs, world);
 }
 
@@ -949,8 +958,8 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
 
 void CombatSession::beginRound(GameStateView &gs)
 {
-    /* 0x12A22 round-loop entry GS: clr acted arrays, flee/eradicate scratch,
-     * recompute ranges, seed melee target slot. */
+    /* 0x12A6A new-round restart (NOT 0x12A22): clr acted arrays + status lottery.
+     * Melee/front ranks stay — 0x11D0C only at fight entry (startRoundLoop). */
     active_monster_slot_ = -1;
     mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_FLEE_PRINT, 0);   /* 0x12A30 -$5E27 */
     mm2_gs_set_u8(gs.a4(), MM2_GS_ERADICATE_SKIP_PRINT, 0); /* 0x12A34 -$51E */
@@ -965,7 +974,6 @@ void CombatSession::beginRound(GameStateView &gs)
         party_blocking_[i] = false;
         mm2_gs_set_u8(gs.a4(), MM2_GS_PARTY_ACTED + i, 0); /* 0x12A94 -$5E40 */
     }
-    recomputeRangeCounts(gs); /* 0x12A3C → 0x11D0C */
     /* 0x12A44..0x12A56: rng(1, party_count) → -$4F8, then subq #1. */
     const int pc = launch_ ? party_count_ : 1;
     const int roll = rng_ ? rng_->range(1, pc > 0 ? pc : 1) : 1;
@@ -1095,13 +1103,22 @@ void CombatSession::runUntilDecisionOrEnd(GameStateView &gs, const world::MapWor
         }
 
         resolveMonsterTurn(gs, best_monster);
-        monster_acted_[best_monster] = true;
-        if (best_monster >= 0 && best_monster < 10) {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + best_monster, 1);
+        /* 0x10118 advance may relocate the actor into a front slot and rewrite
+         * -$4F7 / active_monster_slot_. Stamp acted on the post-turn slot, not
+         * the pre-advance index (otherwise the displaced Soldier is marked and
+         * the Thug who advanced can act again). */
+        const int done_slot = (active_monster_slot_ >= 0) ? active_monster_slot_ : best_monster;
+        if (done_slot >= 0 && done_slot < MM2_GS_MONSTER_BATTLE_SLOTS) {
+            monster_acted_[done_slot] = true;
+            if (done_slot < 10) {
+                mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + done_slot, 1);
+            }
         }
-        /* 0x12B6A..0x12B9E: best monster speed → -$5E38, slot → -$4F7. */
+        /* Speed latch from initiative pick; slot latch stays on post-turn -$4F7. */
         mm2_gs_set_u8(gs.a4(), -0x5E38, static_cast<uint8_t>(best_monster_speed & 0xFF));
-        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_TURN_SLOT, static_cast<uint8_t>(best_monster));
+        if (done_slot >= 0) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_TURN_SLOT, static_cast<uint8_t>(done_slot));
+        }
         if (checkOutcome(gs, world)) {
             return;
         }
@@ -4127,6 +4144,7 @@ void CombatSession::resolveMonsterTurn(GameStateView &gs, int slot)
         const uint8_t melee_n = mm2_gs_u8(gs.a4(), MM2_GS_MELEE_RANGE_N);
         if (static_cast<uint8_t>(slot) < melee_n) {
             /* 0x1059E: clr ranged latch; 0x103BA target; 0x10478 damage. */
+            mm2_gs_set_u8(gs.a4(), -0x5E32, 0); /* 0x105A2: melee, not shoots */
             mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, 0);
             const int target_slot = pickMonsterMeleeTarget103BA(gs);
             if (target_slot >= 0) {
@@ -4956,7 +4974,6 @@ uint16_t CombatSession::monsterMeleeDamage10478(GameStateView &gs, int mon_slot,
 void CombatSession::applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint16_t dmg,
                                          const char *mon_name)
 {
-    (void)gs;
     const int idx = rosterIndexForPartySlot(party_slot);
     if (idx < 0) {
         return;
@@ -4964,8 +4981,12 @@ void CombatSession::applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint
     Mm2RosterRecord &victim = roster_->records[idx];
     char victim_name[MM2_ROSTER_NAME_SIZE + 1];
     mm2_roster_name_to_cstr(&victim, victim_name, sizeof(victim_name));
+    /* 0xFF7C: -$5E32==1 (set by 0x10584 ranged) → "shoots"; else melee verb.
+     * Port uses "attacks" for the melee table pick at -$6EF6 until that table
+     * is wired; latch still gates hand-to-hand vs out-of-range archers. */
+    const char *verb = (mm2_gs_u8(gs.a4(), -0x5E32) == 1) ? "shoots" : "attacks";
     if (dmg == 0) {
-        std::snprintf(status_line_, sizeof(status_line_), "%s attacks %s and misses.", mon_name,
+        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s and misses.", mon_name, verb,
                       victim_name);
         return;
     }
@@ -4979,18 +5000,18 @@ void CombatSession::applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint
         victim.condition = 0x81;
         victim.hp_max = 0;
         audio::playSoundSeq(6, gs.soundsEnabled(), gs.walkBeepEnabled());
-        std::snprintf(status_line_, sizeof(status_line_), "%s attacks %s - %s falls!", mon_name,
+        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s - %s falls!", mon_name, verb,
                       victim_name, victim_name);
     } else if (victim.hp_max > dmg) {
         victim.hp_max = static_cast<uint16_t>(victim.hp_max - dmg);
-        std::snprintf(status_line_, sizeof(status_line_), "%s attacks %s for %u damage.", mon_name,
+        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s for %u damage.", mon_name, verb,
                       victim_name, static_cast<unsigned>(dmg));
     } else {
         victim.condition = static_cast<uint8_t>(victim.condition | 0x40);
         victim.hp_max = 0;
         /* 0xFD8C / 0xFE0C: play_sound_seq id 6 on party KO ("goes down" / "is killed"). */
         audio::playSoundSeq(6, gs.soundsEnabled(), gs.walkBeepEnabled());
-        std::snprintf(status_line_, sizeof(status_line_), "%s attacks %s - %s falls!", mon_name,
+        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s - %s falls!", mon_name, verb,
                       victim_name, victim_name);
     }
 }
@@ -5048,12 +5069,14 @@ void CombatSession::finishVictory(GameStateView &gs)
     arena_reward_ = ArenaReward{};
     /* 0x125FC: play_sound_seq id 3 (victory sting). */
     audio::playSoundSeq(3, gs.soundsEnabled(), gs.walkBeepEnabled());
+    round_layout_active_ = false;
     state_ = CombatState::Inactive;
 }
 
 void CombatSession::finishLeave(GameStateView &gs, bool fled)
 {
     gs.setRightPanelMode(saved_panel_mode_); /* 0x131B8 */
+    round_layout_active_ = false;
     outcome_ = fled ? CombatOutcome::Fled : CombatOutcome::Defeated;
     if (!fled && roster_ && launch_) {
         /* combat_defeat_retreat @ 0x11646 (party wipe path via 0x12C66):
@@ -5098,6 +5121,17 @@ int monsterPictureDiskIndex(const Mm2MonstersFile *monsters, uint8_t type)
 
 }  // namespace
 
+int CombatSession::leaderSpriteDiskIndex() const
+{
+    for (int i = 0; i < MM2_GS_MONSTER_BATTLE_SLOTS; ++i) {
+        if (!slots_[i].alive) {
+            continue;
+        }
+        return monsterPictureDiskIndex(monsters_, slots_[i].type);
+    }
+    return -1;
+}
+
 gfx::CombatPanelView CombatSession::panelView() const
 {
     gfx::CombatPanelView view{};
@@ -5117,11 +5151,8 @@ gfx::CombatPanelView CombatSession::panelView() const
     view.show_party_pick = state_ == CombatState::AwaitingPartyPick;
     view.show_item_pick = state_ == CombatState::AwaitingItemPick;
     view.cast_level = cast_level_;
-    view.label_monster_slots =
-        active() && state_ != CombatState::AwaitingPartyOptions &&
-        state_ != CombatState::AwaitingBribeKind && state_ != CombatState::AwaitingBribeAmount &&
-        state_ != CombatState::AwaitingSurpriseDismiss && state_ != CombatState::AwaitingPartyPick &&
-        state_ != CombatState::AwaitingItemPick;
+    /* Sticky after 0x12A22 — not derived from ephemeral picker states. */
+    view.label_monster_slots = round_layout_active_;
     if (view.show_command_options && active_party_slot_ >= 0) {
         const int idx = rosterIndexForPartySlot(active_party_slot_);
         if (idx >= 0) {
@@ -5137,28 +5168,38 @@ gfx::CombatPanelView CombatSession::panelView() const
         }
     }
 
-    int listed = 0;
-    for (int i = 0; i < MM2_GS_MONSTER_BATTLE_SLOTS && listed < 10; ++i) {
-        if (!slots_[i].alive) {
-            continue;
+    if (view.label_monster_slots) {
+        /* 0x129CC: fixed rows slot+3 for battle slots 0..9; dead → clear. */
+        view.monster_line_count = 10;
+        for (int i = 0; i < 10; ++i) {
+            gfx::CombatMonsterLine &line = view.monster_lines[i];
+            line.letter = static_cast<char>('A' + i);
+            if (!slots_[i].alive) {
+                continue;
+            }
+            line.occupied = true;
+            /* 0x12742: check when battle slot index < A4-$524 melee-range count. */
+            line.show_checkmark = i < melee_range_count_;
+            line.highlighted = (active_monster_slot_ >= 0 && i == active_monster_slot_);
+            if (slots_[i].hp > 0 && slots_[i].hp < slots_[i].max_hp) {
+                std::snprintf(line.status_suffix, sizeof(line.status_suffix), "Hurt");
+            }
+            mm2_monster_name_to_cstr(&monsters_->records[slots_[i].type], line.name, sizeof(line.name));
         }
-        gfx::CombatMonsterLine &line = view.monster_lines[listed];
-        if (view.label_monster_slots) {
-            line.letter = static_cast<char>('A' + listed);
+    } else {
+        /* Pre-combat name box @ 0x12D80: compact live names (no A–J). */
+        int listed = 0;
+        for (int i = 0; i < MM2_GS_MONSTER_BATTLE_SLOTS && listed < 10; ++i) {
+            if (!slots_[i].alive) {
+                continue;
+            }
+            gfx::CombatMonsterLine &line = view.monster_lines[listed];
+            line.occupied = true;
+            mm2_monster_name_to_cstr(&monsters_->records[slots_[i].type], line.name, sizeof(line.name));
+            ++listed;
         }
-        /* 0x12742: check glyph when the display slot is inside the melee-range
-         * count A4-$524 (rolled per fight by 0x11D0C) — not an acted flag. */
-        line.show_checkmark = view.label_monster_slots && listed < melee_range_count_;
-        /* 0x1061E: pen-1 redraw of the acting monster line via 0x1265E(slot). */
-        line.highlighted = (active_monster_slot_ >= 0 && i == active_monster_slot_);
-        if (slots_[i].hp > 0 && slots_[i].hp < slots_[i].max_hp) {
-            /* -$519 bit0 → abbrev table A4-$6FBC entry 7 "Hurt" (0x127FE). */
-            std::snprintf(line.status_suffix, sizeof(line.status_suffix), "Hurt");
-        }
-        mm2_monster_name_to_cstr(&monsters_->records[slots_[i].type], line.name, sizeof(line.name));
-        ++listed;
+        view.monster_line_count = listed;
     }
-    view.monster_line_count = listed;
     view.highlight_slot = active_monster_slot_;
 
     const int live_total = encounter_live_total_ > alive_total ? encounter_live_total_ : alive_total;

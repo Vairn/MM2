@@ -114,15 +114,25 @@ Exporter: `--tempo-scale 1` = Delay@50Hz. Default **`1.2` (`60/50`)** — face-v
 |-------|------|
 | API | `game/include/mm2/platform/Audio.h` |
 | Desktop | `game/src/platform/sdl/AudioSDL.cpp` — SDL mixer, 22050 Hz mono S16 |
-| Amiga / tests | `game/src/platform/AudioStub.cpp` — no-op (Paula TBD) |
-| Assets | `EXTRACTED/audio/*.wav` (copied beside binary or found via `data_dir`) |
+| Amiga | `game/src/platform/amiga/AudioAmiga.cpp` + `mm2_amiga_audio.c` — generative Paula (ACE `custom.aud[]`) |
+| Tables | `EXTRACTED/decomp/mm2_amiga_sfx_tables.h` (from `tools/embed_mm2_amiga_sfx_tables.py`) |
+| Tests | `game/src/platform/AudioStub.cpp` — no-op |
+| Desktop assets | `EXTRACTED/audio/*.wav` (copied beside binary) |
 
 ```text
-init(data_dir)          load 00..09 + title_theme.wav
+init(data_dir)          Amiga: wave_synth_init; Desktop: load WAVs
 playSoundSeq(id, sounds, walk)   // mirrors 0x6FB8 gates
-playTitleTheme(loop)    // overlay title stream
+playTitleTheme(loop)    // start title stream
+pumpTitleTheme()        // Amiga: one note (attractTick); Desktop: no-op
 stopTitleTheme / stopAll
 ```
+
+**Wave fill:** ASM `0x75E2` writes `-$1(a5)` after `clr.w` (always 0). Remake uses
+sawtooth `buf[i]=(UBYTE)i` (intended low-byte of the loop index). Confirm with UAE
+dump of retail post-init buffer if pitch/timbre is wrong.
+
+**UAE checklist:** walk beep (id0), combat oh-noes (id2), victory (id3), title on
+attract, Sounds/Walk Beep off → silence.
 
 Call sites in the remake:
 

@@ -301,6 +301,15 @@ const MAGE_GUILD_INTRO = [
   "Sorcerers sort phials of sands on\nthe shelves.  A man barks, \"Spells\n(y/n)?\"",
 ];
 
+/** Training hall greets @ 0x1FDA8 (A4-$65DE), 4 lines/town then OP_0A y/n. */
+const TRAINING_INTRO = [
+  "A page rolls rusty armor in a barrel\nof sand in order to clean it as burly\nsquires practice fighting with wooden\nsticks.  Care to train (y/n)?",
+  "Banners flutter loudly in the damp sea\nair while knights and gladiators test\ntheir fighting skills.  A muscular man\noffers training.  Join (y/n)?",
+  "The sound of clashing swords\npermeates the chilly air.  A burly\nwarrior asks if you would care to\nenlist for training (y/n?",
+  "Covered in sweat from the heat and a\ntough workout, Phrand, the master\ntrainer approaches and asks, \"Do you\ndesire some rigorous training (y/n?\"",
+  "As youths struggle and train in the\ndistance, a man garbed in a loose\nrobe tied with a swordbelt fluidly\nwalks to you.  \"Care to train (y/n?\"",
+];
+
 /** exe-only innkeeper greets @ 0x19D00..0x1A200 (doc 29), map-index ordered. */
 const INN_INTRO = [
   "A jolly old innkeeper waves his quill\nin the air as he asks, \"Will you sign\n the registry (y/n)?\"",
@@ -596,7 +605,13 @@ async function runTownService(ctx, sel, title, sprite) {
     return;
   }
   if (sel === 0x02) {
-    /* Bound Training menu @ EventTownServices — no showServiceTitle when UI runs. */
+    /* 0x20988: A4-$65DE greet lines + OP_0A y/n; Yes → trainee prompt. */
+    const slot = Math.max(0, Math.min(4, screenId | 0));
+    const yes = await promptYesNo(TRAINING_INTRO[slot], sprite, 0x0e);
+    if (!yes) {
+      ctx.note("Training declined");
+      return;
+    }
     await runTrainingService(ctx);
     return;
   }

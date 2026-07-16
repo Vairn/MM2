@@ -25,7 +25,8 @@ if(AMIGA)
   add_compile_definitions(MM2_HOST_AMIGA MM2_FORCE_AMIGA)
   set(MM2_PLATFORM_SOURCES
     src/platform/amiga/PlatformAmiga.cpp
-    src/platform/AudioStub.cpp
+    src/platform/amiga/AudioAmiga.cpp
+    src/platform/amiga/mm2_amiga_audio.c
   )
   set(MM2_MAIN_SOURCE src/main_amiga.cpp)
 
@@ -127,6 +128,9 @@ set(MM2_AUTOMAP_SOURCES
 if(NOT AMIGA)
   add_executable(image32_golden tests/image32_golden.c)
   target_link_libraries(image32_golden PRIVATE mm2_codecs mm2_audio_stub)
+
+  add_executable(roster_tail_test tests/roster_tail_test.c)
+  target_link_libraries(roster_tail_test PRIVATE mm2_codecs mm2_audio_stub)
 
   add_executable(pc_gfx_rgba_dump tests/pc_gfx_rgba_dump.c)
   target_link_libraries(pc_gfx_rgba_dump PRIVATE mm2_codecs mm2_audio_stub)

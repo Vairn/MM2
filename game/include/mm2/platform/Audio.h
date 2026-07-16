@@ -21,4 +21,10 @@ void playTitleTheme(bool loop = true);
 void stopTitleTheme();
 void stopAll();
 
+/**
+ * Amiga: advance one title-theme note (blocking Delay ticks; ASM 0x283FC).
+ * Desktop SDL: no-op (async mixer already plays the theme).
+ */
+void pumpTitleTheme();
+
 }  // namespace mm2::audio

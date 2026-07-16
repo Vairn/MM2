@@ -74,12 +74,14 @@ struct TownSvcTrainResult {
     bool eligible = false;
     bool paid = false;
     bool leveled = false;
+    bool gained_spells = false; /* $20064 returned 1 — UI "and new spells" */
     uint32_t cost = 0;
     uint32_t required_xp = 0;
     uint8_t old_level = 0;
     uint8_t new_level = 0;
     uint16_t hp_gain = 0;
     uint16_t sp_gain = 0;
+    uint8_t old_spell_level = 0;
     uint8_t spell_level = 0;
 };
 

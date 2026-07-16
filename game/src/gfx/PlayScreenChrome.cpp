@@ -6,6 +6,8 @@
 #include "mm2/gfx/PartyStatusFormat.h"
 #include "mm2/gfx/mm2_font8x8.h"
 
+#include "mm2_roster_codec.h"
+
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
 #endif
@@ -32,7 +34,12 @@ void fillCellRect(ScreenCompositor &c, int col, int row, int width_cells, int he
     if (width_cells <= 0 || height_cells <= 0) {
         return;
     }
+#if MM2_HOST_AMIGA
+    /* Pen 0 = black bitplane clear (0x42DC). Avoid RGB→pen lookup on every cell wipe. */
+    c.fillRectPen(col * 8, row * 8, width_cells * 8, height_cells * 8, 0);
+#else
     c.fillRect(col * 8, row * 8, width_cells * 8, height_cells * 8, 0, 0, 0);
+#endif
 }
 
 namespace {
@@ -244,12 +251,12 @@ void drawPlayStatusBar(ScreenCompositor &c, int day, int year, char facing_key, 
     char buf[16];
     /* col 13: "Day=" + day[era] (-$79DE), width 3 (0x630C..0x6332). */
     textAt(c, 0x0D, row, "Day=");
-    std::snprintf(buf, sizeof(buf), "%d", day);
+    std::snprintf(buf, sizeof(buf), "%-3d", day);
     textAt(c, 0x0D + 4, row, buf);
 
     /* col 22: "Year=" + year[era] (-$79CA), width 4 (0x634C..0x6372). */
     textAt(c, 0x16, row, "Year=");
-    std::snprintf(buf, sizeof(buf), "%d", year);
+    std::snprintf(buf, sizeof(buf), "%-4d", year);
     textAt(c, 0x16 + 5, row, buf);
 
     /* col 32: "Face=" + movement key char -$79B1 (0x6382..0x6398). */
@@ -284,27 +291,40 @@ void drawPlayPartyPanel(ScreenCompositor &c, const PlayPartySlot slots[8])
         char line[48];
         formatPartyStatusLine(line, sizeof(line), i, s.name, static_cast<uint16_t>(s.hp), prefix_style);
 
-        constexpr int kPrefixLen = 4; /* " N) " @ 0x6150 */
+        /* 0x6150: " n) " (4) + name (variable, until NUL) + " /" + HP.
+         * Split so condition attribute colours only the name (0x6204..0x623A). */
+        constexpr int kPrefixLen = 4;
+        const char *name_start = line + kPrefixLen;
+        const char *slash = std::strstr(name_start, " /");
         char prefix[kPrefixLen + 1];
-        char name_field[kPartyNameFieldWidth + 1];
+        char name_field[MM2_ROSTER_NAME_SIZE + 1];
         char tail[16];
         std::memcpy(prefix, line, kPrefixLen);
         prefix[kPrefixLen] = '\0';
-        std::memcpy(name_field, line + kPrefixLen, kPartyNameFieldWidth);
-        name_field[kPartyNameFieldWidth] = '\0';
-        std::snprintf(tail, sizeof(tail), "%s", line + kPrefixLen + kPartyNameFieldWidth);
+        if (slash) {
+            const size_t name_len = static_cast<size_t>(slash - name_start);
+            const size_t copy_n =
+                name_len < sizeof(name_field) - 1 ? name_len : sizeof(name_field) - 1;
+            std::memcpy(name_field, name_start, copy_n);
+            name_field[copy_n] = '\0';
+            std::snprintf(tail, sizeof(tail), "%s", slash);
+        } else {
+            name_field[0] = '\0';
+            std::snprintf(tail, sizeof(tail), "%s", name_start);
+        }
 
         textAt(c, col, row, prefix);
 
         /* Text attribute 1 (-$7C08 @ 0x623A) when condition byte +$26 != 0.
          * GAP: exact palette untraced (0x220BE); rendered as red text. */
+        const int name_col = col + kPrefixLen;
         if (s.bad_condition) {
-            textAt(c, col + kPrefixLen, row, name_field, 255, 80, 80);
+            textAt(c, name_col, row, name_field, 255, 80, 80);
         } else {
-            textAt(c, col + kPrefixLen, row, name_field);
+            textAt(c, name_col, row, name_field);
         }
 
-        textAt(c, col + kPrefixLen + kPartyNameFieldWidth, row, tail);
+        textAt(c, name_col + static_cast<int>(std::strlen(name_field)), row, tail);
     }
 }
 
@@ -313,6 +333,7 @@ void drawPlayRightColumn(ScreenCompositor &c, PlayRightPanel panel, const PlayPr
     if (panel == PlayRightPanel::Protect) {
         /* Protection panel @ 0x5E28 (via -$7EAE): clear (28,1)-(38,15),
          * h-line row 9 cols 27..39, labels col 28 rows 10..12. */
+        fillCellRect(c, 0x1C, 1, 11, 15);
         hLine(c, 0x1B, 0x27, 0x09);
         textAt(c, 0x1C, 0x0A, "Light     )");
         textAt(c, 0x1C, 0x0B, "Magic     %");
@@ -343,10 +364,8 @@ void drawPlayRightColumn(ScreenCompositor &c, PlayRightPanel panel, const PlayPr
         return;
     }
 
-    /* Command reference @ 0x5D54: strings from the pointer table at
-     * A4-$741A printed at col 0x1C rows 1..15 (0x5DBA..0x5DF0). Control
-     * chars 0x18/0x19/0x1A/0x1B are the font arrow glyphs and 0x05 the
-     * horizontal-rule glyph. */
+    /* Command reference @ 0x5D54: clear right column then print A4-$741A strings. */
+    fillCellRect(c, 0x1C, 1, 11, 15);
     static const char *kCommandRef[15] = {
         "  OPTIONS  ",
         "\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05",

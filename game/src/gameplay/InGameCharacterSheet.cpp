@@ -186,6 +186,7 @@ void blitBookFramePc(gfx::ScreenCompositor &c, const mm2_gfx_sheet &book, int fr
         return;
     }
 #if MM2_HOST_AMIGA
+    (void)c;
     if (!f->bitmap) {
         return;
     }

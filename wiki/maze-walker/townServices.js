@@ -7,11 +7,9 @@ import {
   townCommerce,
   trainingCost,
   classXpForLevel,
-  attrBonus,
   trainHpGain,
   tipDayPairBase,
-  classCasterStat,
-  classSpellLevelFor,
+  trainSpellOnLevelUp,
   smithInventory,
   smithBuyFields,
   smithPrice,
@@ -181,6 +179,7 @@ export function svcTrainLevelUp(member, mapId) {
     eligible: false,
     paid: false,
     leveled: false,
+    gainedSpells: false,
     cost: 0,
     requiredXp: 0,
     oldLevel: member.level,
@@ -206,6 +205,8 @@ export function svcTrainLevelUp(member, mapId) {
   }
   r.paid = true;
   member.level = next;
+  /* 0x20338: sync +$20 level mirror with +$71. */
+  if (member.unknown1a20) member.unknown1a20[6] = next;
   /* HP @ 0x20390: ($64DA[class]*$64EE[map])/$64E4[map] + -$7F56(+$27). */
   const endCur = member.enduranceCurrent ?? member.endurance ?? 0;
   let hpGain = trainHpGain(member.classId, mapId, endCur);
@@ -214,16 +215,16 @@ export function svcTrainLevelUp(member, mapId) {
   member.hpCurrent = (member.hpCurrent | 0) + hpGain;
   member.hpMax = (member.hpMax | 0) + hpGain;
   r.hpGain = hpGain;
-  const caster = classCasterStat(member.classId);
-  if (caster) {
-    const statVal = caster === 1 ? member.intelligence : member.personality;
-    const spGain = attrBonus(statVal) + 3;
-    member.spMax += spGain;
-    member.spCurrent = member.spMax;
-    r.spGain = spGain;
+
+  /* Spell leaf @ 0x20064 — only when class is caster and spell level rises. */
+  const cls = member.classId | 0;
+  if (cls >= 1 && cls <= 4) {
+    const spBefore = member.spMax | 0;
+    const gained = trainSpellOnLevelUp(member);
+    r.gainedSpells = !!gained;
+    if ((member.spMax | 0) > spBefore) r.spGain = (member.spMax | 0) - spBefore;
+    else if (gained) r.spGain = member.spMax | 0;
   }
-  const newSl = classSpellLevelFor(member.classId, next);
-  if (newSl > member.spellLevel) member.spellLevel = newSl;
   r.spellLevel = member.spellLevel;
   r.leveled = true;
   return r;
@@ -586,7 +587,9 @@ export async function runTrainingService(ctx) {
       status = `${m.name}: not enough gold (${fee} gp).`;
       note(`Training: ${m.name} insufficient gold`);
     } else {
-      status = `${m.name} trained to level ${tr.newLevel}! (+${tr.hpGain} HP) ${tr.cost} gp.`;
+      status = tr.gainedSpells
+        ? `You gained ${tr.hpGain} hit points and new spells.`
+        : `You gained ${tr.hpGain} hit points.`;
       note(`Training ${m.name} level-up −${tr.cost} gp`);
     }
     afterTxn(ctx);

@@ -108,6 +108,75 @@ export function classSpellLevelFor(classId, charLevel) {
   return 0;
 }
 
+/** A4-$64C2 sorcerer/archer auto-spells (0x80 = pad). */
+const TRAIN_AUTO_SORC = [
+  [0x01, 0x03, 0x04, 0x05],
+  [0x08, 0x0a, 0x0b, 0x80],
+  [0x0f, 0x10, 0x12, 0x80],
+  [0x17, 0x18, 0x19, 0x80],
+  [0x1d, 0x1e, 0x80, 0x80],
+  [0x20, 0x22, 0x80, 0x80],
+  [0x26, 0x27, 0x80, 0x80],
+  [0x28, 0x2b, 0x80, 0x80],
+  [0x32, 0x33, 0x34, 0x36],
+  [0x37, 0x3a, 0x3c, 0x80],
+];
+
+/** A4-$64A2 cleric/paladin auto-spells (flat+0x30 encoding). */
+const TRAIN_AUTO_CLERIC = [
+  [0x32, 0x33, 0x34, 0x36],
+  [0x37, 0x3a, 0x3c, 0x80],
+  [0x3f, 0x40, 0x41, 0x80],
+  [0x44, 0x46, 0x48, 0x80],
+  [0x4b, 0x4d, 0x80, 0x80],
+  [0x50, 0x51, 0x80, 0x80],
+  [0x56, 0x57, 0x80, 0x80],
+  [0x5b, 0x80, 0x80, 0x80],
+  [0x00, 0x02, 0x0d, 0xc0],
+  [0x00, 0x02, 0x0d, 0xd2],
+];
+
+/** Training Hall spell leaf @ 0x20064. Returns true if spell level increased. */
+export function trainSpellOnLevelUp(member) {
+  let level = member.level | 0;
+  const oldSl = member.spellLevel | 0;
+  const classId = member.classId | 0;
+  if (classId !== 3 && classId !== 4) level -= 6;
+  level += 1;
+  if (level > 0) level >>= 1;
+  if (level < 1 || level > 10) return false;
+  let newSl = level;
+  if (newSl <= oldSl) return false;
+  if ((classId === 1 || classId === 2) && newSl > 7) newSl = 7;
+  if (newSl <= oldSl) return false;
+
+  member.spellLevel = newSl;
+  const table = classId === 3 || classId === 1 ? TRAIN_AUTO_CLERIC : TRAIN_AUTO_SORC;
+  const row = table[newSl - 1] || [];
+  if (!member.spells || member.spells.length < 12) {
+    member.spells = new Array(12).fill(0);
+  }
+  for (let i = 0; i < 4; i++) {
+    let raw = row[i] | 0;
+    if (raw === 0x80) continue;
+    if (raw > 0x2f) raw -= 0x30;
+    if (raw < 0 || raw >= 48) continue;
+    const byteIndex = 5 + (raw >> 3);
+    member.spells[byteIndex] |= 1 << (raw & 7);
+  }
+
+  const attr =
+    classId === 2 || classId === 4
+      ? member.intelligenceCurrent ?? member.intelligence ?? 0
+      : member.personalityCurrent ?? member.personality ?? 0;
+  let bonus = restSpellBonusFactor(attr | 0);
+  if (bonus >= 0xf2) bonus = 0;
+  const sp = (bonus + 3) * newSl;
+  member.spMax = sp;
+  member.spCurrent = sp;
+  return true;
+}
+
 export function trainingCost(level, townIndex) {
   return Math.max(0, level) * Math.max(0, townIndex) * 50;
 }

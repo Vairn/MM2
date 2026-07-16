@@ -41,11 +41,31 @@ void textAt(ScreenCompositor &c, int col, int row, const char *text, uint8_t r =
         return;
     }
 #if MM2_HOST_AMIGA
-    /* drawTextPen skips codepoints < 32; combat check glyph 0x17 needs drawGlyphPen. */
+    /* drawTextPen skips codepoints < 32; combat check glyph 0x17 needs drawGlyphPen.
+     * Roster lines are usually 0x17 + ASCII — stamp the check, then batch the rest. */
     const uint8_t pen = (r >= 200 && g >= 200 && b <= 80) ? kPenYellow : kPenWhite;
     int x = col * 8;
     const int y = row * 8;
-    for (const char *p = text; *p; ++p) {
+    const char *p = text;
+    if (static_cast<unsigned char>(*p) == static_cast<unsigned char>(kCheckGlyph)) {
+        c.drawGlyphPen(x, y, static_cast<uint8_t>(kCheckGlyph), pen);
+        x += 8;
+        ++p;
+    }
+    bool has_ctrl = false;
+    for (const char *q = p; *q; ++q) {
+        if (static_cast<unsigned char>(*q) < 32u) {
+            has_ctrl = true;
+            break;
+        }
+    }
+    if (!has_ctrl) {
+        if (*p) {
+            c.drawTextPen(x, y, p, pen);
+        }
+        return;
+    }
+    for (; *p; ++p) {
         const unsigned uch = static_cast<unsigned char>(*p);
         if (uch >= MM2_FONT8X8_GLYPHS) {
             continue;
@@ -131,6 +151,10 @@ void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view)
     for (int i = 0; i < view.monster_line_count && i < 10; ++i) {
         const CombatMonsterLine &line = view.monster_lines[i];
         const int row = kCombatMonsterRow0 + i;
+        if (!line.occupied) {
+            /* 0x129CC: empty/dead battle slot → clear row (fill above already did). */
+            continue;
+        }
 
         char buf[48];
         char field[24];
@@ -195,17 +219,19 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
         return;
     }
 
-    /* Combat cast @ 0x11A90 → 0x79EE: prompts on message band only (no LAB_6622 grid).
-       Combat mode uses prompt row $0F (0x7A04); exploration uses $15. */
+    /* Combat cast @ 0x11A90 → 0x79C6/0x79EE: message band only (no LAB_6622).
+     * Combat row $0F (0x79DC); exploration row $15.
+     * Level line @ (2,$0F) string 0x7BA2 "Cast Spell Level: "; digit echoed;
+     * Number @ (0x0C, row+1) string 0x7BB5 — must not share the level row. */
     if (view.show_cast_level) {
-        textAt(c, 2, kMessageRow, " Spell Level: ");
+        textAt(c, 2, kMessageRow, "Cast Spell Level: ");
         return;
     }
     if (view.show_cast_number) {
         char buf[32];
-        std::snprintf(buf, sizeof(buf), " Spell Level: %d", view.cast_level);
+        std::snprintf(buf, sizeof(buf), "Cast Spell Level: %d", view.cast_level);
         textAt(c, 2, kMessageRow, buf);
-        textAt(c, 0x0C, kMessageRow, "Number: ");
+        textAt(c, 0x0C, kMessageRow + 1, "Number: ");
         return;
     }
     if (view.show_cast_target) {

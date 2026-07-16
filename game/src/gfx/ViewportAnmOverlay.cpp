@@ -22,10 +22,9 @@
 #else
 #include <cstdlib>
 #include <cstring>
-#endif
-
 #include <chrono>
 #include <cstdio>
+#endif
 
 namespace mm2::gfx {
 
@@ -38,6 +37,12 @@ constexpr int kFlipbookDelayTicks = 5;
 // #region agent log
 inline void agentDbgLog(const char *hyp, const char *loc, const char *msg, const char *data_json)
 {
+#if MM2_HOST_AMIGA
+    (void)hyp;
+    (void)loc;
+    (void)msg;
+    (void)data_json;
+#else
     FILE *f = std::fopen("C:/_20260421_/D-REC/development/MM2/debug-5e7785.log", "a");
     if (!f) {
         return;
@@ -50,6 +55,7 @@ inline void agentDbgLog(const char *hyp, const char *loc, const char *msg, const
                  "\"data\":%s,\"timestamp\":%lld}\n",
                  hyp, loc, msg, data_json ? data_json : "{}", static_cast<long long>(ms));
     std::fclose(f);
+#endif
 }
 // #endregion
 

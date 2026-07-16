@@ -155,6 +155,11 @@ public:
 private:
     void refreshPlayWindowTitle();
 
+    /** Seed pending_launch_ + town filter from the roster.dat global tail
+     *  (party words saved by save_game_state @ 0x823C) when no in-memory
+     *  selection exists yet — restores the saved party across relaunch. */
+    void restoreSavedPartyFromRosterTail();
+
     AppHost() = default;
 
     static AppHost *s_instance_;

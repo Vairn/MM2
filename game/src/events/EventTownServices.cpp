@@ -126,6 +126,38 @@ const char *mageGuildIntro(int location_id)
     return kIntro[0];
 }
 
+/* Training-hall greets @ 0x1FDA8.. (A4-$65DE pointer table, 4 lines/town).
+ * Printed at rows 19..22 then OP_0A y/n (@ -$7D46 → 0x15D9A) before the menu. */
+const char *trainingIntro(int location_id)
+{
+    static const char *kIntro[5] = {
+        "A page rolls rusty armor in a barrel\n"
+        "of sand in order to clean it as burly\n"
+        "squires practice fighting with wooden\n"
+        "sticks.  Care to train (y/n)?",
+        "Banners flutter loudly in the damp sea\n"
+        "air while knights and gladiators test\n"
+        "their fighting skills.  A muscular man\n"
+        "offers training.  Join (y/n)?",
+        "The sound of clashing swords\n"
+        "permeates the chilly air.  A burly\n"
+        "warrior asks if you would care to\n"
+        "enlist for training (y/n?",
+        "Covered in sweat from the heat and a\n"
+        "tough workout, Phrand, the master\n"
+        "trainer approaches and asks, \"Do you\n"
+        "desire some rigorous training (y/n?\"",
+        "As youths struggle and train in the\n"
+        "distance, a man garbed in a loose\n"
+        "robe tied with a swordbelt fluidly\n"
+        "walks to you.  \"Care to train (y/n?\"",
+    };
+    if (location_id >= 0 && location_id < 5) {
+        return kIntro[location_id];
+    }
+    return kIntro[0];
+}
+
 /* str.dat blacksmith intros (lines 255–273), map-index ordered (doc 28 §3.2:
  * Drewnhald = idx1 Atlantium). */
 const char *blacksmithIntro(int location_id)
@@ -302,6 +334,8 @@ bool eventTownServiceRunBoundMenu(EventRuntime &rt, GameStateView &gs,
         return runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::Temple);
     case EventRuntime::PendingTownMenu::Smith:
         return runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::Smith);
+    case EventRuntime::PendingTownMenu::Training:
+        return runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::Training);
     default:
         return false;
     }
@@ -326,18 +360,15 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Inn);
         break;
     case 0x02:
-        /* Training Hall — handler @ 0x160C2 case 2 (doc 28 §9). The hall LEVELS the
-         * chosen character UP from experience (record+0x62) when they meet the next
-         * level's XP threshold on their class curve (TWO curves: Group A/B, doc 32)
-         * and can pay the fee (level×index×50). It does NOT raise a stat — the prior
-         * port's stat-add (0x1C898) was the wrong handler/semantics. When a UI
-         * backend is bound, the faithful XP→level-up menu runs (TownServiceMenu →
-         * townSvcTrainLevelUp). HP gain = leaf 0x20390 ($64DA/$64EE/$64E4 +
-         * -$7F56(+$27)); 0x9BCA is bash door, not training. */
-        if (runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::Training)) {
-            break;
+        /* Training Hall — -$7CD4 → 0x20988 (doc 28 §9). Entry paints 4 greet
+         * lines from A4-$65DE then OP_0A y/n (@ -$7D46); Yes gates on A4-$7951
+         * into the trainee prompt (XP level-up, fee level×index×50). Not the
+         * 0x1C898 stat shrine. */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 6); /* ori.b #$6 @ 0x2099C */
+        showServiceIntro(gs, text, wait, trainingIntro(location_id));
+        if (canRunBoundMenu(rt, roster, launch, items, MenuKind::Training)) {
+            rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Training);
         }
-        showServiceTitle(text, wait, title);
         break;
     case 0x03:
         /* Pub @ 0x1D208 / jump 0x1D650: A frenzy 0x1CA2E, B stat-boost 0x1CAC4

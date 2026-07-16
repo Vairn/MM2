@@ -412,6 +412,16 @@ bool EventRuntime::finishPendingTownMenu(GameStateView &gs, bool accepted)
     pending_town_menu_ = PendingTownMenu::None;
 
     if (!accepted) {
+        /* Inn/smith/tavern/training No @ 0x1A1F0 / 0x1C7D6 / 0x1D684 / 0x20C2A:
+         * jsr -$7D40 ($171AC). */
+        bool redraw_status = false;
+        bool redraw_roster = false;
+        bool redraw_divider = false;
+        text_.applyScriptExitCleanup(&redraw_status, &redraw_roster, &redraw_divider);
+        (void)redraw_status;
+        (void)redraw_roster;
+        (void)redraw_divider;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 0);
         return false;
     }
 
@@ -1478,6 +1488,15 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
          * the consumed YesNo wait. */
         if (wait_ == EventVmWait::YesNo) {
             wait_ = EventVmWait::None;
+        }
+        /* OP_0E sets SCRIPT_ABORT at entry. Bare abort skips $171AC (0x17540), but
+         * inn/smith/tavern No leaves call -$7D40 themselves — endScript matches that
+         * so console OP_02 + OP_0B do not stick. Yes keeps layers until the shop
+         * menu clears the console (sign stays). */
+        if (ch == 'N' && wait_ == EventVmWait::None &&
+            mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT)) {
+            endScript(gs);
+            return script_active_ || wait_ != EventVmWait::None;
         }
         if (script_active_) {
             runVmLoop(gs, world);

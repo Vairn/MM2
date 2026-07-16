@@ -324,6 +324,56 @@ void testTownServiceTransactions(int &fails)
         expect(rec.hp_current == 12 && rec.hp_max == 17, "level-up adds gain to current/work max", fails);
     }
 
+    /* ---- Training spell leaf @ 0x20064: Sorcerer L1→L2 gains SL1, auto-spells, SP. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 1, 10000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.class_id = 4; /* Sorcerer — XP Group B: L2 needs 2000 */
+        rec.experience = 2500;
+        rec.intelligence_current = 15;
+        rec.spell_level = 0;
+        rec.sp_max = 0;
+        rec.sp_current = 0;
+        const TownSvcTrainResult r = townSvcTrainLevelUp(rec, 0);
+        expect(r.leveled && rec.level == 2, "Sorcerer L1→L2 leveled", fails);
+        expect(r.gained_spells && rec.spell_level == 1, "Sorcerer gains spell level 1 at L2", fails);
+        /* Auto spells SL1: flats 1,3,4,5 → bits in $51/$51. */
+        expect(mm2::gameplay::spellKnownInBook(rec, 1) && mm2::gameplay::spellKnownInBook(rec, 3) &&
+                   mm2::gameplay::spellKnownInBook(rec, 4) && mm2::gameplay::spellKnownInBook(rec, 5),
+               "Sorcerer auto-learns Detect Magic/Flame Arrow/Light/Location", fails);
+        /* -$7F56(15)+3 = 1+3 = 4; SP = 4 * SL1 = 4. */
+        expect(rec.sp_max == 4 && rec.sp_current == 4, "Sorcerer SP = (bonus+3)*spell_level", fails);
+        expect(r.sp_gain == 4, "train result reports SP gain", fails);
+    }
+
+    /* ---- Cleric L2→L3 gains SL2 + "and new spells"; L3→L4 does not. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 2, 10000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.class_id = 3;
+        rec.experience = 4000; /* Group A L3 = 3000 */
+        rec.personality_current = 15;
+        rec.spell_level = 1;
+        rec.unknown_1a_20[6] = 2;
+        rec.unknown_22 = static_cast<uint16_t>(1u << 8);
+        rec.sp_max = 4;
+        rec.sp_current = 4;
+        const TownSvcTrainResult r = townSvcTrainLevelUp(rec, 0);
+        expect(r.gained_spells && rec.spell_level == 2, "Cleric L2→L3 gains SL2", fails);
+        expect(mm2::gameplay::spellKnownInBook(rec, 7) && mm2::gameplay::spellKnownInBook(rec, 10) &&
+                   mm2::gameplay::spellKnownInBook(rec, 12),
+               "Cleric SL2 auto-spells (flats 7/10/12)", fails);
+        expect(rec.sp_max == 8, "Cleric SP recalc to (bonus+3)*2", fails);
+
+        rec.experience = 7000; /* L4 threshold 6000 */
+        const TownSvcTrainResult r2 = townSvcTrainLevelUp(rec, 0);
+        expect(r2.leveled && rec.level == 4, "Cleric L3→L4 leveled", fails);
+        expect(!r2.gained_spells && rec.spell_level == 2, "Cleric L3→L4 no new spell level", fails);
+        expect(rec.sp_max == 8, "Cleric SP unchanged without spell-level gain", fails);
+    }
+
     /* ---- Training XP gate: under threshold -> not eligible AND no charge. ---- */
     {
         Mm2RosterFile roster{};

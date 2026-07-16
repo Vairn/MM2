@@ -18,6 +18,13 @@ using namespace mm2::gfx::play_layout;
 using mm2::ui::amiga_layout::cellX;
 using mm2::ui::amiga_layout::cellY;
 
+/* Bartman m68k: uint32_t is unsigned long; %u wants unsigned int. */
+template <typename T>
+constexpr unsigned u32(T v)
+{
+    return static_cast<unsigned>(v);
+}
+
 /* Town shop chrome @ asm 0x1C494 (left col 2) + option captions @ 0x1C6BE (col 0x10).
  * Clear preset 2: cells (1,17)-(38,22). ESC prompt @ 0x6DA6 row 23 col 11. */
 constexpr int kLeftCol = 0x02;
@@ -40,7 +47,8 @@ void drawCell(gfx::ScreenCompositor &c, int row, int col, const char *text, uint
 
 void drawEscFooter(gfx::ScreenCompositor &c)
 {
-    drawCell(c, kEscPromptRow, kEscPromptCol, "( 'ESC' to go back )", 180, 180, 180);
+    /* prompt_esc @ 0x6DA6 — "( 'ESC' to go back )" at (11,23), pen 1. */
+    drawCell(c, kEscPromptRow, kEscPromptCol, "( 'ESC' to go back )");
 }
 
 /** Inverse-video service title (0x1C494: -$7C08(1) around "Blacksmith"). */
@@ -328,7 +336,7 @@ void PlayTownServiceUi::drawTrainingPrompt(gfx::ScreenCompositor &c) const
         if (fee == 0) {
             drawCell(c, kBandRowFirst + 1, kOptCol, "Cost in gold = free");
         } else {
-            std::snprintf(line, sizeof(line), "Cost in gold = %u", fee);
+            std::snprintf(line, sizeof(line), "Cost in gold = %u", u32(fee));
             drawCell(c, kBandRowFirst + 1, kOptCol, line);
         }
         drawCell(c, kBandRowFirst + 2, kOptCol, "Press 'T' to train");
@@ -424,11 +432,11 @@ void PlayTownServiceUi::applyTempleAndReturn(int party_slot)
         const uint32_t cost = mm2::events::townSvcTempleHealCost(*rec, ctx_.map_id);
         const mm2::events::TownSvcHealResult r = mm2::events::townSvcHeal(*rec, cost);
         if (cost > 0 && !r.paid) {
-            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, cost);
+            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(cost));
         } else if (cost == 0) {
             std::snprintf(status_, sizeof(status_), "%s needs no healing.", name);
         } else {
-            std::snprintf(status_, sizeof(status_), "%s healed for %u gp.", name, r.cost);
+            std::snprintf(status_, sizeof(status_), "%s healed for %u gp.", name, u32(r.cost));
         }
         break;
     }
@@ -437,12 +445,12 @@ void PlayTownServiceUi::applyTempleAndReturn(int party_slot)
         const mm2::events::TownSvcAlignResult r =
             mm2::events::townSvcRestoreAlignment(*rec, cost);
         if (cost > 0 && !r.paid) {
-            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, cost);
+            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(cost));
         } else if (!r.restored && cost == 0) {
             std::snprintf(status_, sizeof(status_), "%s's alignment is already true.", name);
         } else {
             std::snprintf(status_, sizeof(status_), "%s's alignment restored (%u gp).", name,
-                          r.cost);
+                          u32(r.cost));
         }
         break;
     }
@@ -451,19 +459,19 @@ void PlayTownServiceUi::applyTempleAndReturn(int party_slot)
         const mm2::events::TownSvcDonateResult r =
             mm2::events::townSvcTempleDonate(ctx_.a4, *rec, ctx_.map_id, ctx_.rng);
         if (!r.paid) {
-            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, cost);
+            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(cost));
         } else if (r.all_temples_donated && r.blessed) {
             std::snprintf(status_, sizeof(status_),
                           "%s donated %u gp. Fe Farthing queued — Today you are blessed!", name,
-                          r.cost);
+                          u32(r.cost));
         } else if (r.all_temples_donated) {
             std::snprintf(status_, sizeof(status_),
-                          "%s donated %u gp. All temples — Fe Farthing queued!", name, r.cost);
+                          "%s donated %u gp. All temples — Fe Farthing queued!", name, u32(r.cost));
         } else if (r.blessed) {
             std::snprintf(status_, sizeof(status_),
-                          "%s donated %u gp.\nToday you are blessed!", name, r.cost);
+                          "%s donated %u gp.\nToday you are blessed!", name, u32(r.cost));
         } else {
-            std::snprintf(status_, sizeof(status_), "%s donated %u gp.", name, r.cost);
+            std::snprintf(status_, sizeof(status_), "%s donated %u gp.", name, u32(r.cost));
         }
         break;
     }
@@ -480,9 +488,9 @@ void PlayTownServiceUi::applyTempleAndReturn(int party_slot)
             mm2::events::townSvcBuySpell(*rec, slot.spell_index, slot.gold);
         if (r.learned) {
             std::snprintf(status_, sizeof(status_), "%s learned %s for %u gp.", name, spell_name,
-                          r.cost);
+                          u32(r.cost));
         } else if (r.reject == mm2::events::TownSvcSpellReject::NotEnoughGold) {
-            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, slot.gold);
+            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(slot.gold));
         } else if (r.reject == mm2::events::TownSvcSpellReject::Condition) {
             std::snprintf(status_, sizeof(status_), "%s is afflicted - cannot buy.", name);
         } else {
@@ -512,9 +520,9 @@ void PlayTownServiceUi::applyGuildBuyAndReturn(int party_slot)
         mm2::events::townSvcBuySpell(*rec, slot.spell_index, slot.gold);
     if (r.learned) {
         std::snprintf(status_, sizeof(status_), "%s learned %s for %u gp.", name, spell_name,
-                      r.cost);
+                      u32(r.cost));
     } else if (r.reject == mm2::events::TownSvcSpellReject::NotEnoughGold) {
-        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, slot.gold);
+        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(slot.gold));
     } else if (r.reject == mm2::events::TownSvcSpellReject::Condition) {
         std::snprintf(status_, sizeof(status_), "%s is afflicted - cannot buy.", name);
     } else {
@@ -540,10 +548,19 @@ void PlayTownServiceUi::applyTrainingAndReturn(int party_slot)
         std::snprintf(status_, sizeof(status_), "%s lacks experience to advance.", name);
     } else if (!r.paid) {
         const uint32_t fee = mm2::events::townSvcTrainingCost(rec->level, ctx_.map_id);
-        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, fee);
+        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(fee));
     } else {
-        std::snprintf(status_, sizeof(status_), "%s trained to level %u! (+%u HP) %u gp.", name,
-                      static_cast<unsigned>(r.new_level), static_cast<unsigned>(r.hp_gain), r.cost);
+        /* ASM 0x204C8..0x20518: "You gained " + N + " hit points" [, "and new spells"]. */
+        if (r.gained_spells) {
+            std::snprintf(status_, sizeof(status_),
+                          "You gained %u hit points and new spells.",
+                          static_cast<unsigned>(r.hp_gain));
+        } else {
+            std::snprintf(status_, sizeof(status_), "You gained %u hit points.",
+                          static_cast<unsigned>(r.hp_gain));
+        }
+        (void)name;
+        (void)r.cost;
     }
     /* Training has no sub-menu: stay on the trainee prompt. */
     phase_ = Phase::Menu;
@@ -568,7 +585,7 @@ void PlayTownServiceUi::applySmithBuyAndReturn(int party_slot)
     const mm2::events::TownSvcBuyResult r =
         mm2::events::townSvcSmithBuy(*rec, v.item_id, v.charges, v.bonus, v.price);
     if (r.bought) {
-        std::snprintf(status_, sizeof(status_), "%s bought %s for %u gp.", name, item, r.price);
+        std::snprintf(status_, sizeof(status_), "%s bought %s for %u gp.", name, item, u32(r.price));
     } else {
         switch (r.reject) {
         case mm2::events::TownSvcBuyReject::Condition:
@@ -579,7 +596,7 @@ void PlayTownServiceUi::applySmithBuyAndReturn(int party_slot)
             break;
         case mm2::events::TownSvcBuyReject::NotEnoughGold:
             std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name,
-                          mm2::events::townSvcSmithMerchantBuyPrice(v.price, *rec));
+                          u32(mm2::events::townSvcSmithMerchantBuyPrice(v.price, *rec)));
             break;
         default:
             std::snprintf(status_, sizeof(status_), "%s could not buy %s.", name, item);
@@ -609,7 +626,7 @@ void PlayTownServiceUi::applySmithSellAndReturn(int party_slot)
     const mm2::events::TownSvcSellResult r =
         mm2::events::townSvcSmithSell(*rec, smith_slot_, v.price);
     if (r.sold) {
-        std::snprintf(status_, sizeof(status_), "%s sold %s for %u gp.", name, item, r.price);
+        std::snprintf(status_, sizeof(status_), "%s sold %s for %u gp.", name, item, u32(r.price));
         buildSmithBackpackView();
     } else {
         switch (r.reject) {
@@ -641,7 +658,7 @@ void PlayTownServiceUi::applySmithIdentifyAndReturn(int party_slot)
     const mm2::events::TownSvcIdentifyResult r = mm2::events::townSvcSmithIdentify(
         *rec, smith_slot_, ctx_.items, v.price, summary, sizeof(summary));
     if (r.identified) {
-        std::snprintf(status_, sizeof(status_), "%s: %s (%u gp).", name, summary, r.cost);
+        std::snprintf(status_, sizeof(status_), "%s: %s (%u gp).", name, summary, u32(r.cost));
         smith_identify_pending_ = true; /* 0x1BBD6: hold on backpack list until dismissed */
     } else {
         switch (r.reject) {
@@ -652,7 +669,7 @@ void PlayTownServiceUi::applySmithIdentifyAndReturn(int party_slot)
             std::snprintf(status_, sizeof(status_), "No item in that slot.");
             break;
         case mm2::events::TownSvcIdentifyReject::NotEnoughGold:
-            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, v.price);
+            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(v.price));
             break;
         default:
             std::snprintf(status_, sizeof(status_), "%s could not identify item.", name);
@@ -675,9 +692,9 @@ void PlayTownServiceUi::applyTavernFeedingFrenzy()
         mm2::events::townSvcFeedingFrenzy(*rec, ctx_.launch, ctx_.roster, ctx_.map_id);
     if (r.fed) {
         std::snprintf(status_, sizeof(status_), "%s: party fed to 40 food (%u gp).", name,
-                      r.cost);
+                      u32(r.cost));
     } else {
-        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, r.cost);
+        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(r.cost));
     }
     phase_ = Phase::Menu;
 }
@@ -695,16 +712,16 @@ void PlayTownServiceUi::applyTavernStatBoost(int slot)
     const char *label = tavern_data_.boosts[slot].label;
     if (!r.paid) {
         std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name,
-                      tavern_data_.boosts[slot].cost);
+                      u32(tavern_data_.boosts[slot].cost));
     } else if (r.sick) {
         std::snprintf(status_, sizeof(status_), "%s bought %s — you feel sick!", name,
                       label ? label : "boost");
     } else if (!r.applied) {
-        std::snprintf(status_, sizeof(status_), "%s paid %u gp for %s (building up).", name, r.cost,
+        std::snprintf(status_, sizeof(status_), "%s paid %u gp for %s (building up).", name, u32(r.cost),
                       label ? label : "boost");
     } else {
         std::snprintf(status_, sizeof(status_), "%s bought %s (%u gp).", name,
-                      label ? label : "boost", r.cost);
+                      label ? label : "boost", u32(r.cost));
     }
     phase_ = Phase::Menu;
 }
@@ -790,13 +807,13 @@ void PlayTownServiceUi::applyTavernSpecialty(int food_idx)
         mm2::events::townSvcTavernSpecialty(ctx_.a4, *rec, ctx_.map_id, food_idx, ctx_.rng);
     const char *food = tavern_data_.food.options[food_idx];
     if (!r.paid) {
-        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, r.cost);
+        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(r.cost));
     } else if (r.sick) {
         std::snprintf(status_, sizeof(status_), "%s: %s — you feel sick!", name,
                       food ? food : "meal");
     } else {
         std::snprintf(status_, sizeof(status_), "%s ordered %s (%u gp).", name,
-                      food ? food : "meal", r.cost);
+                      food ? food : "meal", u32(r.cost));
     }
     phase_ = Phase::Menu;
 }
@@ -1021,7 +1038,7 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
             char line[48];
             const char *food = tavern_data_.food.options[i];
             std::snprintf(line, sizeof(line), "%c) %s (%u gp)", char('A' + i),
-                          food ? food : "---", tavern_data_.food.costs[i]);
+                          food ? food : "---", u32(tavern_data_.food.costs[i]));
             row = drawMultiline(c, row, kOptCol, line);
         }
         drawEscFooter(c);
@@ -1035,7 +1052,7 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
             char line[48];
             const char *lab = tavern_data_.boosts[i].label;
             std::snprintf(line, sizeof(line), "%c) %-14s %u gp", char('A' + i),
-                          lab ? lab : "---", tavern_data_.boosts[i].cost);
+                          lab ? lab : "---", u32(tavern_data_.boosts[i].cost));
             drawCell(c, row++, kOptCol, line);
         }
         drawEscFooter(c);
@@ -1076,7 +1093,7 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
                     std::snprintf(name_bonus, sizeof(name_bonus), "%s", item);
                 }
                 char price_str[16];
-                std::snprintf(price_str, sizeof(price_str), "%u gp", shown);
+                std::snprintf(price_str, sizeof(price_str), "%u gp", u32(shown));
                 /* 24-col option band (cols 0x10..0x27): name left, price right-aligned. */
                 char body[40];
                 const int body_len =

@@ -1,0 +1,3 @@
+#pragma once
+/* Amiga / MM2_NO_STL: Bartman m68k toolchain ships no libstdc++ <cstring>. */
+#include "mm2/CppStdCompat.h"

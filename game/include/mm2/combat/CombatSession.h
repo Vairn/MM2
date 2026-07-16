@@ -127,8 +127,16 @@ public:
         return party_slot >= 0 && party_slot < front_rank_count_;
     }
 
+    /** True after 0x12A22 round-loop entry (narrow hood + A–J roster). Sticky —
+     *  item/party pick mid-fight must not flip back to the encounter name-box. */
+    bool roundLayoutActive() const { return round_layout_active_; }
+
     /** Monster slot (0..10) currently acting in the round loop (A4-$4F7), or -1. */
     int activeMonsterSlot() const { return active_monster_slot_; }
+
+    /** Picture disk index (monsters.dat PIC&$7F) for the first alive battle slot —
+     *  combat hood BOB leader. -1 if none. */
+    int leaderSpriteDiskIndex() const;
 
     /** Exploration/sheet cast: same leaf path as combat 'C' (sets active slot). */
     void castSpellFromSheet(GameStateView &gs, int party_slot, int flat0);
@@ -344,6 +352,8 @@ private:
     uint8_t surprise_mode_ = 0;  /* 2 = party surprised, 3 = monsters surprised */
     uint32_t xp_pool_ = 0;       /* -$6FC6: combat XP accrued from kills this fight */
     uint8_t saved_panel_mode_ = 0;
+    /** Set once at startRoundLoop (0x12A22 / 0x135BE); cleared on fight exit. */
+    bool round_layout_active_ = false;
     ArenaReward arena_reward_{};
 
     char status_line_[160] = {};

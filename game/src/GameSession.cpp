@@ -65,8 +65,14 @@ void blitImageFrame(gfx::ScreenCompositor &c, const mm2_gfx_sheet &sheet, int fr
 void maskCombatBackdropBleed(gfx::ScreenCompositor &c)
 {
     using namespace gfx::play_layout;
+    /* Narrow hood ends at x=origin+viewportW (col 0x0F). Roster starts at
+     * col 0x10. Only black the divider column — NEVER (screenW - mask_x), which
+     * wiped D-Delay/monster list every combat frame and stalled the blitter. */
     const int mask_x = gfx::kView3DOriginX + kCombatView3DViewportW;
-    c.fillRect(mask_x, kCombatView3DSkyY, kScreenW - mask_x, kCombatView3DViewportH, 0, 0, 0);
+    const int mask_w = kCombatRightCol * 8 - mask_x;
+    if (mask_w > 0) {
+        c.fillRect(mask_x, kCombatView3DSkyY, mask_w, kCombatView3DViewportH, 0, 0, 0);
+    }
 }
 
 }  // namespace
@@ -100,6 +106,8 @@ void GameSession::markDirty()
     text_dirty_ = true;
     overlay_anim_dirty_ = false;
     play_buffer_valid_ = false;
+    combat_backdrop_cached_ = false;
+    combat_hud_sigs_valid_ = false;
     mm2_amiga_viewport_cache_invalidate();
 #else
     frame_dirty_ = true;
@@ -122,7 +130,68 @@ void GameSession::markOverlayAnimDirty()
 {
     overlay_anim_dirty_ = true;
 }
+
+void GameSession::markCombatHudDirty()
+{
+    /* Retail combat waits (0x6798 / 0x119C2) and round patches only redraw
+     * message band + monster column + party strip — never full chrome / 3D. */
+    text_dirty_ = true;
+}
 #endif
+
+namespace {
+
+#if MM2_HOST_AMIGA
+uint32_t combatRosterHudSig(const gfx::CombatPanelView &view, int highlight)
+{
+    uint32_t h = 2166136261u;
+    h ^= static_cast<uint32_t>(highlight + 1);
+    h *= 16777619u;
+    h ^= static_cast<uint32_t>(view.monster_line_count);
+    h *= 16777619u;
+    h ^= static_cast<uint32_t>(view.overflow_more);
+    h *= 16777619u;
+    for (int i = 0; i < view.monster_line_count && i < 10; ++i) {
+        const gfx::CombatMonsterLine &line = view.monster_lines[i];
+        h ^= line.occupied ? 1u : 0u;
+        h *= 16777619u;
+        h ^= line.show_checkmark ? 1u : 0u;
+        h *= 16777619u;
+        h ^= line.highlighted ? 1u : 0u;
+        h *= 16777619u;
+        for (const char *p = line.name; *p; ++p) {
+            h ^= static_cast<uint8_t>(*p);
+            h *= 16777619u;
+        }
+        for (const char *p = line.status_suffix; *p; ++p) {
+            h ^= static_cast<uint8_t>(*p);
+            h *= 16777619u;
+        }
+    }
+    return h;
+}
+
+uint32_t combatPartyHudSig(const Mm2RosterFile &roster, const Mm2PartyLaunch &launch)
+{
+    uint32_t h = 2166136261u;
+    for (int i = 0; i < launch.party_count && i < MM2_GS_PARTY_SIZE; ++i) {
+        const int idx = launch.roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            h ^= 0xA5u;
+            h *= 16777619u;
+            continue;
+        }
+        const Mm2RosterRecord &rec = roster.records[idx];
+        h ^= static_cast<uint32_t>(rec.hp_max);
+        h *= 16777619u;
+        h ^= static_cast<uint32_t>(rec.condition);
+        h *= 16777619u;
+    }
+    return h;
+}
+#endif
+
+}  // namespace
 
 const char *GameSession::areaName(uint8_t area_id)
 {
@@ -328,6 +397,13 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     gs_.initProtectDefaults();
     events::eventVmInitStrBankOffsets(gs_.a4()); /* 0x9666 bank table A4-$71E8 */
     mm2_party_launch_apply(gs_.a4(), &launch_);
+    /* Reload path @ 0x86F6 parses the roster.dat global tail back into A4;
+     * restore the 24-byte event/quest bank (-$798B) so quest flags and
+     * hireling A..X unlocks persist across sessions. */
+    for (int i = 0; i < MM2_ROSTER_TAIL_EVENT_BANK_LEN; ++i) {
+        mm2_gs_set_u8(gs_.a4(), MM2_GS_EVENT_VAR_BANK + i,
+                      mm2_roster_tail_u8(&roster_, MM2_ROSTER_TAIL_EVENT_BANK + i));
+    }
 
     mm2_image32_set_preview_opaque(0);
 
@@ -669,11 +745,8 @@ void GameSession::finishCombat()
      * (finishCombat used to save immediately → soft-lock saves). */
     const bool total_wipe =
         combat_.lastOutcome() == combat::CombatOutcome::Defeated && partyAllDead();
-    if (!total_wipe && data_dir_) {
-        char *const path = mm2_path_scratch_a();
-        if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
-            (void)mm2_roster_save_file(path, &roster_); /* persist combat XP/gold/HP */
-        }
+    if (!total_wipe) {
+        saveRosterWithGlobalTail(); /* persist combat XP/gold/HP */
     }
 
     runPendingEvents();
@@ -689,6 +762,35 @@ void GameSession::finishCombat()
         resumeOp0eFdAfterCombat();
     }
     markDirty();
+}
+
+void GameSession::saveRosterWithGlobalTail()
+{
+    if (!data_dir_) {
+        return;
+    }
+    /* Mirror of the save_game_state serializer (@ 0x823C stream order): the
+     * party roster-index table + size and the 24-byte event/quest bank live in
+     * the roster.dat global tail, so party selection and hireling A..X
+     * availability survive relaunch. */
+    for (int i = 0; i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int16_t slot = launch_.roster_slots[i];
+        const uint16_t word =
+            (i < launch_.party_count && slot >= 0) ? static_cast<uint16_t>(slot) : 0xFFFFu;
+        mm2_roster_tail_set_u16(&roster_, MM2_ROSTER_TAIL_PARTY_ROSTER_IDX + i * 2, word);
+    }
+    mm2_roster_tail_set_u16(&roster_, MM2_ROSTER_TAIL_PARTY_SIZE,
+                            static_cast<uint16_t>(launch_.party_count));
+    if (gs_.valid()) {
+        for (int i = 0; i < MM2_ROSTER_TAIL_EVENT_BANK_LEN; ++i) {
+            mm2_roster_tail_set_u8(&roster_, MM2_ROSTER_TAIL_EVENT_BANK + i,
+                                   mm2_gs_u8(gs_.a4(), MM2_GS_EVENT_VAR_BANK + i));
+        }
+    }
+    char *const path = mm2_path_scratch_a();
+    if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
+        (void)mm2_roster_save_file(path, &roster_);
+    }
 }
 
 bool GameSession::partyAllDead() const
@@ -875,8 +977,15 @@ bool GameSession::removeHirelingFromParty(int16_t roster_index)
 
 void GameSession::applyExitFlagCleanup()
 {
-    /* 0x171AC / -$7D40: chrome redraws (status/roster/divider) are host markDirty;
-     * GS leaf is clr.b -$7950. Bit2 viewport blit is presentation-only. */
+    /* 0x171AC / -$7D40: drop retained console layers (roster/status overwrite in ASM),
+     * clear EXIT_FLAGS, host markDirty for chrome redraw. */
+    bool redraw_status = false;
+    bool redraw_roster = false;
+    bool redraw_divider = false;
+    events_.textView().applyScriptExitCleanup(&redraw_status, &redraw_roster, &redraw_divider);
+    (void)redraw_status;
+    (void)redraw_roster;
+    (void)redraw_divider;
     mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
     markDirty();
 }
@@ -2025,11 +2134,16 @@ void GameSession::tickOverlayAnimations()
     bool changed = false;
     for (int step = 0; step < steps; ++step) {
         if (combat_.active()) {
-            if (step == 0) {
-                refreshCombatSprites();
-            }
-            for (int i = 0; i < combat_sprite_count_; ++i) {
-                changed |= combat_sprites_[i].tick();
+            /* ASM player/ack waits (0x119C2 / 0x6798) only poll + Delay(1) —
+             * they do not re-place or tick the combat BOB. Advancing .anm here
+             * forced a full-screen copy + masked blit every cel (Amiga hitch). */
+            if (!combat_.awaitingInput()) {
+                if (step == 0) {
+                    refreshCombatSprites();
+                }
+                for (int i = 0; i < combat_sprite_count_; ++i) {
+                    changed |= combat_sprites_[i].tick();
+                }
             }
         }
         if (scripted_loaded_ && scripted_scene_.active()) {
@@ -2113,8 +2227,18 @@ void GameSession::tick(const platform::KeyState &keys)
 
     if (combat_.active()) {
         if (overlay_ == PlayOverlay::CharacterSheet) {
+            /* Sheet is a full overlay; only redraw when input changes it. */
+            const gameplay::SheetSubMode sub_before = sheet_session_.sub_mode;
+            const int slot_before = sheet_session_.party_slot;
             tickCombatCharacterSheetInput(keys);
-            markDirty();
+            if (overlay_ != PlayOverlay::CharacterSheet) {
+                markDirty(); /* closed — restore combat playfield */
+                return;
+            }
+            if (keys.last_ascii != 0 || keys.escape || sheet_session_.sub_mode != sub_before ||
+                sheet_session_.party_slot != slot_before) {
+                markDirty();
+            }
             return;
         }
         const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
@@ -2132,17 +2256,34 @@ void GameSession::tick(const platform::KeyState &keys)
         }
         /* Combat 'C' is handled inside CombatSession (0x11A90 → 0x79EE level/number
          * on the message band). Spell grid is only via sheet 'V' → SpellBook. */
-        /* Do not markDirty on idle combat waits — a full Amiga redraw every
-         * frame makes ACE keyUse edges miss short taps (feels like laggy input). */
+        /* Idle combat waits draw nothing (ASM 0x119C2 / 0x6798). State/message
+         * changes only patch roster + party strip + message band (0x129CC /
+         * 0x12848 / 0x1119E) — never a full play-screen rebuild. */
         const combat::CombatState state_before = combat_.state();
+        const bool round_before = combat_.roundLayoutActive();
+        const int leader_disk_before = combat_.leaderSpriteDiskIndex();
         char status_before[160];
         std::snprintf(status_before, sizeof(status_before), "%s", combat_.statusLine());
         const bool ended = combat_.tick(gs_, world_, keys);
-        if (ended || combat_.state() != state_before || std::strcmp(status_before, combat_.statusLine()) != 0) {
-            markDirty();
-        }
         if (ended) {
+            markDirty();
             finishCombat();
+            return;
+        }
+        /* Advance/compact can replace slot A's type — hood BOB must reload (0x316E),
+         * not stick to the previous front-rank .anm via HUD-only copy_front_to_back. */
+        const int leader_disk_after = combat_.leaderSpriteDiskIndex();
+        if (round_before != combat_.roundLayoutActive() ||
+            leader_disk_before != leader_disk_after) {
+            /* 0x12A22 → 0x135BE / post-advance front change: rebuild hood + sprites. */
+            markDirty();
+        } else if (combat_.state() != state_before ||
+                   std::strcmp(status_before, combat_.statusLine()) != 0) {
+#if MM2_HOST_AMIGA
+            markCombatHudDirty();
+#else
+            markDirty();
+#endif
         }
         return;
     }
@@ -2272,12 +2413,7 @@ void GameSession::maybeFinishInnRegistry()
     if (map_id >= 0 && map_id < 5) {
         goto_town_filter_ = static_cast<uint8_t>(map_id + 1);
     }
-    if (data_dir_) {
-        char *const path = mm2_path_scratch_a();
-        if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
-            (void)mm2_roster_save_file(path, &roster_);
-        }
-    }
+    saveRosterWithGlobalTail();
     /* 0x1A1F8 Goto Town epilogue GS (UI chrome omitted): */
     mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_PREV, 0xFF);
     mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_ID, 0xFF);
@@ -2462,7 +2598,7 @@ void GameSession::maybeOpenTownServiceMenu()
     if (!town_service_ui_.pending() || overlay_ != PlayOverlay::None) {
         return;
     }
-    /* ASM -$7ED8(5): clear (1,11)-(38,22) before shop menu; drop the intro
+    /* ASM -$7ED8(2): clear (1,17)-(38,22) before shop menu; drop the intro
      * OP_02 layer so it does not paint over menu rows 0x11..0x16. */
     events_.textView().clearConsoleMessageLayers();
     town_service_ui_.begin();
@@ -2677,7 +2813,17 @@ void GameSession::renderPartyPanel()
 
         const Mm2RosterRecord &rec = roster_.records[slot];
         slots[i].present = true;
-        mm2_roster_name_to_cstr(&rec, slots[i].name, sizeof(slots[i].name));
+        /* 0x6150 win_print(name): stop at first NUL inside the 11-byte field —
+         * do not strip trailing spaces (mm2_roster_name_to_cstr does). */
+        {
+            int n = 0;
+            while (n < MM2_ROSTER_NAME_SIZE && rec.name[n] != '\0' &&
+                   n + 1 < static_cast<int>(sizeof(slots[i].name))) {
+                slots[i].name[n] = rec.name[n];
+                ++n;
+            }
+            slots[i].name[n] = '\0';
+        }
         /* draw_party_status_panel @ 0x624C: roster word +$5E (hp_max), not +$74. */
         slots[i].hp = rec.hp_max;
         slots[i].bad_condition = rec.condition != 0;
@@ -2708,12 +2854,14 @@ void GameSession::refreshCombatSprites()
     }
     const gfx::CombatPanelView view = combat_.panelView();
 
-    /* Retail centers a single leader sprite (the first alive battle slot's
-     * picture), not a gallery of every distinct monster type — see
-     * 41-aga-port-plan §8.2 and the 0x316E sprite placer. panelView() still
-     * builds the full sprite_slots[] metadata; we render only the leader. */
-    const int leader_disk =
-        view.sprite_slot_count > 0 ? view.sprite_slots[0].disk_index : view.sprite_disk_index;
+    /* Retail centers a single leader sprite (first alive battle slot PIC) —
+     * 0x316E / 41-aga-port-plan §8.2. Prefer battle order over distinct-disk
+     * gallery order so slot A always owns the hood after advances/swaps. */
+    int leader_disk = combat_.leaderSpriteDiskIndex();
+    if (leader_disk < 0) {
+        leader_disk =
+            view.sprite_slot_count > 0 ? view.sprite_slots[0].disk_index : view.sprite_disk_index;
+    }
     if (leader_disk < 0) {
         unloadCombatSprites();
         return;
@@ -2793,22 +2941,19 @@ void GameSession::renderOverlays()
         controls_screen_.render(compositor_, gs_);
         break;
     case PlayOverlay::StatusMessage:
-        /* Status row 0x11 — same clear as EventTextView Op01 / y/n bar (doc 44). */
+        /* Status row 0x11 only — same clear as EventTextView Op01 (doc 44). No host ESC line. */
         gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
-        compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 128, 255);
-        compositor_.drawText(8, 18 * 8, "(ESC to dismiss)", 180, 180, 180, 255);
+        compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 255, 255);
         break;
     case PlayOverlay::ExchangeOrder:
         /* 0x20DE0 strings A4-$6482 / -$647E — host status-line digits. */
-        gfx::fillCellRect(compositor_, 1, 0x11, 38, 2);
-        compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 128, 255);
-        compositor_.drawText(8, 18 * 8, "(1-N / ESC)", 180, 180, 180, 255);
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
+        compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 255, 255);
         break;
     case PlayOverlay::DismissHireling:
     case PlayOverlay::UnlockWho:
-        gfx::fillCellRect(compositor_, 1, 0x11, 38, 2);
-        compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 128, 255);
-        compositor_.drawText(8, 18 * 8, "(1-N / ESC)", 180, 180, 180, 255);
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
+        compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 255, 255);
         break;
     case PlayOverlay::GameOver: {
         /* Funeral band after combat_defeat_retreat @ 0x11646 / tones @ 0x7DCC. */
@@ -2832,7 +2977,8 @@ void GameSession::renderOverlays()
         break;
     }
     case PlayOverlay::DeathStrikes: {
-        /* 0x14106: win_open(7,6,$21,$11) then print -$6D60[0..9] at (2,1+i). */
+        /* 0x14106: win_define(7,6,$21,$11) → cells (7,6)-(33,17) = 27×12;
+         * drawConsoleBox(row,col,w,h) = (6,7,0x1B,0x0C). Print at win-relative (2,1+i). */
         compositor_.drawConsoleBox(6, 7, 0x1B, 0x0C, 255, 0, 0);
         gfx::fillCellRect(compositor_, 8, 7, 0x19, 0x0A);
         int row = 7;
@@ -2847,7 +2993,8 @@ void GameSession::renderOverlays()
             if (*p == '\n') {
                 ++p;
             }
-            compositor_.drawText(16, row * 8, line, 255, 255, 255, 255);
+            /* Window-relative (2, 1+i) → absolute col 9, row 7+i. */
+            compositor_.drawText(9 * 8, row * 8, line, 255, 255, 255, 255);
             ++row;
         }
         break;
@@ -2920,14 +3067,14 @@ void GameSession::renderOverlays()
         /* -$7EC0 status line — Y/N only, no spinner/cursor (doc 44 §3.7). */
         static const char kQuitPrompt[] = "Quit without game save (y/n)?";
         gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
-        compositor_.drawText(8, 17 * 8, kQuitPrompt, 255, 80, 80, 255);
+        compositor_.drawText(8, 17 * 8, kQuitPrompt, 255, 255, 255, 255);
         break;
     }
     case PlayOverlay::RestConfirm: {
         /* 0x19ECB inline string — Y/N only, no spinner/cursor. */
         static const char kRestPrompt[] = "Rest here? (Y/N)";
         gfx::fillCellRect(compositor_, 1, 0x11, 38, 1);
-        compositor_.drawText(8, 17 * 8, kRestPrompt, 255, 255, 128, 255);
+        compositor_.drawText(8, 17 * 8, kRestPrompt, 255, 255, 255, 255);
         break;
     }
     case PlayOverlay::TownService:
@@ -2962,7 +3109,10 @@ void GameSession::renderFrame(bool overlay_anim_only)
             mm2_amiga_play_chrome_cache_end();
         }
         mm2_amiga_play_chrome_cache_present();
-        if (combat_round_layout) {
+        /* 0x135BE clear only when rebuilding combat chrome; a wipe+restore every
+         * full combat dirty was racing the roster and costing a huge fill. */
+        if (combat_round_layout &&
+            (!combat_backdrop_cached_ || combat_backdrop_round_layout_ != combat_round_layout)) {
             gfx::drawCombatScreenChrome(compositor_);
         }
     }
@@ -2991,6 +3141,11 @@ void GameSession::renderFrame(bool overlay_anim_only)
             combat_backdrop_round_layout_ = combat_round_layout;
         } else {
             mm2_amiga_viewport_cache_restore();
+            if (combat_round_layout) {
+                /* Exploration chrome present can leave the wrong dividers —
+                 * re-stamp combat rules without wiping the hood/roster. */
+                gfx::drawCombatScreenLines(compositor_);
+            }
         }
 #else
         if (combat_round_layout) {
@@ -3001,9 +3156,13 @@ void GameSession::renderFrame(bool overlay_anim_only)
 #endif
         refreshCombatSprites();
         if (combat_round_layout) {
+#if MM2_HOST_AMIGA
+            /* Rebuild path already stamped lines via drawCombatScreenChrome. */
+#else
             gfx::drawCombatScreenLines(compositor_);
+#endif
             blitCombatSprites();
-            /* Sprites may paint past the narrow hood — re-mask before roster text. */
+            /* Sprites may paint past the narrow hood — re-mask the divider col. */
             maskCombatBackdropBleed(compositor_);
             gfx::drawCombatViewportFrame(compositor_);
             gfx::drawCombatViewportDivider(compositor_);
@@ -3165,7 +3324,7 @@ void GameSession::renderFrameCombatAnimOnly()
 
     const gfx::CombatPanelView view = combat_.panelView();
     const bool round_layout = view.label_monster_slots;
-    if (round_layout != combat_backdrop_round_layout_) {
+    if (round_layout != combat_backdrop_round_layout_ || !mm2_amiga_viewport_cache_valid()) {
         /* Cached hood was rendered for the other layout — full repaint. */
         renderFrame(false);
         play_buffer_valid_ = true;
@@ -3179,11 +3338,49 @@ void GameSession::renderFrameCombatAnimOnly()
         maskCombatBackdropBleed(compositor_);
         gfx::drawCombatViewportFrame(compositor_);
         gfx::drawCombatViewportDivider(compositor_);
-        /* Belt-and-suspenders: roster lives outside the narrow hood cache. */
-        gfx::drawCombatRightColumn(compositor_, view);
     } else {
         gfx::drawPlayViewportDivider(compositor_);
     }
+}
+
+void GameSession::renderFrameCombatHudOnly()
+{
+    /* Surgical combat redraw matching ASM round patches:
+     *   0x129CC monster column, 0x12848 party strip, 0x1119E message band.
+     * Copy last frame (keeps hood/sprite), then text only — no cache restore,
+     * no BOB blit, no bleed mask (those are for layout/entry frames).
+     * Cast/menu keystrokes only need 0x1119E; skip roster/party when unchanged. */
+    if (!mm2_amiga_copy_front_to_back()) {
+        combat_hud_sigs_valid_ = false;
+        renderFrame(false);
+        play_buffer_valid_ = true;
+        return;
+    }
+
+    const gfx::CombatPanelView view = combat_.panelView();
+    if (view.label_monster_slots != combat_backdrop_round_layout_) {
+        combat_hud_sigs_valid_ = false;
+        renderFrame(false);
+        play_buffer_valid_ = true;
+        return;
+    }
+
+    const uint32_t roster_sig = combatRosterHudSig(view, combat_.activeMonsterSlot());
+    const uint32_t party_sig = combatPartyHudSig(roster_, launch_);
+    const bool roster_changed = !combat_hud_sigs_valid_ || roster_sig != combat_hud_roster_sig_;
+    const bool party_changed = !combat_hud_sigs_valid_ || party_sig != combat_hud_party_sig_;
+
+    if (roster_changed) {
+        gfx::drawCombatRightColumn(compositor_, view);
+        combat_hud_roster_sig_ = roster_sig;
+    }
+    /* 0x1119E message / options / cast prompts — always patch on HUD dirty. */
+    gfx::drawCombatOptionsBar(compositor_, view);
+    if (party_changed) {
+        renderPartyPanel();
+        combat_hud_party_sig_ = party_sig;
+    }
+    combat_hud_sigs_valid_ = true;
 }
 
 void GameSession::renderFrameView3DOnly()
@@ -3268,6 +3465,14 @@ void GameSession::renderFrameTextOnly()
 void GameSession::render()
 {
 #if MM2_HOST_AMIGA
+    /* Combat HUD patches (message / roster / party) — ASM never rebuilds chrome. */
+    if (combat_.active() && text_dirty_ && !view3d_dirty_ && !chrome_dirty_ &&
+        overlay_ == PlayOverlay::None && combat_backdrop_cached_) {
+        renderFrameCombatHudOnly();
+        play_buffer_valid_ = true;
+        return;
+    }
+
     /* Sign / portrait / combat monster cel tick: copy HUD from front, restore
      * cached viewport hood, repaint animated overlay only. */
     if (overlay_anim_dirty_ && !view3d_dirty_ && !chrome_dirty_ && !text_dirty_ &&

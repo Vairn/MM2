@@ -302,6 +302,9 @@ void AppHost::charChooseEnter()
     char_create_prepare_done_ = true;
     char_ui_redrew_ = false;
     MM2_DBG("MM2 GOTO: charChooseEnter startChooseParty\n");
+    if (pending_launch_.party_count == 0) {
+        restoreSavedPartyFromRosterTail();
+    }
     const uint8_t town_filter = pending_choose_town_filter_;
     pending_choose_town_filter_ = 1;
     const Mm2PartyLaunch *saved =
@@ -314,6 +317,43 @@ void AppHost::charChooseEnter()
         character_ui_.needsRedraw() ? 1 : 0,
         apphost_chip_free()
     );
+}
+
+void AppHost::restoreSavedPartyFromRosterTail()
+{
+    /* Party words in the roster.dat global tail (save_game_state @ 0x823C):
+     * 8 x u16 roster indices (-$796A, 0xFFFF = empty) + u16 size (-$795A). */
+    Mm2RosterFile &roster = title_.roster();
+    const uint16_t saved_size = mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_PARTY_SIZE);
+    if (saved_size == 0 || saved_size > MM2_PARTY_LAUNCH_SLOTS) {
+        return;
+    }
+    int members[MM2_PARTY_LAUNCH_SLOTS];
+    int count = 0;
+    for (int i = 0; i < static_cast<int>(saved_size); ++i) {
+        const uint16_t w =
+            mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_PARTY_ROSTER_IDX + i * 2);
+        if (w >= MM2_ROSTER_TAIL_FIRST_SLOT) {
+            continue; /* 0xFFFF empty / out of playable range */
+        }
+        if (mm2_roster_slot_is_empty(&roster.records[w])) {
+            continue;
+        }
+        members[count++] = static_cast<int>(w);
+    }
+    if (count == 0) {
+        return;
+    }
+    /* Inn registry stamps every member's $0B town byte on sign-in (0x1A1CE),
+     * so the first member carries the saved party's home-inn town. */
+    uint8_t town = roster.records[members[0]].town_flags & 0x7F;
+    if (town < 1 || town > 5) {
+        town = 1;
+    }
+    mm2_party_launch_build(&pending_launch_, town, members, count);
+    pending_choose_town_filter_ = town;
+    MM2_DBG("MM2 GOTO: restored saved party from tail members=%d town=%u\n", count,
+            (unsigned)town);
 }
 
 void AppHost::charDestroy()

@@ -6,8 +6,10 @@ namespace mm2::gfx {
 
 /** One row in the combat monster list (slots A–J). */
 struct CombatMonsterLine {
-    char letter = 0;       /* 'A'..'J' when label_monster_slots */
+    char letter = 0;       /* 'A'..'J' = battle slot index when label_monster_slots */
     char name[16]{};
+    /* False when the battle slot is empty/dead — 0x129CC clears that row. */
+    bool occupied = false;
     /* Glyph 0x17 (check) when slot < A4-$524 melee-range count — combat_monster_list_line
      * @ 0x12742. NOT an acted flag: -$524 is rolled per fight by 0x11D0C. */
     bool show_checkmark = false;

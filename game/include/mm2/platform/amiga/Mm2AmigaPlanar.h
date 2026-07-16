@@ -22,6 +22,7 @@ void mm2_amiga_put_pixel_pen(UWORD uwX, UWORD uwY, UBYTE pen);
 void mm2_amiga_put_pixel_rgb(UWORD uwX, UWORD uwY, UBYTE ubR, UBYTE ubG, UBYTE ubB, UBYTE ubA);
 
 void mm2_amiga_draw_glyph8_pen(UWORD uwX, UWORD uwY, UBYTE ubCodepoint, UBYTE pen, UBYTE ubA);
+/** Printable runs: assemble a line mask then one pen fill + blitCopyMask (cell-aligned X). */
 void mm2_amiga_draw_text_pen(UWORD uwX, UWORD uwY, const char *text, UBYTE pen, UBYTE ubA);
 void mm2_amiga_draw_glyph8(UWORD uwX, UWORD uwY, UBYTE ubCodepoint, UBYTE ubR, UBYTE ubG, UBYTE ubB, UBYTE ubA);
 

@@ -12,7 +12,8 @@
 //   draw_viewport_red_lines   0x60B6  — three 8080 segments (status-bar column dividers)
 //   play_screen_panel_box     0x55D8  — 809E box row=0x11 col=0x26 (Protection header rule)
 //   show_command_reference    0x5D54  — 809E + party/command text rows
-//   draw_party_status_panel   0x42DC  — nwcp.32 portrait/stats blits (called from 0x5312)
+//   draw_party_status_panel   0x6150  — party lines rows 0x13..0x16
+//   clear_cell_rect           0x42DC  — win_clear_cells (not nwcp portraits)
 //   play_frame_draw           0x5444  — 5312 party lines → 53A0 viewport (2ECE 3D)
 //
 // 3D backdrop anchors (view_3d_master @ 0x2ECE): sky @ (8,8), floor @ (8,68), 208×60 each.
@@ -33,17 +34,18 @@ constexpr int kViewOriginY = 8;
 constexpr int kViewW = 208;
 constexpr int kViewH = 120;
 
-// Red frame around the 3D window (outer chrome from 0x54F2 / 0x60F4 path).
-constexpr int kViewportFrameX = 6;
-constexpr int kViewportFrameY = 6;
-constexpr int kViewportFrameW = 212;
-constexpr int kViewportFrameH = 126;
+// Red frame around the 3D window — outer glyph border uses cells, not a 2px frame.
+// Viewport interior cells (1,1)-(26,15) → px (8,8)-(215,127). Right column (28,1)-(38,15).
+constexpr int kViewportFrameX = 8;
+constexpr int kViewportFrameY = 8;
+constexpr int kViewportFrameW = 208;
+constexpr int kViewportFrameH = 120;
 
-// Protection / stats column (809E @ 0x55D8 uses row 0x11 ≈ this band).
-constexpr int kProtectFrameX = 220;
-constexpr int kProtectFrameY = 6;
-constexpr int kProtectFrameW = 94;
-constexpr int kProtectFrameH = 126;
+// Protection / Options column interior: cols 28..38, rows 1..15.
+constexpr int kProtectFrameX = 0x1C * 8;
+constexpr int kProtectFrameY = 8;
+constexpr int kProtectFrameW = 11 * 8;
+constexpr int kProtectFrameH = 15 * 8;
 
 // Eagle/Wizard Eye 5×5 overlay (spell_eye @ 0x1E74, blit loop @ 0x1F7E).
 // Dest X = col*0xE + 0xE8; dest Y = 0x3D - row*0xB (row 0 = bottom).
@@ -55,16 +57,16 @@ constexpr int kAutomapOriginX = 0x36;
 constexpr int kAutomapBottomY = 0xAC;
 constexpr int kAutomapOriginY = kAutomapBottomY - 15 * 11; /* row 15 (north) → Y=7 */
 
-// Status strip ('O' Options, Day, Year, Face) — 8080 @ 0x60B6 row 0x12 cell dividers.
-constexpr int kStatusBarY = 134;
-constexpr int kStatusBarH = 10;
-constexpr int kStatusColDiv1X = 96;
-constexpr int kStatusColDiv2X = 168;
-constexpr int kStatusColDiv3X = 248;
+// Status strip ('O' Options, Day, Year, Face) — row 0x11 (engine y = 17*8).
+constexpr int kStatusBarY = 0x11 * 8;
+constexpr int kStatusBarH = 8;
+constexpr int kStatusColDiv1X = 0x0C * 8;
+constexpr int kStatusColDiv2X = 0x15 * 8;
+constexpr int kStatusColDiv3X = 0x1F * 8;
 
-// Eight-slot party list (format_party_status_line @ 0x5312, rows in nwcp band).
-constexpr int kPartyPanelY = 146;
-constexpr int kPartyPanelH = 52;
+// Eight-slot party list @ 0x6150 — rows 0x13..0x16 (engine y = 19*8).
+constexpr int kPartyPanelY = 0x13 * 8;
+constexpr int kPartyPanelH = 4 * 8;
 
 // Status + party band chrome (0x60F4 h-lines rows 0x10/0x12; dividers 0x60B6).
 // Exploration chrome uses h_line/v_line/outerFrame only — NOT console_box (809E

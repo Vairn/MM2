@@ -25,6 +25,8 @@ enum class EventTextOp : uint8_t {
 struct EventTextLayer {
     EventTextOp op = EventTextOp::None;
     char text[256] = {};
+    /** OP_02 base row (ASM push `$13`=19; OP_03 delegates with `$11`=17). */
+    int base_row = 19;
 };
 
 /** Holds visible event text overlays and prompt state for one script session. */
@@ -72,8 +74,12 @@ public:
     bool hasPegasusIllustration() const { return pegasus_overlay_.loaded(); }
 
     /** Drop OP_01/02/03 console message layers before a shop menu repaints the
-     *  lower band (ASM -$7ED8 preset 5: cells (1,11)-(38,22)). Keeps OP_04+ sign. */
+     *  lower band (ASM -$7ED8 preset 2: cells (1,17)-(38,22)). Keeps OP_04/05/06/0B. */
     void clearConsoleMessageLayers();
+
+    /** Explore/service epilogue matching -$7D40 / 0x171AC: drop console messages,
+     *  unload OP_0B sign (place(-1)), keep OP_04/05/06 until the next tile scan. */
+    void applyScriptExitCleanup(bool *redraw_status, bool *redraw_roster, bool *redraw_divider);
 
     /** Draw all active layers onto the compositor (after 3D view). */
     void draw(gfx::ScreenCompositor &c) const;
@@ -105,10 +111,14 @@ public:
 private:
     static void copyResolvedText(char *dst, size_t cap, const char *src);
     static bool isPersistentOverlay(EventTextOp op);
+    /** Replace any prior OP_01/02/03 (ASM clears cells then paints — one active message). */
+    EventTextLayer *pushConsoleLayer(EventTextOp op);
 
     EventTextLayer layers_[4]{};
     int layer_count_ = 0;
     bool space_prompt_ = false;
+    /** After SPACE wait ends — redraw row-23 rule (0x44E0 / -$7F4A). */
+    bool restore_row23_rule_ = false;
     bool text_entry_ = false;
     char text_entry_buf_[11]{};
     int text_entry_len_ = 0;

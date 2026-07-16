@@ -111,6 +111,9 @@ private:
     void renderFrameView3DOnly();
     void renderFrameOverlayAnimOnly();
     void renderFrameCombatAnimOnly();
+    /** ASM combat HUD only: 0x129CC roster + 0x12848 party + 0x1119E message band.
+     *  Does not wipe combat chrome / rebuild the hood (0x135BE is once per fight). */
+    void renderFrameCombatHudOnly();
     void renderFrameTextOnly();
 #endif
     void renderView3D();
@@ -156,6 +159,10 @@ private:
      * same-screen forward step; rate byte = attrib.dat 0x09 (doc 35). */
     void maybeTriggerStepEncounter();
     void finishCombat();
+    /** save_game_state @ 0x823C mirror: sync live GS words into the roster.dat
+     *  global tail (party -$796A/-$795A, event bank -$798B = hireling A..X
+     *  unlocks) and write the file. */
+    void saveRosterWithGlobalTail();
     /** True when every party slot has (condition & 0xE0) != 0 — roster_count_living @ 0x47A2. */
     bool partyAllDead() const;
     /** Total wipe: funeral prompt, do not persist corpses, then title on dismiss. */
@@ -190,6 +197,8 @@ private:
     void markView3DDirty();
     void markTextDirty();
     void markOverlayAnimDirty();
+    /** Combat message/roster/party refresh — retail is surgical, not full-frame. */
+    void markCombatHudDirty();
 #endif
     /** Quick Ref / character sheet / etc. replace the playfield — no viewport .anm. */
     bool viewportHiddenByOverlay() const;
@@ -217,6 +226,10 @@ private:
 #if MM2_HOST_AMIGA
     bool combat_backdrop_cached_ = false;
     bool combat_backdrop_round_layout_ = false; /* layout the cache was rendered with */
+    /** Last HUD-only draw signatures — skip roster/party when only message band changed. */
+    uint32_t combat_hud_roster_sig_ = 0;
+    uint32_t combat_hud_party_sig_ = 0;
+    bool combat_hud_sigs_valid_ = false;
 #endif
 
     world::MapWorld world_;

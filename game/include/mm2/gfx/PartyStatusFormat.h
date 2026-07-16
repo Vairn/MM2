@@ -5,9 +5,10 @@
 
 #include "mm2_roster_codec.h"
 
-// Party status line layout traced from draw_party_status_panel @ 0x6150:
-//   prefix " n)" (0x6204..0x6226) + 11-byte roster name field + " /" (0x6254..0x6266)
-//   + HP word roster +$5E (0x624C); CMPI #$03E7 @ 0x6252 → "+++" @ 0x62C4 else
+// Party status line layout traced from party_status_panel_redraw @ 0x6150:
+//   putchar ' ' + digit + ')' + ' ' + win_print(name until NUL) + ' ' + '/' + HP.
+//   Name is NOT padded to 11 — short names shift '/' and HP left (byte-exact).
+//   HP word roster +$5E (0x624C); CMPI #$03E7 @ 0x6252 → "+++" @ 0x62C4 else
 //   3-cell decimal @ 0x6266..0x629A (left-aligned; trailing spaces when HP < 100 / < 10).
 // Combat strip (combat_message_helper @ 0x12848) differs: prefix glyph 0x17
 // (check) when slot < front-rank cutoff A4-$5E4D (0x12892) else space; HP
@@ -15,6 +16,7 @@
 
 namespace mm2::gfx {
 
+/** Max roster name bytes (field size); party strip prints until first NUL. */
 constexpr int kPartyNameFieldWidth = MM2_ROSTER_NAME_SIZE;
 
 /** HP > 999 → "+++"; else 3-char decimal field left-aligned (e.g. "7  ", "16 ", "999"). */

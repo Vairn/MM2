@@ -312,6 +312,8 @@ void stopAll()
     SDL_UnlockAudioDevice(g_dev);
 }
 
+void pumpTitleTheme() {}
+
 }  // namespace mm2::audio
 
 #endif

@@ -12,6 +12,7 @@
 #include "mm2/gfx/GfxBackend.h"
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/mm2_amiga_file.h"
+#include "mm2/platform/amiga/Mm2AmigaPlanar.h"
 #endif
 #include "mm2_create_character.h"
 #include "mm2_gfx_sheet.h"
@@ -154,19 +155,6 @@ void drawCenteredCellText(gfx::ScreenCompositor &c, int row, int total_cols, con
         col = 0;
     }
     drawCellText(c, row, col, text, r, g, b);
-}
-
-// Small check-mark glyph (the font is ASCII-only, no U+221A). Drawn as a short
-// up-right stroke inside one 8x8 text cell to mirror the original "√" prefix.
-void drawCheckMark(gfx::ScreenCompositor &c, int row, int col, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255)
-{
-    using namespace amiga_layout;
-    const int x = cellX(col);
-    const int y = cellY(row);
-    static const int kPts[][2] = {{1, 4}, {2, 5}, {3, 6}, {4, 4}, {5, 3}, {6, 2}, {7, 1}};
-    for (const auto &p : kPts) {
-        c.fillRect(x + p[0], y + p[1], 2, 2, r, g, b);
-    }
 }
 
 void drawCellGlyph(gfx::ScreenCompositor &c, int row, int col, uint8_t codepoint, uint8_t r = 255, uint8_t g = 255,
@@ -658,8 +646,11 @@ private:
             const int cx = cellX(check_col);
             const int cy = cellY(row);
             c.clearRect(cx, cy, kCellW, kCellH, 0, 0, 0, 255);
+            /* LAB_470 @ $0512: putchar $17 when selected, else $20 (space). */
             if (isPartyListEntryVisible(slot) && isPartyListEntryChecked(slot)) {
-                drawCheckMark(c, row, check_col);
+                drawCellGlyph(c, row, check_col, kPartyCheckGlyph);
+            } else {
+                drawCellGlyph(c, row, check_col, static_cast<uint8_t>(' '));
             }
             expandIncrPresent(cx, cy, kCellW, kCellH);
         }
@@ -671,11 +662,11 @@ private:
             char counts[24];
             std::snprintf(counts, sizeof(counts), "C=%d / H=%d", char_count, hire_count);
             const int len = static_cast<int>(std::strlen(counts));
-            const int cx = cellX(kPartyRightCol);
+            const int cx = cellX(kPartyCountCol);
             const int cy = cellY(kPartyCountRow);
             const int cw = 10 * kCellW; /* enough for "C=6 / H=0" */
             c.clearRect(cx, cy, cw, kCellH, 0, 0, 0, 255);
-            drawCellText(c, kPartyCountRow, kPartyRightCol, counts);
+            drawCellText(c, kPartyCountRow, kPartyCountCol, counts);
             expandIncrPresent(cx, cy, (len > 10 ? len : 10) * kCellW, kCellH);
         }
 
@@ -683,14 +674,13 @@ private:
         {
             const char *full = "*** Party is Full ***";
             const int len = static_cast<int>(std::strlen(full));
-            const int col = (kPartyTextCols - len) / 2;
-            const int cx = cellX(col);
+            const int cx = cellX(kPartyFullCol);
             const int cy = cellY(kPartyFullRow);
             const int cw = len * kCellW;
             c.clearRect(cx, cy, cw, kCellH, 0, 0, 0, 255);
             if (party_count_ >= kMaxParty) {
                 c.fillRect(cx, cy, cw, kCellH, kPartyHiliteR, kPartyHiliteG, kPartyHiliteB);
-                drawCellText(c, kPartyFullRow, col, full, 0, 0, 0);
+                drawCellText(c, kPartyFullRow, kPartyFullCol, full, 0, 0, 0);
             }
             expandIncrPresent(cx, cy, cw, kCellH);
         }
@@ -1024,7 +1014,10 @@ private:
         if (throw_anim_playing_) {
             return UiResult::Continue;
         }
-        if (keys.enter) {
+        // $27FFC input loop: Space ($28084) plays the throw anim then falls into
+        // the CR handler. (ASM lets a bare CR reroll silently; the remake plays
+        // the animation for both keys so every reroll shows the throw.)
+        if (keys.space || keys.enter) {
             startThrowAnimation(true);
             return UiResult::Continue;
         }
@@ -1066,22 +1059,27 @@ private:
         return UiResult::Continue;
     }
 
+    void rollCreateStats()
+    {
+        mm2_create_roll_stats(&pending_.rolled, &create_rng_);
+        pending_.class_id = -1;
+        create_exchange_first_ = -1;
+    }
+
+    // Overlay ASM $27096: blocking 11-frame loop, 60 ms/frame. The remake plays
+    // it over game ticks; input is ignored while it runs (tickCreateStatRoll).
     void startThrowAnimation(bool roll_when_done)
     {
-        if (!has_throw_ || throw_.frame_count <= 1) {
+        if (!has_throw_ || throw_.frame_count < amiga_layout::kCreateThrowFrameCount) {
             if (roll_when_done) {
-                mm2_create_roll_stats(&pending_.rolled, &create_rng_);
-                pending_.class_id = -1;
-                create_exchange_first_ = -1;
+                rollCreateStats();
             }
             throw_anim_playing_ = false;
             throw_anim_frame_ = 0;
-            throw_anim_step_ = 0;
             return;
         }
         throw_anim_playing_ = true;
-        throw_anim_frame_ = amiga_layout::kCreateThrowAnimFrameFirst;
-        throw_anim_step_ = 0;
+        throw_anim_frame_ = 0;
         throw_anim_gate_ = 0;
         throw_roll_when_done_ = roll_when_done;
         markDirty();
@@ -1097,26 +1095,16 @@ private:
             return;
         }
         throw_anim_gate_ = 0;
-        ++throw_anim_step_;
-        const int anim_frames = amiga_layout::kCreateThrowAnimFrameCount;
-        if (anim_frames <= 0) {
-            throw_anim_playing_ = false;
-            throw_anim_frame_ = 0;
+        if (throw_anim_frame_ + 1 < amiga_layout::kCreateThrowFrameCount) {
+            ++throw_anim_frame_;
+            markDirty();
             return;
         }
-        throw_anim_frame_ =
-            amiga_layout::kCreateThrowAnimFrameFirst + ((throw_anim_step_ - 1) % anim_frames);
-        markDirty();
-        if (throw_anim_step_ < amiga_layout::kCreateThrowAnimSteps) {
-            return;
-        }
+        // Loop done ($2714E): the accumulated tableau stays on screen; the
+        // caller ($27FFC space/CR path or $280BA entry) rolls stats next.
         throw_anim_playing_ = false;
-        throw_anim_frame_ = amiga_layout::kCreateThrowRestFrame;
-        throw_anim_step_ = 0;
         if (throw_roll_when_done_) {
-            mm2_create_roll_stats(&pending_.rolled, &create_rng_);
-            pending_.class_id = -1;
-            create_exchange_first_ = -1;
+            rollCreateStats();
             throw_roll_when_done_ = false;
         }
         markDirty();
@@ -1135,79 +1123,33 @@ private:
         markDirty();
     }
 
-    // ---- throw.32 tableau (rewritten from asset + ASM LAB_551A / LAB_5632 / LAB_60DE) ----
-    int throwBlitX(int frame_index, int frame_width) const
-    {
-        using namespace amiga_layout;
-        if (frame_index == kCreateThrowRestFrame ||
-            frame_index < kCreateThrowAnimRightAnchorFrameFirst) {
-            return kCreateThrowTableauX;
-        }
-        return kCreateThrowBlitCol * kCellW - frame_width;
-    }
-
-    void blitThrowFrame(gfx::ScreenCompositor &c, int frame_index) const
+    // ---- throw.32 dice tableau — overlay ASM $27096 (see AmigaCharacterUiLayout.h) ----
+    // BlitBob ($2203C, minterm $C0) is an opaque blit: pen 0 lands as black. On
+    // PC the decoded RGBA has pen 0 transparent, so paint the frame rect black
+    // first. On Amiga frames are planar (no rgba) — opaque blitImage32 into the
+    // UI cache (s_pixel_target) matches the original minterm.
+    void blitThrowFrameOpaque(gfx::ScreenCompositor &c, int frame_index) const
     {
         if (!has_throw_ || frame_index < 0 || frame_index >= static_cast<int>(throw_.frame_count)) {
             return;
         }
         const mm2_image32_frame &frame = throw_.frames[frame_index];
+        using namespace amiga_layout;
+        const int x = kCreateThrowFrameX[frame_index];
+        const int y = kCreateThrowFrameY;
+#if MM2_HOST_AMIGA
+        (void)c;
+        if (!frame.bitmap) {
+            return;
+        }
+        platform::blitImage32(&throw_, frame_index, x, y, 1);
+#else
         if (!frame.rgba) {
             return;
         }
-        using namespace amiga_layout;
-        const int x = throwBlitX(frame_index, static_cast<int>(frame.width));
-        c.blitRgba(frame.rgba, frame.width, frame.height, x, kCreateThrowBlitY);
-    }
-
-    void paintThrowTable(gfx::ScreenCompositor &c) const
-    {
-        using namespace amiga_layout;
-        c.fillRect(kCreateThrowTableauX, kCreateThrowOrangeY, kCreateThrowTableauW, kCreateThrowOrangeH,
-                   kCreateThrowOrangeR, kCreateThrowOrangeG, kCreateThrowOrangeB);
-    }
-
-    void eraseThrowHandLayer(gfx::ScreenCompositor &c) const
-    {
-        using namespace amiga_layout;
-        c.clearRect(kCreateThrowTableauX, kCreateThrowBlitY, kCreateThrowTableauW, kCreateThrowOrangeRow, 0,
-                    0, 0, 255);
-    }
-
-    void drawThrowAnimHighlights(gfx::ScreenCompositor &c) const
-    {
-        using namespace amiga_layout;
-        const int cols[3] = {kCreateThrowDieCol0, kCreateThrowDieCol1, kCreateThrowDieCol2};
-        const int widths[3] = {kCreateThrowHighlightW0, kCreateThrowHighlightW1, kCreateThrowHighlightW2};
-        for (int i = 0; i < 3; ++i) {
-            c.fillRect(cols[i] * kCellW, kCreateThrowHighlightY, widths[i], kCreateThrowHighlightH,
-                       kCreateThrowHighlightR, kCreateThrowHighlightG, kCreateThrowHighlightB);
-        }
-    }
-
-    void drawThrowTableauDieValues(gfx::ScreenCompositor &c, const uint8_t vals[6]) const
-    {
-        using namespace amiga_layout;
-        const int cols[3] = {kCreateThrowDieCol0, kCreateThrowDieCol1, kCreateThrowDieCol2};
-        char buf[8];
-        for (int i = 0; i < 3; ++i) {
-            std::snprintf(buf, sizeof(buf), "%u", vals[i]);
-            c.drawText(cols[i] * kCellW, kCreateThrowDieRowTop, buf);
-        }
-        for (int i = 0; i < 3; ++i) {
-            std::snprintf(buf, sizeof(buf), "%u", vals[3 + i]);
-            c.drawText(cols[i] * kCellW, kCreateThrowDieRowBot, buf);
-        }
-    }
-
-    void drawThrowAnimDieValues(gfx::ScreenCompositor &c) const
-    {
-        uint8_t flicker[6];
-        for (int i = 0; i < 6; ++i) {
-            const uint32_t mix = create_rng_ ^ static_cast<uint32_t>(throw_anim_step_ * 17 + i * 3);
-            flicker[i] = static_cast<uint8_t>((mix % 20u) + 1u);
-        }
-        drawThrowTableauDieValues(c, flicker);
+        c.fillRect(x, y, static_cast<int>(frame.width), static_cast<int>(frame.height), 0, 0, 0, 255);
+        c.blitRgba(frame.rgba, frame.width, frame.height, x, y);
+#endif
     }
 
     void renderThrowTableau(gfx::ScreenCompositor &c) const
@@ -1216,21 +1158,19 @@ private:
             return;
         }
         using namespace amiga_layout;
-        if (!throw_anim_playing_) {
-            // LAB_551A rest path: blit frame 0, print rolled stats on tableau.
-            blitThrowFrame(c, kCreateThrowRestFrame);
-            uint8_t vals[MM2_CREATE_STAT_COUNT];
-            statValues(createDisplayStats(), vals);
-            drawThrowTableauDieValues(c, vals);
-            return;
+#if MM2_HOST_AMIGA
+        /* $2710A / $23ED2: LoadRGB4 from throw.32 on first frame of the loop. */
+        mm2_amiga_apply_palette(&throw_);
+#endif
+        // $270AE: pen-0 FillRect (8,8)-(311,79) before frame 0, then frames pile
+        // up with no per-frame clear. Rest state = all 11 frames accumulated
+        // (the loop's final image simply stays on screen).
+        c.fillRect(kCreateThrowClearX, kCreateThrowClearY, kCreateThrowClearW, kCreateThrowClearH,
+                   0, 0, 0, 255);
+        const int last = throw_anim_playing_ ? throw_anim_frame_ : kCreateThrowFrameCount - 1;
+        for (int i = 0; i <= last && i < static_cast<int>(throw_.frame_count); ++i) {
+            blitThrowFrameOpaque(c, i);
         }
-
-        // LAB_5632 anim path: full-width orange table, then right-anchored anim slice only.
-        // WinUAE refs (174..205) show frame-0 left fist must NOT stay under anim slices.
-        paintThrowTable(c);
-        blitThrowFrame(c, throw_anim_frame_);
-        drawThrowAnimHighlights(c);
-        drawThrowAnimDieValues(c);
     }
 
     int createProgressLineCount() const
@@ -1410,7 +1350,8 @@ private:
     {
         using namespace amiga_layout;
         drawRedBorder(c, kCreateBorderRow, kCreateBorderCol, kCreateBorderW, kCreateBorderH);
-        drawBorderIntegratedText(c, kCreateBorderRow, kCreateBorderCol, kCreateBorderW, "( Create New Characters )");
+        // $2810A: locate(0xA, 0) + print — exact string @ $28150, over the top border.
+        drawBorderIntegratedTextAt(c, kCreateHeaderRow, kCreateHeaderCol, "(Create New Characters)");
         renderThrowTableau(c);
         uint8_t vals[MM2_CREATE_STAT_COUNT];
         statValues(createDisplayStats(), vals);
@@ -1533,10 +1474,18 @@ private:
             } else {
                 const Mm2RosterRecord &rec = roster_->records[roster_idx];
                 char name[16];
-                mm2_roster_name_to_cstr(&rec, name, sizeof(name));
-                // Original LAB_470: "A- " + 11-byte space-padded name + " K/level".
-                std::snprintf(line, sizeof(line), "%c- %-*s%s/%u", letter, MM2_ROSTER_NAME_SIZE, name,
-                              classAbbrev(rec.class_id), rec.level);
+                /* LAB_470 win_print(name) until NUL — no 11-pad. View-all path
+                 * prints class[0] + '/' + town&$7F (not level). */
+                int n = 0;
+                while (n < MM2_ROSTER_NAME_SIZE && rec.name[n] != '\0' &&
+                       n + 1 < static_cast<int>(sizeof(name))) {
+                    name[n] = rec.name[n];
+                    ++n;
+                }
+                name[n] = '\0';
+                const unsigned town = static_cast<unsigned>(rec.town_flags & 0x7F);
+                std::snprintf(line, sizeof(line), "%c- %s %s/%u", letter, name, classAbbrev(rec.class_id),
+                              town);
             }
             drawCellText(c, row, col, line);
         }
@@ -1693,10 +1642,14 @@ private:
     }
 
     // Hirelings are pre-seeded in roster slots 24..47 but stay hidden until
-    // discovered in-game; an unset home-town byte means "not found yet".
-    static bool isHirelingDiscovered(const Mm2RosterRecord &rec)
+    // discovered in-game. ASM @ 0x586 / 0x7B6 / 0xB68: hireling-page entries
+    // (page offset 0x18) gate on the event-bank byte -$798B[letter], which
+    // round-trips through the roster.dat global tail (save_game_state @ 0x823C).
+    bool isHirelingDiscovered(int slot) const
     {
-        return (rec.town_flags & 0x7F) != 0;
+        const int letter = slot - amiga_layout::kRosterHirelingPageOffset;
+        return roster_ &&
+               mm2_roster_tail_u8(roster_, MM2_ROSTER_TAIL_EVENT_BANK + letter) != 0;
     }
 
     // Choose-party list: fixed A..X positions; entry visible when occupied,
@@ -1710,7 +1663,7 @@ private:
         if (mm2_roster_slot_is_empty(&rec)) {
             return false;
         }
-        if (isHirelingSlot(slot) && !isHirelingDiscovered(rec)) {
+        if (isHirelingSlot(slot) && !isHirelingDiscovered(slot)) {
             return false;
         }
         return (rec.town_flags & 0x7F) == static_cast<uint8_t>(party_town_);
@@ -1725,7 +1678,7 @@ private:
         if (mm2_roster_slot_is_empty(&rec)) {
             return false;
         }
-        if (roster_idx >= amiga_layout::kRosterHirelingPageOffset && !isHirelingDiscovered(rec)) {
+        if (isHirelingSlot(roster_idx) && !isHirelingDiscovered(roster_idx)) {
             return false;
         }
         return true;
@@ -1805,24 +1758,21 @@ private:
         char title[32];
         std::snprintf(title, sizeof(title), "( %d-%s )", party_town_, townName(static_cast<uint8_t>(party_town_)));
         drawBorderIntegratedText(c, kRosterBorderRow, kRosterBorderCol, kRosterBorderW, title);
+        /* $089A / $08B2 — no centered "Characters" header on this path ($0826). */
         drawCellText(c, kPartyOtherTownsRow, kPartyOtherTownsCol, "Other Towns");
-        drawCellText(c, kPartyTownKeysRow, kPartyTownKeysCol, "'1' - '5'");
-        const char *header = (party_page_ == PartyPage::Hirelings) ? "Hirelings" : "Characters";
-        drawCenteredCellText(c, kPartyHeaderRow, kPartyTextCols, header);
-        drawCenteredHorizRule(c, kPartyUnderlineRow, kPartyTextCols, 12);
+        drawCellText(c, kPartyTownKeysRow, kPartyTownKeysCol, " '1' - '5'");
         const int char_count = partyCharacterCount();
         const int hire_count = party_count_ - char_count;
-        drawCellText(c, kPartyPartyLabelRow, kPartyRightCol + 2, "PARTY");
+        drawCellText(c, kPartyPartyLabelRow, kPartyPartyLabelCol, "PARTY");
         char counts[24];
         std::snprintf(counts, sizeof(counts), "C=%d / H=%d", char_count, hire_count);
-        drawCellText(c, kPartyCountRow, kPartyRightCol, counts);
+        drawCellText(c, kPartyCountRow, kPartyCountCol, counts);
         if (party_count_ >= kMaxParty) {
             const char *full = "*** Party is Full ***";
             const int len = static_cast<int>(std::strlen(full));
-            const int col = (kPartyTextCols - len) / 2;
-            c.fillRect(cellX(col), cellY(kPartyFullRow), len * kCellW, kCellH, kPartyHiliteR, kPartyHiliteG,
-                       kPartyHiliteB);
-            drawCellText(c, kPartyFullRow, col, full, 0, 0, 0);
+            c.fillRect(cellX(kPartyFullCol), cellY(kPartyFullRow), len * kCellW, kCellH, kPartyHiliteR,
+                       kPartyHiliteG, kPartyHiliteB);
+            drawCellText(c, kPartyFullRow, kPartyFullCol, full, 0, 0, 0);
         }
 
         const int page_offset =
@@ -1834,6 +1784,14 @@ private:
             const int text_col = right ? kPartyListColRight : kPartyListColLeft;
             const char glyph = static_cast<char>('A' + letter);
             const int slot = rosterSlotForLetter(letter, page_offset);
+
+            /* LAB_470: locate check col, putchar $17 or $20, then letter- name… */
+            if (isPartyListEntryVisible(slot) && isPartyListEntryChecked(slot)) {
+                drawCellGlyph(c, row, check_col, kPartyCheckGlyph);
+            } else {
+                drawCellGlyph(c, row, check_col, static_cast<uint8_t>(' '));
+            }
+
             if (!isPartyListEntryVisible(slot)) {
                 char line[8];
                 std::snprintf(line, sizeof(line), "%c-", glyph);
@@ -1843,23 +1801,25 @@ private:
 
             const Mm2RosterRecord &rec = roster_->records[slot];
             char name[16];
-            mm2_roster_name_to_cstr(&rec, name, sizeof(name));
-            char line[48];
-            // Inn party list: same 11-char name field, then 3-letter class abbrev.
-            std::snprintf(line, sizeof(line), "%c- %-*s%s", glyph, MM2_ROSTER_NAME_SIZE, name,
-                          classAbbrev3(rec.class_id));
-            drawCellText(c, row, text_col, line);
-            if (isPartyListEntryChecked(slot)) {
-                drawCheckMark(c, row, check_col);
+            int n = 0;
+            while (n < MM2_ROSTER_NAME_SIZE && rec.name[n] != '\0' &&
+                   n + 1 < static_cast<int>(sizeof(name))) {
+                name[n] = rec.name[n];
+                ++n;
             }
+            name[n] = '\0';
+            char line[48];
+            /* win_print(name) until NUL + ' ' + first 3 chars of class name — no 11-pad. */
+            std::snprintf(line, sizeof(line), "%c- %s %s", glyph, name, classAbbrev3(rec.class_id));
+            drawCellText(c, row, text_col, line);
         }
 
-        drawCenteredCellText(c, kPartyFooterViewRow, kPartyTextCols, "'A' - 'X' to View", 200, 200, 200);
-        drawCenteredCellText(c, kPartyFooterAddRow, kPartyTextCols, "(Ctrl) 'A' - 'X' to Add/Remove", 200, 200, 200);
+        drawCellText(c, kPartyFooterViewRow, kPartyFooterViewCol, "'A' - 'X' to View", 200, 200, 200);
+        drawCellText(c, kPartyFooterAddRow, kPartyFooterAddCol, "(Ctrl) 'A' - 'X' to Add/Remove", 200, 200, 200);
         drawCellText(c, kPartyFooterHireRow, kPartyFooterHireCol,
                      (party_page_ == PartyPage::Hirelings) ? "'Space' for Characters" : "'Space' for Hirelings", 200,
                      200, 200);
-        drawCellText(c, kPartyFooterHireRow, kPartyFooterExitCol, "'Z' to begin", 200, 200, 200);
+        drawCellText(c, kPartyFooterHireRow, kPartyFooterExitCol, "'Z' to exit", 200, 200, 200);
         drawBorderIntegratedText(c, borderBottomRow(kRosterBorderRow, kRosterBorderH), kRosterBorderCol, kRosterBorderW,
                                  "( 'ESC' to exit game )", 180, 180, 180);
     }
@@ -1885,7 +1845,6 @@ private:
     bool throw_anim_playing_ = false;
     bool throw_roll_when_done_ = false;
     int throw_anim_frame_ = 0;
-    int throw_anim_step_ = 0;
     int throw_anim_gate_ = 0;
     int create_name_cursor_frame_ = 0;
     int create_name_cursor_gate_ = 0;

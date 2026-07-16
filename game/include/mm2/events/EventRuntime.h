@@ -85,13 +85,14 @@ public:
     void bindCombat(combat::CombatSession *combat) { combat_ = combat; }
     combat::CombatSession *combat() const { return combat_; }
 
-    /** After a str.dat service intro Y/N (OP_0E 0x03/0x04/0x06), open the bound
+    /** After a service intro Y/N (OP_0E 0x02/0x03/0x04/0x06), open the bound
      *  town-service menu on "yes" (ASM: handler shell gates on A4-$7951). */
     enum class PendingTownMenu : uint8_t {
         None = 0,
         Tavern,
         Temple,
         Smith,
+        Training,
         Inn,
         SkillBuy,
         GeneralStore,

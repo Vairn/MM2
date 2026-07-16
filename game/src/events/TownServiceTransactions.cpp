@@ -366,6 +366,7 @@ TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id, gamepla
 {
     TownSvcTrainResult r;
     r.old_level = rec.level;
+    r.old_spell_level = rec.spell_level;
     r.spell_level = rec.spell_level;
     Mm2TownCommerce town;
     if (!mm2_town_commerce(map_id, &town)) {
@@ -391,7 +392,9 @@ TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id, gamepla
     }
     r.paid = true;
 
+    /* 0x20338..0x20356: -$7F3E increments +$20 and +$71. */
     rec.level = static_cast<uint8_t>(next_level);
+    rec.unknown_1a_20[6] = rec.level;
 
     /* HP @ 0x20390..0x20478: class*$64EE[map]/$64E4[map] (+rem bump) +
      * -$7F56(+$27). Writes +$60/+ $74/+ $5E. Not 0x9BCA (bash door). */
@@ -406,19 +409,17 @@ TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id, gamepla
     rec.hp_max = static_cast<uint16_t>(rec.hp_max + gain16);
     r.hp_gain = gain16;
 
-    const int caster_stat = mm2_class_caster_stat(rec.class_id);
-    if (caster_stat != 0) {
-        const uint8_t stat_val =
-            (caster_stat == 1) ? rec.intelligence_base : rec.personality_base;
-        const int sp_gain = mm2_attr_bonus(stat_val) + 3;
-        rec.sp_max = static_cast<uint16_t>(rec.sp_max + sp_gain);
-        rec.sp_current = rec.sp_max;
-        r.sp_gain = static_cast<uint16_t>(sp_gain);
+    /* Spell leaf @ 0x20480 → 0x20064 for classes 1..4. SP recalculated only
+     * when spell level rises (not +N every character level). */
+    const uint16_t sp_before = rec.sp_max;
+    const uint8_t cls = rec.class_id;
+    if (cls == 1 || cls == 2 || cls == 3 || cls == 4) {
+        r.gained_spells = mm2_train_spell_on_levelup(&rec) != 0;
     }
-
-    const int new_sl = mm2_class_spell_level_for(rec.class_id, next_level);
-    if (new_sl > rec.spell_level) {
-        rec.spell_level = static_cast<uint8_t>(new_sl);
+    if (rec.sp_max > sp_before) {
+        r.sp_gain = static_cast<uint16_t>(rec.sp_max - sp_before);
+    } else if (r.gained_spells) {
+        r.sp_gain = rec.sp_max;
     }
     r.spell_level = rec.spell_level;
     r.leveled = true;

@@ -24,6 +24,25 @@ enum {
     MM2_ROSTER_FILE_SIZE = MM2_ROSTER_RECORD_SIZE * MM2_ROSTER_RECORD_COUNT
 };
 
+/* Global save stream ("tail") — serialized by save_game_state @0x823C, reloaded
+ * @0x86F6; on disk at file offset 0x1860 (roster slots 48..63). Offsets follow
+ * the memcpy order in that routine (mirror of editor RosterGlobalTail.h). */
+enum {
+    MM2_ROSTER_TAIL_FIRST_SLOT =
+        MM2_ROSTER_CHAR_SECTION_SIZE / MM2_ROSTER_RECORD_SIZE, /* 48 */
+    MM2_ROSTER_TAIL_SIZE =
+        MM2_ROSTER_FILE_SIZE - MM2_ROSTER_CHAR_SECTION_SIZE, /* 0x820 */
+    /* Party selection: 8 x u16 LE roster indices (0xFFFF = empty) -> A4-$796A
+     * (stream write loop @0x8302..0x834A), then u16 party size -> A4-$795A. */
+    MM2_ROSTER_TAIL_PARTY_ROSTER_IDX = 0x028,
+    MM2_ROSTER_TAIL_PARTY_SIZE = 0x038,
+    /* 24-byte event/quest bank -> A4-$798B (write @0x84A2). The roster/party
+     * UI gates hireling-page entries (letters A..X) on bank[letter] != 0
+     * (tst.b -$798B(a4,d0) @0x586 / 0x7B6 / 0xB68) — hireling availability. */
+    MM2_ROSTER_TAIL_EVENT_BANK = 0x7CE,
+    MM2_ROSTER_TAIL_EVENT_BANK_LEN = 0x18
+};
+
 /* A single equipped/backpack item, as a convenience aggregate. The ON-DISK and
  * in-memory storage is Structure-of-Arrays (see Mm2RosterRecord), NOT an array
  * of these triplets — use the slot accessors below to read/write a logical slot.
@@ -151,6 +170,14 @@ Mm2RosterItemSlot mm2_roster_equipped(const Mm2RosterRecord *record, int idx);
 Mm2RosterItemSlot mm2_roster_backpack(const Mm2RosterRecord *record, int idx);
 void mm2_roster_set_equipped(Mm2RosterRecord *record, int idx, Mm2RosterItemSlot slot);
 void mm2_roster_set_backpack(Mm2RosterRecord *record, int idx, Mm2RosterItemSlot slot);
+
+/* Read/write raw bytes of the global save stream through the decoded roster
+ * (slots 48..63 round-trip container). tail_off in [0, MM2_ROSTER_TAIL_SIZE);
+ * out-of-range reads return 0, writes are ignored. u16 values are LE on disk. */
+uint8_t mm2_roster_tail_u8(const Mm2RosterFile *roster, int tail_off);
+void mm2_roster_tail_set_u8(Mm2RosterFile *roster, int tail_off, uint8_t v);
+uint16_t mm2_roster_tail_u16(const Mm2RosterFile *roster, int tail_off);
+void mm2_roster_tail_set_u16(Mm2RosterFile *roster, int tail_off, uint16_t v);
 
 int mm2_roster_slot_is_empty(const Mm2RosterRecord *record);
 void mm2_roster_name_to_cstr(const Mm2RosterRecord *record, char *out, size_t out_size);

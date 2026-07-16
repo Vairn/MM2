@@ -287,6 +287,125 @@ int mm2_class_spell_level_for(uint8_t class_id, int char_level)
     }
 }
 
+/* A4-$64C2 — sorcerer/archer auto-spells per new spell level (4 slots, 0x80=pad).
+ * Rows 9–10 are the bytes that follow in the data hunk (overlap into $64A2). */
+static const uint8_t kTrainAutoSorc[10][4] = {
+    {0x01, 0x03, 0x04, 0x05}, {0x08, 0x0a, 0x0b, 0x80}, {0x0f, 0x10, 0x12, 0x80},
+    {0x17, 0x18, 0x19, 0x80}, {0x1d, 0x1e, 0x80, 0x80}, {0x20, 0x22, 0x80, 0x80},
+    {0x26, 0x27, 0x80, 0x80}, {0x28, 0x2b, 0x80, 0x80}, {0x32, 0x33, 0x34, 0x36},
+    {0x37, 0x3a, 0x3c, 0x80},
+};
+
+/* A4-$64A2 — cleric/paladin auto-spells (stored as flat+0x30; 0x20064 subi #0x30). */
+static const uint8_t kTrainAutoCleric[10][4] = {
+    {0x32, 0x33, 0x34, 0x36}, {0x37, 0x3a, 0x3c, 0x80}, {0x3f, 0x40, 0x41, 0x80},
+    {0x44, 0x46, 0x48, 0x80}, {0x4b, 0x4d, 0x80, 0x80}, {0x50, 0x51, 0x80, 0x80},
+    {0x56, 0x57, 0x80, 0x80}, {0x5b, 0x80, 0x80, 0x80}, {0x00, 0x02, 0x0d, 0xc0},
+    {0x00, 0x02, 0x0d, 0xd2},
+};
+
+/* -$7F56 / 0x4442 threshold walk (same as Rest SP / training END bonus). */
+static uint8_t mm2_stat_bonus_7f56(uint8_t attr)
+{
+    static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
+                                      60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
+    uint8_t bonus = 0xFD; /* −3 */
+    size_t i;
+    for (i = 0; i < sizeof(kThresh); ++i) {
+        if (attr <= kThresh[i]) {
+            break;
+        }
+        ++bonus;
+    }
+    return bonus;
+}
+
+int mm2_train_spell_on_levelup(Mm2RosterRecord *rec)
+{
+    int level;
+    int new_sl;
+    uint8_t old_sl;
+    uint8_t class_id;
+    const uint8_t(*table)[4];
+    int slot;
+    uint8_t bonus;
+    int sp;
+
+    if (!rec) {
+        return 0;
+    }
+
+    /* 0x2007A..0x200B6: level from +$20 / +$71 (caller already incremented both). */
+    level = (int)rec->level;
+    old_sl = rec->spell_level;
+    class_id = rec->class_id;
+    /* Pure casters keep level; fighter-mages subq #6 @ 0x200A8. */
+    if (class_id != 3 && class_id != 4) {
+        level -= 6;
+    }
+    level += 1; /* 0x200AC */
+    if (level > 0) {
+        level >>= 1; /* 0x200B6 asr */
+    }
+    if (level < 1 || level > 10) { /* 0x200BA..0x200C8 */
+        return 0;
+    }
+    new_sl = level;
+    if (new_sl <= (int)old_sl) { /* 0x200D0 */
+        return 0;
+    }
+    /* Archer/Paladin natural cap 7 @ 0x200EE. */
+    if ((class_id == 2 || class_id == 1) && new_sl > 7) {
+        new_sl = 7;
+    }
+    if (new_sl <= (int)old_sl) {
+        return 0;
+    }
+
+    rec->spell_level = (uint8_t)new_sl;
+    /* Sync +$23 (high byte of unknown_22 LE) and keep +$72 via spell_level. */
+    rec->unknown_22 = (uint16_t)((rec->unknown_22 & 0x00FFu) | ((uint16_t)new_sl << 8));
+
+    table = (class_id == 3 || class_id == 1) ? kTrainAutoCleric : kTrainAutoSorc;
+    for (slot = 0; slot < 4; ++slot) { /* 0x2011A..0x201BE */
+        uint8_t raw = table[new_sl - 1][slot];
+        int flat;
+        int byte_index;
+        if (raw == 0x80) {
+            continue;
+        }
+        if (raw > 0x2F) {
+            flat = (int)raw - 0x30;
+        } else {
+            flat = (int)raw;
+        }
+        /* Spell book is 48 bits at +$51..+$56; ignore out-of-range flats. */
+        if (flat < 0 || flat >= 48) {
+            continue;
+        }
+        byte_index = 5 + (flat >> 3); /* $51 - $4C */
+        rec->spells[byte_index] =
+            (uint8_t)(rec->spells[byte_index] | (uint8_t)(1u << (flat & 7)));
+    }
+
+    /* SP @ 0x201C2..0x20228: (-$7F56(INT|PER)+3) * new_sl → +$58/+ $5A. */
+    if (class_id == 2 || class_id == 4) {
+        bonus = mm2_stat_bonus_7f56(rec->intelligence_current);
+    } else {
+        bonus = mm2_stat_bonus_7f56(rec->personality_current);
+    }
+    if (bonus >= 0xF2) { /* 0x20206 */
+        bonus = 0;
+    }
+    sp = ((int)bonus + 3) * new_sl;
+    if (sp < 0) {
+        sp = 0;
+    }
+    rec->sp_max = (uint16_t)sp;
+    rec->sp_current = (uint16_t)sp;
+    return 1;
+}
+
 /* Blacksmith static item-id tables [category][map][slot], decoded byte-exact from
  * the data hunk (A4-$68EE/$683A/$68B2/$6876). town*6 + slot @ 0x1C00E. */
 static const uint8_t kSmithIds[MM2_SMITH_CATEGORY_COUNT][MM2_TOWN_COUNT][MM2_SMITH_SLOTS] = {

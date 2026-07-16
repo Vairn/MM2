@@ -260,6 +260,12 @@ private:
             if ((rec.town_flags & 0x7F) != party_town_) {
                 continue;
             }
+            /* ASM 0x586/0xB68: hireling letters gate on event bank -$798B
+             * (persisted in the roster.dat global tail). */
+            if (slot >= 24 &&
+                mm2_roster_tail_u8(roster_, MM2_ROSTER_TAIL_EVENT_BANK + (slot - 24)) == 0) {
+                continue;
+            }
             out[count++] = slot;
         }
         return count;

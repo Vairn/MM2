@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "mm2_roster_codec.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -114,6 +116,13 @@ int mm2_train_hp_gain(uint8_t class_id, int map_id, uint8_t endurance_current);
 int mm2_attr_bonus(int attribute_value);
 int mm2_class_caster_stat(uint8_t class_id);
 int mm2_class_spell_level_for(uint8_t class_id, int char_level);
+
+/* Training Hall spell leaf @ 0x20064 (called from level-up @ 0x204AC when class
+ * is Cleric/Sorcerer/Archer/Paladin). Recomputes spell level from +$20/+class,
+ * grants up to 4 auto-spells from A4-$64A2 (cleric/paladin) or A4-$64C2
+ * (sorcerer/archer), and sets SP current/max = (-$7F56(INT|PER)+3)*new_sl.
+ * Returns 1 when spell level increased (UI prints "and new spells"). */
+int mm2_train_spell_on_levelup(Mm2RosterRecord *rec);
 
 /* ------------------------------------------------------------------------- *
  * Blacksmith static inventories (OP_0E 0x06, handler 0x1C54A; inventory

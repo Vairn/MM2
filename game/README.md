@@ -128,8 +128,9 @@ flowchart TB
 6. **Main loop** — `0x1280` mode dispatch (overland, town, combat, menus).
 7. **Combat** — round loop, player bar, monster AI, rewards.
 8. **Audio** — Desktop: pre-rendered WAVs from `EXTRACTED/audio/` via SDL
-   (`mm2::audio`, see doc 58). Amiga: Paula/`audio.device` port still TODO
-   (`AudioStub.cpp` no-op).
+   (`AudioSDL.cpp`, see doc 58). Amiga: generative Paula
+   (`AudioAmiga.cpp` + `mm2_amiga_audio.c`) — DATA tables, wave synth,
+   `play_sound_seq` / `play_tone_env` / title stream (ASM 0x6FB8 / 0x77AA / 0x283FC).
 9. **Copy protection** — externalize globe/disk strings (already extracted to `EXTRACTED/embedded_strings.json`).
 
 RE references: [`EXTRACTED/docs/README.md`](../EXTRACTED/docs/README.md),

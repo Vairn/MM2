@@ -2,7 +2,7 @@
 
 namespace mm2::audio {
 
-/* No-op backend for unit tests and Amiga (Paula port TBD). Desktop game uses AudioSDL. */
+/* No-op backend for unit tests. Amiga uses AudioAmiga.cpp; desktop uses AudioSDL. */
 
 bool init(const char * /*data_dir*/) { return true; }
 void shutdown() {}
@@ -10,5 +10,6 @@ void playSoundSeq(uint8_t /*id*/, bool /*sounds_enabled*/, bool /*walk_beep_enab
 void playTitleTheme(bool /*loop*/) {}
 void stopTitleTheme() {}
 void stopAll() {}
+void pumpTitleTheme() {}
 
 }  // namespace mm2::audio

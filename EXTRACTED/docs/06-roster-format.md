@@ -115,7 +115,12 @@ The reference editor reads the record sequentially into six `equiped[6]`, six
 blob (same size as the character section — stored in roster slots 48–63 in the
 editor). Reload path @ **`0x86F6`** re-parses when the session timer fires.
 Tail byte indices used by the editor mirror the memcpy order in that routine; see
-`editor/src/core/RosterGlobalTail.h`.
+`editor/src/core/RosterGlobalTail.h`. C codec accessors:
+`EXTRACTED/decomp/mm2_roster_codec.h` (`MM2_ROSTER_TAIL_*`,
+`mm2_roster_tail_u8/u16`). **Party selection persists here**: 8×u16 roster
+indices @ tail `+$028` (→ `-$796A`, `0xFFFF` = empty; stream loop @ `0x8302`)
+then u16 party size @ `+$038` (→ `-$795A` @ `0x836A`); the event/quest bank
+(hireling A..X availability) @ `+$7CE` (→ `-$798B`, write @ `0x84A2`).
 
 ### Direct global bytes (also event-script targets)
 
@@ -143,7 +148,7 @@ Tail byte indices used by the editor mirror the memcpy order in that routine; se
 | `-$798E` | Dawn's Mist / resort gate | **g=0x3C** |
 | `-$798D` | `period_flag_b` | **g=0x3D** — calendar period flag B (day 60/120/180 reset), **not** a dungeon gate |
 | `-$798C` | `period_flag_a` | **g=0x3E** — calendar period flag A (day 60/120/180 reset) |
-| `-$798B` + n | event bank | **g=0x00..0x17** — 24-byte general quest/event bank |
+| `-$798B` + n | event bank | **g=0x00..0x17** — 24-byte general quest/event bank. Doubles as **hireling A..X availability**: the roster/party UI gates hireling-page entries (page offset `$18`) on `bank[letter] != 0` (`tst.b (-$798B,d0)` @ `0x586`, `0x7B6`, `0xB68`, `0xD1C`, `0x292B2`). Persisted in the tail @ `+$7CE` |
 | `-$7995` + n | second gate bank | **g=0x80..0x83** (4 bytes) |
 | `-$796C` | move counter | |
 | `-$796B` | encounter mode | |
