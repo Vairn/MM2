@@ -248,7 +248,7 @@
 #define MM2_GS_PARTY_SELECT_CTX (-0x5D3F)  /* alias: same byte as SAVED_COND_FLAG */
 #define MM2_GS_FACING_INDEX     (-0x55D7)  /* byte  ($AA29) */
 #define MM2_GS_EVENT_BUSY_SENTINEL (-0x55C8)  /* byte  ($AA38) */
-#define MM2_GS_ATTRIB_ERA_GATE  (-0xA9F5)  /* byte  ($560B) */
+#define MM2_GS_ATTRIB_ERA_GATE  (-0x560B)  /* byte  ($A9F5) */
 #define MM2_GS_CONTEXT_MASK_TBL (-0x6BE6)  /* byte[] ($941A) */
 #define MM2_GS_INPUT_STATE      (-0x799D)  /* byte[] ($8663..$8667) */
 #define MM2_GS_INPUT_STATE_END  (-0x7999)  /* byte  ($8667) */

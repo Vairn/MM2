@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       skip_gallery:
-        description: Skip sprite PNG export (docs-only sync)
+        description: Skip sprite PNG export (docs-only; publish preserves live Amiga gallery)
         type: boolean
         default: true
 

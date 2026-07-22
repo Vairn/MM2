@@ -77,7 +77,8 @@ RNG helper: `JSR -$7BB4(A4)` with `(1, max)` returns a roll in `[1,max]`.
 - `0x11866` draws the command bar and sets capability flags for the active
   character:
   - `-$5E36` **melee/attack**: character is within front-rank cutoff `-$5E4D`.
-  - `-$5E35` **shoot**: class `$0F==2` or front rank, **and** `$4E` (bow) set.
+  - `-$5E35` **shoot**: class `$0F==2` (Archer) **or back rank** (slot at/after
+    the front-rank cutoff — was mislabeled "front rank"), **and** `$4E` (bow) set.
   - `-$5E34` **cast**: not silenced (`$26` bit1) **and** caster (`$72`) **and**
     spell points `$58 > 0`.
   - Each available command is printed via `0x1181E` (string pointer table at
@@ -93,11 +94,21 @@ RNG helper: `JSR -$7BB4(A4)` with `(1, max)` returns a roll in `[1,max]`.
 | F   | Fight (picker when >1 live; arg `$FF` → `0x1162C`) | `0x11B4C` → `0x111DA` |
 | C   | Cast spell              | spell select -> dispatch table `0xD000..0xD256` |
 | S   | Shoot (picker; arg `$FF` → `0x11610`) | `0x11BA4` → `0x111DA` |
-| Ctrl-A | Quick: Shoot if able else Attack else end turn | `0x11A2A` |
-| B   | Block                   | `0x11B0A` (`-$7D5E`/`-$7C3E`) |
-| R   | Run / retreat           | `0x11B1A` (`-$7CC2` party reorder) |
-| U   | Use item                | `0x11B62` (`0x133EC`) |
-| V   | View character          | `0x11B6E` (`-$7E00`) |
+| Ctrl-A | Quick: Shoot if able else Attack else end turn (no Block) | `0x11A2A` |
+| B   | **End turn only — no Block** (was mislabeled "Block") | `0x11A60` |
+| D   | **Block**                | `0x11B0A` |
+| E   | **Exchange** (party position swap) | `0x11B1A` → `-$7CC2` → `0x20FF2` |
+| R   | Run / retreat           | `0x116B0` / `0x11B9A` (`rng(1,100) < -$560D` retreat-diff) |
+| U / P | Use item (both keys map to the same handler) | `0x11B62` → `0x133EC` |
+| V / Q | View character (turn not spent) | `0x11B6E` (`-$7E00`) |
+
+**Correction (2026-07-17):** an earlier pass had **B**=Block and **R**=Run
+mapped to the same address (`0x11B1A`) and omitted **D**/**E** entirely. The
+jump cascade at `0x11BD0`–`0x11C1C` (key normalised by `-0x41`) actually
+routes: **B** → `0x11A60` (end-turn no-op), **D** → `0x11B0A` (Block), **E** →
+`0x11B1A` (Exchange), **R** → `0x116B0`/`0x11B9A` (Run). See
+`CombatSession.cpp` `handlePlayerCommand` switch (~lines 881–940) and
+`resolvePlayerRun` (~line 4043).
 
 Target selection: `0x111DA` ("which (A - x)?") when arg=`$FF`; arg `0` hits index 0.
 Single live monster forces arg←0 (auto). Spell Attack path also has `0xD43C`/`0xD390`.
@@ -122,8 +133,13 @@ For monster slot `-$4F7` (status `-$519[i]`):
     `-$11B9` (Sabil low5) to a party member.
 - **Multiplies/breeds** (`-$11A1`, Oabil bit7): `0x100B0` roughly doubles the
   on-screen count.
-- **Adds friends** (`-$11B7`, Oabil low nibble): `0x11F0A` appends reinforcement
-  monster ids to `-$11DE[]` ("<name> adds friends!").
+- **Adds friends, mid-fight** (`-$11B7`, Oabil low nibble): **`0x10082`**
+  (`monsterWaitsOrAddsFriends10082` in `CombatSession.cpp`) grows the live
+  monster count when the overflow/breed type matches and count is in range
+  `0x0A..0x6E` ("<name> adds friends!"). **`0x11F0A` is a different routine** —
+  it seeds the **initial** random-encounter group size from `monsters.dat`
+  Oabil (`FriendCountLookup` / `encounterAddsFriends` in `EncounterPicker.cpp`),
+  not a per-round combat action. An earlier pass conflated the two.
 
 ## Status / afflictions
 Battle status uses the `-$519[]` byte plus per-character bits. UI abbreviations
@@ -157,7 +173,7 @@ case.
 | `0x10118` | melee resolution |
 | `0x10DFC` | flee ("runs") |
 | `0x100B0` | multiply / breed |
-| `0x11F0A` | adds friends (reinforcements) |
+| `0x10082` | adds friends, mid-fight (reinforcements) — `0x11F0A` is the *initial* encounter group-size fill, not a round action |
 | `0x10B74` | per-monster reward decode |
 | `0x12430` | victory / end combat |
 | `0x11646` | defeat / retreat |
@@ -235,14 +251,18 @@ confirmation.
 - **Flee**: monsters that flee yield **no treasure and no XP share** (FAQ line
   1842-1843). `0x10DFC` prints "<name> runs".
 - **Fleeing party members**: a party member who flees combat **does not receive
-  XP for that encounter**. However, their XP share is **not forfeited** to the
-  remaining party — it is simply lost (FAQ line 1843-1844).
+  XP for that encounter**, and — **correcting the FAQ's "simply lost" framing**
+  (FAQ line 1843-1844) — their share is **not forfeited**: `shrinkPartyAfterCharRun`
+  removes the fleeing slot from `party_count_` *before* `finishVictory` divides
+  the XP pool by the eligible-member count, so the pool is split among fewer
+  members and the fled member's implicit share is absorbed by the rest. This
+  matches the main-text bullet above, not the older FAQ note.
 - **Unconscious characters**: receive XP (FAQ line 1845).
 - **Stoned / dead characters**: do **not** receive XP (FAQ line 1845).
 
 ### Monster friend-summon cap
 
-- When a monster uses "adds friends" (`Oabil` low nibble via `0x11F0A`): the
+- When a monster uses "adds friends" mid-fight (`Oabil` low nibble via `0x10082`; see correction above — **not** `0x11F0A`, which is the encounter-setup fill): the
   count of monsters **not in the front 10 doubles** (FAQ line 1846-1848).
   Example: 6 woodsmen in back → 12 after summon.
 - Maximum total monsters: **255**. If there are > 122 monsters already in the

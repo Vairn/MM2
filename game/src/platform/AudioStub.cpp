@@ -10,6 +10,6 @@ void playSoundSeq(uint8_t /*id*/, bool /*sounds_enabled*/, bool /*walk_beep_enab
 void playTitleTheme(bool /*loop*/) {}
 void stopTitleTheme() {}
 void stopAll() {}
-void pumpTitleTheme() {}
+bool pumpTitleTheme() { return false; }
 
 }  // namespace mm2::audio

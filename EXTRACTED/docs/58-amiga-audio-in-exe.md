@@ -36,7 +36,7 @@ Gating inside `play_sound_seq`:
 |----|----------|------|
 | `-$7326` | `0xCD8` | 12 Paula periods (C..B): 428, 404, 381, 360, 339, 320, 302, 285, 269, 254, 240, 226 |
 | `-$734A` | `0xCB4` | Octave wave offsets into synth buffer |
-| `-$7338` | `0xCC6` | Octave wave lengths (256..1) |
+| `-$7338` | `0xCC6` | Octave wave lengths: `256, 128, 64, 32, 16, 8, 4, 2` (ends at **2**, not 1 — `kMm2AmigaWaveLens` in `mm2_amiga_sfx_tables.h`) |
 | `-$7252` | `0xDAC` | Duration/volume index table |
 | `-$7232` | `0xDCC` | 10 pointers → sequences at `0xD22..` (**SFX**, not scene bytecode) |
 | `-$72FC` | `0xD02` | Ptrs to `Audio one`..`eight` name strings in CODE |
@@ -123,9 +123,25 @@ Exporter: `--tempo-scale 1` = Delay@50Hz. Default **`1.2` (`60/50`)** — face-v
 init(data_dir)          Amiga: wave_synth_init; Desktop: load WAVs
 playSoundSeq(id, sounds, walk)   // mirrors 0x6FB8 gates
 playTitleTheme(loop)    // start title stream
-pumpTitleTheme()        // Amiga: one note (attractTick); Desktop: no-op
+pumpTitleTheme() -> bool  // Amiga: cooperative per-frame pump; Desktop: false
 stopTitleTheme / stopAll
 ```
+
+**Cooperative title pump (2026-07-17 rewrite):** retail's `0x283FC` overlay
+blocks the whole attract loop inside `play_tone_env`'s `Delay(1)` spin, so no
+other drawing happens while a note plays. The remake can't block the frame
+loop, so `pumpTitleTheme()` is called once per attract frame and internally
+tracks **real elapsed time** (`timerGetPrec`) to catch up the equivalent
+`Delay(1)` ticks, stepping the `0x77AA` envelope and chaining directly into
+the next note with **no silence gap** — `mm2_amiga_audio_title_pump()`
+(renamed from `title_advance`) replaces the old "one blocking note per call"
+shape. `AudioAmiga::pumpTitleTheme()` returns `true` only when the stream
+finished or was aborted (caller then calls `stopTitleTheme()` and leaves
+attract); it returns `false` while still playing so the caller keeps
+animating/drawing. Catch-up is capped at 4 ticks/frame so a hitch cannot
+blast through many notes at once. Abort key-check was also changed from
+`keyCheck` (held) to `keyUse` (new press) so a key still held from the
+logo screen doesn't immediately kill the theme.
 
 **Wave fill:** ASM `0x75E2` writes `-$1(a5)` after `clr.w` (always 0). Remake uses
 sawtooth `buf[i]=(UBYTE)i` (intended low-byte of the loop index). Confirm with UAE

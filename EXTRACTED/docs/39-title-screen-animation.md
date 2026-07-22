@@ -69,13 +69,20 @@ per-part anchors. The remake uses the table above for attract animation.
 
 ## Peeker slots (TitleAttract only)
 
-Retail **`intro.32` bakes face-like pixels in all four hollows**. Only **one** peeker
-cel should be visible at a time:
+**Correction (2026-07-17):** `intro.32` does **not** bake face-like pixels into
+the hollows — the art behind every hole is already correct scenery (bark,
+grass, wing). Only **one** peeker cel should be visible at a time, and no
+cover-fill is needed or used:
 
-1. Re-blit **`intro.32` @ (3, 0)** (restores baked faces everywhere).
-2. **Cover-fill** each inactive peeker slot with its per-slot RGB (masks the baked face
-   in that hollow without overwriting surrounding bark/grass/wing).
+1. Re-blit **`intro.32` @ (3, 0)** (restores plain scenery everywhere).
+2. Leave inactive peeker slots **undrawn** — the re-blitted background already
+   shows through correctly. (An earlier note called for a per-slot RGB
+   "cover-fill" to mask a baked face; that would incorrectly paint over the
+   real bark/grass/wing art and has never matched the remake.)
 3. Blit **one** active `introclips` cel on top.
+
+Remake: `game/src/TitleScreen.cpp` `kPeekerSlots` (see its comment for the
+byte-level justification).
 
 | Slot | Frame | X | Y | Location |
 |------|------:|--:|--:|----------|
@@ -116,7 +123,10 @@ Peekers run only in **TitleAttract**. **TitleMenu** does not draw peekers or `in
 - Top box (304×98 @ 8,3): open-book art + centered **MIGHT / and / MAGIC / Book Two** + tagline.
 - Bottom box (304×93 @ 8,104): **C / V / G / M / O / Q** menu lines (greyed when `roster.dat` missing).
 - `book.32` page-turn: one frame step every **`kBookStepTicks` (8)** ticks.
-- **Escape** returns to TitleAttract; any key from attract opens menu.
+- Any key from attract opens the menu (edge-triggered `keys.any_key`). **Escape
+  is not a dedicated "back to attract" key in `menuTick()`** — the menu stays up
+  until **C/V/G/M/O** is pressed or **Q** quits; only the Controls/Options
+  sub-panels pop back to the menu on Escape. (Remake: `TitleScreen.cpp::menuTick`.)
 
 ---
 
@@ -155,6 +165,6 @@ On original hardware: menu text drawn on **retained** `intro.32` framebuffer (la
 
 - [`38-title-screen-and-intro-assets.md`](38-title-screen-and-intro-assets.md) — boot graph, logo `0x26BC4`, asset strings
 - [`39-character-ui-view-create.md`](39-character-ui-view-create.md) — **P** / **C** / character sheet
-- [`26-audio-callpaths-title-death-shared.md`](26-audio-callpaths-title-death-shared.md) — title music `0x12D`
+- [`58-amiga-audio-in-exe.md`](58-amiga-audio-in-exe.md) — title theme is DATA `0x1D79` / overlay `0x283FC`, cooperative pump in the remake ([`26-audio-callpaths-title-death-shared.md`](26-audio-callpaths-title-death-shared.md)'s "title music `0x12D`" claim is **superseded/wrong** — that address is a graphics blit, not audio)
 - [`06-gfx-loading.md`](06-gfx-loading.md) — `.32` codec
 - [`game/README.md`](../../game/README.md) — build / run

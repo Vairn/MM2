@@ -230,8 +230,10 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
         }
         Mm2RosterRecord &rec = roster_->records[idx];
         auto *raw = reinterpret_cast<uint8_t *>(&rec);
-        /* Remake keeps canonical spell_level at +$72; Amiga base is +$23.
-         * Seed +$23 so 0x4476's +$23→+$72 mirror preserves it. */
+        /* Remake keeps canonical level/spell_level at +$71/+72; Amiga working
+         * copies are +$20/+23. Seed both so 0x4476's working→permanent mirror
+         * preserves them (stock roster can leave +$20 stuck at 1). */
+        raw[0x20] = rec.level;
         raw[0x23] = rec.spell_level;
         /* 0x4476 sync_party_secondary_stats */
         raw[0x6B] = raw[0x10]; /* might */

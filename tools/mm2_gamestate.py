@@ -74,7 +74,7 @@ FIELDS: list[FieldDef] = [
     FieldDef("string_walk_index", -0x5D44, "w", "$A2BC string resolver"),
     FieldDef("facing_index",     -0x55D7, "b", "$AA29 0/2/4/6 N/E/S/W"),
     FieldDef("event_busy_sentinel", -0x55C8, "b", "$AA38 $FF during script"),
-    FieldDef("attrib_era_gate_cache", -0xA9F5, "b", "$560B attrib+0x0F cache"),
+    FieldDef("attrib_era_gate_cache", -0x560B, "b", "$A9F5 attrib+0x0F cache"),
     FieldDef("input_state_end",  -0x7999, "b", "$8667 end of input-state span"),
     # calendar / era
     FieldDef("time_subday",      -0x79B4, "w", "$864C 256 = 1 day"),

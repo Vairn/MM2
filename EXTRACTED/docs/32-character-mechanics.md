@@ -7,7 +7,8 @@ Values below are **FAQ-sourced** unless marked **ASM-confirmed**. Use ASM traces
 before treating formulas as on-disk or hard-coded addresses.
 
 **Related:** [`06-roster-format.md`](06-roster-format.md) (`$16` thievery,
-`$17`–`$20` skills/flags), [`17-combat-system.md`](17-combat-system.md).
+`$17`–`$1F` skills/flags, `$20` **working level** — not a skill/flag),
+[`17-combat-system.md`](17-combat-system.md).
 
 ---
 
@@ -57,8 +58,27 @@ FAQ table (lines 446–467); values from 60+ verified via save-state comparison
 | 200–224 | 20 | 17 | 17 |
 | 225–249 | 21 | 18 | 18 |
 
+**ASM-confirmed SP/level boundaries (2026-07-17):** the FAQ table above rounds
+attribute ranges to even pairs; the real Rest-time lookup (`luck_bonus_table_walk`
+@ **`0x4442`**, walking thresholds at **`A4-$7486`**, called from the Rest SP
+recompute at **`0x19C30`** — see [`06-roster-format.md`](06-roster-format.md) and
+[`57-user-help-trace-residuals.md`](57-user-help-trace-residuals.md) §4) uses
+`attr <= threshold` (unsigned `bls`) against the table
+`{4,6,9,13,15,17,19,22,26,30,45,60,75,90,105,120,135,150,175,200,225,250,255}`,
+giving tier index `i` = SP/level directly. In ASM-confirmed terms the tier
+boundaries are **`≤4→0, ≤6→1, ≤9→2, ≤13→3, ≤15→4, ≤17→5, ≤19→6, ≤22→7, ≤26→8,
+≤30→9, ≤45→10, ≤60→11, ≤75→12, ≤90→13, ≤105→14, ≤120→15, ≤135→16, ≤150→17,
+≤175→18, ≤200→19, ≤225→20, ≤250→21, ≤255→22`** — e.g. attribute **13** is
+tier 3 (not 4 as the FAQ's "13–14→4" row implies); the FAQ/ASM boundaries are
+off by one attribute point at every tier edge. This ASM table only drives the
+**Rest SP recompute**; whether the same table also gates SP-at-level-up is
+unconfirmed — treat the FAQ table as the level-up reference until traced.
+Remake: `gameplay::restSpellBonusFactor()` in `game/src/gameplay/Movement.cpp`.
+
 **Fighter-mage SP quirk (FAQ lines 477–481):** After promotion, Paladin/Archer
 max SP ≈ `(points per level) × (level − 6)` — described as matching MM1 behaviour.
+**Not yet ASM-confirmed** — the Rest recompute above does not special-case
+Paladin/Archer beyond the INT/PER attribute choice at `$7B36`.
 
 Example (FAQ line 500–501): Sorcerer with End 20 → 6 (base at End 11–12) + 4
 (END bonus) = **10 HP per level** when training at Atlantium.

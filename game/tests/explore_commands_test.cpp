@@ -143,6 +143,52 @@ int main()
         expect(gs.day() == static_cast<uint16_t>(day0 + 1), "rest day-advance crosses midnight", fails);
     }
 
+    /* ---- Rest SP recompute @ 0x19C30 (INT/PER × working level) ------------ */
+    {
+        Mm2RosterRecord cass{};
+        cass.class_id = 4; /* Sorcerer */
+        cass.level = 4;
+        cass.spell_level = 2;
+        cass.intelligence_current = 21; /* tier → bonus 4 → SP/level 7 */
+        cass.personality_current = 7;
+        cass.unknown_1a_20[6] = 1; /* stock roster drift: +$20 stuck at 1 */
+        cass.unknown_22 = static_cast<uint16_t>(2u << 8);
+        cass.sp_max = 7;
+        cass.sp_current = 7;
+
+        recomputeRestSpellPoints(cass);
+        expect(cass.sp_max == 7 && cass.sp_current == 7,
+               "without sync, stale +$20=1 keeps stock Cassandra at SP 7", fails);
+
+        syncRosterWorkingLevelFields(cass);
+        expect(cass.unknown_1a_20[6] == 4, "sync copies +$71 level into +$20", fails);
+        recomputeRestSpellPoints(cass);
+        expect(cass.sp_max == 28 && cass.sp_current == 28,
+               "Cassandra L4 INT21 Rest SP = (4+3)*4 = 28", fails);
+
+        Mm2RosterRecord gene{};
+        gene.class_id = 3; /* Cleric */
+        gene.level = 4;
+        gene.spell_level = 2;
+        gene.personality_current = 20; /* same 7 SP/level tier */
+        gene.intelligence_current = 10;
+        gene.sp_max = 7;
+        gene.sp_current = 7;
+        syncRosterWorkingLevelFields(gene);
+        recomputeRestSpellPoints(gene);
+        expect(gene.sp_max == 28 && gene.sp_current == 28,
+               "Gene Eric L4 PER20 Rest SP = (4+3)*4 = 28", fails);
+
+        Mm2RosterRecord knight{};
+        knight.class_id = 0;
+        knight.level = 4;
+        knight.spell_level = 0;
+        knight.sp_max = 0;
+        syncRosterWorkingLevelFields(knight);
+        recomputeRestSpellPoints(knight);
+        expect(knight.sp_max == 0, "non-caster (+$23==0) Rest leaves SP alone", fails);
+    }
+
     if (fails == 0) {
         std::printf("OK: explore_commands_test\n");
         return 0;

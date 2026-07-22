@@ -22,9 +22,10 @@ void stopTitleTheme();
 void stopAll();
 
 /**
- * Amiga: advance one title-theme note (blocking Delay ticks; ASM 0x283FC).
- * Desktop SDL: no-op (async mixer already plays the theme).
+ * Amiga: cooperative title pump (once per attract frame). Paula keeps sounding
+ * between frames; notes chain without silence. Returns true when theme
+ * ended/aborted (leave attract). Desktop: no-op, false.
  */
-void pumpTitleTheme();
+bool pumpTitleTheme();
 
 }  // namespace mm2::audio

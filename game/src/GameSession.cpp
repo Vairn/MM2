@@ -362,6 +362,9 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
             rec.hp_max = rec.hp_current;
         }
         rec.condition = static_cast<uint8_t>(rec.condition & static_cast<uint8_t>(~0x40u));
+        /* Stock starters (Gene Eric / Cassandra) ship +$20=1 while +$71=4.
+         * Rest @ 0x19C9A multiplies SP by +$20 — align working copies now. */
+        gameplay::syncRosterWorkingLevelFields(rec);
     }
 
     quit_ = false;
@@ -1383,26 +1386,9 @@ void GameSession::executeRest()
             rec.hp_max = rec.hp_current; /* 0x19C2A */
         }
 
-        /* 0x19C30 SP recompute (ASM-exact):
-         *   if +$23==0 → skip
-         *   attr = +$12 (PER); if class==4 or ==2 → attr = +$11 (INT)
-         *   bonus = -$7F56(attr) @ 0x4442 (table -$7486); clamp if >= $F2
-         *   sp_current (+$5A) = (bonus+3) * +$20; then sp_max (+$58) = sp_current */
-        const uint8_t caster_flag = static_cast<uint8_t>((rec.unknown_22 >> 8) & 0xFF); /* +$23 */
-        if (caster_flag != 0) {
-            uint8_t attr = rec.personality_current; /* +$12 */
-            if (rec.class_id == 4 || rec.class_id == 2) {
-                attr = rec.intelligence_current; /* +$11 */
-            }
-            uint8_t bonus = gameplay::restSpellBonusFactor(attr);
-            if (bonus >= 0xF2) {
-                bonus = 0;
-            }
-            const uint8_t mul = rec.unknown_1a_20[6]; /* +$20 */
-            const uint16_t sp = static_cast<uint16_t>((static_cast<uint16_t>(bonus) + 3u) * mul);
-            rec.sp_current = sp;
-            rec.sp_max = sp; /* 0x19CD2 */
-        }
+        /* 0x19C30 SP recompute — sync working +$20/+23 first (stock roster drift). */
+        gameplay::syncRosterWorkingLevelFields(rec);
+        gameplay::recomputeRestSpellPoints(rec);
     }
 
     /* 0x19CEC: advance the clock by 0x55 sub-day units (one rest = ~85 ticks),

@@ -375,7 +375,9 @@ void mm2_create_build_record(const Mm2PendingCharacter *pending, Mm2RosterRecord
     out->food = MM2_CREATE_START_FOOD;
     out->condition = 0;
     out->level = 1;
+    out->unknown_1a_20[6] = 1; /* +$20 working level — Amiga create @ 0x272D6 */
     out->spell_level = 0;
+    out->unknown_22 = 0; /* +$23 working spell-level */
     out->experience = 0;
     out->gold = MM2_CREATE_START_GOLD;
     out->gems = 0;

@@ -62,8 +62,17 @@ void syncCurrentCellFlags(GameStateView &gs, const world::MapWorld &world);
  * clr -$79E1; if light==0 and (-$5600>=$80 or bit5 of -$55D6) → set -$79E1. */
 void sessionInteractionGate(GameStateView &gs);
 
-/* Rest SP bonus lookup @ 0x4442 (table A4-$7486): returns (bonus+3) factor
- * before mulu with roster +$20. Attr is INT or PER per class branch @ 0x19C48. */
+/* Rest SP bonus lookup @ 0x4442 (table A4-$7486): returns the unsigned tier
+ * byte used at 0x19C74 before addq #3. Attr is INT or PER per class @ 0x19C48. */
 uint8_t restSpellBonusFactor(uint8_t attr);
+
+/* Align Amiga working level (+$20) / spell-level (+$23) with remake-canonical
+ * +$71/+72. Stock roster starters ship +$20=1 while +$71=4; Rest @ 0x19C9A
+ * multiplies by +$20, so a stale working byte leaves casters at creation SP. */
+void syncRosterWorkingLevelFields(Mm2RosterRecord &rec);
+
+/* Rest SP recompute @ 0x19C30: if +$23!=0, SP = (bonus+3)*+$20 → +$5A/+ $58.
+ * Call syncRosterWorkingLevelFields first when canonical fields may have drifted. */
+void recomputeRestSpellPoints(Mm2RosterRecord &rec);
 
 }  // namespace mm2::gameplay

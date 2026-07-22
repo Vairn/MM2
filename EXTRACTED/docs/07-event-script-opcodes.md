@@ -261,7 +261,7 @@ static pc-relative calls (statically resolvable):
 | `6` (`0x06`) | `jsr 0x1c54a` | (static) blacksmith |
 | `7` (`0x07`) | `jsr -$7DB8` | general store |
 | `8` (`0x08`) | `jsr -$7DBE` | arena / special shop |
-| `100` (`0x64`) | `jsr -$7D9A` | portal/travel |
+| `100` (`0x64`) | `jsr -$7D9A` | **Circus** (`0xDF04`, loc 10 day-gated attribute mini-game) — was mislabeled "portal/travel"; Poorman's Portal is a **default-range** selector (`0x11`), not `0x64` |
 | `126` (`0x7E`) | `jsr -$7DB2` | special |
 | `127` (`0x7F`) | `jsr -$7DAC` | special |
 | `128` (`0x80`) | `jsr -$7DA6` | special |
@@ -474,7 +474,7 @@ that would otherwise show a fabricated/misleading placeholder:
 | `[16]`–`[20]` | Nordonna's kobold-rescue + hireling reward | **Nordonna @ `(1,2)`**; sons rescued cavern loc 17 `(15,0)`; hire **A/B** at inn (doc 53) |
 | `[21]` | "A sleepy conjurer yawns, 'My friends, for only 20 gold I can enroll you in the local mage guild.' Buy in (y/n)?" | `0x0D` enroll mage guild |
 | `[22]` | "Not enough gold!" | shared rejection |
-| `[23]` | "Fanciful Feldecarb Fountain flows full as fluttering faeries frolic fastidiously. Flick a farthing (y/n)?" | `0x0A` **Feldecarb Fountain** @ Middlegate **`(2,10)/W`** (top-right of town) |
+| `[23]` | "Fanciful Feldecarb Fountain flows full as fluttering faeries frolic fastidiously. Flick a farthing (y/n)?" | `0x0E` **Feldecarb Fountain** @ Middlegate **`(15,15)`** — was mislabeled `0x0A`/`(2,10)` (that selector/coords are **Nordon**, not Feldecarb); see [`53-nordon-nordonna-quests.md`](53-nordon-nordonna-quests.md) |
 | `[24]` | "You find a fabulous castle key!" | fountain success |
 | `[25]` | "Fool, you have no farthing to flick!" | fountain failure when no farthing item — **NOT** arena tickets (`0x08` @ `(2,13)`) |
 | `[26]` | key-purchase prompt (500gp) | locksmith |
@@ -997,14 +997,33 @@ are mutually exclusive unless noted.
 
 **RE guess:** B — arena entrance tiles decompile to `exec_selector(0x10)` / `0x49` / etc., not `OP_12` in the visible script (**Partial**).
 
-**RESOLVED (2026-07, Verified):** B, precisely. Every default-range selector
-(`0x09`–`0x10`, `0x11`–`0x37`, `0x38`–`0x4B`, `0x4C`–`0x54`, `0x56`–`0x5B`,
-`0x5C`–`0x5E`, `0x65`–`0x69`, `0x6A`–`0x7C`, `0x97`–`0x98`, `0xE3`–`0xF3`,
-`0xF4`–`0xFB`) is binned by `0x15EDC` and dispatched — via the SAME fixed
-thunk `-$7DFA` — to the SAME `0x9D76` Arena Games **ticket-combat-reward**
-engine (ticket scan/consume, fixed encounter, gold reward). It is not a
-generic shop. See §"Default-range Arena Games ticket engine (`0x9D76`)"
-below and `EventVmHelpers.h`.
+**RESOLVED (2026-07, Verified) — superseded, corrected below:** an earlier
+pass claimed every default-range selector was dispatched via thunk `-$7DFA`
+to the same `0x9D76` Arena Games engine. **That direction was backwards.**
+Byte-verified against the A4 vtable trampoline table
+(`EXTRACTED/ghidra/mm2_data_00.bin`):
+
+```text
+-$7DFA (file off 0x0204): 4EF9 000092F2  -> 0x092F2 event_dat_loader
+-$7DBE (file off 0x0240): 4EF9 00009D76  -> 0x09D76 Arena Games
+```
+
+So **explicit selector `0x08`** (the shop `exec_selector(0x08)` case) is the
+**sole** path into the `0x9D76` Arena Games ticket-combat-reward engine — via
+its own thunk `-$7DBE`, not `-$7DFA`. The **default-range bin** (`0x15EDC`
+categories `0x3C`–`0x46`, covering `0x09`–`0x10`, `0x11`–`0x37`, `0x38`–`0x4B`,
+`0x4C`–`0x54`, `0x56`–`0x5B`, `0x5C`–`0x5E`, `0x65`–`0x69`, `0x6A`–`0x7C`,
+`0x97`–`0x98`, `0xE3`–`0xF3`, `0xF4`–`0xFB`) instead re-enters thunk `-$7DFA`
+→ **`0x092F2` `event_dat_loader`** with a synthetic index, queuing an overlay
+event (queued-id + scanner epilogue @ `0x176B6`) — almost certainly to run
+one of `event.dat`'s non-map "string bank" pseudo-records (e.g. loc 60
+Nordon/Nordonna/Corak) for whatever cross-town quest/reward text that
+category represents. The exact reinvocation index mapping is **not**
+reverse-engineered yet — treat the default-range bin as "queues an event
+overlay", not "always Arena". See `game/src/events/EventTownServices.cpp`
+(selector `0x08` case, dated comment) and
+`EventRuntime::runDefaultRangeOverlay` / `runQueuedDispatch` in
+`game/src/events/EventRuntime.cpp`.
 
 **Your answer:** ___
 
@@ -1020,6 +1039,12 @@ below and `EventVmHelpers.h`.
 - **D.** You fire `0xFD` regularly in early game.
 
 **RE guess:** A — names in `SELECTOR_NAMES` + portal tiles using high selectors; `0xFD` seen rarely (**Partial**).
+
+**Correction (2026-07-17):** `0x64` is **not** portal travel — it is the
+**Circus** mini-game (`-$7D9A` → `0xDF04`, loc 10 day-gated), ported in
+`EventTownServices.cpp` case `0x64`. "Poorman's Portal" is a **default-range**
+selector (`0x11`), dispatched through the `0x15EDC` bin → `event_dat_loader`
+overlay path (see §5 correction above), not an explicit high selector.
 
 **Your answer:** ___
 

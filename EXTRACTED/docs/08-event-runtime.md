@@ -142,7 +142,7 @@ host script ends after the selector (and any async wait) returns.
 ## Era gating (two layers)
 
 1. **Screen gate** @ `0x172BC`: `era_low` (`A4-$79B5`) must equal cached
-   `attrib.dat` byte `0x0F` for the current screen (`A4-$A9F5`).
+   `attrib.dat` byte `0x0F` for the current screen (`A4-$560B`).
 2. **Script ops** `OP_22` / `OP_23`: range-check era or day-of-year into
    `cond_flag` (`A4-$7951`).
 
@@ -194,7 +194,7 @@ Anchor `A4 = $7FFE`. Canonical signed offsets (see `mm2_gamestate.h`).
 | `-$6CC8` | `opcode_len_tbl` | 51×16-bit deltas (`0x00..0x32`) |
 | `-$1108` | `event_blob` | ptr → event.dat |
 | `-$110C` | `map_blob` | ptr → map.dat |
-| `-$A9F5` | `attrib_era_gate_cache` | byte |
+| `-$560B` | `attrib_era_gate_cache` | byte |
 
 ## Token skip table (`A4-$6CC8`)
 

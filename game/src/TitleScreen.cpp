@@ -800,8 +800,11 @@ TitleScreen::AttractAdvance TitleScreen::attractTick(const platform::KeyState &k
     }
     tickPegasusAnimation();
 #if MM2_HOST_AMIGA
-    /* Overlay 0x283FC: one note per attract iter (blocking Delay ticks). */
-    audio::pumpTitleTheme();
+    /* Cooperative music: pump one frame of Delay ticks, keep drawing/animating. */
+    if (audio::pumpTitleTheme()) {
+        audio::stopTitleTheme();
+        return AttractAdvance::GoMenu;
+    }
 #endif
     if (keys.any_key) {
         audio::stopTitleTheme();

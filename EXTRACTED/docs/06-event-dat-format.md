@@ -58,16 +58,33 @@ All 71 entries are contiguous (entry[n].offset + entry[n].length == entry[n+1].o
 The engine scans all triplets each time the party steps on a tile.
 If `position` matches and `(flags & context) != 0`, the event fires.
 
-**Known condition flag values (towns/outdoor):**
+**Known condition flag values (towns/outdoor) — ASM-confirmed facing bits:**
 
-| Value | Meaning              |
-|-------|----------------------|
-| 0x10  | Always fires         |
-| 0x20  | Directional (N?)     |
-| 0x40  | Special/interact     |
-| 0x80  | Enter/step-on        |
-| 0xC0  | Enter + Special      |
-| 0xF0  | Any direction        |
+Tile scanner cond test @ `0x17684`: `(triplet_cond & context) != 0`. `context`
+comes from `context_mask_tbl` @ `A4-$6BE6` (file offset `0x1418` in the data
+hunk), indexed by **facing index** `0/2/4/6` (odd indices unused/zero):
+
+| Facing index | Facing | context byte |
+|--------------|--------|---------------|
+| 0 | West | `0x10` |
+| 2 | South | `0x20` |
+| 4 | East | `0x40` |
+| 6 | North | `0x80` |
+
+So a triplet `cond` byte is a **bitmask of which facing(s) trigger the event**,
+not a severity/always/directional tier:
+
+| Value | Meaning                          |
+|-------|----------------------------------|
+| 0x10  | Fires when facing **West**       |
+| 0x20  | Fires when facing **South**      |
+| 0x40  | Fires when facing **East**       |
+| 0x80  | Fires when facing **North**      |
+| 0xC0  | Fires when facing East or North  |
+| 0xF0  | Fires facing any direction       |
+
+Remake: `mm2::events::EventRuntime::contextMask()` / `initContextMaskTable()`
+in `game/src/events/EventRuntime.cpp` (facing index out of range → `0xF0`).
 
 ### 2. String Offset Word
 

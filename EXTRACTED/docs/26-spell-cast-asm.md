@@ -45,13 +45,26 @@ cast (`0x6E30`) and from combat character-sheet **`V`** (`0x675A`).
 | Player turn | `0x119C2` | ~13501 (DC) | Combat menu loop |
 | Command bar | `0x11866` | ~13479 | Sets `A4-$5E34` if caster, not silenced, SP>0 |
 | Read key | `0x1175C` | ~13463 | `CMPI #$43` accepts **C** |
-| Dispatch | `0x11BF8` | ~13538 | `'C'` (`#$43`) → `0x11A90` |
-| Precast | `0x11A90` | ~13515 | `JSR -$7E4E(A4)` |
-| Picker | `0x11AAC` | ~13517 | `JSR -$7E12(A4)` → index in **D0**, `$FFFF` = cancel |
-| School gate | `0x11AE8` | — | `JSR $13730(PC)` with index on stack |
-| Cleric FX | `0x11AF6` | — | if gate **≠ 0**: `JSR $CDB8(PC)` |
-| Sorc FX | `0x11B02` | — | if gate **= 0**: `JSR $CFF8(PC)` |
-| SP spend | `0x11B14` | — | optional `JSR $6DEE` / refresh |
+| Dispatch | `0x11BF8` | ~13538 | `'C'` (`#$43`) → `0x11A68` |
+| Precast | `0x11A68` | ~13515 | `JSR -$7E4E(A4)` |
+| Picker | `0x11A84` | ~13517 | `JSR -$7E12(A4)` → index in **D0**, `$FFFF` = cancel |
+| School gate | `0x11AC0` | — | `JSR $13708(PC)` with index on stack |
+| FX (gate ≠ 0) | `0x11ACE` | — | `JSR $CD90(PC)` |
+| FX (gate = 0) | `0x11ADA` | — | `JSR $CFD0(PC)` |
+| SP spend | `0x11AEC` | — | optional `JSR -$7E48(A4)` / `0x12848` refresh |
+
+**Correction (2026-07-17):** byte-verified against
+`EXTRACTED/mm2.capstone.annotated.asm` (lines ~22381–22428) — the addresses
+above replace an earlier pass that had every step ~`0x28` too high
+(`0x11A90`→`0x11A68`, `0x11AE8`→`0x11AC0`, `$13730`→`$13708`, `$CDB8`→`$CD90`,
+`$CFF8`→`$CFD0`). **`$13730` is mid-function-body** of the real gate entry at
+`$13708`, not the entry point — the ASM annotation at `$13730` even lands on a
+`link.w a5,#$fffc` that is *not* the routine's first instruction, which is the
+`@LBL` boundary bug that produced the stale address. The **`$CDB8`/`$CFF8`
+addresses documented below for the school-gate body and the exploration path
+(`0x6E30`) are still correct** — those are genuinely different call sites
+(exploration always uses `$CDB8`; only the *combat* gate's two branches were
+mislabeled as `$CDB8`/`$CFF8` when they are actually `$CD90`/`$CFD0`).
 
 ## Exploration / non-combat cast (`0x6E30`)
 

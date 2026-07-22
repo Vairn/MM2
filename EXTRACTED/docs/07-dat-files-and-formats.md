@@ -64,9 +64,9 @@ Layout:
 - Record fields:
   - `0x00..0x0B` - item name (12-byte ASCII, space-padded)
   - `0x0C` - separator/pad (editor writes `0`)
-  - `0x0D` - usable-by bitmask
+  - `0x0D` - **forbidden-class** bitmask (set bit = that class **cannot** use the item; `K P A C S R N B` = `0x80..0x01`) — not a "usable-by" mask
   - `0x0E` - bonus packed nibble (`hi=bonus_type`, `lo=bonus_amount`)
-  - `0x0F` - effect packed nibble (`hi=effect_type`, `lo=effect_amount`)
+  - `0x0F` - **use-power byte** — flat spell/effect index, **not** a `hi/lo` nibble pair
   - `0x10` - damage byte
   - `0x11` - pad/unused byte (editor writes `0`)
   - `0x12..0x13` - gold (`uint16` little-endian on disk; shop price in gp; game
@@ -124,14 +124,20 @@ Layout:
 
 - 256 records
 - 26 bytes per record (`0x1A`)
-- Record shape currently modeled as:
-  - `0x00..0x0D` - monster name (14-byte fixed field)
-  - `0x0E..0x19` - 12-byte stat/behavior payload (still being field-lifted)
+- Record shape (confirmed by the unpacker @ ASM `0x4C8E`, `MM2_MON_OFF_*` in
+  `EXTRACTED/decomp/mm2_monsters_codec.h`):
+  - `0x00..0x0D` - monster name (14-byte fixed field; high bit of first byte used elsewhere as a flag — see [`16-monster-ability-format.md`](16-monster-ability-format.md))
+  - `0x0E` HP · `0x0F` XP (same lookup table as HP, `A4-$746C`) · `0x10` treasure ·
+    `0x11` Pabil (group attack) · `0x12` Sabil (single-target attack) ·
+    `0x13` Oabil (other behaviour / friend-add) · `0x14` speed · `0x15` picture ·
+    `0x16` AC · `0x17` damage · `0x18` speed2 · `0x19` magic resist
 
 Notes:
 
-- This is sufficient for byte-perfect load/edit/save and safe round-tripping.
-- Field-level semantics for the 12-byte payload remain TODO pending deeper combat call-site traces.
+- Byte-perfect load/edit/save and round-tripping are solid.
+- Full field semantics (HP/XP/treasure/Pabil/Sabil/Oabil/speed/AC/damage/mres)
+  are decoded — see [`16-monster-ability-format.md`](16-monster-ability-format.md)
+  for the per-field breakdown and status-effect/verb tables.
 
 ## `str.dat` (confirmed encoding, partial semantics)
 

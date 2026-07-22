@@ -312,7 +312,7 @@ void stopAll()
     SDL_UnlockAudioDevice(g_dev);
 }
 
-void pumpTitleTheme() {}
+bool pumpTitleTheme() { return false; }
 
 }  // namespace mm2::audio
 

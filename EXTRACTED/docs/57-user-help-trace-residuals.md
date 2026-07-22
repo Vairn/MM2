@@ -87,6 +87,7 @@ engine depth, not a short playtest ask.
 | **Watch / dump** | Exact SP numbers pre/post Rest; whether non-casters change; any “rested” condition bits. |
 | **Priority** | **Medium** — wrong SP after Rest hurts casters; formula is local once `0x4442` table is dumped. |
 | **Remake (2026-07-10)** | **Wired.** Table `A4-$7486` from data hunk; `(bonus+3)*+$20` → `+$5A` then copy to `+$58`. Roster `+$20`/`+$23` are the ASM fields (not `spell_level`/`level`). |
+| **Drift bug found (2026-07-17)** | Stock `roster.dat` starters ship the *working* copies `+$20`/`+$23` stuck at their character-creation seed (`+$20=1`, `+$23=0` — see `0x272D6`) while the *canonical* fields `+$71`/`+$72` already hold the real level/spell-level. Rest multiplies by `+$20` directly (`0x19C9A`), and `sync_party_secondary_stats` @ `0x4476` mirrors **`+$20→+$71`** (working→canonical, not the reverse) — so an un-refreshed working copy first stalls Rest SP at the creation value, then can clobber a correct canonical level on the next sync. Fixed in the remake by `gameplay::syncRosterWorkingLevelFields()` (copies `+$71→+$20`, `+$72→+$23`), called from `GameSession::start` (party load) and before `recomputeRestSpellPoints()` in `executeRest`, and seeded in `CombatSession::enter` alongside the existing `+$23` seed. See [`06-roster-format.md`](06-roster-format.md) `$20`/`$23` fields. |
 
 ### 5. Search Identify / rating UI — `0x1B19C`
 

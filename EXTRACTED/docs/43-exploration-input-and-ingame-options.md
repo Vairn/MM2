@@ -332,9 +332,17 @@ party-order entries.
 - Prompt `Rest here? (Y/N)` (`$19ECB`) — same indoor/outdoor key-read split as the main
   loop; `N` → repaint (`-$7EBA` → `0x560A`), clear `-$7950`.
 - `Y` → `$19AD6` (hireling daily-pay check; fail → `Not enough gold - Dismiss hirelings`
-  (`$19EDC`)), then `$19D64` and `$19B28` (rest execution / day advance — internals
-  untraced). Dispatcher epilogue (`$1420`) runs `$54B6` frame redraw, sets `-$7952`
-  (event latch) and `-$79E5`.
+  (`$19EDC`)), then `$19D64` and `$19B28` (rest execution / day advance). Dispatcher
+  epilogue (`$1420`) runs `$54B6` frame redraw, sets `-$7952` (event latch) and
+  `-$79E5`.
+- **Traced + ported (2026-07-17):** `GameSession::executeRest()` implements the
+  full body — hireling pay/dismiss gate, `-$55D6` bit3 "Too dangerous!" ambush
+  check, HP heal-to-max, food consumption, the SP recompute at `0x19C30`
+  (`gameplay::syncRosterWorkingLevelFields` + `recomputeRestSpellPoints` — see
+  [`06-roster-format.md`](06-roster-format.md) and
+  [`57-user-help-trace-residuals.md`](57-user-help-trace-residuals.md) §4), and
+  the `0x55`-unit clock advance. `$19AD6`/`$19D64`/`$19B28` are no longer
+  "internals untraced" — see `game/src/GameSession.cpp::executeRest` (~line 1274).
 
 ### 7.5 `S` Search — `$4800` (PC-relative; also auto-run when `-$794C == $FE`)
 
@@ -421,7 +429,7 @@ Existing trace in doc 03 (`LAB_24C4` movement loop, ESC via `-$86B0`).
 | Passability test internals (which obstruction index per tile/flags; swim/barrier rules) | `$9424` |
 | Forced-search sentinel writer (`-$794C := $FE`, presumed combat victory) | writer not located |
 | Search payoff handler (loot vs fixed encounter) | `0x1B19C` |
-| Rest execution: pay check / heal / day advance | `$19AD6`, `$19D64`, `$19B28` |
+| ~~Rest execution: pay check / heal / day advance~~ | **Closed 2026-07-17** — traced + ported, see §7.4 |
 | Bash success/trap fine branches; door strength `-$5608`, trap byte `-$5607` semantics | `$9BCA`–`$9CAA`, `0x20D5C` |
 | Trap victim/damage helpers | `0x1A9A6`, `0x1A90E` |
 | Sheet sub-handlers: Drop/Equip/Remove/Trade/Use/Gather/Share internals | `$F004`, `$ED9C`, `$EACC`, `$E61C`, `$E94A`, `$8050`, `$7DCC` |
@@ -439,7 +447,13 @@ Implemented in `game/src/gameplay/Movement.cpp` + `PlaySessionInput.cpp`:
   masks are **not** the same labels as page-1 N/E/S/W bit names — see `mm2_map_codec.h`).
 - Screen edge: `0x1D0A` neighbour bytes `attrib` `0x05..0x08`, coord wrap `& $F`, reload via
   `MapWorld::enterScreen` (full `0x1B2A` / `$2546` chain partially stubbed).
-- Time tick @ `0x69DC(n=1)`: subday increment + dark-tile light drain (`-$79AB`); day rollover
-  @ `0x6A06` and Protect redraw @ `0x5E28` deferred.
-- Walk beep @ `-$7FD4` not wired; obstruction messages @ `$5918` not wired.
+- Time tick @ `0x69DC(n=1)`: subday increment + dark-tile light drain (`-$79AB`); day
+  rollover @ `0x6A06` is **implemented** (`applyDayRollover` in `Movement.cpp` ~line
+  136, called from both turn and step paths). Protect panel redraw @ `0x5E28`
+  is still deferred.
+- Walk beep is **wired**: `audio::playSoundSeq(0, …)` fires on both turn and step
+  (`Movement.cpp` ~lines 320, 384) — this is thunk `-$7E42(0)` → `0x6FB8`, **not**
+  `-$7FD4` (`-$7FD4`/`0x1D0A` is the **screen-edge** handler, a separate concern;
+  an earlier note conflated the two addresses). Obstruction messages @ `$5918`
+  are wired via `obstructionMessage` in `GameSession`'s bash/unlock/step paths.
 - SDL maps cursor + keypad only (doc §1 table); WASD not mapped.

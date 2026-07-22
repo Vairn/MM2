@@ -36,9 +36,11 @@ runtime — it is a packed quest/calendar/combat-state blob. The editor keeps sl
 | `$15` | 1 | Luck (current) | Copied to `$70` on party load |
 | `$16` | 1 | **Thievery %** | Robber 30% / Ninja 10% at creation; +1%/level (FAQ) — see [`32-character-mechanics.md`](32-character-mechanics.md) |
 | `$17`–`$19` | 3 | **Secondary skills** | Skill bytes (Cartographer, Pathfinder, …); sellers in [`33-skills-and-hirelings.md`](33-skills-and-hirelings.md). Often 5/5/5 or 10/10/10 in saves |
-| `$1A`–`$20` | 7 | *Quest / progress flags* | Likely class-quest and world-quest bits; FAQ condition strings (`[PALADINS ONLY]`, `CORAK'S SOUL`, `ADMIT 8 PASS`) — **not ASM-mapped** |
+| `$1A`–`$1F` | 6 | *Quest / progress flags* | Likely class-quest and world-quest bits; FAQ condition strings (`[PALADINS ONLY]`, `CORAK'S SOUL`, `ADMIT 8 PASS`) — **not ASM-mapped** |
+| `$20` | 1 | **Working level** | **ASM-confirmed** mirror of `$71` (Level). Seeded to `1` at character creation (`0x272D6`); mirrored `$20→$71` (not the reverse) by `sync_party_secondary_stats` @ `0x4476`; consumed as the SP multiplier in Rest recompute @ `0x19C9A` (`mulu.w $20(a1),d0`). **Bug/drift:** stock `roster.dat` starters (Gene Eric, Cassandra, …) ship with `$20` stuck at `1` while `$71`=4+; if `0x4476` (or Rest) runs before something re-derives `$20` from `$71`, casters rest to level-1 SP. Remake fix: `gameplay::syncRosterWorkingLevelFields()` copies `$71→$20`/`$72→$23` before any Rest/secondary-stat sync — see `game/src/gameplay/Movement.{h,cpp}` and `game/src/GameSession.cpp::executeRest`/`start`. |
 | `$21` | 1 | **Age** | Starts at 18 |
-| `$22`–`$23` | 2 | *Unknown* (word, LE) | |
+| `$22` | 1 | *Unknown* (low byte of `$22` word) | |
+| `$23` | 1 | **Working spell-level / caster flag** | **ASM-confirmed** mirror of `$72` (Secondary/spell level); high byte of the `$22`/`$23` LE word. Gate check `tst.b $23(a0)` @ `0x19C34` — nonzero ⇒ character is a caster and Rest recomputes SP; mirrored `$23→$72` by `sync_party_secondary_stats` @ `0x4476`. Same creation/drift caveats as `$20` above. |
 | `$24` | 1 | **Armor Class** | Effective AC (temp, modified by equipment) |
 | `$25` | 1 | **Food** | Ration count |
 | `$26` | 1 | **Condition** | Living = OR bitfield (≤`$7F`): `$01` Cursed, `$02` Silenced, `$04` Diseased, `$08` Poisoned, `$10` Asleep, `$20` Paralyzed, `$40` Unconscious. Fatal whole-byte: `$81` Dead (`0x1EEC8`), `$82` Stoned (`0x1EEDA`), `$FF` Eradicated (`0x1EEEC`); any other ≥`$80` treated as eradicated. |
@@ -238,6 +240,17 @@ spell-effect step timers (decrement one-per-step; a quest counter would not).
   $E (race), $F (class), $71 (level), $5E (HP max), $74 (HP current).
 - **Class branch** (`$7B36`): Checks `$F == 2` (Archer) or `$F == 4` (Sorcerer) for
   INT-based spell point calculation; else PER-based (Paladin/Cleric).
+- **Rest SP recompute** (`$19C30`–`$19CA0`): `tst.b $23(a0)` gates on working
+  spell-level; class branch as above picks INT (`$11`) or PER (`$12`); bonus from
+  `jsr -$7F56(a4)` (leaf `$4442`, table `A4-$7486`); `(bonus+3) * $20(a1)` →
+  `$5A` (SP current) then copied to `$58` (SP max). See §"Working level" fields above.
+- **Secondary-stat sync** (`sync_party_secondary_stats` @ `$4476`): mirrors
+  `$10→$6B`, `$11→$6C`, `$12→$6D`, `$13→$6E`, `$14→$6F`, and — the fields that
+  matter for Rest — **`$20→$71`** (working level → canonical level) and
+  **`$23→$72`** (working spell-level → canonical spell-level). Direction is
+  working-to-canonical, so a stale `$20`/`$23` from disk can clobber an
+  otherwise-correct `$71`/`$72` if this runs before the working copies are
+  refreshed.
 - **Party setup** (`$520E`–`$528C`): Copies 8 roster indices from A4-$8696 → A4-$A1A2,
   then iterates characters copying `$15`→`$70` and `$27`→`$73`.
 - **Roster load** (`$3290`): `Read` **$1860** bytes into A4-$2A3E; per-record word
@@ -254,7 +267,9 @@ Examples to trace in `event.dat` / `exec_selector` conditions:
 
 - Paladin-only squares, Corak soul token, eight-passenger ferry, Nordon goblet state
 - Byte **`$79`** (class-quest / guild mask) is **ASM-confirmed** for mage-guild gate;
-  bytes **`$1A`–`$20`** remain candidates for per-quest progress
+  bytes **`$1A`–`$1F`** remain candidates for per-quest progress. Byte **`$20`**
+  is **ASM-confirmed as "working level"** (see Record Layout above) — it is
+  **not** a quest flag.
 
 See [`06-event-dat-format.md`](06-event-dat-format.md) § FAQ event validation.
 

@@ -277,6 +277,34 @@ uint8_t restSpellBonusFactor(uint8_t attr)
     return bonus;
 }
 
+void syncRosterWorkingLevelFields(Mm2RosterRecord &rec)
+{
+    rec.unknown_1a_20[6] = rec.level; /* +$20 ← +$71 */
+    rec.unknown_22 = static_cast<uint16_t>((rec.unknown_22 & 0x00FFu) |
+                                           (static_cast<uint16_t>(rec.spell_level) << 8)); /* +$23 ← +$72 */
+}
+
+void recomputeRestSpellPoints(Mm2RosterRecord &rec)
+{
+    /* 0x19C30: if +$23==0 → skip; else INT for Sorc/Archer, PER otherwise. */
+    const uint8_t caster_flag = static_cast<uint8_t>((rec.unknown_22 >> 8) & 0xFF); /* +$23 */
+    if (caster_flag == 0) {
+        return;
+    }
+    uint8_t attr = rec.personality_current; /* +$12 */
+    if (rec.class_id == 4 || rec.class_id == 2) {
+        attr = rec.intelligence_current; /* +$11 */
+    }
+    uint8_t bonus = restSpellBonusFactor(attr);
+    if (bonus >= 0xF2) {
+        bonus = 0;
+    }
+    const uint8_t mul = rec.unknown_1a_20[6]; /* +$20 */
+    const uint16_t sp = static_cast<uint16_t>((static_cast<uint16_t>(bonus) + 3u) * mul);
+    rec.sp_current = sp;
+    rec.sp_max = sp; /* 0x19CD2 */
+}
+
 MoveResult turn(world::MapWorld &world, GameStateView &gs, bool right_cw)
 {
     (void)world;

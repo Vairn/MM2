@@ -15,10 +15,12 @@ explodes the bytes into a block of A4-relative "current monster" combat globals.
 
 **RESOLVED 2026-07**: `hpmul` is byte-verified in `EXTRACTED/ghidra/mm2_data_00.bin`
 at data-hunk offset `0xB92` (`A4-$746C`) as four big-endian words `0001 000A
-0064 03E8` = `{1, 10, 100, 1000}`. `xpmul`'s table address was not located, but
-the identical `{1, 10, 100, 1000}` shape reproduces all 13 FAQ §3-8 HP/XP
-cross-check rows in Appendix A exactly (Creepy Crawler HP 5/XP 150 through Mega
-Dragon HP 64000/XP 32000000), so it is used with high confidence. Implemented
+0064 03E8` = `{1, 10, 100, 1000}`. **`xpmul` uses the SAME table** (`A4-$746C`) —
+the unpacker at ASM `0x4D5E` (`lea.l -$746c(a4), a0`) reloads it right after the
+HP load at `0x4D1A`, so HP and XP share one multiplier table rather than two
+separate ones. This also reproduces all 13 FAQ §3-8 HP/XP cross-check rows in
+Appendix A exactly (Creepy Crawler HP 5/XP 150 through Mega Dragon HP
+64000/XP 32000000). Implemented
 as `mm2_monster_decode_hp` / `mm2_monster_decode_xp` in
 `EXTRACTED/decomp/mm2_monsters_codec.c`.
 | 0x10 | treasure| reward pack (gold/gems/item/XP-bonus). **Not a combat ability.** Decoded by the reward routine at `0x10B74` |

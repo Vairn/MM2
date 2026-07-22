@@ -9,9 +9,9 @@ namespace {
 
 int abortIfAnyKey(void)
 {
-    /* Approximate -$7BD2: any key aborts current sequence / title note. */
+    /* New presses only — held keys from logo→attract must not kill the theme. */
     for (UBYTE k = 0; k < KEY_COUNT; ++k) {
-        if (keyCheck(k)) {
+        if (keyUse(k)) {
             return 1;
         }
     }
@@ -33,7 +33,6 @@ void shutdown()
 
 void playSoundSeq(uint8_t id, bool sounds_enabled, bool walk_beep_enabled)
 {
-    /* Gates mirror play_sound_seq @ 0x6FB8. */
     if (id == 0) {
         if (!walk_beep_enabled) {
             return;
@@ -63,11 +62,17 @@ void stopAll()
     mm2_amiga_audio_stop_channels();
 }
 
-void pumpTitleTheme()
+bool pumpTitleTheme()
 {
-    if (mm2_amiga_audio_title_active()) {
-        (void)mm2_amiga_audio_title_advance();
+    /* One cooperative frame: advance Delay ticks from real time, keep animating.
+     * Returns true when theme ended/aborted (leave attract). */
+    if (!mm2_amiga_audio_title_active()) {
+        return false;
     }
+    if (!mm2_amiga_audio_title_pump()) {
+        return true; /* aborted or finished */
+    }
+    return false; /* still playing — draw another attract frame */
 }
 
 }  // namespace mm2::audio

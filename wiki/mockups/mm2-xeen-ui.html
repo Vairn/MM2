@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MM2 · Xeen-style UI mockup</title>
+<style>
+  :root {
+    --stone-0: #1a1410;
+    --stone-1: #2a2118;
+    --stone-2: #3d3024;
+    --stone-3: #5a4634;
+    --bronze: #c4a06a;
+    --bronze-dim: #8a6e45;
+    --bronze-hi: #e8d09a;
+    --ink: #f0e6d0;
+    --ink-dim: #b8a888;
+    --panel: #120e0b;
+    --sky-top: #4a6a8a;
+    --sky-bot: #8a9aaa;
+    --floor: #6b5a42;
+    --floor-dark: #3d3224;
+    --hp-green: #3ec45a;
+    --hp-yellow: #d4b030;
+    --hp-red: #c43030;
+    --hp-blue: #4070c8;
+    --accent: #3a9a8a;
+    --danger: #c05040;
+    --frame: 640px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at 50% 20%, #2a2218 0%, #0c0a08 70%);
+    color: var(--ink);
+    font-family: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 1.5rem 1rem 2.5rem;
+  }
+
+  header {
+    text-align: center;
+    max-width: 720px;
+  }
+  header h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--bronze-hi);
+  }
+  header p {
+    margin-top: 0.35rem;
+    font-size: 0.9rem;
+    color: var(--ink-dim);
+    line-height: 1.45;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+  .toolbar button {
+    appearance: none;
+    border: 1px solid var(--bronze-dim);
+    background: linear-gradient(180deg, var(--stone-3), var(--stone-1));
+    color: var(--ink);
+    padding: 0.4rem 0.85rem;
+    border-radius: 3px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.85rem;
+  }
+  .toolbar button[aria-pressed="true"] {
+    border-color: var(--bronze-hi);
+    color: var(--bronze-hi);
+    box-shadow: inset 0 0 0 1px rgba(232, 208, 154, 0.35);
+  }
+  .toolbar button:hover { border-color: var(--bronze); }
+
+  /* ---- Game shell ---- */
+  .shell {
+    width: min(100%, var(--frame));
+    background: var(--panel);
+    border: 3px solid var(--bronze-dim);
+    box-shadow:
+      0 0 0 2px var(--stone-0),
+      0 12px 40px rgba(0,0,0,0.55);
+    image-rendering: pixelated;
+  }
+
+  .chrome {
+    display: grid;
+    grid-template-columns: 1fr 72px;
+    grid-template-rows: auto auto auto;
+    gap: 0;
+    background: linear-gradient(180deg, var(--stone-2), var(--stone-0));
+    padding: 8px;
+  }
+
+  /* Viewport frame */
+  .view-wrap {
+    grid-column: 1;
+    grid-row: 1;
+    position: relative;
+    border: 4px solid var(--bronze-dim);
+    outline: 2px solid #1a120c;
+    background: #000;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+  }
+
+  .viewport {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background:
+      linear-gradient(180deg, var(--sky-top) 0%, var(--sky-bot) 48%, var(--floor) 48%, var(--floor-dark) 100%);
+  }
+
+  /* Fake 3D corridor */
+  .corridor {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .corridor .wall-l,
+  .corridor .wall-r {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 28%;
+    background: linear-gradient(90deg, #2a2218, #5a4a38);
+  }
+  .corridor .wall-l {
+    left: 0;
+    clip-path: polygon(0 0, 100% 18%, 100% 82%, 0 100%);
+    background: linear-gradient(90deg, #1e1812, #4a3c2e);
+  }
+  .corridor .wall-r {
+    right: 0;
+    clip-path: polygon(0 18%, 100% 0, 100% 100%, 0 82%);
+    background: linear-gradient(270deg, #1e1812, #4a3c2e);
+  }
+  .corridor .door {
+    position: absolute;
+    left: 38%; right: 38%;
+    top: 28%; bottom: 38%;
+    background: linear-gradient(180deg, #3a2e22, #1a140e);
+    border: 3px solid #6a5438;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.6);
+  }
+  .corridor .door::after {
+    content: "";
+    position: absolute;
+    right: 10%; top: 48%;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--bronze);
+  }
+  .corridor .sky-band {
+    position: absolute;
+    left: 28%; right: 28%;
+    top: 18%; height: 12%;
+    background: linear-gradient(180deg, #6a8aaa, #9aacbc);
+  }
+  .town .corridor .door { display: none; }
+  .town .building {
+    position: absolute;
+    bottom: 38%;
+    width: 22%;
+    height: 42%;
+    background: linear-gradient(180deg, #8a6a4a, #4a3220);
+    border: 2px solid #2a1c12;
+  }
+  .town .building.b1 { left: 30%; }
+  .town .building.b2 { right: 30%; background: linear-gradient(180deg, #6a7a5a, #3a4230); }
+  .town .street {
+    position: absolute;
+    left: 22%; right: 22%;
+    bottom: 0; height: 38%;
+    background:
+      repeating-linear-gradient(90deg, #5a4a38 0 14px, #4a3c2e 14px 28px);
+    clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
+  }
+
+  /* Combat monsters */
+  .combat-mode .viewport {
+    background: linear-gradient(180deg, #2a3040 0%, #4a5060 45%, #3a3228 45%, #1a1610 100%);
+  }
+  .monster {
+    display: none;
+    position: absolute;
+    bottom: 18%;
+    width: 28%;
+    aspect-ratio: 3/4;
+    background:
+      radial-gradient(ellipse at 50% 30%, #6a3a3a, #2a1010 70%);
+    border: 2px solid #8a4a4a;
+    border-radius: 40% 40% 20% 20%;
+  }
+  .combat-mode .monster { display: block; }
+  .monster.m1 { left: 18%; }
+  .monster.m2 { left: 50%; transform: translateX(-50%); bottom: 22%; width: 32%; }
+  .monster.m3 { right: 18%; }
+  .monster .eye {
+    position: absolute;
+    top: 28%;
+    width: 18%; height: 12%;
+    background: #f0d040;
+    border-radius: 50%;
+  }
+  .monster .eye.l { left: 22%; }
+  .monster .eye.r { right: 22%; }
+
+  /* Frame ornaments */
+  .gem {
+    position: absolute;
+    width: 14px; height: 14px;
+    border: 2px solid var(--bronze-dim);
+    transform: rotate(45deg);
+    background: #2a2a2a;
+    z-index: 3;
+  }
+  .gem.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .gem.tl { top: 8px; left: 8px; }
+  .gem.tr { top: 8px; right: 8px; }
+  .gem.bl { bottom: 28px; left: 8px; }
+  .gem.br { bottom: 28px; right: 8px; }
+
+  .ornament {
+    position: absolute;
+    z-index: 3;
+    font-size: 0.7rem;
+    color: var(--bronze);
+    opacity: 0.85;
+    letter-spacing: 0.02em;
+  }
+  .ornament.bat { top: 6px; left: 50%; transform: translateX(-50%); }
+  .ornament.garg { bottom: 30px; left: 22px; }
+  .ornament.gremlin { bottom: 30px; right: 22px; }
+  .ornament.flap { animation: flap 1.2s ease-in-out infinite; }
+  @keyframes flap {
+    0%, 100% { transform: translateX(-50%) scaleY(1); }
+    50% { transform: translateX(-50%) scaleY(0.85); }
+  }
+
+  .face-gem {
+    position: absolute;
+    bottom: 8px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 4;
+    width: 36px; height: 22px;
+    border: 2px solid var(--bronze);
+    border-radius: 4px;
+    background: linear-gradient(180deg, #1a3028, #0a1814);
+    color: var(--hp-green);
+    font-family: "Courier New", monospace;
+    font-size: 0.75rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .face-gem:hover { border-color: var(--bronze-hi); color: var(--bronze-hi); }
+
+  /* Right option icons */
+  .options {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-left: 6px;
+    justify-content: flex-start;
+  }
+  .opt {
+    appearance: none;
+    border: 1px solid var(--bronze-dim);
+    background: linear-gradient(180deg, #4a3a28, #2a1e14);
+    color: var(--ink);
+    height: 36px;
+    border-radius: 2px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.62rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    line-height: 1.05;
+  }
+  .opt .glyph {
+    font-size: 0.85rem;
+    color: var(--bronze-hi);
+    font-family: "Courier New", monospace;
+  }
+  .opt:hover, .opt.active {
+    border-color: var(--bronze-hi);
+    color: var(--bronze-hi);
+  }
+  .combat-mode .opt.explore-only { opacity: 0.35; pointer-events: none; }
+  .explore-mode .opt.combat-only { display: none; }
+  .combat-mode .opt.explore-swap { display: none; }
+
+  /* Message / view strip */
+  .msg {
+    grid-column: 1;
+    grid-row: 2;
+    margin-top: 6px;
+    min-height: 44px;
+    border: 2px solid var(--bronze-dim);
+    background: #0e0a08;
+    padding: 6px 10px;
+    font-family: "Courier New", monospace;
+    font-size: 0.78rem;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+  .msg .dim { color: var(--ink-dim); }
+  .msg .hi { color: var(--bronze-hi); }
+
+  /* Party row + d-pad */
+  .bottom {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    display: grid;
+    grid-template-columns: 1fr 88px;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .party {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 3px;
+  }
+  .char {
+    border: 2px solid var(--bronze-dim);
+    background: #1a140e;
+    cursor: pointer;
+    padding: 2px;
+    text-align: center;
+    position: relative;
+  }
+  .char:hover, .char.selected {
+    border-color: var(--bronze-hi);
+  }
+  .char.selected { outline: 1px solid rgba(232, 208, 154, 0.5); }
+  .char .face {
+    height: 42px;
+    background: linear-gradient(180deg, #5a4a38, #2a2218);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    font-size: 1.4rem;
+    line-height: 1;
+    overflow: hidden;
+    position: relative;
+  }
+  .char .face::before {
+    content: "";
+    position: absolute;
+    inset: 8% 18% 20%;
+    background: var(--skin, #c4a070);
+    border-radius: 40% 40% 35% 35%;
+  }
+  .char .face::after {
+    content: "";
+    position: absolute;
+    top: 6%; left: 12%; right: 12%; height: 28%;
+    background: var(--hair, #3a2818);
+    border-radius: 50% 50% 10% 10%;
+  }
+  .char .name {
+    font-size: 0.55rem;
+    color: var(--ink-dim);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .char .gem-hp {
+    width: 10px; height: 10px;
+    margin: 3px auto 1px;
+    transform: rotate(45deg);
+    border: 1px solid #1a120c;
+  }
+  .char .bars {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 2px 2px;
+  }
+  .char .bar {
+    height: 3px;
+    background: #0a0806;
+    border: 1px solid #2a2218;
+  }
+  .char .bar > i {
+    display: block;
+    height: 100%;
+  }
+  .char .bar.hp > i { background: var(--hp-green); }
+  .char .bar.sp > i { background: var(--hp-blue); }
+  .char.hurt .bar.hp > i { background: var(--hp-yellow); }
+  .char.critical .bar.hp > i { background: var(--hp-red); }
+  .char.hurt .gem-hp { background: var(--hp-yellow); }
+  .char.critical .gem-hp { background: var(--hp-red); }
+  .char.ok .gem-hp { background: var(--hp-green); }
+  .char.uncon .gem-hp { background: var(--hp-blue); }
+  .char.uncon .face { filter: grayscale(0.8) brightness(0.6); }
+
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 2px;
+    border: 2px solid var(--bronze-dim);
+    background: #0e0a08;
+    padding: 4px;
+  }
+  .dpad button {
+    appearance: none;
+    border: 1px solid var(--bronze-dim);
+    background: linear-gradient(180deg, #4a3a28, #2a1e14);
+    color: var(--bronze-hi);
+    font-family: "Courier New", monospace;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 2px;
+  }
+  .dpad button:hover { border-color: var(--bronze-hi); }
+  .dpad .n { grid-column: 2; grid-row: 1; }
+  .dpad .w { grid-column: 1; grid-row: 2; }
+  .dpad .c { grid-column: 2; grid-row: 2; font-size: 0.55rem; color: var(--ink-dim); }
+  .dpad .e { grid-column: 3; grid-row: 2; }
+  .dpad .s { grid-column: 2; grid-row: 3; }
+
+  /* Status ribbon under shell */
+  .status {
+    width: min(100%, var(--frame));
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-family: "Courier New", monospace;
+    font-size: 0.75rem;
+    color: var(--ink-dim);
+    padding: 0 0.25rem;
+  }
+  .status strong { color: var(--bronze); font-weight: normal; }
+
+  .notes {
+    width: min(100%, var(--frame));
+    border-top: 1px solid var(--stone-3);
+    padding-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--ink-dim);
+    line-height: 1.5;
+  }
+  .notes h2 {
+    font-size: 0.95rem;
+    color: var(--bronze);
+    margin-bottom: 0.4rem;
+  }
+  .notes ul { padding-left: 1.2rem; }
+  .notes li { margin: 0.25rem 0; }
+  .notes code {
+    font-family: "Courier New", monospace;
+    font-size: 0.8em;
+    color: var(--bronze-hi);
+  }
+
+  .compare {
+    width: min(100%, var(--frame));
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  @media (max-width: 640px) {
+    .compare { grid-template-columns: 1fr; }
+    .party { grid-template-columns: repeat(4, 1fr); }
+  }
+  .compare article {
+    border: 1px solid var(--stone-3);
+    padding: 0.75rem;
+    background: rgba(18, 14, 11, 0.6);
+  }
+  .compare h3 {
+    font-size: 0.85rem;
+    color: var(--bronze-hi);
+    margin-bottom: 0.35rem;
+  }
+  .compare p { font-size: 0.8rem; color: var(--ink-dim); line-height: 1.4; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Might and Magic II · Xeen-style UI mockup</h1>
+    <p>
+      Classic MM2 systems (8-character party, Day/Year/Face, Protect) presented with
+      MM3 / Clouds &amp; Darkside of Xeen chrome: ornate viewport frame, portraits + HP gems,
+      icon column, and direction pad.
+    </p>
+  </header>
+
+  <div class="toolbar" role="toolbar" aria-label="Mockup modes">
+    <button type="button" id="btn-explore" aria-pressed="true">Explore</button>
+    <button type="button" id="btn-combat" aria-pressed="false">Combat</button>
+    <button type="button" id="btn-town" aria-pressed="false">Town street</button>
+    <button type="button" id="btn-protect" aria-pressed="false">Toggle Protect gems</button>
+  </div>
+
+  <div class="shell" id="shell">
+    <div class="chrome explore-mode town" id="chrome">
+      <div class="view-wrap">
+        <div class="viewport" id="viewport">
+          <div class="corridor" aria-hidden="true">
+            <div class="sky-band"></div>
+            <div class="wall-l"></div>
+            <div class="wall-r"></div>
+            <div class="door"></div>
+            <div class="building b1"></div>
+            <div class="building b2"></div>
+            <div class="street"></div>
+          </div>
+          <div class="monster m1"><span class="eye l"></span><span class="eye r"></span></div>
+          <div class="monster m2"><span class="eye l"></span><span class="eye r"></span></div>
+          <div class="monster m3"><span class="eye l"></span><span class="eye r"></span></div>
+
+          <span class="gem tl on" id="gem-tl" title="Protect Fire"></span>
+          <span class="gem tr on" id="gem-tr" title="Protect Cold"></span>
+          <span class="gem bl" id="gem-bl" title="Protect Electricity"></span>
+          <span class="gem br on" id="gem-br" title="Protect Poison / Acid"></span>
+
+          <span class="ornament bat" title="Danger Sense">danger</span>
+          <span class="ornament garg" title="Levitate">garg</span>
+          <span class="ornament gremlin" title="Secret passage">grem</span>
+
+          <button type="button" class="face-gem" id="face-gem" title="Facing / Control Panel (Tab)">N</button>
+        </div>
+      </div>
+
+      <div class="options" id="options">
+        <!-- explore -->
+        <button type="button" class="opt explore-swap" data-msg="Cast — pick caster, then spell."><span class="glyph">✧</span>Cast</button>
+        <button type="button" class="opt explore-swap" data-msg="Shoot — ranged attack if foe in view."><span class="glyph">➳</span>Shoot</button>
+        <button type="button" class="opt explore-only" data-msg="Unlock — try lockpicks / Open Locks."><span class="glyph">⚿</span>Unlock</button>
+        <button type="button" class="opt explore-only" data-msg="Bash — smash door / thin wall (Might)."><span class="glyph">⚒</span>Bash</button>
+        <button type="button" class="opt explore-only" data-msg="Rest — camp until rested (watch danger)."><span class="glyph">☽</span>Rest</button>
+        <button type="button" class="opt explore-only" data-msg="Search — look for secrets &amp; loot."><span class="glyph">⌕</span>Search</button>
+        <button type="button" class="opt" data-msg="Automap — Wizard Eye / Cartography style overlay."><span class="glyph">▣</span>Map</button>
+        <button type="button" class="opt" data-msg="Quick Reference — party summary sheet."><span class="glyph">≡</span>Quick</button>
+        <!-- combat swaps -->
+        <button type="button" class="opt combat-only" data-msg="Attack — melee the focused foe."><span class="glyph">⚔</span>Attack</button>
+        <button type="button" class="opt combat-only" data-msg="Fight — auto-resolve remaining actions."><span class="glyph">⚡</span>Fight</button>
+        <button type="button" class="opt combat-only" data-msg="Run — attempt to flee combat."><span class="glyph">⇢</span>Run</button>
+        <button type="button" class="opt combat-only" data-msg="Block — raise defenses this round."><span class="glyph">▣</span>Block</button>
+        <button type="button" class="opt combat-only" data-msg="Cast — combat spell for active character."><span class="glyph">✧</span>Cast</button>
+        <button type="button" class="opt combat-only" data-msg="Use — consume / activate an item."><span class="glyph">◈</span>Use</button>
+      </div>
+
+      <div class="msg" id="msg">
+        <span class="hi">Middlegate</span> — Main Street.<br />
+        <span class="dim">Day 14 · Year 700 · Face North · Protect: Fire, Cold, Acid</span>
+      </div>
+
+      <div class="bottom">
+        <div class="party" id="party"></div>
+        <div class="dpad" aria-label="Direction pad">
+          <button type="button" class="n" data-dir="forward" title="Forward">▲</button>
+          <button type="button" class="w" data-dir="left" title="Turn left">◀</button>
+          <button type="button" class="c" data-dir="wait" title="Wait / Pass">W</button>
+          <button type="button" class="e" data-dir="right" title="Turn right">▶</button>
+          <button type="button" class="s" data-dir="back" title="Back">▼</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status">
+    <span>Layout intent: <strong>640×480-ish</strong> Xeen shell over MM2 logic</span>
+    <span id="mode-label">Mode: Explore · Town</span>
+  </div>
+
+  <div class="compare">
+    <article>
+      <h3>Classic MM2 (today)</h3>
+      <p>
+        320×200 text chrome: 208×120 hood, OPTIONS/Protect column as strings,
+        status strip (Day/Year/Face), party as <code>n) Name /HP</code> lines — no portraits,
+        no clickable icons.
+      </p>
+    </article>
+    <article>
+      <h3>This mockup (MM3–5 language)</h3>
+      <p>
+        Keeps MM2’s <strong>8</strong> party slots (Xeen uses 6). Maps Protect to corner gems,
+        Face to the center gem, commands to the icon rail, movement to a d-pad.
+        HP/SP bars + condition gems under portraits.
+      </p>
+    </article>
+  </div>
+
+  <div class="notes">
+    <h2>Design notes for a future Agui backend</h2>
+    <ul>
+      <li>Logic stays ASM-faithful; only chrome/draw swaps (see <code>41-aga-port-plan.md</code> §10).</li>
+      <li>UI pens 32–63 for frame, bars, selected/disabled — world art stays 1–31.</li>
+      <li>Click portrait → character sheet; Face gem / Tab → control panel (sound, load/save, etc.).</li>
+      <li>Automap toggles in the view window (= key in Xeen); MM2 map data can drive the same pane.</li>
+      <li>Combat: same shell, swap icon set; multi-monster sprites already planned for AGA.</li>
+    </ul>
+  </div>
+
+<script>
+const FACINGS = ["N", "E", "S", "W"];
+let facing = 0;
+let protectOn = true;
+
+const party = [
+  { name: "Sir Aubrey",  hp: 92, hpMax: 100, sp: 0,  spMax: 0,   skin: "#c4a070", hair: "#3a2818", state: "ok" },
+  { name: "Mira",        hp: 61, hpMax: 70,  sp: 40, spMax: 55,  skin: "#d4b090", hair: "#6a3a18", state: "ok" },
+  { name: "Thorne",      hp: 28, hpMax: 85,  sp: 0,  spMax: 0,   skin: "#a88860", hair: "#1a1010", state: "critical" },
+  { name: "Lysa",        hp: 44, hpMax: 60,  sp: 70, spMax: 90,  skin: "#c8a888", hair: "#c8b040", state: "hurt" },
+  { name: "Grom",        hp: 100,hpMax: 110, sp: 0,  spMax: 0,   skin: "#8a7050", hair: "#2a1810", state: "ok" },
+  { name: "Elowen",      hp: 55, hpMax: 55,  sp: 88, spMax: 88,  skin: "#dcc0a0", hair: "#e8d080", state: "ok" },
+  { name: "Hickory",     hp: 0,  hpMax: 75,  sp: 12, spMax: 40,  skin: "#b09070", hair: "#4a3020", state: "uncon" },
+  { name: "Vex",         hp: 38, hpMax: 50,  sp: 20, spMax: 35,  skin: "#907060", hair: "#101018", state: "hurt" },
+];
+
+const partyEl = document.getElementById("party");
+const msgEl = document.getElementById("msg");
+const chrome = document.getElementById("chrome");
+const faceGem = document.getElementById("face-gem");
+const modeLabel = document.getElementById("mode-label");
+
+function renderParty() {
+  partyEl.innerHTML = party.map((c, i) => `
+    <button type="button" class="char ${c.state}" data-idx="${i}" style="--skin:${c.skin};--hair:${c.hair}">
+      <div class="face" aria-hidden="true"></div>
+      <div class="name">${c.name}</div>
+      <div class="gem-hp" title="Condition gem"></div>
+      <div class="bars">
+        <div class="bar hp"><i style="width:${Math.round(100*c.hp/Math.max(1,c.hpMax))}%"></i></div>
+        <div class="bar sp"><i style="width:${c.spMax ? Math.round(100*c.sp/c.spMax) : 0}%"></i></div>
+      </div>
+    </button>
+  `).join("");
+}
+
+function setMsg(html) {
+  msgEl.innerHTML = html;
+}
+
+function statusLine() {
+  const gems = protectOn ? "Fire, Cold, Acid" : "none";
+  return `<span class="dim">Day 14 · Year 700 · Face ${FACINGS[facing]} · Protect: ${gems}</span>`;
+}
+
+function applyProtect() {
+  ["gem-tl", "gem-tr", "gem-br"].forEach((id, i) => {
+    document.getElementById(id).classList.toggle("on", protectOn && i < 3);
+  });
+  document.getElementById("gem-bl").classList.toggle("on", false);
+}
+
+function setMode(mode) {
+  const explore = mode === "explore" || mode === "town";
+  chrome.classList.toggle("explore-mode", explore);
+  chrome.classList.toggle("combat-mode", mode === "combat");
+  chrome.classList.toggle("town", mode === "town");
+
+  document.getElementById("btn-explore").setAttribute("aria-pressed", mode === "explore");
+  document.getElementById("btn-combat").setAttribute("aria-pressed", mode === "combat");
+  document.getElementById("btn-town").setAttribute("aria-pressed", mode === "town");
+
+  if (mode === "combat") {
+    modeLabel.textContent = "Mode: Combat";
+    setMsg(`<span class="hi">Combat!</span> Orcs block the passage.<br />${statusLine()}`);
+    document.querySelector(".ornament.bat").classList.add("flap");
+  } else if (mode === "town") {
+    modeLabel.textContent = "Mode: Explore · Town";
+    setMsg(`<span class="hi">Middlegate</span> — Main Street.<br />${statusLine()}`);
+    document.querySelector(".ornament.bat").classList.remove("flap");
+  } else {
+    modeLabel.textContent = "Mode: Explore · Dungeon";
+    setMsg(`<span class="hi">Corsair's Cove</span> — a heavy door ahead.<br />${statusLine()}`);
+    document.querySelector(".ornament.bat").classList.remove("flap");
+  }
+}
+
+document.getElementById("btn-explore").onclick = () => setMode("explore");
+document.getElementById("btn-combat").onclick = () => setMode("combat");
+document.getElementById("btn-town").onclick = () => setMode("town");
+document.getElementById("btn-protect").onclick = () => {
+  protectOn = !protectOn;
+  document.getElementById("btn-protect").setAttribute("aria-pressed", String(protectOn));
+  applyProtect();
+  setMsg(`Protect spells ${protectOn ? "active" : "expired"}.<br />${statusLine()}`);
+};
+
+faceGem.onclick = () => {
+  setMsg(`<span class="hi">Control Panel</span> — Sound, Load, Save, Quit, Difficulty.<br /><span class="dim">(Tab / click Face gem — Xeen convention)</span>`);
+};
+
+document.getElementById("options").addEventListener("click", (e) => {
+  const btn = e.target.closest(".opt");
+  if (!btn) return;
+  document.querySelectorAll(".opt").forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+  setMsg(`${btn.dataset.msg}<br />${statusLine()}`);
+});
+
+partyEl.addEventListener("click", (e) => {
+  const card = e.target.closest(".char");
+  if (!card) return;
+  document.querySelectorAll(".char").forEach((c) => c.classList.remove("selected"));
+  card.classList.add("selected");
+  const c = party[+card.dataset.idx];
+  setMsg(
+    `<span class="hi">${c.name}</span> — HP ${c.hp}/${c.hpMax}` +
+    (c.spMax ? ` · SP ${c.sp}/${c.spMax}` : "") +
+    ` · ${c.state}<br /><span class="dim">Open sheet: Items · Quick · Exchange · Exit</span>`
+  );
+});
+
+document.querySelector(".dpad").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const d = btn.dataset.dir;
+  if (d === "left") facing = (facing + 3) % 4;
+  if (d === "right") facing = (facing + 1) % 4;
+  faceGem.textContent = FACINGS[facing];
+  const labels = {
+    forward: "Advance one square.",
+    back: "Step back one square.",
+    left: "Turn left.",
+    right: "Turn right.",
+    wait: "Wait — time passes.",
+  };
+  setMsg(`${labels[d]} Facing <span class="hi">${FACINGS[facing]}</span>.<br />${statusLine()}`);
+});
+
+renderParty();
+applyProtect();
+setMode("town");
+</script>
+</body>
+</html>
