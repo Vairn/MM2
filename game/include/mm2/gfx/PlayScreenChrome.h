@@ -12,8 +12,15 @@ struct PlayPartySlot {
     bool bad_condition = false;   /* roster byte +$26 != 0 (0x622C) */
     bool in_combat = false;       /* use the combat strip format (0x12848) */
     bool combat_front_rank = false; /* glyph 0x17 when slot < A4-$5E4D (0x12892) */
-    int hp = 0;                   /* roster word +$5E (0x6274) */
+    int hp = 0;                   /* roster word +$5E (0x6274) — classic strip */
     char name[16] = {0};
+    /* Agui HUD extras (ignored by ClassicPlayHud). */
+    int hp_current = 0;           /* roster +$74 */
+    int hp_max = 0;               /* roster +$5E */
+    int sp_current = 0;
+    int sp_max = 0;
+    int face_id = 0;              /* archetype face atlas index */
+    uint8_t condition = 0;        /* raw roster +$26 */
 };
 
 /** Protect panel values A4 -$79AB..-$79A6 @ 0x5E28 (doc 43 §4). */

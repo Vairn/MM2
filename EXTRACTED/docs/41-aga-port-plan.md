@@ -215,10 +215,19 @@ the same **`picture` → `NN.anm`** mapping as generic creatures (e.g. dragon, d
 
 ---
 
-## 10. Future UI (planned)
+## 10. Future UI (planned) / Agui play HUD
 
-- Today: **`AmigaClassic`** UI backend (ASM-faithful title / roster / `book.32` chrome) on SDL.
-- Later: new UI backend on AGA consuming pens **32–63** (panels, states, HUD).
+- Today: **`AmigaClassic`** character UI (`book.32` chrome) on SDL; play HUD default remains
+  **Classic** glyph lattice (`PlayScreenChrome`).
+- **Agui** play HUD (SDL first): `--play-ui=agui` / `MM2_PLAY_UI=agui` selects `AguiPlayHud`
+  via `IPlayHud` (`game/include/mm2/ui/IPlayHud.h`). Layout:
+  [`AguiPlayScreenLayout.h`](../../game/include/mm2/ui/AguiPlayScreenLayout.h) on **320×200**
+  (viewport hood still **208×120** for View3D tables).
+- Art pack: [`game/data/ui/agui/`](../../game/data/ui/agui/) — indexed PNGs authored at
+  **native sizes**, packed by [`tools/pack_agui_ui.py`](../../tools/pack_agui_ui.py) to
+  `agui_atlas.rgba` + `.json`. Preview: [`tools/ui_pack_preview.py`](../../tools/ui_pack_preview.py).
+- **AGA planar pack** (pens **32–63**): not shipped yet — same manifest, 6bp slices + Chip-friendly
+  small BOBs; do not overload retail 5-plane `.32` for UI pens.
 - **Game logic** stays in `Game` / `GameSession` / combat VM — only **draw + chrome** swap.
 
 Benefits of 64 pens for UI:
@@ -226,7 +235,7 @@ Benefits of 64 pens for UI:
 - Distinct selected / disabled / hover states without stealing terrain colours.
 - Clearer borders, status colours, HP/SP bars, future layout not tied to `nwcp.32` / `book.32` sheets.
 
-SDL desktop can keep classic UI for RE; AGA ships new UI when ready.
+SDL desktop can keep classic UI for RE; Agui is opt-in; AGA ships planar UI when the packer lands.
 
 ---
 

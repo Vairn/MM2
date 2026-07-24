@@ -1,0 +1,220 @@
+{
+  "width": 256,
+  "height": 172,
+  "format": "rgba8",
+  "palette": "palette.json",
+  "aga_pen_base": 32,
+  "aga_planar": "not packed yet \u2014 see 41-aga-port-plan.md \u00a710",
+  "sprites": [
+    {
+      "name": "chrome/frame",
+      "x": 1,
+      "y": 1,
+      "w": 216,
+      "h": 128
+    },
+    {
+      "name": "chrome/gem_on",
+      "x": 218,
+      "y": 1,
+      "w": 6,
+      "h": 6
+    },
+    {
+      "name": "chrome/gem_off",
+      "x": 225,
+      "y": 1,
+      "w": 6,
+      "h": 6
+    },
+    {
+      "name": "chrome/face_gem",
+      "x": 232,
+      "y": 1,
+      "w": 18,
+      "h": 10
+    },
+    {
+      "name": "icons/cast",
+      "x": 1,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/shoot",
+      "x": 14,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/unlock",
+      "x": 27,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/bash",
+      "x": 40,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/rest",
+      "x": 53,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/search",
+      "x": 66,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/map",
+      "x": 79,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/quick",
+      "x": 92,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/attack",
+      "x": 105,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/fight",
+      "x": 118,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/run",
+      "x": 131,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/block",
+      "x": 144,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/use",
+      "x": 157,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/dpad_n",
+      "x": 170,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/dpad_s",
+      "x": 183,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/dpad_w",
+      "x": 196,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/dpad_e",
+      "x": 209,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "icons/dpad_wait",
+      "x": 222,
+      "y": 130,
+      "w": 12,
+      "h": 12
+    },
+    {
+      "name": "faces/face_00",
+      "x": 1,
+      "y": 143,
+      "w": 28,
+      "h": 28
+    },
+    {
+      "name": "faces/face_01",
+      "x": 30,
+      "y": 143,
+      "w": 28,
+      "h": 28
+    },
+    {
+      "name": "faces/face_02",
+      "x": 59,
+      "y": 143,
+      "w": 28,
+      "h": 28
+    },
+    {
+      "name": "faces/face_03",
+      "x": 88,
+      "y": 143,
+      "w": 28,
+      "h": 28
+    },
+    {
+      "name": "faces/face_04",
+      "x": 117,
+      "y": 143,
+      "w": 28,
+      "h": 28
+    },
+    {
+      "name": "faces/face_05",
+      "x": 146,
+      "y": 143,
+      "w": 28,
+      "h": 28
+    },
+    {
+      "name": "faces/face_06",
+      "x": 175,
+      "y": 143,
+      "w": 28,
+      "h": 28
+    },
+    {
+      "name": "faces/face_07",
+      "x": 204,
+      "y": 143,
+      "w": 28,
+      "h": 28
+    }
+  ]
+}

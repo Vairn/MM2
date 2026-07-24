@@ -19,6 +19,8 @@
 #include "mm2/events/EventRuntime.h"
 #include "mm2/events/ScriptedSceneEngine.h"
 #include "mm2/platform/Platform.h"
+#include "mm2/ui/IPlayHud.h"
+#include "mm2/ui/PlayHudKind.h"
 #include "mm2/ui/PlayTownServiceUi.h"
 #include "mm2/world/MapWorld.h"
 
@@ -45,6 +47,10 @@ public:
     bool start(const char *data_dir, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
                uint32_t start_flags = 0);
     void shutdown();
+
+    /** Select play HUD before start() (default Classic). */
+    void setPlayHudKind(ui::PlayHudKind kind) { play_hud_kind_ = kind; }
+    ui::PlayHudKind playHudKind() const { return play_hud_kind_; }
 
 #if MM2_HOST_AMIGA
     /** Staged play-mode asset load — one heavy step per frame (Bartman 4K stack). */
@@ -203,6 +209,7 @@ private:
     /** Quick Ref / character sheet / etc. replace the playfield — no viewport .anm. */
     bool viewportHiddenByOverlay() const;
     gfx::PlayProtectValues protectValues() const;
+    ui::IPlayHud &hud();
 
     const char *data_dir_ = nullptr;
     uint32_t start_flags_ = 0;
@@ -211,6 +218,9 @@ private:
     bool back_to_goto_town_ = false;
     uint8_t goto_town_filter_ = 1;
     bool assets_ok_ = false;
+
+    ui::PlayHudKind play_hud_kind_ = ui::PlayHudKind::Classic;
+    ui::IPlayHud *play_hud_ = nullptr;
 
     Mm2PartyLaunch launch_{};
     Mm2RosterFile roster_{};

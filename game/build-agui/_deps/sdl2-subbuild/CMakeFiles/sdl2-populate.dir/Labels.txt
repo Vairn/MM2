@@ -1,0 +1,14 @@
+# Target labels
+ sdl2-populate
+# Source files and their labels
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/CMakeFiles/sdl2-populate
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/CMakeFiles/sdl2-populate.rule
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/CMakeFiles/sdl2-populate-complete.rule
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/sdl2-populate-prefix/src/sdl2-populate-stamp/sdl2-populate-build.rule
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/sdl2-populate-prefix/src/sdl2-populate-stamp/sdl2-populate-configure.rule
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/sdl2-populate-prefix/src/sdl2-populate-stamp/sdl2-populate-download.rule
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/sdl2-populate-prefix/src/sdl2-populate-stamp/sdl2-populate-install.rule
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/sdl2-populate-prefix/src/sdl2-populate-stamp/sdl2-populate-mkdir.rule
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/sdl2-populate-prefix/src/sdl2-populate-stamp/sdl2-populate-patch.rule
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/sdl2-populate-prefix/src/sdl2-populate-stamp/sdl2-populate-test.rule
+C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-subbuild/sdl2-populate-prefix/src/sdl2-populate-stamp/sdl2-populate-update.rule

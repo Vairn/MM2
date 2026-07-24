@@ -1,0 +1,3447 @@
+The system is: Windows - 10.0.26200 - AMD64
+Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+Compiler: C:/msys64/ucrt64/bin/cc.exe 
+Build flags: 
+Id flags:  
+
+The output was:
+0
+
+
+Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "a.exe"
+
+The C compiler identification is GNU, found in "C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/3.24.0-rc4/CompilerIdC/a.exe"
+
+Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+Compiler: C:/msys64/ucrt64/bin/c++.exe 
+Build flags: 
+Id flags:  
+
+The output was:
+0
+
+
+Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "a.exe"
+
+The CXX compiler identification is GNU, found in "C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/3.24.0-rc4/CompilerIdCXX/a.exe"
+
+Detecting C compiler ABI info compiled with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_a2732 && [1/2] Building C object CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj
+Using built-in specs.
+COLLECT_GCC=C:\msys64\ucrt64\bin\cc.exe
+Target: x86_64-w64-mingw32
+Configured with: ../gcc-14.1.0/configure --prefix=/ucrt64 --with-local-prefix=/ucrt64/local --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --with-native-system-header-dir=/ucrt64/include --libexecdir=/ucrt64/lib --enable-bootstrap --enable-checking=release --with-arch=nocona --with-tune=generic --enable-languages=c,lto,c++,fortran,ada,objc,obj-c++,rust,jit --enable-shared --enable-static --enable-libatomic --enable-threads=posix --enable-graphite --enable-fully-dynamic-string --enable-libstdcxx-filesystem-ts --enable-libstdcxx-time --disable-libstdcxx-pch --enable-lto --enable-libgomp --disable-libssp --disable-multilib --disable-rpath --disable-win32-registry --disable-nls --disable-werror --disable-symvers --with-libiconv --with-system-zlib --with-gmp=/ucrt64 --with-mpfr=/ucrt64 --with-mpc=/ucrt64 --with-isl=/ucrt64 --with-pkgversion='Rev3, Built by MSYS2 project' --with-bugurl=https://github.com/msys2/MINGW-packages/issues --with-gnu-as --with-gnu-ld --disable-libstdcxx-debug --enable-plugin --with-boot-ldflags=-static-libstdc++ --with-stage1-ldflags=-static-libstdc++
+Thread model: posix
+Supported LTO compression algorithms: zlib zstd
+gcc version 14.1.0 (Rev3, Built by MSYS2 project) 
+COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_a2732.dir/'
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/cc1.exe -quiet -v -iprefix C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/ -D_REENTRANT C:/Program Files/CMake/share/cmake-3.24/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_a2732.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mtune=generic -march=nocona -version -o C:\Users\ADAMTE~1\AppData\Local\Temp\ccnDiUSc.s
+GNU C17 (Rev3, Built by MSYS2 project) version 14.1.0 (x86_64-w64-mingw32)
+	compiled by GNU C version 14.1.0, GMP version 6.3.0, MPFR version 4.2.1, MPC version 1.3.1, isl version isl-0.26-GMP
+
+GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+ignoring nonexistent directory "C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/include"
+ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/include"
+ignoring nonexistent directory "D:/a/msys64/ucrt64/include"
+ignoring nonexistent directory "/ucrt64/include"
+ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed"
+ignoring nonexistent directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/include"
+ignoring nonexistent directory "D:/a/msys64/ucrt64/include"
+#include "..." search starts here:
+#include <...> search starts here:
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed
+End of search list.
+Compiler executable checksum: 72bbd08d0e8e581d270f60276297cebd
+COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_a2732.dir/'
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/as.exe -v -o CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj C:\Users\ADAMTE~1\AppData\Local\Temp\ccnDiUSc.s
+GNU assembler version 2.42 (x86_64-w64-mingw32) using BFD version (GNU Binutils) 2.42
+COMPILER_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/;C:/msys64/ucrt64/bin/../lib/gcc/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/
+LIBRARY_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/;C:/msys64/ucrt64/bin/../lib/gcc/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../
+COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.'
+[2/2] Linking C executable cmTC_a2732.exe
+Using built-in specs.
+COLLECT_GCC=C:\msys64\ucrt64\bin\cc.exe
+COLLECT_LTO_WRAPPER=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/lto-wrapper.exe
+Target: x86_64-w64-mingw32
+Configured with: ../gcc-14.1.0/configure --prefix=/ucrt64 --with-local-prefix=/ucrt64/local --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --with-native-system-header-dir=/ucrt64/include --libexecdir=/ucrt64/lib --enable-bootstrap --enable-checking=release --with-arch=nocona --with-tune=generic --enable-languages=c,lto,c++,fortran,ada,objc,obj-c++,rust,jit --enable-shared --enable-static --enable-libatomic --enable-threads=posix --enable-graphite --enable-fully-dynamic-string --enable-libstdcxx-filesystem-ts --enable-libstdcxx-time --disable-libstdcxx-pch --enable-lto --enable-libgomp --disable-libssp --disable-multilib --disable-rpath --disable-win32-registry --disable-nls --disable-werror --disable-symvers --with-libiconv --with-system-zlib --with-gmp=/ucrt64 --with-mpfr=/ucrt64 --with-mpc=/ucrt64 --with-isl=/ucrt64 --with-pkgversion='Rev3, Built by MSYS2 project' --with-bugurl=https://github.com/msys2/MINGW-packages/issues --with-gnu-as --with-gnu-ld --disable-libstdcxx-debug --enable-plugin --with-boot-ldflags=-static-libstdc++ --with-stage1-ldflags=-static-libstdc++
+Thread model: posix
+Supported LTO compression algorithms: zlib zstd
+gcc version 14.1.0 (Rev3, Built by MSYS2 project) 
+COMPILER_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/;C:/msys64/ucrt64/bin/../lib/gcc/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/
+LIBRARY_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/;C:/msys64/ucrt64/bin/../lib/gcc/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../
+COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_a2732.exe' '-mtune=generic' '-march=nocona' '-dumpdir' 'cmTC_a2732.'
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/collect2.exe -plugin C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/liblto_plugin.dll -plugin-opt=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\Users\ADAMTE~1\AppData\Local\Temp\ccbVk20l.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_eh -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_eh -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -m i386pep -Bdynamic -o cmTC_a2732.exe C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/crt2.o C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0 -LC:/msys64/ucrt64/bin/../lib/gcc -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../.. CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj --out-implib libcmTC_a2732.dll.a --major-image-version 0 --minor-image-version 0 -lmingw32 -lgcc -lgcc_eh -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lgcc_eh -lmingwex -lmsvcrt -lkernel32 C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/default-manifest.o C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o
+COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_a2732.exe' '-mtune=generic' '-march=nocona' '-dumpdir' 'cmTC_a2732.'
+
+
+
+Parsed C implicit include dir info from above output: rv=done
+  found start of include info
+  found start of implicit include info
+    add: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include]
+    add: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include]
+    add: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed]
+  end of search list found
+  collapse include dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include] ==> [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/include]
+  collapse include dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include] ==> [C:/msys64/ucrt64/include]
+  collapse include dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed] ==> [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed]
+  implicit include dirs: [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/include;C:/msys64/ucrt64/include;C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed]
+
+
+Parsed C implicit link information from above output:
+  link line regex: [^( *|.*[/\])(ld\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\]+-)?ld|collect2)[^/\]*( |$)]
+  ignore line: [Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp]
+  ignore line: []
+  ignore line: [Run Build Command(s):C:/Windows/ninja.exe cmTC_a2732 && [1/2] Building C object CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj]
+  ignore line: [Using built-in specs.]
+  ignore line: [COLLECT_GCC=C:\msys64\ucrt64\bin\cc.exe]
+  ignore line: [Target: x86_64-w64-mingw32]
+  ignore line: [Configured with: ../gcc-14.1.0/configure --prefix=/ucrt64 --with-local-prefix=/ucrt64/local --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --with-native-system-header-dir=/ucrt64/include --libexecdir=/ucrt64/lib --enable-bootstrap --enable-checking=release --with-arch=nocona --with-tune=generic --enable-languages=c,lto,c++,fortran,ada,objc,obj-c++,rust,jit --enable-shared --enable-static --enable-libatomic --enable-threads=posix --enable-graphite --enable-fully-dynamic-string --enable-libstdcxx-filesystem-ts --enable-libstdcxx-time --disable-libstdcxx-pch --enable-lto --enable-libgomp --disable-libssp --disable-multilib --disable-rpath --disable-win32-registry --disable-nls --disable-werror --disable-symvers --with-libiconv --with-system-zlib --with-gmp=/ucrt64 --with-mpfr=/ucrt64 --with-mpc=/ucrt64 --with-isl=/ucrt64 --with-pkgversion='Rev3, Built by MSYS2 project' --with-bugurl=https://github.com/msys2/MINGW-packages/issues --with-gnu-as --with-gnu-ld --disable-libstdcxx-debug --enable-plugin --with-boot-ldflags=-static-libstdc++ --with-stage1-ldflags=-static-libstdc++]
+  ignore line: [Thread model: posix]
+  ignore line: [Supported LTO compression algorithms: zlib zstd]
+  ignore line: [gcc version 14.1.0 (Rev3  Built by MSYS2 project) ]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_a2732.dir/']
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/cc1.exe -quiet -v -iprefix C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/ -D_REENTRANT C:/Program Files/CMake/share/cmake-3.24/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_a2732.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mtune=generic -march=nocona -version -o C:\Users\ADAMTE~1\AppData\Local\Temp\ccnDiUSc.s]
+  ignore line: [GNU C17 (Rev3  Built by MSYS2 project) version 14.1.0 (x86_64-w64-mingw32)]
+  ignore line: [	compiled by GNU C version 14.1.0  GMP version 6.3.0  MPFR version 4.2.1  MPC version 1.3.1  isl version isl-0.26-GMP]
+  ignore line: []
+  ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+  ignore line: [ignoring nonexistent directory "C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/include"]
+  ignore line: [ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/include"]
+  ignore line: [ignoring nonexistent directory "D:/a/msys64/ucrt64/include"]
+  ignore line: [ignoring nonexistent directory "/ucrt64/include"]
+  ignore line: [ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed"]
+  ignore line: [ignoring nonexistent directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/include"]
+  ignore line: [ignoring nonexistent directory "D:/a/msys64/ucrt64/include"]
+  ignore line: [#include "..." search starts here:]
+  ignore line: [#include <...> search starts here:]
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include]
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include]
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed]
+  ignore line: [End of search list.]
+  ignore line: [Compiler executable checksum: 72bbd08d0e8e581d270f60276297cebd]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_a2732.dir/']
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/as.exe -v -o CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj C:\Users\ADAMTE~1\AppData\Local\Temp\ccnDiUSc.s]
+  ignore line: [GNU assembler version 2.42 (x86_64-w64-mingw32) using BFD version (GNU Binutils) 2.42]
+  ignore line: [COMPILER_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/]
+  ignore line: [LIBRARY_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.']
+  ignore line: [[2/2] Linking C executable cmTC_a2732.exe]
+  ignore line: [Using built-in specs.]
+  ignore line: [COLLECT_GCC=C:\msys64\ucrt64\bin\cc.exe]
+  ignore line: [COLLECT_LTO_WRAPPER=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/lto-wrapper.exe]
+  ignore line: [Target: x86_64-w64-mingw32]
+  ignore line: [Configured with: ../gcc-14.1.0/configure --prefix=/ucrt64 --with-local-prefix=/ucrt64/local --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --with-native-system-header-dir=/ucrt64/include --libexecdir=/ucrt64/lib --enable-bootstrap --enable-checking=release --with-arch=nocona --with-tune=generic --enable-languages=c,lto,c++,fortran,ada,objc,obj-c++,rust,jit --enable-shared --enable-static --enable-libatomic --enable-threads=posix --enable-graphite --enable-fully-dynamic-string --enable-libstdcxx-filesystem-ts --enable-libstdcxx-time --disable-libstdcxx-pch --enable-lto --enable-libgomp --disable-libssp --disable-multilib --disable-rpath --disable-win32-registry --disable-nls --disable-werror --disable-symvers --with-libiconv --with-system-zlib --with-gmp=/ucrt64 --with-mpfr=/ucrt64 --with-mpc=/ucrt64 --with-isl=/ucrt64 --with-pkgversion='Rev3, Built by MSYS2 project' --with-bugurl=https://github.com/msys2/MINGW-packages/issues --with-gnu-as --with-gnu-ld --disable-libstdcxx-debug --enable-plugin --with-boot-ldflags=-static-libstdc++ --with-stage1-ldflags=-static-libstdc++]
+  ignore line: [Thread model: posix]
+  ignore line: [Supported LTO compression algorithms: zlib zstd]
+  ignore line: [gcc version 14.1.0 (Rev3  Built by MSYS2 project) ]
+  ignore line: [COMPILER_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/]
+  ignore line: [LIBRARY_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_a2732.exe' '-mtune=generic' '-march=nocona' '-dumpdir' 'cmTC_a2732.']
+  link line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/collect2.exe -plugin C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/liblto_plugin.dll -plugin-opt=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\Users\ADAMTE~1\AppData\Local\Temp\ccbVk20l.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_eh -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_eh -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -m i386pep -Bdynamic -o cmTC_a2732.exe C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/crt2.o C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0 -LC:/msys64/ucrt64/bin/../lib/gcc -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../.. CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj --out-implib libcmTC_a2732.dll.a --major-image-version 0 --minor-image-version 0 -lmingw32 -lgcc -lgcc_eh -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lgcc_eh -lmingwex -lmsvcrt -lkernel32 C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/default-manifest.o C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o]
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/collect2.exe] ==> ignore
+    arg [-plugin] ==> ignore
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/liblto_plugin.dll] ==> ignore
+    arg [-plugin-opt=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/lto-wrapper.exe] ==> ignore
+    arg [-plugin-opt=-fresolution=C:\Users\ADAMTE~1\AppData\Local\Temp\ccbVk20l.res] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingw32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc_eh] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingwex] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmsvcrt] ==> ignore
+    arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lpthread] ==> ignore
+    arg [-plugin-opt=-pass-through=-ladvapi32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lshell32] ==> ignore
+    arg [-plugin-opt=-pass-through=-luser32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingw32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc_eh] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingwex] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmsvcrt] ==> ignore
+    arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+    arg [-m] ==> ignore
+    arg [i386pep] ==> ignore
+    arg [-Bdynamic] ==> search dynamic
+    arg [-o] ==> ignore
+    arg [cmTC_a2732.exe] ==> ignore
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/crt2.o] ==> obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/crt2.o]
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o] ==> obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../..] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../..]
+    arg [CMakeFiles/cmTC_a2732.dir/CMakeCCompilerABI.c.obj] ==> ignore
+    arg [--out-implib] ==> ignore
+    arg [libcmTC_a2732.dll.a] ==> ignore
+    arg [--major-image-version] ==> ignore
+    arg [0] ==> ignore
+    arg [--minor-image-version] ==> ignore
+    arg [0] ==> ignore
+    arg [-lmingw32] ==> lib [mingw32]
+    arg [-lgcc] ==> lib [gcc]
+    arg [-lgcc_eh] ==> lib [gcc_eh]
+    arg [-lmingwex] ==> lib [mingwex]
+    arg [-lmsvcrt] ==> lib [msvcrt]
+    arg [-lkernel32] ==> lib [kernel32]
+    arg [-lpthread] ==> lib [pthread]
+    arg [-ladvapi32] ==> lib [advapi32]
+    arg [-lshell32] ==> lib [shell32]
+    arg [-luser32] ==> lib [user32]
+    arg [-lkernel32] ==> lib [kernel32]
+    arg [-lmingw32] ==> lib [mingw32]
+    arg [-lgcc] ==> lib [gcc]
+    arg [-lgcc_eh] ==> lib [gcc_eh]
+    arg [-lmingwex] ==> lib [mingwex]
+    arg [-lmsvcrt] ==> lib [msvcrt]
+    arg [-lkernel32] ==> lib [kernel32]
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/default-manifest.o] ==> obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/default-manifest.o]
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o] ==> obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o]
+  remove lib [gcc_eh]
+  remove lib [msvcrt]
+  remove lib [gcc_eh]
+  remove lib [msvcrt]
+  collapse obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/crt2.o] ==> [C:/msys64/ucrt64/lib/crt2.o]
+  collapse obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o] ==> [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o]
+  collapse obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/default-manifest.o] ==> [C:/msys64/ucrt64/lib/default-manifest.o]
+  collapse obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o] ==> [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0] ==> [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc] ==> [C:/msys64/ucrt64/lib/gcc]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib] ==> [C:/msys64/ucrt64/x86_64-w64-mingw32/lib]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib] ==> [C:/msys64/ucrt64/lib]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib] ==> [C:/msys64/ucrt64/x86_64-w64-mingw32/lib]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../..] ==> [C:/msys64/ucrt64/lib]
+  implicit libs: [mingw32;gcc;mingwex;kernel32;pthread;advapi32;shell32;user32;kernel32;mingw32;gcc;mingwex;kernel32]
+  implicit objs: [C:/msys64/ucrt64/lib/crt2.o;C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o;C:/msys64/ucrt64/lib/default-manifest.o;C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o]
+  implicit dirs: [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0;C:/msys64/ucrt64/lib/gcc;C:/msys64/ucrt64/x86_64-w64-mingw32/lib;C:/msys64/ucrt64/lib]
+  implicit fwks: []
+
+
+Detecting CXX compiler ABI info compiled with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_cf10b && [1/2] Building CXX object CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj
+Using built-in specs.
+COLLECT_GCC=C:\msys64\ucrt64\bin\c++.exe
+Target: x86_64-w64-mingw32
+Configured with: ../gcc-14.1.0/configure --prefix=/ucrt64 --with-local-prefix=/ucrt64/local --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --with-native-system-header-dir=/ucrt64/include --libexecdir=/ucrt64/lib --enable-bootstrap --enable-checking=release --with-arch=nocona --with-tune=generic --enable-languages=c,lto,c++,fortran,ada,objc,obj-c++,rust,jit --enable-shared --enable-static --enable-libatomic --enable-threads=posix --enable-graphite --enable-fully-dynamic-string --enable-libstdcxx-filesystem-ts --enable-libstdcxx-time --disable-libstdcxx-pch --enable-lto --enable-libgomp --disable-libssp --disable-multilib --disable-rpath --disable-win32-registry --disable-nls --disable-werror --disable-symvers --with-libiconv --with-system-zlib --with-gmp=/ucrt64 --with-mpfr=/ucrt64 --with-mpc=/ucrt64 --with-isl=/ucrt64 --with-pkgversion='Rev3, Built by MSYS2 project' --with-bugurl=https://github.com/msys2/MINGW-packages/issues --with-gnu-as --with-gnu-ld --disable-libstdcxx-debug --enable-plugin --with-boot-ldflags=-static-libstdc++ --with-stage1-ldflags=-static-libstdc++
+Thread model: posix
+Supported LTO compression algorithms: zlib zstd
+gcc version 14.1.0 (Rev3, Built by MSYS2 project) 
+COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-shared-libgcc' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_cf10b.dir/'
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/cc1plus.exe -quiet -v -iprefix C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/ -D_REENTRANT C:/Program Files/CMake/share/cmake-3.24/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_cf10b.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mtune=generic -march=nocona -version -o C:\Users\ADAMTE~1\AppData\Local\Temp\ccvRg2UX.s
+GNU C++17 (Rev3, Built by MSYS2 project) version 14.1.0 (x86_64-w64-mingw32)
+	compiled by GNU C version 14.1.0, GMP version 6.3.0, MPFR version 4.2.1, MPC version 1.3.1, isl version isl-0.26-GMP
+
+GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+ignoring nonexistent directory "C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/include"
+ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0"
+ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/x86_64-w64-mingw32"
+ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/backward"
+ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/include"
+ignoring nonexistent directory "D:/a/msys64/ucrt64/include"
+ignoring nonexistent directory "/ucrt64/include"
+ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed"
+ignoring nonexistent directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/include"
+ignoring nonexistent directory "D:/a/msys64/ucrt64/include"
+#include "..." search starts here:
+#include <...> search starts here:
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/x86_64-w64-mingw32
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/backward
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed
+End of search list.
+Compiler executable checksum: d7a8e66cf2f26a72e527b0aced6104da
+COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-shared-libgcc' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_cf10b.dir/'
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/as.exe -v -o CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj C:\Users\ADAMTE~1\AppData\Local\Temp\ccvRg2UX.s
+GNU assembler version 2.42 (x86_64-w64-mingw32) using BFD version (GNU Binutils) 2.42
+COMPILER_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/;C:/msys64/ucrt64/bin/../lib/gcc/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/
+LIBRARY_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/;C:/msys64/ucrt64/bin/../lib/gcc/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../
+COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-shared-libgcc' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.'
+[2/2] Linking CXX executable cmTC_cf10b.exe
+Using built-in specs.
+COLLECT_GCC=C:\msys64\ucrt64\bin\c++.exe
+COLLECT_LTO_WRAPPER=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/lto-wrapper.exe
+Target: x86_64-w64-mingw32
+Configured with: ../gcc-14.1.0/configure --prefix=/ucrt64 --with-local-prefix=/ucrt64/local --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --with-native-system-header-dir=/ucrt64/include --libexecdir=/ucrt64/lib --enable-bootstrap --enable-checking=release --with-arch=nocona --with-tune=generic --enable-languages=c,lto,c++,fortran,ada,objc,obj-c++,rust,jit --enable-shared --enable-static --enable-libatomic --enable-threads=posix --enable-graphite --enable-fully-dynamic-string --enable-libstdcxx-filesystem-ts --enable-libstdcxx-time --disable-libstdcxx-pch --enable-lto --enable-libgomp --disable-libssp --disable-multilib --disable-rpath --disable-win32-registry --disable-nls --disable-werror --disable-symvers --with-libiconv --with-system-zlib --with-gmp=/ucrt64 --with-mpfr=/ucrt64 --with-mpc=/ucrt64 --with-isl=/ucrt64 --with-pkgversion='Rev3, Built by MSYS2 project' --with-bugurl=https://github.com/msys2/MINGW-packages/issues --with-gnu-as --with-gnu-ld --disable-libstdcxx-debug --enable-plugin --with-boot-ldflags=-static-libstdc++ --with-stage1-ldflags=-static-libstdc++
+Thread model: posix
+Supported LTO compression algorithms: zlib zstd
+gcc version 14.1.0 (Rev3, Built by MSYS2 project) 
+COMPILER_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/;C:/msys64/ucrt64/bin/../lib/gcc/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/
+LIBRARY_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/;C:/msys64/ucrt64/bin/../lib/gcc/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/;C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../
+COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_cf10b.exe' '-shared-libgcc' '-mtune=generic' '-march=nocona' '-dumpdir' 'cmTC_cf10b.'
+ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/collect2.exe -plugin C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/liblto_plugin.dll -plugin-opt=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\Users\ADAMTE~1\AppData\Local\Temp\ccbj4vX7.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -m i386pep -Bdynamic -o cmTC_cf10b.exe C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/crt2.o C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0 -LC:/msys64/ucrt64/bin/../lib/gcc -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../.. CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj --out-implib libcmTC_cf10b.dll.a --major-image-version 0 --minor-image-version 0 -lstdc++ -lmingw32 -lgcc_s -lgcc -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc_s -lgcc -lmingwex -lmsvcrt -lkernel32 C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/default-manifest.o C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o
+COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_cf10b.exe' '-shared-libgcc' '-mtune=generic' '-march=nocona' '-dumpdir' 'cmTC_cf10b.'
+
+
+
+Parsed CXX implicit include dir info from above output: rv=done
+  found start of include info
+  found start of implicit include info
+    add: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0]
+    add: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/x86_64-w64-mingw32]
+    add: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/backward]
+    add: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include]
+    add: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include]
+    add: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed]
+  end of search list found
+  collapse include dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0] ==> [C:/msys64/ucrt64/include/c++/14.1.0]
+  collapse include dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/x86_64-w64-mingw32] ==> [C:/msys64/ucrt64/include/c++/14.1.0/x86_64-w64-mingw32]
+  collapse include dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/backward] ==> [C:/msys64/ucrt64/include/c++/14.1.0/backward]
+  collapse include dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include] ==> [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/include]
+  collapse include dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include] ==> [C:/msys64/ucrt64/include]
+  collapse include dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed] ==> [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed]
+  implicit include dirs: [C:/msys64/ucrt64/include/c++/14.1.0;C:/msys64/ucrt64/include/c++/14.1.0/x86_64-w64-mingw32;C:/msys64/ucrt64/include/c++/14.1.0/backward;C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/include;C:/msys64/ucrt64/include;C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed]
+
+
+Parsed CXX implicit link information from above output:
+  link line regex: [^( *|.*[/\])(ld\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\]+-)?ld|collect2)[^/\]*( |$)]
+  ignore line: [Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp]
+  ignore line: []
+  ignore line: [Run Build Command(s):C:/Windows/ninja.exe cmTC_cf10b && [1/2] Building CXX object CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj]
+  ignore line: [Using built-in specs.]
+  ignore line: [COLLECT_GCC=C:\msys64\ucrt64\bin\c++.exe]
+  ignore line: [Target: x86_64-w64-mingw32]
+  ignore line: [Configured with: ../gcc-14.1.0/configure --prefix=/ucrt64 --with-local-prefix=/ucrt64/local --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --with-native-system-header-dir=/ucrt64/include --libexecdir=/ucrt64/lib --enable-bootstrap --enable-checking=release --with-arch=nocona --with-tune=generic --enable-languages=c,lto,c++,fortran,ada,objc,obj-c++,rust,jit --enable-shared --enable-static --enable-libatomic --enable-threads=posix --enable-graphite --enable-fully-dynamic-string --enable-libstdcxx-filesystem-ts --enable-libstdcxx-time --disable-libstdcxx-pch --enable-lto --enable-libgomp --disable-libssp --disable-multilib --disable-rpath --disable-win32-registry --disable-nls --disable-werror --disable-symvers --with-libiconv --with-system-zlib --with-gmp=/ucrt64 --with-mpfr=/ucrt64 --with-mpc=/ucrt64 --with-isl=/ucrt64 --with-pkgversion='Rev3, Built by MSYS2 project' --with-bugurl=https://github.com/msys2/MINGW-packages/issues --with-gnu-as --with-gnu-ld --disable-libstdcxx-debug --enable-plugin --with-boot-ldflags=-static-libstdc++ --with-stage1-ldflags=-static-libstdc++]
+  ignore line: [Thread model: posix]
+  ignore line: [Supported LTO compression algorithms: zlib zstd]
+  ignore line: [gcc version 14.1.0 (Rev3  Built by MSYS2 project) ]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-shared-libgcc' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_cf10b.dir/']
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/cc1plus.exe -quiet -v -iprefix C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/ -D_REENTRANT C:/Program Files/CMake/share/cmake-3.24/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_cf10b.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mtune=generic -march=nocona -version -o C:\Users\ADAMTE~1\AppData\Local\Temp\ccvRg2UX.s]
+  ignore line: [GNU C++17 (Rev3  Built by MSYS2 project) version 14.1.0 (x86_64-w64-mingw32)]
+  ignore line: [	compiled by GNU C version 14.1.0  GMP version 6.3.0  MPFR version 4.2.1  MPC version 1.3.1  isl version isl-0.26-GMP]
+  ignore line: []
+  ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+  ignore line: [ignoring nonexistent directory "C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/include"]
+  ignore line: [ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0"]
+  ignore line: [ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/x86_64-w64-mingw32"]
+  ignore line: [ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/backward"]
+  ignore line: [ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/include"]
+  ignore line: [ignoring nonexistent directory "D:/a/msys64/ucrt64/include"]
+  ignore line: [ignoring nonexistent directory "/ucrt64/include"]
+  ignore line: [ignoring duplicate directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed"]
+  ignore line: [ignoring nonexistent directory "C:/msys64/ucrt64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/include"]
+  ignore line: [ignoring nonexistent directory "D:/a/msys64/ucrt64/include"]
+  ignore line: [#include "..." search starts here:]
+  ignore line: [#include <...> search starts here:]
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0]
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/x86_64-w64-mingw32]
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include/c++/14.1.0/backward]
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include]
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../include]
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/include-fixed]
+  ignore line: [End of search list.]
+  ignore line: [Compiler executable checksum: d7a8e66cf2f26a72e527b0aced6104da]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-shared-libgcc' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_cf10b.dir/']
+  ignore line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/as.exe -v -o CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj C:\Users\ADAMTE~1\AppData\Local\Temp\ccvRg2UX.s]
+  ignore line: [GNU assembler version 2.42 (x86_64-w64-mingw32) using BFD version (GNU Binutils) 2.42]
+  ignore line: [COMPILER_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/]
+  ignore line: [LIBRARY_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-shared-libgcc' '-mtune=generic' '-march=nocona' '-dumpdir' 'CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.']
+  ignore line: [[2/2] Linking CXX executable cmTC_cf10b.exe]
+  ignore line: [Using built-in specs.]
+  ignore line: [COLLECT_GCC=C:\msys64\ucrt64\bin\c++.exe]
+  ignore line: [COLLECT_LTO_WRAPPER=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/lto-wrapper.exe]
+  ignore line: [Target: x86_64-w64-mingw32]
+  ignore line: [Configured with: ../gcc-14.1.0/configure --prefix=/ucrt64 --with-local-prefix=/ucrt64/local --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --with-native-system-header-dir=/ucrt64/include --libexecdir=/ucrt64/lib --enable-bootstrap --enable-checking=release --with-arch=nocona --with-tune=generic --enable-languages=c,lto,c++,fortran,ada,objc,obj-c++,rust,jit --enable-shared --enable-static --enable-libatomic --enable-threads=posix --enable-graphite --enable-fully-dynamic-string --enable-libstdcxx-filesystem-ts --enable-libstdcxx-time --disable-libstdcxx-pch --enable-lto --enable-libgomp --disable-libssp --disable-multilib --disable-rpath --disable-win32-registry --disable-nls --disable-werror --disable-symvers --with-libiconv --with-system-zlib --with-gmp=/ucrt64 --with-mpfr=/ucrt64 --with-mpc=/ucrt64 --with-isl=/ucrt64 --with-pkgversion='Rev3, Built by MSYS2 project' --with-bugurl=https://github.com/msys2/MINGW-packages/issues --with-gnu-as --with-gnu-ld --disable-libstdcxx-debug --enable-plugin --with-boot-ldflags=-static-libstdc++ --with-stage1-ldflags=-static-libstdc++]
+  ignore line: [Thread model: posix]
+  ignore line: [Supported LTO compression algorithms: zlib zstd]
+  ignore line: [gcc version 14.1.0 (Rev3  Built by MSYS2 project) ]
+  ignore line: [COMPILER_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/bin/]
+  ignore line: [LIBRARY_PATH=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/]
+  ignore line: [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_cf10b.exe' '-shared-libgcc' '-mtune=generic' '-march=nocona' '-dumpdir' 'cmTC_cf10b.']
+  link line: [ C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/collect2.exe -plugin C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/liblto_plugin.dll -plugin-opt=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\Users\ADAMTE~1\AppData\Local\Temp\ccbj4vX7.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -m i386pep -Bdynamic -o cmTC_cf10b.exe C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/crt2.o C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0 -LC:/msys64/ucrt64/bin/../lib/gcc -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib -LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../.. CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj --out-implib libcmTC_cf10b.dll.a --major-image-version 0 --minor-image-version 0 -lstdc++ -lmingw32 -lgcc_s -lgcc -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc_s -lgcc -lmingwex -lmsvcrt -lkernel32 C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/default-manifest.o C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o]
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/collect2.exe] ==> ignore
+    arg [-plugin] ==> ignore
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/liblto_plugin.dll] ==> ignore
+    arg [-plugin-opt=C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/lto-wrapper.exe] ==> ignore
+    arg [-plugin-opt=-fresolution=C:\Users\ADAMTE~1\AppData\Local\Temp\ccbj4vX7.res] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingw32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingwex] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmsvcrt] ==> ignore
+    arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lpthread] ==> ignore
+    arg [-plugin-opt=-pass-through=-ladvapi32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lshell32] ==> ignore
+    arg [-plugin-opt=-pass-through=-luser32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingw32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingwex] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmsvcrt] ==> ignore
+    arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+    arg [-m] ==> ignore
+    arg [i386pep] ==> ignore
+    arg [-Bdynamic] ==> search dynamic
+    arg [-o] ==> ignore
+    arg [cmTC_cf10b.exe] ==> ignore
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/crt2.o] ==> obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/crt2.o]
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o] ==> obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib]
+    arg [-LC:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../..] ==> dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../..]
+    arg [CMakeFiles/cmTC_cf10b.dir/CMakeCXXCompilerABI.cpp.obj] ==> ignore
+    arg [--out-implib] ==> ignore
+    arg [libcmTC_cf10b.dll.a] ==> ignore
+    arg [--major-image-version] ==> ignore
+    arg [0] ==> ignore
+    arg [--minor-image-version] ==> ignore
+    arg [0] ==> ignore
+    arg [-lstdc++] ==> lib [stdc++]
+    arg [-lmingw32] ==> lib [mingw32]
+    arg [-lgcc_s] ==> lib [gcc_s]
+    arg [-lgcc] ==> lib [gcc]
+    arg [-lmingwex] ==> lib [mingwex]
+    arg [-lmsvcrt] ==> lib [msvcrt]
+    arg [-lkernel32] ==> lib [kernel32]
+    arg [-lpthread] ==> lib [pthread]
+    arg [-ladvapi32] ==> lib [advapi32]
+    arg [-lshell32] ==> lib [shell32]
+    arg [-luser32] ==> lib [user32]
+    arg [-lkernel32] ==> lib [kernel32]
+    arg [-lmingw32] ==> lib [mingw32]
+    arg [-lgcc_s] ==> lib [gcc_s]
+    arg [-lgcc] ==> lib [gcc]
+    arg [-lmingwex] ==> lib [mingwex]
+    arg [-lmsvcrt] ==> lib [msvcrt]
+    arg [-lkernel32] ==> lib [kernel32]
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/default-manifest.o] ==> obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/default-manifest.o]
+    arg [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o] ==> obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o]
+  remove lib [msvcrt]
+  remove lib [msvcrt]
+  collapse obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/crt2.o] ==> [C:/msys64/ucrt64/lib/crt2.o]
+  collapse obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o] ==> [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o]
+  collapse obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib/default-manifest.o] ==> [C:/msys64/ucrt64/lib/default-manifest.o]
+  collapse obj [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o] ==> [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0] ==> [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc] ==> [C:/msys64/ucrt64/lib/gcc]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib/../lib] ==> [C:/msys64/ucrt64/x86_64-w64-mingw32/lib]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../lib] ==> [C:/msys64/ucrt64/lib]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../../../x86_64-w64-mingw32/lib] ==> [C:/msys64/ucrt64/x86_64-w64-mingw32/lib]
+  collapse library dir [C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/14.1.0/../../..] ==> [C:/msys64/ucrt64/lib]
+  implicit libs: [stdc++;mingw32;gcc_s;gcc;mingwex;kernel32;pthread;advapi32;shell32;user32;kernel32;mingw32;gcc_s;gcc;mingwex;kernel32]
+  implicit objs: [C:/msys64/ucrt64/lib/crt2.o;C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/crtbegin.o;C:/msys64/ucrt64/lib/default-manifest.o;C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/crtend.o]
+  implicit dirs: [C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0;C:/msys64/ucrt64/lib/gcc;C:/msys64/ucrt64/x86_64-w64-mingw32/lib;C:/msys64/ucrt64/lib]
+  implicit fwks: []
+
+
+Performing C SOURCE FILE Test CHECK_CPU_ARCHITECTURE_X64 succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_d0768 && [1/2] Building C object CMakeFiles/cmTC_d0768.dir/src.c.obj
+[2/2] Linking C executable cmTC_d0768.exe
+
+
+Source file was:
+
+int main(int argc, char *argv[]) {
+#if defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64) || defined(_M_X64) || defined(_M_AMD64)
+  return 0;
+#else
+  choke
+#endif
+}
+
+Performing C SOURCE FILE Test HAVE_GCC_WALL succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_e33a4 && [1/2] Building C object CMakeFiles/cmTC_e33a4.dir/src.c.obj
+[2/2] Linking C executable cmTC_e33a4.exe
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_GCC_WUNDEF succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_50775 && [1/2] Building C object CMakeFiles/cmTC_50775.dir/src.c.obj
+[2/2] Linking C executable cmTC_50775.exe
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_GCC_NO_STRICT_ALIASING succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_cec19 && [1/2] Building C object CMakeFiles/cmTC_cec19.dir/src.c.obj
+[2/2] Linking C executable cmTC_cec19.exe
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_GCC_WDECLARATION_AFTER_STATEMENT succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_325dc && [1/2] Building C object CMakeFiles/cmTC_325dc.dir/src.c.obj
+[2/2] Linking C executable cmTC_325dc.exe
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_GCC_ATOMICS succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_7cdc2 && [1/2] Building C object CMakeFiles/cmTC_7cdc2.dir/src.c.obj
+[2/2] Linking C executable cmTC_7cdc2.exe
+
+
+Source file was:
+int main(int argc, char **argv) {
+        int a;
+        void *x, *y, *z;
+        __sync_lock_test_and_set(&a, 4);
+        __sync_lock_test_and_set(&x, y);
+        __sync_fetch_and_add(&a, 1);
+        __sync_bool_compare_and_swap(&a, 5, 10);
+        __sync_bool_compare_and_swap(&x, y, z);
+        return 0; }
+Performing C SOURCE FILE Test HAVE_GCC_FVISIBILITY succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_be603 && [1/2] Building C object CMakeFiles/cmTC_be603.dir/src.c.obj
+[2/2] Linking C executable cmTC_be603.exe
+
+
+Source file was:
+
+      #if !defined(__GNUC__) || __GNUC__ < 4
+      #error SDL only uses visibility attributes in GCC 4 or newer
+      #endif
+      int main(int argc, char **argv) { return 0; }
+Performing C SOURCE FILE Test HAVE_GCC_WSHADOW succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_250da && [1/2] Building C object CMakeFiles/cmTC_250da.dir/src.c.obj
+[2/2] Linking C executable cmTC_250da.exe
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_GCC_WUNUSED_LOCAL_TYPEDEFS succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_9e3a7 && [1/2] Building C object CMakeFiles/cmTC_9e3a7.dir/src.c.obj
+[2/2] Linking C executable cmTC_9e3a7.exe
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_NO_UNDEFINED succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_e9833 && [1/2] Building C object CMakeFiles/cmTC_e9833.dir/src.c.obj
+[2/2] Linking C executable cmTC_e9833.exe
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_GDWARF_4 succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_b983f && [1/2] Building C object CMakeFiles/cmTC_b983f.dir/src.c.obj
+[2/2] Linking C executable cmTC_b983f.exe
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_MMX succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_21fd3 && [1/2] Building C object CMakeFiles/cmTC_21fd3.dir/src.c.obj
+[2/2] Linking C executable cmTC_21fd3.exe
+
+
+Source file was:
+
+          #ifdef __MINGW32__
+          #include <_mingw.h>
+          #ifdef __MINGW64_VERSION_MAJOR
+          #include <intrin.h>
+          #else
+          #include <mmintrin.h>
+          #endif
+          #else
+          #include <mmintrin.h>
+          #endif
+          #ifndef __MMX__
+          #error Assembler CPP flag not enabled
+          #endif
+          int main(int argc, char **argv) { return 0; }
+Performing C SOURCE FILE Test HAVE_SSE succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_17f6f && [1/2] Building C object CMakeFiles/cmTC_17f6f.dir/src.c.obj
+[2/2] Linking C executable cmTC_17f6f.exe
+
+
+Source file was:
+
+          #ifdef __MINGW32__
+          #include <_mingw.h>
+          #ifdef __MINGW64_VERSION_MAJOR
+          #include <intrin.h>
+          #else
+          #include <xmmintrin.h>
+          #endif
+          #else
+          #include <xmmintrin.h>
+          #endif
+          #ifndef __SSE__
+          #error Assembler CPP flag not enabled
+          #endif
+          int main(int argc, char **argv) { return 0; }
+Performing C SOURCE FILE Test CPU_SUPPORTS_SSE2 succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_38411 && [1/2] Building C object CMakeFiles/cmTC_38411.dir/src.c.obj
+[2/2] Linking C executable cmTC_38411.exe
+
+
+Source file was:
+
+          #ifdef __MINGW32__
+          #include <_mingw.h>
+          #ifdef __MINGW64_VERSION_MAJOR
+          #include <intrin.h>
+          #else
+          #include <emmintrin.h>
+          #endif
+          #else
+          #include <emmintrin.h>
+          #endif
+          #ifndef __SSE2__
+          #error Assembler CPP flag not enabled
+          #endif
+          int main(int argc, char **argv) { return 0; }
+Performing C SOURCE FILE Test CPU_SUPPORTS_SSE3 succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_14775 && [1/2] Building C object CMakeFiles/cmTC_14775.dir/src.c.obj
+[2/2] Linking C executable cmTC_14775.exe
+
+
+Source file was:
+
+          #ifdef __MINGW32__
+          #include <_mingw.h>
+          #ifdef __MINGW64_VERSION_MAJOR
+          #include <intrin.h>
+          #else
+          #include <pmmintrin.h>
+          #endif
+          #else
+          #include <pmmintrin.h>
+          #endif
+          #ifndef __SSE3__
+          #error Assembler CPP flag not enabled
+          #endif
+          int main(int argc, char **argv) { return 0; }
+Determining if the include file immintrin.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_0e0ee && [1/2] Building C object CMakeFiles/cmTC_0e0ee.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_0e0ee.exe
+
+
+
+Determining if the include file ctype.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_8ce41 && [1/2] Building C object CMakeFiles/cmTC_8ce41.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_8ce41.exe
+
+
+
+Determining if the include file float.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_bbd3e && [1/2] Building C object CMakeFiles/cmTC_bbd3e.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_bbd3e.exe
+
+
+
+Determining if the include file iconv.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f64c5 && [1/2] Building C object CMakeFiles/cmTC_f64c5.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_f64c5.exe
+
+
+
+Determining if the include file inttypes.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f31f3 && [1/2] Building C object CMakeFiles/cmTC_f31f3.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_f31f3.exe
+
+
+
+Determining if the include file limits.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_03edb && [1/2] Building C object CMakeFiles/cmTC_03edb.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_03edb.exe
+
+
+
+Determining if the include file malloc.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_1871e && [1/2] Building C object CMakeFiles/cmTC_1871e.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_1871e.exe
+
+
+
+Determining if the include file math.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_84836 && [1/2] Building C object CMakeFiles/cmTC_84836.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_84836.exe
+
+
+
+Determining if the include file memory.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_24695 && [1/2] Building C object CMakeFiles/cmTC_24695.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_24695.exe
+
+
+
+Determining if the include file signal.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_aa444 && [1/2] Building C object CMakeFiles/cmTC_aa444.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_aa444.exe
+
+
+
+Determining if the include file stdarg.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_644b3 && [1/2] Building C object CMakeFiles/cmTC_644b3.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_644b3.exe
+
+
+
+Determining if the include file stddef.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_4a808 && [1/2] Building C object CMakeFiles/cmTC_4a808.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_4a808.exe
+
+
+
+Determining if the include file stdint.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f0613 && [1/2] Building C object CMakeFiles/cmTC_f0613.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_f0613.exe
+
+
+
+Determining if the include file stdio.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_3a055 && [1/2] Building C object CMakeFiles/cmTC_3a055.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_3a055.exe
+
+
+
+Determining if the include file stdlib.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_37542 && [1/2] Building C object CMakeFiles/cmTC_37542.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_37542.exe
+
+
+
+Determining if the include file string.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f99a1 && [1/2] Building C object CMakeFiles/cmTC_f99a1.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_f99a1.exe
+
+
+
+Determining if the include file strings.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_7fb1a && [1/2] Building C object CMakeFiles/cmTC_7fb1a.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_7fb1a.exe
+
+
+
+Determining if the include file sys/types.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_5d3c6 && [1/2] Building C object CMakeFiles/cmTC_5d3c6.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_5d3c6.exe
+
+
+
+Determining if the include file wchar.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_94364 && [1/2] Building C object CMakeFiles/cmTC_94364.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_94364.exe
+
+
+
+Determining if files stddef.h;stdarg.h;stdlib.h;string.h;stdio.h;wchar.h;float.h exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_cb71f && [1/2] Building C object CMakeFiles/cmTC_cb71f.dir/STDC_HEADERS.c.obj
+[2/2] Linking C executable cmTC_cb71f.exe
+
+
+
+Determining if the M_PI exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_06ff2 && [1/2] Building C object CMakeFiles/cmTC_06ff2.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_06ff2.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef M_PI
+  return ((int*)(&M_PI))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strtod exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_b76a7 && [1/2] Building C object CMakeFiles/cmTC_b76a7.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_b76a7.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strtod
+  return ((int*)(&strtod))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the malloc exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_b2c0d && [1/2] Building C object CMakeFiles/cmTC_b2c0d.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_b2c0d.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef malloc
+  return ((int*)(&malloc))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the calloc exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_52f8b && [1/2] Building C object CMakeFiles/cmTC_52f8b.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_52f8b.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef calloc
+  return ((int*)(&calloc))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the realloc exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_750b0 && [1/2] Building C object CMakeFiles/cmTC_750b0.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_750b0.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef realloc
+  return ((int*)(&realloc))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the free exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_785d7 && [1/2] Building C object CMakeFiles/cmTC_785d7.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_785d7.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef free
+  return ((int*)(&free))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the getenv exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_b1496 && [1/2] Building C object CMakeFiles/cmTC_b1496.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_b1496.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef getenv
+  return ((int*)(&getenv))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the putenv exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_010e2 && [1/2] Building C object CMakeFiles/cmTC_010e2.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_010e2.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef putenv
+  return ((int*)(&putenv))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the bsearch exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_fcae6 && [1/2] Building C object CMakeFiles/cmTC_fcae6.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_fcae6.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef bsearch
+  return ((int*)(&bsearch))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the qsort exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_4cbdf && [1/2] Building C object CMakeFiles/cmTC_4cbdf.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_4cbdf.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef qsort
+  return ((int*)(&qsort))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the abs exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_dbd11 && [1/2] Building C object CMakeFiles/cmTC_dbd11.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_dbd11.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef abs
+  return ((int*)(&abs))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the memset exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_63520 && [1/2] Building C object CMakeFiles/cmTC_63520.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_63520.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef memset
+  return ((int*)(&memset))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the memcpy exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_ec52f && [1/2] Building C object CMakeFiles/cmTC_ec52f.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_ec52f.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef memcpy
+  return ((int*)(&memcpy))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the memmove exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_5a144 && [1/2] Building C object CMakeFiles/cmTC_5a144.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_5a144.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef memmove
+  return ((int*)(&memmove))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the memcmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_7883e && [1/2] Building C object CMakeFiles/cmTC_7883e.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_7883e.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef memcmp
+  return ((int*)(&memcmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strlen exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_af7e0 && [1/2] Building C object CMakeFiles/cmTC_af7e0.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_af7e0.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strlen
+  return ((int*)(&strlen))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _strrev exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_9b8e8 && [1/2] Building C object CMakeFiles/cmTC_9b8e8.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_9b8e8.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _strrev
+  return ((int*)(&_strrev))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _strupr exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_a4596 && [1/2] Building C object CMakeFiles/cmTC_a4596.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_a4596.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _strupr
+  return ((int*)(&_strupr))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _strlwr exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_96f61 && [1/2] Building C object CMakeFiles/cmTC_96f61.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_96f61.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _strlwr
+  return ((int*)(&_strlwr))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strchr exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_6166b && [1/2] Building C object CMakeFiles/cmTC_6166b.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_6166b.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strchr
+  return ((int*)(&strchr))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strrchr exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_c3565 && [1/2] Building C object CMakeFiles/cmTC_c3565.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_c3565.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strrchr
+  return ((int*)(&strrchr))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strstr exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f925c && [1/2] Building C object CMakeFiles/cmTC_f925c.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_f925c.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strstr
+  return ((int*)(&strstr))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strtok_r exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_34f9d && [1/2] Building C object CMakeFiles/cmTC_34f9d.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_34f9d.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strtok_r
+  return ((int*)(&strtok_r))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the itoa exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_d8ff5 && [1/2] Building C object CMakeFiles/cmTC_d8ff5.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_d8ff5.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef itoa
+  return ((int*)(&itoa))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _ltoa exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_3d8a7 && [1/2] Building C object CMakeFiles/cmTC_3d8a7.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_3d8a7.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _ltoa
+  return ((int*)(&_ltoa))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _ultoa exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_1724d && [1/2] Building C object CMakeFiles/cmTC_1724d.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_1724d.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _ultoa
+  return ((int*)(&_ultoa))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strtol exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_36b3a && [1/2] Building C object CMakeFiles/cmTC_36b3a.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_36b3a.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strtol
+  return ((int*)(&strtol))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strtoul exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_cb27d && [1/2] Building C object CMakeFiles/cmTC_cb27d.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_cb27d.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strtoul
+  return ((int*)(&strtoul))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _i64toa exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_a19ae && [1/2] Building C object CMakeFiles/cmTC_a19ae.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_a19ae.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _i64toa
+  return ((int*)(&_i64toa))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _ui64toa exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_a9683 && [1/2] Building C object CMakeFiles/cmTC_a9683.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_a9683.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _ui64toa
+  return ((int*)(&_ui64toa))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strtoll exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_7b2d7 && [1/2] Building C object CMakeFiles/cmTC_7b2d7.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_7b2d7.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strtoll
+  return ((int*)(&strtoll))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strtoull exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_3896a && [1/2] Building C object CMakeFiles/cmTC_3896a.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_3896a.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strtoull
+  return ((int*)(&strtoull))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the atoi exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_8c3cc && [1/2] Building C object CMakeFiles/cmTC_8c3cc.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_8c3cc.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef atoi
+  return ((int*)(&atoi))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the atof exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f93a7 && [1/2] Building C object CMakeFiles/cmTC_f93a7.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_f93a7.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef atof
+  return ((int*)(&atof))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strcmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_a1eef && [1/2] Building C object CMakeFiles/cmTC_a1eef.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_a1eef.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strcmp
+  return ((int*)(&strcmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strncmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_dc238 && [1/2] Building C object CMakeFiles/cmTC_dc238.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_dc238.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strncmp
+  return ((int*)(&strncmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _stricmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_89f82 && [1/2] Building C object CMakeFiles/cmTC_89f82.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_89f82.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _stricmp
+  return ((int*)(&_stricmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strcasecmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_db151 && [1/2] Building C object CMakeFiles/cmTC_db151.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_db151.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strcasecmp
+  return ((int*)(&strcasecmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _strnicmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_d57b1 && [1/2] Building C object CMakeFiles/cmTC_d57b1.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_d57b1.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _strnicmp
+  return ((int*)(&_strnicmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strncasecmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_8669f && [1/2] Building C object CMakeFiles/cmTC_8669f.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_8669f.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strncasecmp
+  return ((int*)(&strncasecmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the wcscmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f6a0f && [1/2] Building C object CMakeFiles/cmTC_f6a0f.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_f6a0f.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef wcscmp
+  return ((int*)(&wcscmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _wcsdup exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_5e06c && [1/2] Building C object CMakeFiles/cmTC_5e06c.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_5e06c.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _wcsdup
+  return ((int*)(&_wcsdup))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the wcsdup exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_818a2 && [1/2] Building C object CMakeFiles/cmTC_818a2.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_818a2.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef wcsdup
+  return ((int*)(&wcsdup))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the wcslen exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_9aa26 && [1/2] Building C object CMakeFiles/cmTC_9aa26.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_9aa26.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef wcslen
+  return ((int*)(&wcslen))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the wcsncmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_bcc23 && [1/2] Building C object CMakeFiles/cmTC_bcc23.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_bcc23.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef wcsncmp
+  return ((int*)(&wcsncmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the wcsstr exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_69b67 && [1/2] Building C object CMakeFiles/cmTC_69b67.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_69b67.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef wcsstr
+  return ((int*)(&wcsstr))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _wcsicmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_6a34d && [1/2] Building C object CMakeFiles/cmTC_6a34d.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_6a34d.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _wcsicmp
+  return ((int*)(&_wcsicmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _wcsnicmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_c8097 && [1/2] Building C object CMakeFiles/cmTC_c8097.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_c8097.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _wcsnicmp
+  return ((int*)(&_wcsnicmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the sscanf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_e5136 && [1/2] Building C object CMakeFiles/cmTC_e5136.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_e5136.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef sscanf
+  return ((int*)(&sscanf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the vsscanf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f63b9 && [1/2] Building C object CMakeFiles/cmTC_f63b9.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_f63b9.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef vsscanf
+  return ((int*)(&vsscanf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the vsnprintf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_02412 && [1/2] Building C object CMakeFiles/cmTC_02412.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_02412.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef vsnprintf
+  return ((int*)(&vsnprintf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the fopen64 exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_5d8ff && [1/2] Building C object CMakeFiles/cmTC_5d8ff.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_5d8ff.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef fopen64
+  return ((int*)(&fopen64))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the fseeko exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_053dc && [1/2] Building C object CMakeFiles/cmTC_053dc.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_053dc.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef fseeko
+  return ((int*)(&fseeko))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the fseeko64 exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_7966a && [1/2] Building C object CMakeFiles/cmTC_7966a.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_7966a.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef fseeko64
+  return ((int*)(&fseeko64))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _Exit exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_cfe45 && [1/2] Building C object CMakeFiles/cmTC_cfe45.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_cfe45.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _Exit
+  return ((int*)(&_Exit))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the setjmp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f848c && [1/2] Building C object CMakeFiles/cmTC_f848c.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_f848c.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <setjmp.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef setjmp
+  return ((int*)(&setjmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the nanosleep exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_5031e && [1/2] Building C object CMakeFiles/cmTC_5031e.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_5031e.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <time.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef nanosleep
+  return ((int*)(&nanosleep))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the function pow exists in the m passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_49170 && [1/2] Building C object CMakeFiles/cmTC_49170.dir/CheckFunctionExists.c.obj
+<command-line>: warning: conflicting types for built-in function 'pow'; expected 'double(double,  double)' [-Wbuiltin-declaration-mismatch]
+C:/Program Files/CMake/share/cmake-3.24/Modules/CheckFunctionExists.c:7:3: note: in expansion of macro 'CHECK_FUNCTION_EXISTS'
+    7 |   CHECK_FUNCTION_EXISTS(void);
+      |   ^~~~~~~~~~~~~~~~~~~~~
+C:/Program Files/CMake/share/cmake-3.24/Modules/CheckFunctionExists.c:1:1: note: 'pow' is declared in header '<math.h>'
+  +++ |+#include <math.h>
+    1 | #ifdef CHECK_FUNCTION_EXISTS
+[2/2] Linking C executable cmTC_49170.exe
+
+
+
+Determining if the atan exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_45a03 && [1/2] Building C object CMakeFiles/cmTC_45a03.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_45a03.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef atan
+  return ((int*)(&atan))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the atan2 exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_113f7 && [1/2] Building C object CMakeFiles/cmTC_113f7.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_113f7.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef atan2
+  return ((int*)(&atan2))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the atanf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_0601c && [1/2] Building C object CMakeFiles/cmTC_0601c.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_0601c.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef atanf
+  return ((int*)(&atanf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the atan2f exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_71a0d && [1/2] Building C object CMakeFiles/cmTC_71a0d.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_71a0d.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef atan2f
+  return ((int*)(&atan2f))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the ceil exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_2f857 && [1/2] Building C object CMakeFiles/cmTC_2f857.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_2f857.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef ceil
+  return ((int*)(&ceil))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the ceilf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_4aa84 && [1/2] Building C object CMakeFiles/cmTC_4aa84.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_4aa84.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef ceilf
+  return ((int*)(&ceilf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the copysign exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_955b5 && [1/2] Building C object CMakeFiles/cmTC_955b5.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_955b5.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef copysign
+  return ((int*)(&copysign))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the copysignf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_5be48 && [1/2] Building C object CMakeFiles/cmTC_5be48.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_5be48.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef copysignf
+  return ((int*)(&copysignf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the cos exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_b1c1c && [1/2] Building C object CMakeFiles/cmTC_b1c1c.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_b1c1c.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef cos
+  return ((int*)(&cos))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the cosf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_991d7 && [1/2] Building C object CMakeFiles/cmTC_991d7.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_991d7.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef cosf
+  return ((int*)(&cosf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the exp exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_d19b7 && [1/2] Building C object CMakeFiles/cmTC_d19b7.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_d19b7.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef exp
+  return ((int*)(&exp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the expf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_a161e && [1/2] Building C object CMakeFiles/cmTC_a161e.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_a161e.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef expf
+  return ((int*)(&expf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the fabs exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_248b3 && [1/2] Building C object CMakeFiles/cmTC_248b3.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_248b3.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef fabs
+  return ((int*)(&fabs))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the fabsf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f3f63 && [1/2] Building C object CMakeFiles/cmTC_f3f63.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_f3f63.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef fabsf
+  return ((int*)(&fabsf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the floor exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_6ab69 && [1/2] Building C object CMakeFiles/cmTC_6ab69.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_6ab69.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef floor
+  return ((int*)(&floor))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the floorf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_352e1 && [1/2] Building C object CMakeFiles/cmTC_352e1.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_352e1.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef floorf
+  return ((int*)(&floorf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the fmod exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f4516 && [1/2] Building C object CMakeFiles/cmTC_f4516.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_f4516.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef fmod
+  return ((int*)(&fmod))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the fmodf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_46140 && [1/2] Building C object CMakeFiles/cmTC_46140.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_46140.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef fmodf
+  return ((int*)(&fmodf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the log exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_937e5 && [1/2] Building C object CMakeFiles/cmTC_937e5.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_937e5.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef log
+  return ((int*)(&log))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the logf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_cb992 && [1/2] Building C object CMakeFiles/cmTC_cb992.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_cb992.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef logf
+  return ((int*)(&logf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the log10 exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_8b003 && [1/2] Building C object CMakeFiles/cmTC_8b003.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_8b003.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef log10
+  return ((int*)(&log10))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the log10f exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_52438 && [1/2] Building C object CMakeFiles/cmTC_52438.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_52438.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef log10f
+  return ((int*)(&log10f))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the lround exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_905af && [1/2] Building C object CMakeFiles/cmTC_905af.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_905af.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef lround
+  return ((int*)(&lround))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the lroundf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_492eb && [1/2] Building C object CMakeFiles/cmTC_492eb.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_492eb.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef lroundf
+  return ((int*)(&lroundf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the pow exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_49afe && [1/2] Building C object CMakeFiles/cmTC_49afe.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_49afe.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef pow
+  return ((int*)(&pow))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the powf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_b44c6 && [1/2] Building C object CMakeFiles/cmTC_b44c6.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_b44c6.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef powf
+  return ((int*)(&powf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the round exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_6afe7 && [1/2] Building C object CMakeFiles/cmTC_6afe7.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_6afe7.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef round
+  return ((int*)(&round))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the roundf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_bc35a && [1/2] Building C object CMakeFiles/cmTC_bc35a.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_bc35a.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef roundf
+  return ((int*)(&roundf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the scalbn exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_40f68 && [1/2] Building C object CMakeFiles/cmTC_40f68.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_40f68.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef scalbn
+  return ((int*)(&scalbn))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the scalbnf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_27e34 && [1/2] Building C object CMakeFiles/cmTC_27e34.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_27e34.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef scalbnf
+  return ((int*)(&scalbnf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the sin exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_0e58b && [1/2] Building C object CMakeFiles/cmTC_0e58b.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_0e58b.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef sin
+  return ((int*)(&sin))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the sinf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_55d3e && [1/2] Building C object CMakeFiles/cmTC_55d3e.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_55d3e.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef sinf
+  return ((int*)(&sinf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the sqrt exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_52a40 && [1/2] Building C object CMakeFiles/cmTC_52a40.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_52a40.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef sqrt
+  return ((int*)(&sqrt))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the sqrtf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_3bbfa && [1/2] Building C object CMakeFiles/cmTC_3bbfa.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_3bbfa.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef sqrtf
+  return ((int*)(&sqrtf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the tan exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_36b08 && [1/2] Building C object CMakeFiles/cmTC_36b08.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_36b08.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef tan
+  return ((int*)(&tan))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the tanf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_2962c && [1/2] Building C object CMakeFiles/cmTC_2962c.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_2962c.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef tanf
+  return ((int*)(&tanf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the acos exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_82e77 && [1/2] Building C object CMakeFiles/cmTC_82e77.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_82e77.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef acos
+  return ((int*)(&acos))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the acosf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_fb6db && [1/2] Building C object CMakeFiles/cmTC_fb6db.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_fb6db.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef acosf
+  return ((int*)(&acosf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the asin exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_3d17a && [1/2] Building C object CMakeFiles/cmTC_3d17a.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_3d17a.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef asin
+  return ((int*)(&asin))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the asinf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_dbde6 && [1/2] Building C object CMakeFiles/cmTC_dbde6.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_dbde6.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef asinf
+  return ((int*)(&asinf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the trunc exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_e8117 && [1/2] Building C object CMakeFiles/cmTC_e8117.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_e8117.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef trunc
+  return ((int*)(&trunc))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the truncf exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_c59ca && [1/2] Building C object CMakeFiles/cmTC_c59ca.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_c59ca.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <math.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef truncf
+  return ((int*)(&truncf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the alloca exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_205e4 && [1/2] Building C object CMakeFiles/cmTC_205e4.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_205e4.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stdlib.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef alloca
+  return ((int*)(&alloca))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the alloca exist passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_56b84 && [1/2] Building C object CMakeFiles/cmTC_56b84.dir/CheckSymbolExists.c.obj
+[2/2] Linking C executable cmTC_56b84.exe
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <malloc.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef alloca
+  return ((int*)(&alloca))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Performing C SOURCE FILE Test HAVE_WIN32_CC succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_dfe60 && [1/2] Building C object CMakeFiles/cmTC_dfe60.dir/src.c.obj
+[2/2] Linking C executable cmTC_dfe60.exe
+
+
+Source file was:
+
+    #include <windows.h>
+    int main(int argc, char **argv) { return 0; }
+Determining if the include file d3d9.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_75d34 && [1/2] Building C object CMakeFiles/cmTC_75d34.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_75d34.exe
+
+
+
+Determining if the include file d3d11_1.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_be0da && [1/2] Building C object CMakeFiles/cmTC_be0da.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_be0da.exe
+
+
+
+Performing C SOURCE FILE Test HAVE_D3D12_H succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_355ec && [1/2] Building C object CMakeFiles/cmTC_355ec.dir/src.c.obj
+[2/2] Linking C executable cmTC_355ec.exe
+
+
+Source file was:
+
+      #include <d3d12.h>
+      #include <d3d12sdklayers.h>
+      ID3D12Device1 *device;
+      int main(int argc, char **argv) {return 0; }
+      
+Determining if the include file ddraw.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_ff6f4 && [1/2] Building C object CMakeFiles/cmTC_ff6f4.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_ff6f4.exe
+
+
+
+Determining if the include file dsound.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_ce64e && [1/2] Building C object CMakeFiles/cmTC_ce64e.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_ce64e.exe
+
+
+
+Determining if the include file dinput.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_2ac46 && [1/2] Building C object CMakeFiles/cmTC_2ac46.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_2ac46.exe
+
+
+
+Determining if the include file dxgi.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_fc555 && [1/2] Building C object CMakeFiles/cmTC_fc555.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_fc555.exe
+
+
+
+Performing C SOURCE FILE Test HAVE_XINPUT_H succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_770e2 && [1/2] Building C object CMakeFiles/cmTC_770e2.dir/src.c.obj
+[2/2] Linking C executable cmTC_770e2.exe
+
+
+Source file was:
+
+      #include <windows.h>
+      #include <xinput.h>
+      int main(int argc, char **argv) { return 0; }
+Performing C SOURCE FILE Test HAVE_WINDOWS_GAMING_INPUT_H succeeded with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_61a29 && [1/2] Building C object CMakeFiles/cmTC_61a29.dir/src.c.obj
+[2/2] Linking C executable cmTC_61a29.exe
+
+
+Source file was:
+
+      #define COBJMACROS
+      #include <windows.gaming.input.h>
+      __x_ABI_CWindows_CGaming_CInput_CIGamepadStatics2 *s2;
+      int main(int argc, char **argv) { return 0; }
+Determining if the include file tpcshrd.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_25496 && [1/2] Building C object CMakeFiles/cmTC_25496.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_25496.exe
+
+
+
+Determining if the include file roapi.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_68dc9 && [1/2] Building C object CMakeFiles/cmTC_68dc9.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_68dc9.exe
+
+
+
+Determining if the include file mmdeviceapi.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_85f38 && [1/2] Building C object CMakeFiles/cmTC_85f38.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_85f38.exe
+
+
+
+Determining if the include file audioclient.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_b3ccd && [1/2] Building C object CMakeFiles/cmTC_b3ccd.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_b3ccd.exe
+
+
+
+Determining if the include file sensorsapi.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_39f85 && [1/2] Building C object CMakeFiles/cmTC_39f85.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_39f85.exe
+
+
+
+Determining if the include file shellscalingapi.h exists passed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_fdd91 && [1/2] Building C object CMakeFiles/cmTC_fdd91.dir/CheckIncludeFile.c.obj
+[2/2] Linking C executable cmTC_fdd91.exe
+
+
+

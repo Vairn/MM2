@@ -1,0 +1,987 @@
+Determining if the __GLIBC__ exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f2200 && [1/2] Building C object CMakeFiles/cmTC_f2200.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_f2200.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -std=gnu11 -o CMakeFiles/cmTC_f2200.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:8:19: error: '__GLIBC__' undeclared (first use in this function); did you mean '__LINE__'?
+    8 |   return ((int*)(&__GLIBC__))[argc];
+      |                   ^~~~~~~~~
+      |                   __LINE__
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:8:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stdlib.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef __GLIBC__
+  return ((int*)(&__GLIBC__))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Performing C SOURCE FILE Test CHECK_CPU_ARCHITECTURE_X86 failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_71ca1 && [1/2] Building C object CMakeFiles/cmTC_71ca1.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_71ca1.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DCHECK_CPU_ARCHITECTURE_X86  -std=gnu11 -o CMakeFiles/cmTC_71ca1.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:3: error: 'choke' undeclared (first use in this function)
+    6 |   choke
+      |   ^~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:3: note: each undeclared identifier is reported only once for each function it appears in
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:8: error: expected ';' before '}' token
+    6 |   choke
+      |        ^
+      |        ;
+    7 | #endif
+    8 | }
+      | ~       
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+
+int main(int argc, char *argv[]) {
+#if defined(__i386__) || defined(__i486__) || defined(__i586__) || defined(__i686__) ||defined( __i386) || defined(_M_IX86)
+  return 0;
+#else
+  choke
+#endif
+}
+
+Performing C SOURCE FILE Test CHECK_CPU_ARCHITECTURE_ARM32 failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_c806e && [1/2] Building C object CMakeFiles/cmTC_c806e.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_c806e.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DCHECK_CPU_ARCHITECTURE_ARM32  -std=gnu11 -o CMakeFiles/cmTC_c806e.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:3: error: 'choke' undeclared (first use in this function)
+    6 |   choke
+      |   ^~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:3: note: each undeclared identifier is reported only once for each function it appears in
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:8: error: expected ';' before '}' token
+    6 |   choke
+      |        ^
+      |        ;
+    7 | #endif
+    8 | }
+      | ~       
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+
+int main(int argc, char *argv[]) {
+#if defined(__arm__) || defined(_M_ARM)
+  return 0;
+#else
+  choke
+#endif
+}
+
+Performing C SOURCE FILE Test CHECK_CPU_ARCHITECTURE_ARM64 failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_74c4a && [1/2] Building C object CMakeFiles/cmTC_74c4a.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_74c4a.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DCHECK_CPU_ARCHITECTURE_ARM64  -std=gnu11 -o CMakeFiles/cmTC_74c4a.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:3: error: 'choke' undeclared (first use in this function)
+    6 |   choke
+      |   ^~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:3: note: each undeclared identifier is reported only once for each function it appears in
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:8: error: expected ';' before '}' token
+    6 |   choke
+      |        ^
+      |        ;
+    7 | #endif
+    8 | }
+      | ~       
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+
+int main(int argc, char *argv[]) {
+#if defined(__aarch64__) || defined(_M_ARM64)
+  return 0;
+#else
+  choke
+#endif
+}
+
+Performing C SOURCE FILE Test CHECK_CPU_ARCHITECTURE_LOONGARCH64 failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_47caf && [1/2] Building C object CMakeFiles/cmTC_47caf.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_47caf.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DCHECK_CPU_ARCHITECTURE_LOONGARCH64  -std=gnu11 -o CMakeFiles/cmTC_47caf.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:3: error: 'choke' undeclared (first use in this function)
+    6 |   choke
+      |   ^~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:3: note: each undeclared identifier is reported only once for each function it appears in
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:8: error: expected ';' before '}' token
+    6 |   choke
+      |        ^
+      |        ;
+    7 | #endif
+    8 | }
+      | ~       
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+
+int main(int argc, char *argv[]) {
+#if defined(__loongarch64)
+  return 0;
+#else
+  choke
+#endif
+}
+
+Performing C SOURCE FILE Test HAVE_GCC_WDOCUMENTATION failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f5a78 && [1/2] Building C object CMakeFiles/cmTC_f5a78.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_f5a78.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DHAVE_GCC_WDOCUMENTATION  -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1   -Wdocumentation -std=gnu11 -o CMakeFiles/cmTC_f5a78.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+cc.exe: error: unrecognized command-line option '-Wdocumentation'
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_GCC_WDOCUMENTATION_UNKNOWN_COMMAND failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_b9519 && [1/2] Building C object CMakeFiles/cmTC_b9519.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_b9519.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DHAVE_GCC_WDOCUMENTATION_UNKNOWN_COMMAND  -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1   -Wdocumentation-unknown-command -std=gnu11 -o CMakeFiles/cmTC_b9519.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+cc.exe: error: unrecognized command-line option '-Wdocumentation-unknown-command'
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_GCC_COMMENT_BLOCK_COMMANDS failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_ad034 && [1/2] Building C object CMakeFiles/cmTC_ad034.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_ad034.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DHAVE_GCC_COMMENT_BLOCK_COMMANDS  -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1   -fcomment-block-commands=threadsafety -std=gnu11 -o CMakeFiles/cmTC_ad034.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+cc.exe: error: unrecognized command-line option '-fcomment-block-commands=threadsafety'
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_CLANG_COMMENT_BLOCK_COMMANDS failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_ba0f0 && [1/2] Building C object CMakeFiles/cmTC_ba0f0.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_ba0f0.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DHAVE_CLANG_COMMENT_BLOCK_COMMANDS  -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1   /clang:-fcomment-block-commands=threadsafety -std=gnu11 -o CMakeFiles/cmTC_ba0f0.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+cc.exe: warning: /clang:-fcomment-block-commands=threadsafety: linker input file unused because linking not done
+cc.exe: error: /clang:-fcomment-block-commands=threadsafety: linker input file not found: No such file or directory
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test HAVE_ALTIVEC_H_HDR failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_d207e && [1/2] Building C object CMakeFiles/cmTC_d207e.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_d207e.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DHAVE_ALTIVEC_H_HDR  -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos" -maltivec -std=gnu11 -o CMakeFiles/cmTC_d207e.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+cc.exe: error: unrecognized command-line option '-maltivec'
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+
+          #include <altivec.h>
+          vector unsigned int vzero() {
+              return vec_splat_u32(0);
+          }
+          int main(int argc, char **argv) { return 0; }
+Performing C SOURCE FILE Test CPU_SUPPORTS_ALTIVEC failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_dd412 && [1/2] Building C object CMakeFiles/cmTC_dd412.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_dd412.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DCPU_SUPPORTS_ALTIVEC  -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos" -maltivec -std=gnu11 -o CMakeFiles/cmTC_dd412.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+cc.exe: error: unrecognized command-line option '-maltivec'
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+
+          vector unsigned int vzero() {
+              return vec_splat_u32(0);
+          }
+          int main(int argc, char **argv) { return 0; }
+Performing C SOURCE FILE Test HAVE_MPROTECT failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_799df && [1/2] Building C object CMakeFiles/cmTC_799df.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_799df.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DHAVE_MPROTECT  -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_799df.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:2:39: fatal error: sys/mman.h: No such file or directory
+    2 |                              #include <sys/mman.h>
+      |                                       ^~~~~~~~~~~~
+compilation terminated.
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+#include <sys/types.h>
+                             #include <sys/mman.h>
+                             int main(void) { return 0; }
+Determining if the setenv exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_ac3fb && [1/2] Building C object CMakeFiles/cmTC_ac3fb.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_ac3fb.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_ac3fb.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'setenv' undeclared (first use in this function); did you mean 'getenv'?
+   14 |   return ((int*)(&setenv))[argc];
+      |                   ^~~~~~
+      |                   getenv
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef setenv
+  return ((int*)(&setenv))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the unsetenv exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_ecf7c && [1/2] Building C object CMakeFiles/cmTC_ecf7c.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_ecf7c.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_ecf7c.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'unsetenv' undeclared (first use in this function)
+   14 |   return ((int*)(&unsetenv))[argc];
+      |                   ^~~~~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef unsetenv
+  return ((int*)(&unsetenv))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the bcopy exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_056e8 && [1/2] Building C object CMakeFiles/cmTC_056e8.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_056e8.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_056e8.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'bcopy' undeclared (first use in this function)
+   14 |   return ((int*)(&bcopy))[argc];
+      |                   ^~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef bcopy
+  return ((int*)(&bcopy))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strlcpy exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_7a6f7 && [1/2] Building C object CMakeFiles/cmTC_7a6f7.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_7a6f7.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_7a6f7.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'strlcpy' undeclared (first use in this function); did you mean 'strncpy'?
+   14 |   return ((int*)(&strlcpy))[argc];
+      |                   ^~~~~~~
+      |                   strncpy
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strlcpy
+  return ((int*)(&strlcpy))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strlcat exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_0321b && [1/2] Building C object CMakeFiles/cmTC_0321b.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_0321b.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_0321b.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'strlcat' undeclared (first use in this function); did you mean 'strncat'?
+   14 |   return ((int*)(&strlcat))[argc];
+      |                   ^~~~~~~
+      |                   strncat
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strlcat
+  return ((int*)(&strlcat))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the index exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_961af && [1/2] Building C object CMakeFiles/cmTC_961af.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_961af.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_961af.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'index' undeclared (first use in this function)
+   14 |   return ((int*)(&index))[argc];
+      |                   ^~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef index
+  return ((int*)(&index))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the rindex exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_8e9a4 && [1/2] Building C object CMakeFiles/cmTC_8e9a4.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_8e9a4.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_8e9a4.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'rindex' undeclared (first use in this function)
+   14 |   return ((int*)(&rindex))[argc];
+      |                   ^~~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef rindex
+  return ((int*)(&rindex))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _uitoa exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_e36ea && [1/2] Building C object CMakeFiles/cmTC_e36ea.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_e36ea.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_e36ea.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: '_uitoa' undeclared (first use in this function); did you mean '_ultoa'?
+   14 |   return ((int*)(&_uitoa))[argc];
+      |                   ^~~~~~
+      |                   _ultoa
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _uitoa
+  return ((int*)(&_uitoa))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the strcasestr exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_3508f && [1/2] Building C object CMakeFiles/cmTC_3508f.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_3508f.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_3508f.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'strcasestr' undeclared (first use in this function); did you mean 'strcasecmp'?
+   14 |   return ((int*)(&strcasestr))[argc];
+      |                   ^~~~~~~~~~
+      |                   strcasecmp
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef strcasestr
+  return ((int*)(&strcasestr))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the wcslcat exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_9bd87 && [1/2] Building C object CMakeFiles/cmTC_9bd87.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_9bd87.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_9bd87.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'wcslcat' undeclared (first use in this function); did you mean 'wcsncat'?
+   14 |   return ((int*)(&wcslcat))[argc];
+      |                   ^~~~~~~
+      |                   wcsncat
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef wcslcat
+  return ((int*)(&wcslcat))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the wcslcpy exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_e21ab && [1/2] Building C object CMakeFiles/cmTC_e21ab.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_e21ab.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_e21ab.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'wcslcpy' undeclared (first use in this function); did you mean 'wcsncpy'?
+   14 |   return ((int*)(&wcslcpy))[argc];
+      |                   ^~~~~~~
+      |                   wcsncpy
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef wcslcpy
+  return ((int*)(&wcslcpy))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the wcscasecmp exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_af19b && [1/2] Building C object CMakeFiles/cmTC_af19b.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_af19b.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_af19b.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'wcscasecmp' undeclared (first use in this function); did you mean 'strcasecmp'?
+   14 |   return ((int*)(&wcscasecmp))[argc];
+      |                   ^~~~~~~~~~
+      |                   strcasecmp
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef wcscasecmp
+  return ((int*)(&wcscasecmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the wcsncasecmp exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_f4515 && [1/2] Building C object CMakeFiles/cmTC_f4515.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_f4515.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_f4515.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: error: 'wcsncasecmp' undeclared (first use in this function); did you mean 'strncasecmp'?
+   14 |   return ((int*)(&wcsncasecmp))[argc];
+      |                   ^~~~~~~~~~~
+      |                   strncasecmp
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:14:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <float.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef wcsncasecmp
+  return ((int*)(&wcsncasecmp))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the sigaction exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_5b0b7 && [1/2] Building C object CMakeFiles/cmTC_5b0b7.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_5b0b7.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_5b0b7.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:8:19: error: 'sigaction' undeclared (first use in this function)
+    8 |   return ((int*)(&sigaction))[argc];
+      |                   ^~~~~~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:8:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <signal.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef sigaction
+  return ((int*)(&sigaction))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the sysconf exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_e6515 && [1/2] Building C object CMakeFiles/cmTC_e6515.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_e6515.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_e6515.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:8:19: error: 'sysconf' undeclared (first use in this function)
+    8 |   return ((int*)(&sysconf))[argc];
+      |                   ^~~~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:8:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <unistd.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef sysconf
+  return ((int*)(&sysconf))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the sysctlbyname exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_e0c2a && [1/2] Building C object CMakeFiles/cmTC_e0c2a.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_e0c2a.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_e0c2a.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:3:10: fatal error: sys/sysctl.h: No such file or directory
+    3 | #include <sys/sysctl.h>
+      |          ^~~~~~~~~~~~~~
+compilation terminated.
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <sys/types.h>
+#include <sys/sysctl.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef sysctlbyname
+  return ((int*)(&sysctlbyname))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the getauxval exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_09ca9 && [1/2] Building C object CMakeFiles/cmTC_09ca9.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_09ca9.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_09ca9.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:2:10: fatal error: sys/auxv.h: No such file or directory
+    2 | #include <sys/auxv.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <sys/auxv.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef getauxval
+  return ((int*)(&getauxval))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the elf_aux_info exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_73262 && [1/2] Building C object CMakeFiles/cmTC_73262.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_73262.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_73262.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:2:10: fatal error: sys/auxv.h: No such file or directory
+    2 | #include <sys/auxv.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <sys/auxv.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef elf_aux_info
+  return ((int*)(&elf_aux_info))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the poll exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_2ed6e && [1/2] Building C object CMakeFiles/cmTC_2ed6e.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_2ed6e.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_2ed6e.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:2:10: fatal error: poll.h: No such file or directory
+    2 | #include <poll.h>
+      |          ^~~~~~~~
+compilation terminated.
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <poll.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef poll
+  return ((int*)(&poll))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the memfd_create exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_d502c && [1/2] Building C object CMakeFiles/cmTC_d502c.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_d502c.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_d502c.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:2:10: fatal error: sys/mman.h: No such file or directory
+    2 | #include <sys/mman.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <sys/mman.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef memfd_create
+  return ((int*)(&memfd_create))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the posix_fallocate exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_c6eb2 && [1/2] Building C object CMakeFiles/cmTC_c6eb2.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_c6eb2.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_c6eb2.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:8:19: error: 'posix_fallocate' undeclared (first use in this function)
+    8 |   return ((int*)(&posix_fallocate))[argc];
+      |                   ^~~~~~~~~~~~~~~
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:8:19: note: each undeclared identifier is reported only once for each function it appears in
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <fcntl.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef posix_fallocate
+  return ((int*)(&posix_fallocate))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the include file alloca.h exists failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_53008 && [1/2] Building C object CMakeFiles/cmTC_53008.dir/CheckIncludeFile.c.obj
+FAILED: CMakeFiles/cmTC_53008.dir/CheckIncludeFile.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_53008.dir/CheckIncludeFile.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckIncludeFile.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckIncludeFile.c:1:10: fatal error: alloca.h: No such file or directory
+    1 | #include <alloca.h>
+      |          ^~~~~~~~~~
+compilation terminated.
+ninja: build stopped: subcommand failed.
+
+
+
+Determining if the alloca exist failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_ce1cf && [1/2] Building C object CMakeFiles/cmTC_ce1cf.dir/CheckSymbolExists.c.obj
+FAILED: CMakeFiles/cmTC_ce1cf.dir/CheckSymbolExists.c.obj 
+C:\msys64\ucrt64\bin\cc.exe   -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_ce1cf.dir/CheckSymbolExists.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:2:10: fatal error: alloca.h: No such file or directory
+    2 | #include <alloca.h>
+      |          ^~~~~~~~~~
+compilation terminated.
+ninja: build stopped: subcommand failed.
+
+
+File C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <alloca.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef alloca
+  return ((int*)(&alloca))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Performing C SOURCE FILE Test HAVE_SA_SIGACTION failed with the following output:
+Change Dir: C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:/Windows/ninja.exe cmTC_48794 && [1/2] Building C object CMakeFiles/cmTC_48794.dir/src.c.obj
+FAILED: CMakeFiles/cmTC_48794.dir/src.c.obj 
+C:\msys64\ucrt64\bin\cc.exe -DHAVE_SA_SIGACTION  -idirafter "C:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-src/src/video/khronos"  -D_GNU_SOURCE=1 -std=gnu11 -o CMakeFiles/cmTC_48794.dir/src.c.obj -c C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c: In function 'main':
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/CMakeTmp/src.c:6:39: error: invalid use of undefined type 'struct sigaction'
+    6 |   (void)sizeof(((struct sigaction *)0)->sa_sigaction);
+      |                                       ^~
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+
+#include <signal.h>
+
+int main()
+{
+  (void)sizeof(((struct sigaction *)0)->sa_sigaction);
+  return 0;
+}
+

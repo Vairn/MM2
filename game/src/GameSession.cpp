@@ -1,5 +1,7 @@
 #include "mm2/GameSession.h"
 
+#include "mm2/ui/PlayHudFactory.h"
+
 #include "mm2/Mm2Dbg.h"
 #include "mm2/CppStdCompat.h"
 
@@ -325,6 +327,9 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     roster_ = roster;
     launch_ = launch;
 
+    play_hud_ = ui::acquirePlayHud(play_hud_kind_);
+    (void)play_hud_->init(data_dir_);
+
     /* Amiga seeds A4-$60E2 via 0x2407C; a fixed ctor seed made every launch
      * replay the same encounter/step-random sequence. Mix VBlank clock. */
     {
@@ -576,6 +581,10 @@ void GameSession::tickBootstrap()
 
 void GameSession::shutdown()
 {
+    if (play_hud_) {
+        play_hud_->shutdown();
+        play_hud_ = nullptr;
+    }
     env_.unloadAll();
     events_.unload();
     events_loaded_ = false;
@@ -1005,6 +1014,14 @@ gfx::PlayProtectValues GameSession::protectValues() const
         v.guard_dog = gs_.guardDogFlag();
     }
     return v;
+}
+
+ui::IPlayHud &GameSession::hud()
+{
+    if (!play_hud_) {
+        play_hud_ = ui::acquirePlayHud(play_hud_kind_);
+    }
+    return *play_hud_;
 }
 
 void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
@@ -2812,6 +2829,12 @@ void GameSession::renderPartyPanel()
         }
         /* draw_party_status_panel @ 0x624C: roster word +$5E (hp_max), not +$74. */
         slots[i].hp = rec.hp_max;
+        slots[i].hp_current = rec.hp_current;
+        slots[i].hp_max = rec.hp_max;
+        slots[i].sp_current = rec.sp_current;
+        slots[i].sp_max = rec.sp_max;
+        slots[i].face_id = static_cast<int>(rec.class_id) % 8;
+        slots[i].condition = rec.condition;
         slots[i].bad_condition = rec.condition != 0;
         if (combat_.active()) {
             slots[i].in_combat = true;
@@ -2820,7 +2843,7 @@ void GameSession::renderPartyPanel()
         }
     }
 
-    gfx::drawPlayPartyPanel(compositor_, slots);
+    hud().drawPartyPanel(compositor_, slots);
 }
 
 void GameSession::unloadCombatSprites()
@@ -3091,7 +3114,7 @@ void GameSession::renderFrame(bool overlay_anim_only)
                 mm2_amiga_play_chrome_cache_create();
             }
             mm2_amiga_play_chrome_cache_begin();
-            gfx::drawPlayScreenChromeStatic(compositor_);
+            hud().drawChromeStatic(compositor_);
             mm2_amiga_play_chrome_cache_end();
         }
         mm2_amiga_play_chrome_cache_present();
@@ -3099,13 +3122,13 @@ void GameSession::renderFrame(bool overlay_anim_only)
          * full combat dirty was racing the roster and costing a huge fill. */
         if (combat_round_layout &&
             (!combat_backdrop_cached_ || combat_backdrop_round_layout_ != combat_round_layout)) {
-            gfx::drawCombatScreenChrome(compositor_);
+            hud().drawCombatChrome(compositor_);
         }
     }
 #else
     (void)overlay_anim_only;
     compositor_.clear(0, 0, 0, 255);
-    gfx::drawPlayScreenChrome(compositor_);
+    hud().drawChrome(compositor_);
 #endif
 
     if (combat_active) {
@@ -3130,7 +3153,7 @@ void GameSession::renderFrame(bool overlay_anim_only)
             if (combat_round_layout) {
                 /* Exploration chrome present can leave the wrong dividers —
                  * re-stamp combat rules without wiping the hood/roster. */
-                gfx::drawCombatScreenLines(compositor_);
+                hud().drawCombatLines(compositor_);
             }
         }
 #else
@@ -3145,16 +3168,16 @@ void GameSession::renderFrame(bool overlay_anim_only)
 #if MM2_HOST_AMIGA
             /* Rebuild path already stamped lines via drawCombatScreenChrome. */
 #else
-            gfx::drawCombatScreenLines(compositor_);
+            hud().drawCombatLines(compositor_);
 #endif
             blitCombatSprites();
             /* Sprites may paint past the narrow hood — re-mask the divider col. */
             maskCombatBackdropBleed(compositor_);
-            gfx::drawCombatViewportFrame(compositor_);
-            gfx::drawCombatViewportDivider(compositor_);
+            hud().drawCombatViewportFrame(compositor_);
+            hud().drawCombatViewportDivider(compositor_);
         } else {
             blitCombatSprites();
-            gfx::drawPlayViewportDivider(compositor_);
+            hud().drawViewportDivider(compositor_);
         }
     } else if (!scripted_active || !scripted_scene_.hidesView3D()) {
         if (overlay_ != PlayOverlay::Automap && !viewportHiddenByOverlay()) {
@@ -3185,7 +3208,7 @@ void GameSession::renderFrame(bool overlay_anim_only)
             drawSpellEyeOverlayIfActive(compositor_, env_, world_, gs_, assets_ok_);
 #endif
             /* Walls blit past x=216 and erase the viewport/right-column divider. */
-            gfx::drawPlayViewportDivider(compositor_);
+            hud().drawViewportDivider(compositor_);
         }
     }
 
@@ -3196,15 +3219,15 @@ void GameSession::renderFrame(bool overlay_anim_only)
         }
 
         const bool protect_panel = panel == gfx::PlayRightPanel::Protect;
-        gfx::drawPlayStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
+        hud().drawStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
                                gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
     }
 
     renderPartyPanel();
 
     if (combat_active) {
-        gfx::drawCombatRightColumn(compositor_, combat_view);
-        gfx::drawCombatOptionsBar(compositor_, combat_view);
+        hud().drawCombatRightColumn(compositor_, combat_view);
+        hud().drawCombatOptionsBar(compositor_, combat_view);
     } else {
         gfx::PlayRightPanel panel = right_panel_;
         if (scripted_active) {
@@ -3221,7 +3244,7 @@ void GameSession::renderFrame(bool overlay_anim_only)
              * only (faithful, not fullscreen modals) — keep 3D view + right column. */
             const bool protect_panel = panel == gfx::PlayRightPanel::Protect;
             const gfx::PlayProtectValues prot = protectValues();
-            gfx::drawPlayRightColumn(compositor_, panel, protect_panel ? &prot : nullptr);
+            hud().drawRightColumn(compositor_, panel, protect_panel ? &prot : nullptr);
         }
     }
 
@@ -3288,7 +3311,7 @@ void GameSession::renderFrameOverlayAnimOnly()
         if (!world_.isOutdoor() && !combat_.active()) {
             blitIndoorTorches();
         }
-        gfx::drawPlayViewportDivider(compositor_);
+        hud().drawViewportDivider(compositor_);
     }
 
     if (scripted_loaded_ && scripted_scene_.active()) {
@@ -3322,10 +3345,10 @@ void GameSession::renderFrameCombatAnimOnly()
     blitCombatSprites();
     if (round_layout) {
         maskCombatBackdropBleed(compositor_);
-        gfx::drawCombatViewportFrame(compositor_);
-        gfx::drawCombatViewportDivider(compositor_);
+        hud().drawCombatViewportFrame(compositor_);
+        hud().drawCombatViewportDivider(compositor_);
     } else {
-        gfx::drawPlayViewportDivider(compositor_);
+        hud().drawViewportDivider(compositor_);
     }
 }
 
@@ -3357,11 +3380,11 @@ void GameSession::renderFrameCombatHudOnly()
     const bool party_changed = !combat_hud_sigs_valid_ || party_sig != combat_hud_party_sig_;
 
     if (roster_changed) {
-        gfx::drawCombatRightColumn(compositor_, view);
+        hud().drawCombatRightColumn(compositor_, view);
         combat_hud_roster_sig_ = roster_sig;
     }
     /* 0x1119E message / options / cast prompts — always patch on HUD dirty. */
-    gfx::drawCombatOptionsBar(compositor_, view);
+    hud().drawCombatOptionsBar(compositor_, view);
     if (party_changed) {
         renderPartyPanel();
         combat_hud_party_sig_ = party_sig;
@@ -3389,12 +3412,12 @@ void GameSession::renderFrameView3DOnly()
         if (!world_.isOutdoor()) {
             blitIndoorTorches();
         }
-        gfx::drawPlayViewportDivider(compositor_);
+        hud().drawViewportDivider(compositor_);
     }
 
     if (text_dirty_) {
         const bool protect_panel = right_panel_ == gfx::PlayRightPanel::Protect;
-        gfx::drawPlayStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
+        hud().drawStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
                                gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
         /* Console message band (OP_01/02/03 + text-entry cursor). Partial 3D
          * refresh previously skipped this and left torn/stale glyphs. */
@@ -3425,7 +3448,7 @@ void GameSession::renderFrameTextOnly()
     }
 
     const bool protect_panel = right_panel_ == gfx::PlayRightPanel::Protect;
-    gfx::drawPlayStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
+    hud().drawStatusBar(compositor_, gs_.valid() ? gs_.day() : 0, gs_.valid() ? gs_.year() : 0,
                            gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
 
     /* Clear the lower console band before redraw so partial updates cannot leave

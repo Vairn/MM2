@@ -435,6 +435,16 @@ else()
   message(FATAL_ERROR "MM2_UI must be 'classic' or 'stub' (got '${MM2_UI}')")
 endif()
 
+# Play HUD chrome (classic glyph lattice vs Agui portrait/icon HUD).
+# Default leaves runtime --play-ui= / MM2_PLAY_UI free; set CACHE to force at compile time.
+set(MM2_PLAY_UI "" CACHE STRING "Force play HUD at compile time: classic|agui|empty=runtime")
+set_property(CACHE MM2_PLAY_UI PROPERTY STRINGS "" classic agui)
+if(MM2_PLAY_UI STREQUAL "agui")
+  add_compile_definitions(MM2_PLAY_UI_AGUI)
+elseif(MM2_PLAY_UI STREQUAL "classic")
+  add_compile_definitions(MM2_PLAY_UI_CLASSIC)
+endif()
+
 # ---------------------------------------------------------------------------
 # Game executable
 # ---------------------------------------------------------------------------
@@ -488,6 +498,11 @@ set(MM2_GAME_SOURCES
   src/ui/AmigaCharacterUi.cpp
   src/ui/RosterSkillDisplay.cpp
   src/ui/PlayTownServiceUi.cpp
+  src/ui/PlayHudKind.cpp
+  src/ui/PlayHudFactory.cpp
+  src/ui/ClassicPlayHud.cpp
+  src/ui/AguiPlayHud.cpp
+  src/ui/AguiAtlas.cpp
   ${MM2_PLATFORM_SOURCES}
 )
 

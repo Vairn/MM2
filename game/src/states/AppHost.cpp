@@ -48,10 +48,11 @@ AppHost &AppHost::createInStorage(unsigned char *storage)
     return *s_instance_;
 }
 
-bool AppHost::start(const char *data_dir, ui::CharacterUiKind ui_kind)
+bool AppHost::start(const char *data_dir, ui::CharacterUiKind ui_kind, ui::PlayHudKind play_hud_kind)
 {
     data_dir_ = data_dir;
     ui_kind_ = ui_kind;
+    play_hud_kind_ = play_hud_kind;
     quit_ = false;
     character_ui_ready_ = false;
     char_create_prepare_done_ = false;
@@ -65,8 +66,9 @@ bool AppHost::start(const char *data_dir, ui::CharacterUiKind ui_kind)
 
 #if !MM2_HOST_AMIGA
     char window_title[256];
-    std::snprintf(window_title, sizeof(window_title), "MM2 (%s, ui=%s) — title screen", platform::hostName(),
-                  ui::characterUiKindName(ui_kind));
+    std::snprintf(window_title, sizeof(window_title), "MM2 (%s, ui=%s, play=%s) — title screen",
+                  platform::hostName(), ui::characterUiKindName(ui_kind),
+                  ui::playHudKindName(play_hud_kind));
     platform::setWindowTitle(window_title);
 #endif
     return true;
@@ -494,6 +496,7 @@ bool AppHost::startInTownFromPending()
     title_.releaseChipForPlayMode();
     MM2_DBG("MM2 GOTO: releaseChipForPlayMode done chip=%lu\n", apphost_chip_free());
 #endif
+    session_.setPlayHudKind(play_hud_kind_);
     if (!session_.start(data_dir_, title_.roster(), pending_launch_)) {
         MM2_DBG("MM2 GOTO: GameSession::start FAILED\n");
         return false;

@@ -5,6 +5,7 @@
 #include "mm2/platform/Audio.h"
 #include "mm2/gfx/GfxBackend.h"
 #include "mm2/ui/CharacterUiKind.h"
+#include "mm2/ui/PlayHudKind.h"
 #include "mm2_pc_gfx_codec.h"
 
 #include <cstdio>
@@ -34,6 +35,27 @@ mm2::ui::CharacterUiKind parseUiKind(int argc, char **argv)
     return mm2::ui::CharacterUiKind::AmigaClassic;
 }
 
+mm2::ui::PlayHudKind parsePlayHudKind(int argc, char **argv)
+{
+#if defined(MM2_PLAY_UI_AGUI)
+    return mm2::ui::PlayHudKind::Agui;
+#elif defined(MM2_PLAY_UI_CLASSIC)
+    return mm2::ui::PlayHudKind::Classic;
+#endif
+
+    for (int i = 1; i < argc; ++i) {
+        const char *arg = argv[i];
+        if (std::strncmp(arg, "--play-ui=", 10) == 0) {
+            return mm2::ui::playHudKindFromString(arg + 10);
+        }
+    }
+    const char *env = std::getenv("MM2_PLAY_UI");
+    if (env && *env) {
+        return mm2::ui::playHudKindFromString(env);
+    }
+    return mm2::ui::PlayHudKind::Classic;
+}
+
 void parseGfxOptions(int argc, char **argv)
 {
     auto &settings = mm2::gfx::gfxSettings();
@@ -56,7 +78,7 @@ const char *parseDataDir(int argc, char **argv)
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
         if (std::strncmp(arg, "--ui=", 5) == 0 || std::strncmp(arg, "--gfx=", 6) == 0 ||
-            std::strncmp(arg, "--cga-palette=", 14) == 0) {
+            std::strncmp(arg, "--cga-palette=", 14) == 0 || std::strncmp(arg, "--play-ui=", 10) == 0) {
             continue;
         }
         return arg;
@@ -71,6 +93,7 @@ int SDL_main(int argc, char **argv)
     parseGfxOptions(argc, argv);
     const char *data_dir_hint = parseDataDir(argc, argv);
     const auto ui_kind = parseUiKind(argc, argv);
+    const auto play_hud_kind = parsePlayHudKind(argc, argv);
 
     if (!mm2::platform::init(&argc, &argv)) {
         return 1;
@@ -96,7 +119,7 @@ int SDL_main(int argc, char **argv)
         return 1;
     }
 
-    const int rc = mm2_app_run(data_dir, static_cast<int>(ui_kind));
+    const int rc = mm2_app_run(data_dir, static_cast<int>(ui_kind), static_cast<int>(play_hud_kind));
 
     mm2::audio::shutdown();
     mm2::platform::shutdown();
