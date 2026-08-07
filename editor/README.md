@@ -77,8 +77,8 @@ editor/
 | spells.dat | fully decoded | list + Properties fields |
 | roster.dat | layout confirmed | list + character tabs |
 | str.dat | encoding decoded | line table + Properties |
-| monsters.dat | fully decoded | list + Properties + sprite preview + full ability panel |
+| monsters.dat | fully decoded | list + full ability panel + sprite preview |
 | map.dat | confirmed | Tiles / Window / 3D + Properties |
-| attrib.dat | partial | screen editor + Properties summary |
-| event.dat | VM + DSL | Outline / Script / Problems + inspector |
+| attrib.dat | fields confirmed | screen editor (env/neighbors/transition/era/door/flags/roof) + Properties |
+| event.dat | VM + DSL | Outline / Script / Graph / Wizard + inspector |
 | .32 / .anm / PC gfx | view-only | preview (read-only) |
