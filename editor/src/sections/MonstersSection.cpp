@@ -566,6 +566,14 @@ void MonstersSection::drawMonsterDetail(App& app) {
                     r.setArcher(archer);
                     dirty = true;
                 }
+                ImGui::SameLine();
+                bool misc = r.sabilMisc();
+                if (ImGui::Checkbox("Misc", &misc)) {
+                    r.setSabilMisc(misc);
+                    dirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Sabil bit 5: reserved misc flag (not yet mapped in ASM).");
             });
             form.row("Group attack", [&] {
                 effectCombo("##party", r.partyVerb(), kPartyVerbNames, kPartyVerbCount,
@@ -590,9 +598,23 @@ void MonstersSection::drawMonsterDetail(App& app) {
         ui::FormTable form("mon_beh", ui::Em(8.f));
         if (form.begin()) {
             form.row("Reinforcements", [&] {
-                ImGui::Text("%u", r.addFriends());
+                ui::SetFieldShort();
+                int cnt = r.friendCount();
+                if (ImGui::InputInt("##rein", &cnt, 1, 1)) {
+                    r.setFriendCount(static_cast<uint8_t>(cnt));
+                    dirty = true;
+                }
+                ImGui::SameLine();
+                int eff = r.addFriends();
+                ImGui::TextDisabled("→ %u", eff);
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Monsters summoned by \"adds friends\".");
+                    ImGui::SetTooltip("Monsters summoned by \"adds friends\". Count (1–16) ×10 if the ×10 bit is set.");
+                ImGui::SameLine();
+                bool x10 = r.friendCountX10();
+                if (ImGui::Checkbox("×10", &x10)) {
+                    r.setFriendCountX10(x10);
+                    dirty = true;
+                }
             });
             form.row("Flee tier", [&] {
                 ImGui::Text("%u", r.fleeTier());

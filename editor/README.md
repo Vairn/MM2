@@ -77,7 +77,7 @@ editor/
 | spells.dat | fully decoded | list + Properties fields |
 | roster.dat | layout confirmed | list + character tabs |
 | str.dat | encoding decoded | line table + Properties |
-| monsters.dat | fields partial | list + Properties + sprite preview |
+| monsters.dat | fully decoded | list + Properties + sprite preview + full ability panel |
 | map.dat | confirmed | Tiles / Window / 3D + Properties |
 | attrib.dat | partial | screen editor + Properties summary |
 | event.dat | VM + DSL | Outline / Script / Problems + inspector |
