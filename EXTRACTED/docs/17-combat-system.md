@@ -141,6 +141,29 @@ For monster slot `-$4F7` (status `-$519[i]`):
   Oabil (`FriendCountLookup` / `encounterAddsFriends` in `EncounterPicker.cpp`),
   not a per-round combat action. An earlier pass conflated the two.
 
+## Party damage and front-rank expansion
+
+Monster melee and ranged hits route through `0x4AAA` after the to-hit/damage
+calculation at `0x10478`. The remake exposes this leaf as
+`CombatSession::applyPartyDamage4AAA`, which updates the working HP field
+(roster `+$5E`, the codec `hp_max`) and preserves the separate HP ceiling at
+`+$74` (`hp_current`). On KO it sets the condition to unconscious/dead state,
+plays the fall sound/message, and enters the ROM's post-damage expansion path:
+
+- `0xFD8C`/`0xFE00` checks whether the front-rank cutoff `-$5E4D` is below the
+  current party size.
+- If a back-rank slot remains, the cutoff increments by one. The next party
+  slot therefore receives front-rank/melee eligibility and the combat strip
+  checkmark on redraw.
+- The cutoff is bounded by the party count; no expansion occurs when every
+  remaining slot is already in front.
+
+This is distinct from the round-entry range recomputation at `0x11D0C`, which
+initially rolls the melee range and front-rank cutoff. The KO expansion is a
+persistent adjustment within the current fight. The deterministic regression is
+covered by `game/tests/combat_setup_test.cpp` (six-member outdoor party,
+`0x4AAA` KO, and `-$5E4D` increment).
+
 ## Status / afflictions
 Battle status uses the `-$519[]` byte plus per-character bits. UI abbreviations
 (table at `A4-$6FBC`): `Enca Mdls Held Aslp Afrd Weak Siln Hurt`

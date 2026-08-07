@@ -119,8 +119,8 @@ Remake: `game/src/TitleScreen.cpp` — **320×200**, `Mm2Font8x8.inc`, menu on *
 
 | Doc | Description |
 |-----|-------------|
-| [`26-combat-overview.md`](26-combat-overview.md) | Round loop summary and battle slots |
-| [`17-combat-system.md`](17-combat-system.md) | Full ASM trace — player bar, AI, rewards |
+| [`26-combat-overview.md`](26-combat-overview.md) | Round loop summary, battle slots, and front-rank expansion |
+| [`17-combat-system.md`](17-combat-system.md) | Full ASM trace ? player bar, AI, damage/KO path, rewards |
 | [`26-spell-cast-asm.md`](26-spell-cast-asm.md) | Spell cast dispatch in combat |
 | [`35-encounter-tables.md`](35-encounter-tables.md) | Random step, arena, OP_12 fixed fights |
 

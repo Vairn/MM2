@@ -126,7 +126,9 @@ flowchart TB
    `GameSession::tick()` after movement (`-$7952` latch). Offline:
    `event_middlegate_test`, `event_op_demo` → `build/event_demos/`.
 6. **Main loop** — `0x1280` mode dispatch (overland, town, combat, menus).
-7. **Combat** — round loop, player bar, monster AI, rewards.
+7. **Combat** ? encounter setup, round loop, player bar, monster AI, rewards,
+   and KO-driven front-rank expansion. The deterministic setup regression is
+   `combat_setup_test`; see [`17-combat-system.md`](../EXTRACTED/docs/17-combat-system.md).
 8. **Audio** — Desktop: pre-rendered WAVs from `EXTRACTED/audio/` via SDL
    (`AudioSDL.cpp`, see doc 58). Amiga: generative Paula
    (`AudioAmiga.cpp` + `mm2_amiga_audio.c`) — DATA tables, wave synth,

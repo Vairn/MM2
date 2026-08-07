@@ -53,7 +53,9 @@ From `0x11866` / `0x1175C` — bar strings at `A4-$6F9C`:
 See [Combat System](17-combat-system.md) for the corrected `B`/`D`/`E`/`R` dispatch trace (2026-07-17).
 
 Capability flags (`-$5E36` melee, `-$5E35` shoot, `-$5E34` cast) depend on rank,
-class, silence, and SP.
+class, silence, and SP. When a party member falls through `0x4AAA`, the KO follow-up
+(`0xFD8C`/`0xFE00`) increments the front-rank cutoff `-$5E4D` when a back-rank
+member remains, allowing the next slot to enter melee range.
 
 ## Monster behaviour (summary)
 
@@ -63,7 +65,7 @@ Unpack each slot with **`0x4C8E`** from `monsters.dat`, then AI at **`0x106A0`**
 - **Group verb** — Pabil low 5 → table `A4-$6E56` @ `0x10002` (e.g. “frenzies”)
 - **Single-target status** — Sabil low 5 → victim table @ `0xFEEA`
 - **Multiply** — Oabil bit 7 → `0x100B0`
-- **Adds friends** — Oabil low nibble → `0x11F0A`
+- **Adds friends (mid-fight)** ? Oabil low nibble ? `0x10082`; the initial random encounter group fill at `0x11F0A` is a separate path.
 
 ## Gallery & catalogs
 
