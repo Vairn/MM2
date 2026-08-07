@@ -7,11 +7,12 @@ namespace mm2 {
 
 class RosterSection : public Section {
 public:
-    const char* title() const override { return "Roster / Party"; }
+    DocKind docKind() const override { return DocKind::Roster; }
     const char* fileName() const override { return "roster.dat"; }
     bool load(const std::string& dataDir) override;
     bool save(const std::string& dataDir) override;
-    void draw(App& app) override;
+    void drawWorkspace(App& app, EditorSelection& sel) override;
+    void drawProperties(App& app, EditorSelection& sel) override;
 
 private:
     void drawCharacterSheet(RosterRecord& r);
@@ -20,8 +21,8 @@ private:
     void drawSpells(RosterRecord& r);
     void drawGlobalOverlay();
     void drawHirelingUnlocks();
+    void drawRosterDetail(App& app);
 
-    // Event bank g=0x00..0x17 in the roster global tail (A4-$798B).
     uint8_t hirelingUnlockByte(int letterIndex) const;
     void setHirelingUnlock(int letterIndex, bool found);
 

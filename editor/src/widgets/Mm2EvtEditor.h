@@ -23,6 +23,9 @@ public:
     void clearErrorMarkers();
     void markErrorLine(int line0, const char* tip = nullptr);
 
+    /** Insert text at the start of `atLine0` (or the current cursor line if -1). */
+    void insertSnippet(const std::string& text, int atLine0 = -1);
+
     bool draw(const char* title, const ImVec2& size);
 
     TextEditor& raw() { return editor_; }

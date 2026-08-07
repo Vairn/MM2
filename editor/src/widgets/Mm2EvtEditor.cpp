@@ -211,10 +211,37 @@ int Mm2EvtEditor::findLine(const std::string& needle) const {
     return -1;
 }
 
+void Mm2EvtEditor::insertSnippet(const std::string& text, int atLine0) {
+    if (text.empty()) return;
+    TextEditor::DocPos pos;
+    if (atLine0 >= 0) {
+        pos = TextEditor::DocPos(static_cast<size_t>(atLine0), 0);
+    } else {
+        pos = editor_.GetCurrentCursorPosition();
+        pos.index = 0;
+    }
+    editor_.ReplaceSectionText(pos, pos, text);
+    // Place caret after the inserted block.
+    size_t newlines = 0;
+    for (char c : text)
+        if (c == '\n') ++newlines;
+    const size_t endLine = pos.line + newlines;
+    size_t endCol = 0;
+    if (newlines == 0) {
+        endCol = pos.index + text.size();
+    } else {
+        const size_t lastNl = text.rfind('\n');
+        endCol = text.size() - lastNl - 1;
+    }
+    editor_.SetCursor(TextEditor::DocPos(endLine, endCol));
+    editor_.ScrollToLine(endLine, TextEditor::Scroll::alignMiddle);
+    editor_.SetFocus();
+}
+
 bool Mm2EvtEditor::draw(const char* title, const ImVec2& size) {
     if (pendingGoToLine_ >= 0) {
-        editor_.SetCursor(pendingGoToLine_, 0);
-        editor_.ScrollToLine(pendingGoToLine_, TextEditor::Scroll::alignMiddle);
+        editor_.SetCursor(TextEditor::DocPos(static_cast<size_t>(pendingGoToLine_), 0));
+        editor_.ScrollToLine(static_cast<size_t>(pendingGoToLine_), TextEditor::Scroll::alignMiddle);
         pendingGoToLine_ = -1;
     }
     // Compact vertical metrics: TextEditor uses GetTextLineHeightWithSpacing(),

@@ -25,11 +25,15 @@ public:
     PcGfxSection(const char* title, const char* ext) : title_(title), ext_(ext) {}
     ~PcGfxSection() override;
 
+    DocKind docKind() const override {
+        return (ext_ && ext_[1] == '4') ? DocKind::PcGfxCga : DocKind::PcGfxEga;
+    }
     const char* title() const override { return title_; }
     const char* fileName() const override { return ""; }  // scans many files
     bool load(const std::string& dataDir) override;
     bool save(const std::string& dataDir) override { (void)dataDir; return false; }
-    void draw(App& app) override;
+    void drawWorkspace(App& app, EditorSelection& sel) override;
+    void drawProperties(App& app, EditorSelection& sel) override;
 
 private:
     void rescan(const std::string& dir);

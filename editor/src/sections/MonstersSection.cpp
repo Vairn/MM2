@@ -19,8 +19,6 @@ namespace mm2 {
 
 namespace {
 
-// Case-insensitive lookup of MONSTERS.4 / MONSTERS.16 within `dir` (GOG ships
-// ALLCAPS filenames, but the host filesystem may be case-sensitive).
 std::string findMonstersFile(const std::string& dir, const std::string& ext) {
     std::error_code ec;
     if (dir.empty() || !fs::is_directory(dir, ec)) return "";
@@ -33,6 +31,19 @@ std::string findMonstersFile(const std::string& dir, const std::string& ext) {
         if (pcIsMonstersFile(e.path().filename().string())) return e.path().string();
     }
     return "";
+}
+
+bool byteField(const char* id, uint8_t* byte, bool* dirty) {
+    int v = *byte;
+    ui::SetFieldStretch();
+    if (ImGui::InputInt(id, &v, 1, 5)) {
+        if (v < 0) v = 0;
+        if (v > 255) v = 255;
+        *byte = static_cast<uint8_t>(v);
+        *dirty = true;
+        return true;
+    }
+    return false;
 }
 
 }  // namespace
@@ -61,13 +72,12 @@ void MonstersSection::buildPcComposedTextures() {
     pcComposedTextures_.reserve(pcPic_->frames.size());
     for (int i = 0; i < static_cast<int>(pcPic_->frames.size()); ++i) {
         pcCompositeMonsterFrame(*pcPic_, i, pcCgaPalette_, rgba);
-        pcComposedTextures_.push_back(makeTextureRGBA(rgba.data(), kPcCombatCanvasW, kPcCombatCanvasH));
+        pcComposedTextures_.push_back(
+            makeTextureRGBA(rgba.data(), kPcCombatCanvasW, kPcCombatCanvasH));
     }
 }
 
 void MonstersSection::syncPcSprite(App& app, uint8_t picture) {
-    // Pull the shared PC assets folder (set by PcGfxSection or auto-detected
-    // on folder open); reset cached atlases if it changed.
     if (pcDir_ != app.state().pcDataDir) {
         pcDir_ = app.state().pcDataDir;
         pcAtlasCgaLoaded_ = false;
@@ -86,7 +96,7 @@ void MonstersSection::syncPcSprite(App& app, uint8_t picture) {
     }
 
     const int pictureId = picture & 0x7F;
-    if (pcPicId_ == pictureId && pcPicVariant_ == pcMode_) return;  // already decoded
+    if (pcPicId_ == pictureId && pcPicVariant_ == pcMode_) return;
     pcPicId_ = pictureId;
     pcPicVariant_ = pcMode_;
     pcState_ = 0;
@@ -116,7 +126,8 @@ void MonstersSection::buildSpriteComposedTextures() {
             composedTextures_.push_back(0);
             continue;
         }
-        composedTextures_.push_back(makeTextureRGBA(rgba.data(), spriteAnmCanvas_.width, spriteAnmCanvas_.height));
+        composedTextures_.push_back(
+            makeTextureRGBA(rgba.data(), spriteAnmCanvas_.width, spriteAnmCanvas_.height));
     }
 }
 
@@ -160,7 +171,7 @@ void MonstersSection::loadSprite(uint8_t picture) {
     spriteFile_ = name;
 
     if (idx <= 0) {
-        sprite_.error = "no sprite (picture & 0x7F == 0)";
+        sprite_.error = "no sprite (picture id 0)";
         return;
     }
     gfxLoad(dir_ + "/" + spriteFile_, /*isAnm=*/true, sprite_);
@@ -176,24 +187,98 @@ void MonstersSection::loadSprite(uint8_t picture) {
     }
 }
 
-void MonstersSection::draw(App& app) {
+void MonstersSection::drawWorkspace(App& app, EditorSelection& sel) {
     if (!loaded) {
-        ui::EmptyState("monsters.dat not loaded.");
+        ui::EmptyState("monsters.dat not loaded", "Open a folder containing monsters.dat");
         return;
     }
+    if (sel.doc == DocKind::Monsters && sel.kind == EditorSelection::Kind::Monster &&
+        sel.index >= 0 && sel.index < kMonstersCount)
+        selected_ = sel.index;
+    if (selected_ < 0 || selected_ >= kMonstersCount) selected_ = 0;
 
-    if (!ui::BeginMasterList(layout_, "mon_list", "256 monsters")) {
-        return;
-    }
+    if (!ui::BeginMasterList(layout_, "mon_list", "Monsters")) return;
     for (int i = 0; i < kMonstersCount; ++i) {
         std::string nm = file_.records[i].nameStr();
-        if (!ui::ListFilterPass(layout_, nm.c_str()) &&
-            !ui::ListFilterPass(layout_, std::to_string(i).c_str()))
-            continue;
-        if (ui::ListRow(i, nm.c_str(), selected_ == i)) selected_ = i;
+        char hay[48];
+        snprintf(hay, sizeof(hay), "%d %s", i, nm.c_str());
+        if (!ui::ListFilterPass(layout_, hay)) continue;
+        if (ui::ListRow(i, nm.c_str(), selected_ == i)) {
+            selected_ = i;
+            sel.Select(DocKind::Monsters, EditorSelection::Kind::Monster, i);
+        }
     }
     ui::EndMasterListBeginDetail(layout_, "mon_detail");
+    drawMonsterDetail(app);
+    ui::EndMasterDetail();
+}
 
+void MonstersSection::drawProperties(App& app, EditorSelection& sel) {
+    (void)app;
+    if (!loaded) {
+        ui::EmptyState("Not loaded", "monsters.dat missing from the data folder");
+        return;
+    }
+    if (sel.doc == DocKind::Monsters && sel.kind == EditorSelection::Kind::Monster &&
+        sel.index >= 0 && sel.index < kMonstersCount)
+        selected_ = sel.index;
+    if (selected_ < 0 || selected_ >= kMonstersCount) selected_ = 0;
+    if (sel.kind == EditorSelection::Kind::None || sel.doc != DocKind::Monsters)
+        sel.Select(DocKind::Monsters, EditorSelection::Kind::Monster, selected_);
+
+    const MonsterRecord& r = file_.records[selected_];
+    std::string nmStr = r.nameStr();
+    const char* nm = nmStr.empty() ? "(blank)" : nmStr.c_str();
+    char sub[48];
+    snprintf(sub, sizeof(sub), "#%d · pic %d", selected_, r.picture() & 0x7F);
+    ui::PanelHeader(nm, sub);
+
+    ui::SectionBlock("Combat");
+    {
+        ui::FormTable form("mon_prop_combat", ui::Em(7.f));
+        if (form.begin()) {
+            form.row("HP", [&] { ImGui::Text("%u", r.hpValue()); });
+            form.row("XP", [&] { ImGui::Text("%u", r.xpValue()); });
+            form.row("AC", [&] { ImGui::Text("%u", r.ac()); });
+            form.row("Damage", [&] { ImGui::Text("%u", r.damage()); });
+            form.row("Speed", [&] { ImGui::Text("%u", r.speed()); });
+            form.row("Magic resist", [&] { ImGui::Text("%u", r.magicResist()); });
+        }
+    }
+
+    ui::SectionBlock("Traits");
+    {
+        ui::FormTable form("mon_prop_traits", ui::Em(7.f));
+        if (form.begin()) {
+            form.row("Attack", [&] {
+                ImGui::TextUnformatted(abilityName(r.singleEffect()));
+            });
+            form.row("Group", [&] {
+                ImGui::TextUnformatted(partyVerbName(r.partyVerb()));
+            });
+            form.row("Flags", [&] {
+                std::string flags;
+                if (r.isUndead()) flags += "undead";
+                if (r.isArcher()) {
+                    if (!flags.empty()) flags += ", ";
+                    flags += "archer";
+                }
+                if (r.multiplies()) {
+                    if (!flags.empty()) flags += ", ";
+                    flags += "breeds";
+                }
+                if (flags.empty()) flags = "—";
+                ImGui::TextUnformatted(flags.c_str());
+            });
+            form.row("Loot", [&] {
+                ImGui::Text("drop %u · gems %s · gold %u", r.itemDropLevel(),
+                            r.dropsGems() ? "yes" : "no", r.goldTier());
+            });
+        }
+    }
+}
+
+void MonstersSection::drawMonsterDetail(App& app) {
     MonsterRecord& r = file_.records[selected_];
 
     char nameBuf[kMonsterNameSize + 1];
@@ -201,83 +286,73 @@ void MonstersSection::draw(App& app) {
     std::strncpy(nameBuf, nm.c_str(), sizeof(nameBuf));
     nameBuf[kMonsterNameSize] = '\0';
 
-    ui::PanelHeader(nm.empty() ? "(blank monster)" : nm.c_str(),
-                    (std::string("#") + std::to_string(selected_)).c_str());
+    char sub[96];
+    snprintf(sub, sizeof(sub), "#%d · HP %u · XP %u · AC %u", selected_, r.hpValue(), r.xpValue(),
+             r.ac());
+    ui::PanelHeader(nm.empty() ? "(blank monster)" : nm.c_str(), sub);
 
-    {
-        ui::FormTable form("mon_name");
-        if (form.begin()) {
-            form.row("Name", [&] {
-                ui::SetFieldStretch();
-                if (ImGui::InputText("##name", nameBuf, sizeof(nameBuf))) {
-                    r.setName(nameBuf);
-                    dirty = true;
-                }
-            });
-        }
-    }
-
-    uint8_t pic = r.raw[0x15];
+    uint8_t pic = r.picture();
     if (spritePic_ != pic) loadSprite(pic);
+    syncPcSprite(app, pic);
 
-    if (ImGui::BeginTable("mon_body", 2,
+    // —— Top: sprite preview | identity + combat ——
+    if (ImGui::BeginTable("mon_top", 2,
                           ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV)) {
-        ImGui::TableSetupColumn("sprite", ImGuiTableColumnFlags_WidthFixed, ui::Em(22.f));
-        ImGui::TableSetupColumn("props", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("sprite", ImGuiTableColumnFlags_WidthFixed, ui::Em(20.f));
+        ImGui::TableSetupColumn("stats", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableNextRow();
 
+        // LEFT: sprite
         ImGui::TableNextColumn();
         ui::SectionBlock("Sprite");
-        ImGui::TextDisabled("picture=%u  (file %u, flag 0x80=%s)", pic, pic & 0x7F,
-                            (pic & 0x80) ? "set" : "clear");
-
-        ui::SetFieldMed();
-        const char* pcModeLabel = pcMode_ == PcSpriteMode::Amiga ? "Amiga (.anm)"
-                                  : pcMode_ == PcSpriteMode::Cga  ? "PC CGA (.4)"
-                                                                   : "PC EGA (.16)";
-        if (ImGui::BeginCombo("Sprite source", pcModeLabel)) {
-            if (ImGui::Selectable("Amiga (.anm)", pcMode_ == PcSpriteMode::Amiga)) pcMode_ = PcSpriteMode::Amiga;
-            if (ImGui::Selectable("PC CGA (.4)", pcMode_ == PcSpriteMode::Cga)) pcMode_ = PcSpriteMode::Cga;
-            if (ImGui::Selectable("PC EGA (.16)", pcMode_ == PcSpriteMode::Ega)) pcMode_ = PcSpriteMode::Ega;
-            ImGui::EndCombo();
-        }
-        syncPcSprite(app, pic);
-
-        if (pcMode_ != PcSpriteMode::Amiga) {
-            if (!pcDir_.empty() && pcMode_ == PcSpriteMode::Cga) {
-                ui::SetFieldShort();
-                const char* palLabel = pcCgaPalette_ == 0 ? "green/red/brown" : "cyan/magenta/white";
-                if (ImGui::BeginCombo("CGA palette", palLabel)) {
-                    if (ImGui::Selectable("green/red/brown", pcCgaPalette_ == 0)) {
-                        pcCgaPalette_ = 0;
-                        buildPcComposedTextures();
+        {
+            ui::FormTable form("mon_sprite_src", ui::Em(5.f));
+            if (form.begin()) {
+                form.row("Source", [&] {
+                    ui::SetFieldStretch();
+                    const char* pcModeLabel = pcMode_ == PcSpriteMode::Amiga ? "Amiga (.anm)"
+                                              : pcMode_ == PcSpriteMode::Cga  ? "PC CGA (.4)"
+                                                                               : "PC EGA (.16)";
+                    if (ImGui::BeginCombo("##src", pcModeLabel)) {
+                        if (ImGui::Selectable("Amiga (.anm)", pcMode_ == PcSpriteMode::Amiga))
+                            pcMode_ = PcSpriteMode::Amiga;
+                        if (ImGui::Selectable("PC CGA (.4)", pcMode_ == PcSpriteMode::Cga))
+                            pcMode_ = PcSpriteMode::Cga;
+                        if (ImGui::Selectable("PC EGA (.16)", pcMode_ == PcSpriteMode::Ega))
+                            pcMode_ = PcSpriteMode::Ega;
+                        ImGui::EndCombo();
                     }
-                    if (ImGui::Selectable("cyan/magenta/white (MM2 default)", pcCgaPalette_ == 1)) {
-                        pcCgaPalette_ = 1;
-                        buildPcComposedTextures();
+                });
+                form.row("Picture", [&] {
+                    ui::SetFieldShort();
+                    int p = pic;
+                    if (ImGui::InputInt("##pic", &p, 1, 5)) {
+                        if (p < 0) p = 0;
+                        if (p > 255) p = 255;
+                        r.raw[0x15] = static_cast<uint8_t>(p);
+                        dirty = true;
+                        pic = r.picture();
+                        loadSprite(pic);
                     }
-                    ImGui::EndCombo();
-                }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("%s", spriteFile_.c_str());
+                });
             }
+        }
+
+        // Preview image
+        bool drewPreview = false;
+        if (pcMode_ != PcSpriteMode::Amiga) {
             if (pcDir_.empty()) {
-                ImGui::TextDisabled("No PC assets folder set (open one from the PC Walls section).");
+                ImGui::TextDisabled("Set a PC assets folder from PC Walls.");
             } else if (!pcPic_ || !pcPic_->ok) {
-                ImGui::TextColored(ui::Danger(), "No PC sprite for picture id %d in %s.", pic & 0x7F,
-                                   pcMode_ == PcSpriteMode::Cga ? "MONSTERS.4" : "MONSTERS.16");
+                ImGui::TextColored(ui::Danger(), "No PC sprite for id %d", pic & 0x7F);
             } else {
                 const int n = static_cast<int>(pcPic_->frames.size());
-                ImGui::TextDisabled("%d raw frames  flags=0x%X", n, pcPic_->flags);
-                ImGui::Checkbox("Play##pcmon", &pcPlaying_);
-                ImGui::SameLine();
-                ImGui::Checkbox("Loop##pcmon", &pcLoop_);
-                ui::SetFieldShort();
-                ImGui::SliderFloat("Speed##pcmon", &pcSpeed_, 0.1f, 4.0f, "%.2fx");
-                ImGui::SliderInt("State##pcmon", &pcState_, 0, n > 0 ? n - 1 : 0);
-                ImGui::SliderFloat("Zoom##pcmon", &spriteZoom_, 1.0f, 6.0f, "%.0fx");
-
                 if (pcPlaying_ && n > 1) {
                     const double now = ImGui::GetTime();
-                    const float dt = static_cast<float>((pcLastTick_ > 0.0) ? (now - pcLastTick_) : 0.0);
+                    const float dt =
+                        static_cast<float>((pcLastTick_ > 0.0) ? (now - pcLastTick_) : 0.0);
                     pcLastTick_ = now;
                     pcElapsed_ += (dt > 0.0f) ? dt : 0.0f;
                     const float frameDur = 0.125f / ((pcSpeed_ > 0.0f) ? pcSpeed_ : 1.0f);
@@ -299,67 +374,39 @@ void MonstersSection::draw(App& app) {
                 }
                 if (pcState_ < 0) pcState_ = 0;
                 if (pcState_ >= n) pcState_ = (n > 0) ? (n - 1) : 0;
-
                 if (pcState_ >= 0 && pcState_ < static_cast<int>(pcComposedTextures_.size())) {
                     unsigned int tex = pcComposedTextures_[static_cast<size_t>(pcState_)];
-                    if (tex)
-                        ImGui::Image(static_cast<ImTextureID>(tex), ImVec2(kPcCombatCanvasW * spriteZoom_,
-                                                                           kPcCombatCanvasH * spriteZoom_));
-                    ImGui::TextDisabled("state %d/%d  (%dx%d canvas, %dbpp)", pcState_, n - 1, kPcCombatCanvasW,
-                                        kPcCombatCanvasH, pcPic_->bpp);
+                    if (tex) {
+                        ImGui::Image(static_cast<ImTextureID>(tex),
+                                     ImVec2(kPcCombatCanvasW * spriteZoom_,
+                                            kPcCombatCanvasH * spriteZoom_));
+                        drewPreview = true;
+                    }
                 }
+                ImGui::TextDisabled("%d frames", n);
             }
-        }
-
-        ImGui::Text("%s", spriteFile_.c_str());
-        if (pcMode_ != PcSpriteMode::Amiga) ImGui::TextDisabled("(Amiga sprite decoded below for comparison)");
-        if (sprite_.ok || !sprite_.frames.empty()) {
-            int n = static_cast<int>(sprite_.frames.size());
-            ImGui::TextDisabled("%d frames  depth=%d", n, sprite_.depth);
-            ImGui::Checkbox("Play##sprite", &spritePlaying_);
-            ImGui::SameLine();
-            ImGui::Checkbox("Loop##sprite", &spriteLoop_);
-            ui::SetFieldShort();
-            ImGui::SliderFloat("Speed##sprite", &spriteSpeed_, 0.1f, 4.0f, "%.2fx");
-            ui::SetFieldMed();
-            const char* spriteModeLabel =
-                (spritePlayMode_ == AnmPlayMode::Flipbook) ? "Flipbook" : "Sequence";
-            if (ImGui::BeginCombo("Play mode##sprite", spriteModeLabel)) {
-                if (ImGui::Selectable("Flipbook (all composed frames)", spritePlayMode_ == AnmPlayMode::Flipbook)) {
-                    spritePlayMode_ = AnmPlayMode::Flipbook;
-                    spriteSequenceStep_ = 0;
-                    spriteElapsed_ = 0.0f;
-                }
-                if (ImGui::Selectable("Sequence (game stream)", spritePlayMode_ == AnmPlayMode::Sequence)) {
-                    spritePlayMode_ = AnmPlayMode::Sequence;
-                    spriteSequenceStep_ = 0;
-                    spriteElapsed_ = 0.0f;
-                    int frame = gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
-                    if (frame >= 0) spriteFrame_ = frame;
-                }
-                ImGui::EndCombo();
-            }
-            ImGui::SliderInt("Frame##sprite", &spriteFrame_, 0, n > 0 ? n - 1 : 0);
-            ImGui::SliderFloat("Zoom##sprite", &spriteZoom_, 1.0f, 6.0f, "%.0fx");
-
+        } else if (sprite_.ok || !sprite_.frames.empty()) {
+            const int n = static_cast<int>(sprite_.frames.size());
             if (spritePlaying_ && n > 1) {
                 const double now = ImGui::GetTime();
-                const float dt = static_cast<float>((spriteLastTick_ > 0.0) ? (now - spriteLastTick_) : 0.0);
+                const float dt =
+                    static_cast<float>((spriteLastTick_ > 0.0) ? (now - spriteLastTick_) : 0.0);
                 spriteLastTick_ = now;
                 spriteElapsed_ += (dt > 0.0f) ? dt : 0.0f;
-
                 const bool useSequence =
                     spritePlayMode_ == AnmPlayMode::Sequence && gfxAnmHasSequencePlayback(sprite_);
                 if (useSequence) {
-                    if (spriteSequence_ < 0 || spriteSequence_ >= static_cast<int>(sprite_.sequences.size()))
+                    if (spriteSequence_ < 0 ||
+                        spriteSequence_ >= static_cast<int>(sprite_.sequences.size()))
                         spriteSequence_ = 0;
-                    const auto& seq = sprite_.sequences[spriteSequence_];
+                    const auto& seq = sprite_.sequences[static_cast<size_t>(spriteSequence_)];
                     const int pairCount = static_cast<int>(seq.size() / 2);
                     if (pairCount > 0) {
-                        while (spriteElapsed_ >= gfxAnmSequenceStepDurationSec(sprite_, spriteSequence_,
-                                                                                 spriteSequenceStep_, spriteSpeed_)) {
-                            spriteElapsed_ -= gfxAnmSequenceStepDurationSec(sprite_, spriteSequence_,
-                                                                           spriteSequenceStep_, spriteSpeed_);
+                        while (spriteElapsed_ >=
+                               gfxAnmSequenceStepDurationSec(sprite_, spriteSequence_,
+                                                             spriteSequenceStep_, spriteSpeed_)) {
+                            spriteElapsed_ -= gfxAnmSequenceStepDurationSec(
+                                sprite_, spriteSequence_, spriteSequenceStep_, spriteSpeed_);
                             ++spriteSequenceStep_;
                             if (spriteSequenceStep_ >= pairCount) {
                                 if (spriteLoop_)
@@ -370,7 +417,8 @@ void MonstersSection::draw(App& app) {
                                     break;
                                 }
                             }
-                            int frame = gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+                            int frame =
+                                gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
                             if (frame >= 0 && frame < n) spriteFrame_ = frame;
                         }
                     }
@@ -393,84 +441,103 @@ void MonstersSection::draw(App& app) {
             } else {
                 spriteLastTick_ = ImGui::GetTime();
             }
-
             if (spriteFrame_ < 0) spriteFrame_ = 0;
             if (spriteFrame_ >= n) spriteFrame_ = (n > 0) ? (n - 1) : 0;
 
-            if (!sprite_.sequences.empty() && spritePlayMode_ == AnmPlayMode::Sequence) {
-                if (spriteSequence_ < 0 || spriteSequence_ >= static_cast<int>(sprite_.sequences.size()))
-                    spriteSequence_ = 0;
-                std::string seqLabel = "Sequence " + std::to_string(spriteSequence_);
-                if (ImGui::BeginCombo("Sequence##sprite", seqLabel.c_str())) {
-                    for (int i = 0; i < static_cast<int>(sprite_.sequences.size()); ++i) {
-                        std::string label =
-                            "Sequence " + std::to_string(i) + " (" +
-                            std::to_string(static_cast<int>(sprite_.sequences[i].size() / 2)) + " steps)";
-                        bool sel = (i == spriteSequence_);
-                        if (ImGui::Selectable(label.c_str(), sel)) {
-                            spriteSequence_ = i;
-                            spriteSequenceStep_ = 0;
-                            spriteElapsed_ = 0.0f;
-                            int frame = gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
-                            if (frame >= 0 && frame < n) spriteFrame_ = frame;
-                        }
-                        if (sel) ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                const int frame = gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
-                const int delay = (spriteSequence_ >= 0 &&
-                                   spriteSequence_ < static_cast<int>(sprite_.sequences.size()) &&
-                                   static_cast<size_t>(spriteSequenceStep_) * 2 + 1 <
-                                       sprite_.sequences[spriteSequence_].size())
-                                      ? static_cast<int>(
-                                            sprite_.sequences[spriteSequence_][static_cast<size_t>(spriteSequenceStep_) * 2 + 1])
-                                      : 0;
-                ImGui::TextDisabled("Seq step=%d frame=%d delay=%d", spriteSequenceStep_, frame, delay);
-            }
-
             if (spriteFrame_ >= 0 && spriteFrame_ < n) {
-                const GfxFrame& fr = sprite_.frames[spriteFrame_];
-                unsigned int tex = textures_[spriteFrame_];
+                const GfxFrame& fr = sprite_.frames[static_cast<size_t>(spriteFrame_)];
+                unsigned int tex = textures_[static_cast<size_t>(spriteFrame_)];
                 int drawW = fr.width;
                 int drawH = fr.height;
-                if (spriteAnmCanvas_.valid && spriteFrame_ >= 0 &&
-                    spriteFrame_ < static_cast<int>(composedTextures_.size()) &&
-                    composedTextures_[spriteFrame_]) {
-                    tex = composedTextures_[spriteFrame_];
+                if (spriteAnmCanvas_.valid && spriteFrame_ < static_cast<int>(composedTextures_.size()) &&
+                    composedTextures_[static_cast<size_t>(spriteFrame_)]) {
+                    tex = composedTextures_[static_cast<size_t>(spriteFrame_)];
                     drawW = spriteCanvasW_;
                     drawH = spriteCanvasH_;
                 }
                 if (tex) {
-                    ImVec2 sz(drawW * spriteZoom_, drawH * spriteZoom_);
-                    ImGui::Image(static_cast<ImTextureID>(tex), sz);
+                    ImGui::Image(static_cast<ImTextureID>(tex),
+                                 ImVec2(drawW * spriteZoom_, drawH * spriteZoom_));
+                    drewPreview = true;
                 }
-                ImGui::TextDisabled("composed %dx%d  raw patch %dx%d  flags=0x%X", drawW, drawH, fr.width, fr.height,
-                                    fr.flags);
-                const int preIdx = spriteFrame_ - 1;
-                if (preIdx >= 0 && preIdx < static_cast<int>(sprite_.preludeEntries.size())) {
-                    const GfxAnimPreludeEntry& pe = sprite_.preludeEntries[preIdx];
-                    if (pe.used) {
-                        ImGui::TextDisabled("Prelude[%d] for frame %d: x_off=%d y_off=%d w=%d h=%d", preIdx,
-                                            spriteFrame_, pe.xOffset, pe.yOffset, pe.width, pe.height);
-                    }
-                }
+                ImGui::TextDisabled("%d frames · frame %d", n, spriteFrame_);
             }
         } else {
-            ImGui::TextColored(ui::Danger(), "No sprite: %s",
-                               sprite_.error.empty() ? "decode failed" : sprite_.error.c_str());
+            ImGui::TextColored(ui::Danger(), "%s",
+                               sprite_.error.empty() ? "No sprite" : sprite_.error.c_str());
+        }
+        (void)drewPreview;
+
+        ImGui::Checkbox("Play", pcMode_ == PcSpriteMode::Amiga ? &spritePlaying_ : &pcPlaying_);
+        ImGui::SameLine();
+        ImGui::Checkbox("Loop", pcMode_ == PcSpriteMode::Amiga ? &spriteLoop_ : &pcLoop_);
+        ui::SetFieldShort();
+        ImGui::SliderFloat("Zoom", &spriteZoom_, 1.0f, 6.0f, "%.0fx");
+
+        // RIGHT: identity + combat
+        ImGui::TableNextColumn();
+        ui::SectionBlock("Identity");
+        {
+            ui::FormTable form("mon_name", ui::Em(6.f));
+            if (form.begin()) {
+                form.row("Name", [&] {
+                    ui::SetFieldStretch();
+                    if (ImGui::InputText("##name", nameBuf, sizeof(nameBuf))) {
+                        r.setName(nameBuf);
+                        dirty = true;
+                    }
+                });
+            }
         }
 
-        ImGui::TableNextColumn();
-        auto effectCombo = [&](const char* label, uint8_t cur, const char* const* names,
-                               int count, void (MonsterRecord::*setter)(uint8_t)) {
-            ui::SetFieldWide();
+        ui::SectionBlock("Combat");
+        {
+            ui::FormGrid grid("mon_combat", ui::Em(6.f));
+            if (grid.begin()) {
+                grid.row2(
+                    "HP",
+                    [&] {
+                        ImGui::AlignTextToFramePadding();
+                        ImGui::Text("%u", r.hpValue());
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("code");
+                        ImGui::SameLine();
+                        byteField("##hp", &r.raw[0x0E], &dirty);
+                    },
+                    "XP",
+                    [&] {
+                        ImGui::AlignTextToFramePadding();
+                        ImGui::Text("%u", r.xpValue());
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("code");
+                        ImGui::SameLine();
+                        byteField("##xp", &r.raw[0x0F], &dirty);
+                    });
+                grid.row2(
+                    "AC", [&] { byteField("##ac", &r.raw[0x16], &dirty); }, "Damage",
+                    [&] { byteField("##dmg", &r.raw[0x17], &dirty); });
+                grid.row2(
+                    "Speed", [&] { byteField("##spd", &r.raw[0x14], &dirty); }, "Speed 2",
+                    [&] { byteField("##spd2", &r.raw[0x18], &dirty); });
+                grid.row1("Magic resist", [&] { byteField("##mr", &r.raw[0x19], &dirty); });
+            }
+        }
+
+        ImGui::EndTable();
+    }
+
+    // —— Attacks ——
+    ui::SectionBlock("Attacks");
+    {
+        auto effectCombo = [&](const char* id, uint8_t cur, const char* const* names, int count,
+                               void (MonsterRecord::*setter)(uint8_t)) {
+            ui::SetFieldStretch();
             const char* curName = cur < count ? names[cur] : "?";
-            if (ImGui::BeginCombo(label, curName)) {
+            if (ImGui::BeginCombo(id, curName)) {
                 for (int e = 0; e < count; ++e) {
                     bool sel = (e == cur);
-                    char item[48];
-                    snprintf(item, sizeof(item), "%2d  %s", e, names[e]);
+                    char item[64];
+                    snprintf(item, sizeof(item), "%s", names[e]);
                     if (ImGui::Selectable(item, sel)) {
                         (r.*setter)(static_cast<uint8_t>(e));
                         dirty = true;
@@ -481,119 +548,186 @@ void MonstersSection::draw(App& app) {
             }
         };
 
-        ui::SectionBlock("Abilities", "ASM-confirmed");
-        ImGui::TextDisabled("Single-target attack (Sabil 0x%02X)", r.sabil());
-        effectCombo("Effect##single", r.singleEffect(), kAbilityNames, kAbilityCount,
-                    &MonsterRecord::setSingleEffect);
-        bool undead = r.isUndead();
-        if (ImGui::Checkbox("Undead", &undead)) {
-            r.setUndead(undead);
-            dirty = true;
+        ui::FormTable form("mon_atk", ui::Em(8.f));
+        if (form.begin()) {
+            form.row("Single target", [&] {
+                effectCombo("##single", r.singleEffect(), kAbilityNames, kAbilityCount,
+                            &MonsterRecord::setSingleEffect);
+            });
+            form.row("Flags", [&] {
+                bool undead = r.isUndead();
+                if (ImGui::Checkbox("Undead", &undead)) {
+                    r.setUndead(undead);
+                    dirty = true;
+                }
+                ImGui::SameLine();
+                bool archer = r.isArcher();
+                if (ImGui::Checkbox("Archer", &archer)) {
+                    r.setArcher(archer);
+                    dirty = true;
+                }
+            });
+            form.row("Group attack", [&] {
+                effectCombo("##party", r.partyVerb(), kPartyVerbNames, kPartyVerbCount,
+                            &MonsterRecord::setPartyVerb);
+            });
+            form.row("Group chance", [&] {
+                ui::SetFieldMed();
+                int chance = r.partyChance();
+                if (ImGui::SliderInt("##chance", &chance, 0, 7)) {
+                    r.setPartyChance(static_cast<uint8_t>(chance));
+                    dirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("How often the group attack is used (0–7).");
+            });
         }
-        ImGui::SameLine();
-        bool archer = r.isArcher();
-        if (ImGui::Checkbox("Archer", &archer)) {
-            r.setArcher(archer);
-            dirty = true;
-        }
+    }
 
-        ImGui::Spacing();
-        ImGui::TextDisabled("Group attack (Pabil 0x%02X)", r.pabil());
-        effectCombo("Verb##party", r.partyVerb(), kPartyVerbNames, kPartyVerbCount,
-                    &MonsterRecord::setPartyVerb);
-        {
-            ui::SetFieldShort();
-            int chance = r.partyChance();
-            if (ImGui::SliderInt("Use-chance tier##party", &chance, 0, 7)) {
-                r.setPartyChance(static_cast<uint8_t>(chance));
-                dirty = true;
+    // —— Behavior ——
+    ui::SectionBlock("Behavior");
+    {
+        ui::FormTable form("mon_beh", ui::Em(8.f));
+        if (form.begin()) {
+            form.row("Reinforcements", [&] {
+                ImGui::Text("%u", r.addFriends());
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Monsters summoned by \"adds friends\".");
+            });
+            form.row("Flee tier", [&] {
+                ImGui::Text("%u", r.fleeTier());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Chance the monster flees (0–3).");
+            });
+            form.row("Breeds", [&] {
+                bool mult = r.multiplies();
+                if (ImGui::Checkbox("##mult", &mult)) {
+                    r.setMultiplies(mult);
+                    dirty = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("duplicates itself in combat");
+            });
+        }
+    }
+
+    // —— Loot ——
+    ui::SectionBlock("Loot");
+    {
+        ui::FormGrid grid("mon_loot", ui::Em(7.f));
+        if (grid.begin()) {
+            grid.row2(
+                "Item drop",
+                [&] {
+                    ui::SetFieldShort();
+                    int drop = r.itemDropLevel();
+                    if (ImGui::InputInt("##drop", &drop, 1, 1)) {
+                        if (drop < 0) drop = 0;
+                        if (drop > 3) drop = 3;
+                        r.raw[0x10] = static_cast<uint8_t>((r.raw[0x10] & ~0x03) | (drop & 0x03));
+                        dirty = true;
+                    }
+                },
+                "Gold tier",
+                [&] {
+                    ui::SetFieldShort();
+                    int gold = r.goldTier();
+                    if (ImGui::InputInt("##goldt", &gold, 1, 1)) {
+                        if (gold < 0) gold = 0;
+                        if (gold > 3) gold = 3;
+                        r.raw[0x10] =
+                            static_cast<uint8_t>((r.raw[0x10] & ~0x18) | ((gold & 0x03) << 3));
+                        dirty = true;
+                    }
+                });
+            grid.row1("Gems", [&] {
+                bool gems = r.dropsGems();
+                if (ImGui::Checkbox("##gems", &gems)) {
+                    r.raw[0x10] = gems ? (r.raw[0x10] | 0x04) : (r.raw[0x10] & ~0x04);
+                    dirty = true;
+                }
+            });
+        }
+    }
+
+    // —— Animation advanced (collapsed) ——
+    if (ImGui::CollapsingHeader("Animation controls")) {
+        if (pcMode_ != PcSpriteMode::Amiga && pcMode_ == PcSpriteMode::Cga && !pcDir_.empty()) {
+            ui::SetFieldMed();
+            const char* palLabel = pcCgaPalette_ == 0 ? "green/red/brown" : "cyan/magenta/white";
+            if (ImGui::BeginCombo("CGA palette", palLabel)) {
+                if (ImGui::Selectable("green/red/brown", pcCgaPalette_ == 0)) {
+                    pcCgaPalette_ = 0;
+                    buildPcComposedTextures();
+                }
+                if (ImGui::Selectable("cyan/magenta/white (MM2 default)", pcCgaPalette_ == 1)) {
+                    pcCgaPalette_ = 1;
+                    buildPcComposedTextures();
+                }
+                ImGui::EndCombo();
             }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Pabil bits 5-7. Indexes a frequency table at\n"
-                                  "asm 0x10002 - higher = used more often.");
         }
-
-        ImGui::Spacing();
-        ImGui::TextDisabled("Other behavior (Oabil 0x%02X)", r.oabil());
-        ImGui::Text("Adds friends: %u reinforcements", r.addFriends());
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Oabil low nibble +1 (x10 if bit4). Count of monsters\n"
-                              "summoned by the \"adds friends!\" action (asm 0x11F0A).");
-        ImGui::Text("Flee tier: %u", r.fleeTier());
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Oabil bits 5-6. Chance the monster \"runs\" / flees\n"
-                              "(asm 0x10DFC).");
-        bool mult = r.multiplies();
-        if (ImGui::Checkbox("Multiplies / breeds", &mult)) {
-            r.setMultiplies(mult);
-            dirty = true;
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Oabil bit7. Monster duplicates itself in combat\n"
-                              "(asm 0x100B0).");
-
-        ui::SectionBlock("Named fields", "semantics partial");
-        ImGui::Text("Derived HP: %u", r.hpValue());
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("ASM 0x4C8E: ((hp_code & 0x3F)+1) * {1,10,100,1000}[(hp_code>>6)&3]");
-        ImGui::Text("Derived XP: %u", r.xpValue());
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("ASM 0x4C8E: ((xp_code & 0x1F)+1) * {1,10,100,1000}[(xp_code>>5)&3], x1000 if bit7");
-        ImGui::Text("Treasure flags: item_drop=%u  gems=%s  gold_tier=%u",
-                    r.itemDropLevel(), r.dropsGems() ? "yes" : "no", r.goldTier());
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("ASM 0x10B74 reward decode of byte 0x10:\n"
-                              "bits0-1=item drop level, bit2=gems flag, bits3-4=gold tier");
-        struct Field {
-            const char* label;
-            int off;
-        };
-        const Field fields[] = {
-            {"HP code", 0x0E},   {"XP code", 0x0F},  {"Treasure", 0x10},
-            {"Pabil", 0x11},     {"Sabil", 0x12},    {"Oabil", 0x13},
-            {"Speed", 0x14},     {"Picture", 0x15},  {"Armor class", 0x16},
-            {"Damage", 0x17},    {"Speed2", 0x18},   {"Magic resist", 0x19},
-        };
-        {
-            ui::FormGrid grid("mon_fields");
-            if (grid.begin()) {
-                for (int i = 0; i < static_cast<int>(sizeof(fields) / sizeof(fields[0])); i += 2) {
-                    const Field& f0 = fields[i];
-                    const Field& f1 = fields[i + 1];
-                    grid.row2(
-                        f0.label,
-                        [&] {
-                            ui::SetFieldStretch();
-                            int v = r.raw[f0.off];
-                            if (ImGui::InputInt(("##" + std::to_string(f0.off)).c_str(), &v)) {
-                                r.raw[f0.off] = static_cast<uint8_t>(v & 0xFF);
-                                dirty = true;
-                            }
-                        },
-                        f1.label,
-                        [&] {
-                            ui::SetFieldStretch();
-                            int v = r.raw[f1.off];
-                            if (ImGui::InputInt(("##" + std::to_string(f1.off)).c_str(), &v)) {
-                                r.raw[f1.off] = static_cast<uint8_t>(v & 0xFF);
-                                dirty = true;
-                            }
-                        });
+        if (pcMode_ == PcSpriteMode::Amiga) {
+            ui::SetFieldShort();
+            ImGui::SliderFloat("Speed##sprite", &spriteSpeed_, 0.1f, 4.0f, "%.2fx");
+            const char* modeLabel =
+                (spritePlayMode_ == AnmPlayMode::Flipbook) ? "Flipbook" : "Sequence";
+            ui::SetFieldMed();
+            if (ImGui::BeginCombo("Play mode##sprite", modeLabel)) {
+                if (ImGui::Selectable("Flipbook", spritePlayMode_ == AnmPlayMode::Flipbook)) {
+                    spritePlayMode_ = AnmPlayMode::Flipbook;
+                    spriteSequenceStep_ = 0;
+                    spriteElapsed_ = 0.0f;
+                }
+                if (ImGui::Selectable("Sequence", spritePlayMode_ == AnmPlayMode::Sequence)) {
+                    spritePlayMode_ = AnmPlayMode::Sequence;
+                    spriteSequenceStep_ = 0;
+                    spriteElapsed_ = 0.0f;
+                    int frame = gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+                    if (frame >= 0) spriteFrame_ = frame;
+                }
+                ImGui::EndCombo();
+            }
+            const int n = static_cast<int>(sprite_.frames.size());
+            ImGui::SliderInt("Frame##sprite", &spriteFrame_, 0, n > 0 ? n - 1 : 0);
+            if (!sprite_.sequences.empty() && spritePlayMode_ == AnmPlayMode::Sequence) {
+                if (spriteSequence_ < 0 ||
+                    spriteSequence_ >= static_cast<int>(sprite_.sequences.size()))
+                    spriteSequence_ = 0;
+                std::string seqLabel = "Sequence " + std::to_string(spriteSequence_);
+                if (ImGui::BeginCombo("Sequence##sprite", seqLabel.c_str())) {
+                    for (int i = 0; i < static_cast<int>(sprite_.sequences.size()); ++i) {
+                        std::string label =
+                            "Sequence " + std::to_string(i) + " (" +
+                            std::to_string(static_cast<int>(sprite_.sequences[static_cast<size_t>(i)].size() /
+                                                           2)) +
+                            " steps)";
+                        bool sel = (i == spriteSequence_);
+                        if (ImGui::Selectable(label.c_str(), sel)) {
+                            spriteSequence_ = i;
+                            spriteSequenceStep_ = 0;
+                            spriteElapsed_ = 0.0f;
+                            int frame =
+                                gfxAnmSequenceFrameAt(sprite_, spriteSequence_, spriteSequenceStep_);
+                            if (frame >= 0 && frame < n) spriteFrame_ = frame;
+                        }
+                        if (sel) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
                 }
             }
+        } else {
+            ui::SetFieldShort();
+            ImGui::SliderFloat("Speed##pcmon", &pcSpeed_, 0.1f, 4.0f, "%.2fx");
+            const int n = pcPic_ ? static_cast<int>(pcPic_->frames.size()) : 0;
+            ImGui::SliderInt("State##pcmon", &pcState_, 0, n > 0 ? n - 1 : 0);
         }
-
-        ImGui::EndTable();
     }
 
     if (ui::BeginHexBlock("Raw record")) {
-        ImGui::TextDisabled("Record %d @ 0x%04X (%d bytes)", selected_,
-                            selected_ * kMonsterRecordSize, kMonsterRecordSize);
+        ImGui::TextDisabled("Record %d · %d bytes", selected_, kMonsterRecordSize);
         DrawHexView("mon_hex", r.raw.data(), kMonsterRecordSize, selected_ * kMonsterRecordSize);
         ui::EndHexBlock();
     }
-
-    ui::EndMasterDetail();
 }
 
 }  // namespace mm2

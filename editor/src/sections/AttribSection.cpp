@@ -23,12 +23,17 @@ bool AttribSection::save(const std::string& dataDir) {
     return ok;
 }
 
-void AttribSection::draw(App& app) {
+void AttribSection::focusIndex(int index) {
+    if (index >= 0 && index < kAttribScreens) screen_ = index;
+}
+
+void AttribSection::drawWorkspace(App& app, EditorSelection& sel) {
     (void)app;
     if (!loaded) {
-        ui::EmptyState("attrib.dat not loaded.");
+        ui::EmptyState("attrib.dat not loaded", "Open a folder containing attrib.dat");
         return;
     }
+    if (sel.doc == DocKind::Attrib && sel.index >= 0 && sel.index < kAttribScreens) screen_ = sel.index;
 
     ui::BeginToolbarRow();
     ui::SetFieldWide();
@@ -36,7 +41,10 @@ void AttribSection::draw(App& app) {
     if (ImGui::BeginCombo("##screen", cur.c_str())) {
         for (int i = 0; i < kAttribScreens; ++i) {
             std::string lbl = std::to_string(i) + ": " + areaLabel(i);
-            if (ImGui::Selectable(lbl.c_str(), screen_ == i)) screen_ = i;
+            if (ImGui::Selectable(lbl.c_str(), screen_ == i)) {
+                screen_ = i;
+                sel.Select(DocKind::Attrib, EditorSelection::Kind::AttribScreen, i);
+            }
         }
         ImGui::EndCombo();
     }
@@ -44,6 +52,9 @@ void AttribSection::draw(App& app) {
     ImGui::TextDisabled("env · neighbors · transition · era · roof");
     ui::EndToolbarRow();
     ImGui::Spacing();
+
+    if (sel.doc != DocKind::Attrib || sel.kind == EditorSelection::Kind::None)
+        sel.Select(DocKind::Attrib, EditorSelection::Kind::AttribScreen, screen_);
 
     AttribScreen& s = file_.screens[screen_];
 
@@ -221,6 +232,23 @@ void AttribSection::draw(App& app) {
         DrawHexView("attrib_hex", s.raw.data(), kAttribRecordSize, screen_ * kAttribRecordSize);
         ui::EndHexBlock();
     }
+}
+
+void AttribSection::drawProperties(App& app, EditorSelection& sel) {
+    (void)app;
+    if (!loaded) {
+        ui::EmptyState("Not loaded", "attrib.dat missing from the data folder");
+        return;
+    }
+    if (sel.doc == DocKind::Attrib && sel.index >= 0 && sel.index < kAttribScreens) screen_ = sel.index;
+    const AttribScreen& s = file_.screens[screen_];
+    ui::SectionBlock("Screen");
+    ImGui::Text("%d: %s", screen_, areaLabel(screen_).c_str());
+    ImGui::TextDisabled("%s", s.isOutside() ? "overland" : envTypeName(s.envType()));
+    ImGui::Text("Entry (%d, %d)", s.entryX(), s.entryY());
+    ImGui::Text("Transition → %d (%s)", s.transitionScreen(),
+                areaLabel(s.transitionScreen()).c_str());
+    ImGui::TextDisabled("Flags 0x%02X", s.raw[attrib_off::kFlags]);
 }
 
 }  // namespace mm2

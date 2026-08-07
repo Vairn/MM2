@@ -259,7 +259,9 @@ void PcGfxSection::buildMonsterTextures() {
     }
 }
 
-void PcGfxSection::draw(App& app) {
+void PcGfxSection::drawWorkspace(App& app, EditorSelection& sel) {
+    if (selectedFile_ >= 0)
+        sel.Select(docKind(), EditorSelection::Kind::GfxFile, selectedFile_);
     // Two-way sync with the shared PC assets directory (App auto-detects it
     // on folder open; the button below lets the user override it).
     if (dir_.empty() && !app.state().pcDataDir.empty() && app.state().pcDataDir != lastSyncedPcDir_) {
@@ -271,10 +273,10 @@ void PcGfxSection::draw(App& app) {
     ImGui::TextDisabled("%s", dir_.empty() ? "(no PC assets folder)" : dir_.c_str());
     ImGui::SameLine();
     if (ImGui::SmallButton("Open PC assets folder...")) {
-        auto sel = pfd::select_folder("Select GOG Might and Magic II folder (ALLCAPS.4 / .16)").result();
-        if (!sel.empty()) {
-            rescan(sel);
-            app.state().pcDataDir = sel;
+        auto folder = pfd::select_folder("Select GOG Might and Magic II folder (ALLCAPS.4 / .16)").result();
+        if (!folder.empty()) {
+            rescan(folder);
+            app.state().pcDataDir = folder;
         }
     }
     ImGui::Separator();
@@ -367,6 +369,23 @@ void PcGfxSection::draw(App& app) {
     else drawWallDetail();
 
     ui::EndDetailPanel();
+}
+
+void PcGfxSection::drawProperties(App& app, EditorSelection& sel) {
+    (void)app;
+    (void)sel;
+    ui::SectionBlock("PC graphics viewer");
+    ImGui::TextUnformatted("Read-only preview");
+    ImGui::TextDisabled("Extension %s · %zu files", ext_, files_.size());
+    if (!dir_.empty()) ImGui::TextWrapped("%s", dir_.c_str());
+    if (selectedFile_ >= 0 && selectedFile_ < static_cast<int>(files_.size())) {
+        ImGui::Spacing();
+        ui::SectionBlock("Selected file");
+        ImGui::TextUnformatted(files_[selectedFile_].c_str());
+        ImGui::TextDisabled("%s", isMonsters_ ? "Monster atlas" : "Wall sheet");
+    } else {
+        ui::EmptyState("No file selected", "Pick a file in the Workspace list");
+    }
 }
 
 void PcGfxSection::drawWallDetail() {

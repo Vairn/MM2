@@ -33,6 +33,24 @@ inline void SetFieldMed() { SetFieldWidth(FieldMed()); }
 inline void SetFieldWide() { SetFieldWidth(FieldWide()); }
 inline void SetFieldCombo() { SetFieldWidth(FieldCombo()); }
 
+/** Single/multi-line text input bound to a std::string. Returns true on change. */
+inline bool TextInput(const char* label, std::string& value, const ImVec2& size = ImVec2(0, 0),
+                      ImGuiInputTextFlags flags = 0) {
+    static std::unordered_map<std::string, std::string> scratch;
+    std::string key(label);
+    auto& buf = scratch[key];
+    if (buf.size() <= value.size())
+        buf.resize(value.size() + 64, '\0');
+    std::strncpy(buf.data(), value.c_str(), value.size() + 1);
+    bool changed = false;
+    if (size.x != 0.f || size.y != 0.f)
+        changed = ImGui::InputTextMultiline(label, buf.data(), buf.size(), size, flags);
+    else
+        changed = ImGui::InputText(label, buf.data(), buf.size(), flags);
+    if (changed) value.assign(buf.data(), std::char_traits<char>::length(buf.data()));
+    return changed;
+}
+
 inline void SameLineRightAlign(float width) {
     float x = ImGui::GetContentRegionMax().x - width;
     if (x < ImGui::GetCursorPosX()) x = ImGui::GetCursorPosX();
@@ -57,6 +75,21 @@ inline void SectionBlock(const char* title, const char* subtitle = nullptr) {
 inline void EmptyState(const char* message) {
     ImGui::Spacing();
     ImGui::TextDisabled("%s", message);
+}
+
+inline void EmptyState(const char* title, const char* subtitle) {
+    const float availY = ImGui::GetContentRegionAvail().y;
+    const float pad = Em(2.0f);
+    if (availY > pad * 2.f) ImGui::Dummy(ImVec2(0, pad));
+    ImGui::PushStyleColor(ImGuiCol_Text, Accent());
+    ImGui::TextWrapped("%s", title);
+    ImGui::PopStyleColor();
+    if (subtitle && subtitle[0]) {
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, Muted());
+        ImGui::TextWrapped("%s", subtitle);
+        ImGui::PopStyleColor();
+    }
 }
 
 inline bool VSplitter(const char* id, float* width, float minW, float maxW,
@@ -105,11 +138,17 @@ inline bool ListFilterPass(const MasterDetail& md, const char* text) {
     return false;
 }
 
-inline bool BeginMasterList(MasterDetail& md, const char* listId, const char* listTitle = nullptr) {
-    if (md.listWidth <= 0.f) md.listWidth = ListWidth();
-    const float minW = Em(11.0f);
-    const float maxW = (std::max)(minW, ImGui::GetContentRegionAvail().x * 0.45f);
-    md.listWidth = (std::clamp)(md.listWidth, minW, maxW);
+// When fullWidth is true, the list fills the available region (Workspace pane).
+inline bool BeginMasterList(MasterDetail& md, const char* listId, const char* listTitle = nullptr,
+                            bool fullWidth = false) {
+    if (fullWidth) {
+        md.listWidth = ImGui::GetContentRegionAvail().x;
+    } else {
+        if (md.listWidth <= 0.f) md.listWidth = ListWidth();
+        const float minW = Em(11.0f);
+        const float maxW = (std::max)(minW, ImGui::GetContentRegionAvail().x * 0.45f);
+        md.listWidth = (std::clamp)(md.listWidth, minW, maxW);
+    }
 
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Em(0.55f), Em(0.45f)));
@@ -159,6 +198,12 @@ inline void EndMasterListBeginDetail(MasterDetail& md, const char* detailId) {
 
 inline void EndMasterDetail() {
     ImGui::EndChild();
+    ImGui::PopStyleVar(2);
+}
+
+inline void EndMasterListOnly() {
+    ImGui::EndChild();
+    ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(2);
 }
 

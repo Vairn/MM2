@@ -1,7 +1,9 @@
 ﻿#include "sections/MapSection.h"
 
 #include <cstdio>
+#include <cstring>
 
+#include "app/App.h"
 #include "core/AreaNames.h"
 #include "core/Cartography.h"
 #include "imgui.h"
@@ -880,12 +882,29 @@ void MapSection::drawCollisionDecode(uint8_t cell) {
         ImGui::TextDisabled("No event flag (0x80 clear)");
 }
 
-void MapSection::draw(App& app) {
-    (void)app;
+void MapSection::focusIndex(int index) {
+    if (index >= 0 && index < kMapScreens) screen_ = index;
+}
+
+void MapSection::focusTile(int screen, int tileY, int tileX) {
+    if (screen >= 0 && screen < kMapScreens) screen_ = screen;
+    if (tileX < 0) tileX = 0;
+    if (tileY < 0) tileY = 0;
+    if (tileX >= kMapGridDim) tileX = kMapGridDim - 1;
+    if (tileY >= kMapGridDim) tileY = kMapGridDim - 1;
+    const int idx = tileY * kMapGridDim + tileX;
+    selVisual_ = idx;
+    selCollision_ = idx;
+    camera_.x = tileX;
+    camera_.y = tileY;
+}
+
+void MapSection::drawWorkspace(App& app, EditorSelection& sel) {
     if (!loaded) {
-        ui::EmptyState("map.dat not loaded.");
+        ui::EmptyState("map.dat not loaded", "Open a folder containing map.dat");
         return;
     }
+    if (sel.doc == DocKind::Map && sel.index >= 0 && sel.index < kMapScreens) screen_ = sel.index;
 
     ui::BeginToolbarRow();
     ui::SetFieldWide();
@@ -893,27 +912,54 @@ void MapSection::draw(App& app) {
     if (ImGui::BeginCombo("##map_screen", cur.c_str())) {
         for (int i = 0; i < kMapScreens; ++i) {
             std::string lbl = std::to_string(i) + ": " + areaLabel(i);
-            if (ImGui::Selectable(lbl.c_str(), screen_ == i)) screen_ = i;
+            if (ImGui::Selectable(lbl.c_str(), screen_ == i)) {
+                screen_ = i;
+                sel.Select(DocKind::Map, EditorSelection::Kind::MapScreen, i);
+            }
         }
         ImGui::EndCombo();
     }
     ImGui::SameLine();
     if (screen_ > 0) {
-        if (ImGui::ArrowButton("##prev", ImGuiDir_Left)) screen_--;
+        if (ImGui::ArrowButton("##prev", ImGuiDir_Left)) {
+            screen_--;
+            sel.Select(DocKind::Map, EditorSelection::Kind::MapScreen, screen_);
+        }
         ImGui::SameLine();
     }
     if (screen_ < kMapScreens - 1) {
-        if (ImGui::ArrowButton("##next", ImGuiDir_Right)) screen_++;
+        if (ImGui::ArrowButton("##next", ImGuiDir_Right)) {
+            screen_++;
+            sel.Select(DocKind::Map, EditorSelection::Kind::MapScreen, screen_);
+        }
     }
     ImGui::SameLine();
     ImGui::TextDisabled("%s", isOutdoor(screen_) ? "outdoor" : "indoor");
     ui::EndToolbarRow();
     ImGui::Spacing();
 
+    if (sel.doc != DocKind::Map || sel.kind == EditorSelection::Kind::None)
+        sel.Select(DocKind::Map, EditorSelection::Kind::MapScreen, screen_);
+
+    // Honor Properties / cross-doc tab requests.
+    const char* forceTab = nullptr;
+    if (!sel.requestInnerTab.empty() && sel.doc == DocKind::Map) {
+        forceTab = sel.requestInnerTab.c_str();
+    }
+
     MapScreen& s = file_.screens[screen_];
 
     if (ImGui::BeginTabBar("map_tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
-        if (ImGui::BeginTabItem("Tiles")) {
+        ImGuiTabItemFlags tileFlags = 0;
+        ImGuiTabItemFlags winFlags = 0;
+        ImGuiTabItemFlags viewFlags = 0;
+        if (forceTab) {
+            if (std::strcmp(forceTab, "Tiles") == 0) tileFlags = ImGuiTabItemFlags_SetSelected;
+            else if (std::strcmp(forceTab, "Window") == 0) winFlags = ImGuiTabItemFlags_SetSelected;
+            else if (std::strcmp(forceTab, "3D View") == 0) viewFlags = ImGuiTabItemFlags_SetSelected;
+            sel.requestInnerTab.clear();
+        }
+        if (ImGui::BeginTabItem("Tiles", nullptr, tileFlags)) {
             ImGui::Checkbox("Tile graphics", &graphical_);
             if (graphical_) {
                 ImGui::SameLine();
@@ -930,9 +976,6 @@ void MapSection::draw(App& app) {
                     drawGrid("visual", s.visual, selVisual_);
                 ImGui::TableNextColumn();
                 ui::SectionBlock("Collision + events", "page 1");
-                // Collision always renders with the indoor townb.32 cartography
-                // tiles (even on outdoor screens); falls back to hex if missing.
-                // Event-flagged cells (0x80) get a red marker.
                 if (graphical_ && !townb_.tex.empty())
                     drawCartoGrid("collision", s.collision, selCollision_, /*forceTownb=*/true,
                                   /*markEvents=*/true);
@@ -942,15 +985,62 @@ void MapSection::draw(App& app) {
             }
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Window (3D backdrop)")) {
+        if (ImGui::BeginTabItem("Window (3D backdrop)", nullptr, winFlags)) {
             drawWindow();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("3D View")) {
+        if (ImGui::BeginTabItem("3D View", nullptr, viewFlags)) {
             drawView3D();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
+    }
+
+    if (selVisual_ >= 0 || selCollision_ >= 0) {
+        sel.Select(DocKind::Map, EditorSelection::Kind::MapTile, screen_,
+                   selCollision_ >= 0 ? selCollision_ : selVisual_);
+    }
+    (void)app;
+}
+
+void MapSection::drawProperties(App& app, EditorSelection& sel) {
+    if (!loaded) {
+        ui::EmptyState("Not loaded", "map.dat missing from the data folder");
+        return;
+    }
+    if (sel.doc == DocKind::Map && sel.index >= 0 && sel.index < kMapScreens) screen_ = sel.index;
+
+    ui::SectionBlock("Screen");
+    ImGui::Text("%d: %s", screen_, areaLabel(screen_).c_str());
+    ImGui::TextDisabled("%s", isOutdoor(screen_) ? "outdoor" : "indoor");
+    if (attribLoaded_) {
+        const auto& a = attrib_.screens[screen_];
+        ImGui::TextDisabled("env %s · level %d", envTypeName(a.envType()), a.level());
+    }
+
+    ImGui::Spacing();
+    if (ImGui::Button("Open Events for this screen")) {
+        app.openEventsLocation(screen_);
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Open event.dat location matching this map screen index");
+
+    ImGui::Spacing();
+    ui::SectionBlock("Selected tile");
+    if (selCollision_ >= 0) {
+        const int x = selCollision_ % 16;
+        const int y = selCollision_ / 16;
+        const uint8_t cell = file_.screens[screen_].collision[selCollision_];
+        ImGui::Text("Collision (%d, %d)", x, y);
+        drawCollisionDecode(cell);
+    } else if (selVisual_ >= 0) {
+        const int x = selVisual_ % 16;
+        const int y = selVisual_ / 16;
+        const uint8_t cell = file_.screens[screen_].visual[selVisual_];
+        ImGui::Text("Visual (%d, %d)", x, y);
+        drawVisualDecode(cell);
+    } else {
+        ui::EmptyState("No tile selected", "Click a cell in the Tiles tab");
     }
 }
 

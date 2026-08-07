@@ -1110,16 +1110,18 @@ void RosterSection::drawGlobalOverlay() {
                 selectedGlobal * kRosterRecordSize);
 }
 
-void RosterSection::draw(App& app) {
+void RosterSection::drawWorkspace(App& app, EditorSelection& sel) {
+    (void)app;
     if (!loaded) {
-        ui::EmptyState("roster.dat not loaded.");
+        ui::EmptyState("roster.dat not loaded", "Open a folder containing roster.dat");
         return;
     }
+    if (sel.doc == DocKind::Roster && sel.kind == EditorSelection::Kind::RosterChar &&
+        sel.index >= 0 && sel.index < kRosterCharacterCount)
+        selected_ = sel.index;
     if (selected_ < 0 || selected_ >= kRosterCharacterCount) selected_ = 0;
 
-    if (!ui::BeginMasterList(layout_, "roster_list", "Roster")) {
-        return;
-    }
+    if (!ui::BeginMasterList(layout_, "roster_list")) return;
 
     ImGui::TextDisabled("Characters");
     for (int i = 0; i < 24; ++i) {
@@ -1129,7 +1131,10 @@ void RosterSection::draw(App& app) {
         if (!ui::ListFilterPass(layout_, hay)) continue;
         char label[64];
         snprintf(label, sizeof(label), "%2d  %s", i, nm.empty() ? "(empty)" : nm.c_str());
-        if (ImGui::Selectable(label, selected_ == i)) selected_ = i;
+        if (ImGui::Selectable(label, selected_ == i)) {
+            selected_ = i;
+            sel.Select(DocKind::Roster, EditorSelection::Kind::RosterChar, i);
+        }
     }
 
     ImGui::Spacing();
@@ -1151,13 +1156,51 @@ void RosterSection::draw(App& app) {
         char label[64];
         snprintf(label, sizeof(label), "%c  %s", letter, nm.empty() ? "(empty)" : nm.c_str());
         if (!found) ImGui::PushStyleColor(ImGuiCol_Text, ui::Muted());
-        if (ImGui::Selectable(label, selected_ == slot)) selected_ = slot;
+        if (ImGui::Selectable(label, selected_ == slot)) {
+            selected_ = slot;
+            sel.Select(DocKind::Roster, EditorSelection::Kind::RosterChar, slot);
+        }
         if (!found) ImGui::PopStyleColor();
         ImGui::PopID();
     }
 
     ui::EndMasterListBeginDetail(layout_, "roster_detail");
+    drawRosterDetail(app);
+    ui::EndMasterDetail();
+}
 
+void RosterSection::drawProperties(App& app, EditorSelection& sel) {
+    (void)app;
+    if (!loaded) {
+        ui::EmptyState("Not loaded", "roster.dat missing from the data folder");
+        return;
+    }
+    if (sel.doc == DocKind::Roster && sel.kind == EditorSelection::Kind::RosterChar &&
+        sel.index >= 0 && sel.index < kRosterCharacterCount)
+        selected_ = sel.index;
+    if (selected_ < 0 || selected_ >= kRosterCharacterCount) selected_ = 0;
+    if (sel.kind == EditorSelection::Kind::None || sel.doc != DocKind::Roster)
+        sel.Select(DocKind::Roster, EditorSelection::Kind::RosterChar, selected_);
+
+    const RosterRecord& r = file_.records[selected_];
+    std::string nmStr = r.nameStr();
+    const char* nm = nmStr.empty() ? "(empty)" : nmStr.c_str();
+    char sub[64];
+    if (selected_ >= 24)
+        snprintf(sub, sizeof(sub), "Hireling · slot %d", selected_);
+    else
+        snprintf(sub, sizeof(sub), "Character · slot %d", selected_);
+    ui::PanelHeader(nm, sub);
+    ui::SectionBlock("Summary");
+    {
+        ui::FormTable form("roster_summary");
+        if (form.begin()) {
+            form.row("Slot", [&] { ImGui::TextUnformatted(std::to_string(selected_).c_str()); });
+        }
+    }
+}
+
+void RosterSection::drawRosterDetail(App& app) {
     RosterRecord& r = file_.records[selected_];
     std::string nm = r.nameStr();
     char sub[64];
@@ -1214,8 +1257,6 @@ void RosterSection::draw(App& app) {
         }
         ImGui::EndTabBar();
     }
-
-    ui::EndMasterDetail();
 }
 
 }  // namespace mm2

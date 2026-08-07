@@ -42,6 +42,14 @@ FetchContent_Declare(
   SOURCE_SUBDIR  not-a-real-subdir
 )
 
+# Syntax-highlighting text editor for .mm2evt (goossens rewrite of ImGuiColorTextEdit).
+FetchContent_Declare(
+  imguicolortextedit
+  GIT_REPOSITORY https://github.com/goossens/ImGuiColorTextEdit.git
+  GIT_TAG        master
+  SOURCE_SUBDIR  not-a-real-subdir
+)
+
 # imnodes (node graph UI for the event editor). Zoom support from Auburn PR #192
 # (https://github.com/Nelarius/imnodes/pull/192) — not yet merged upstream.
 FetchContent_Declare(
@@ -51,15 +59,7 @@ FetchContent_Declare(
   SOURCE_SUBDIR  not-a-real-subdir
 )
 
-# Syntax-highlighting text editor for .mm2evt (goossens rewrite of ImGuiColorTextEdit).
-FetchContent_Declare(
-  imguicolortextedit
-  GIT_REPOSITORY https://github.com/goossens/ImGuiColorTextEdit.git
-  GIT_TAG        master
-  SOURCE_SUBDIR  not-a-real-subdir
-)
-
-FetchContent_MakeAvailable(glfw imgui portable_file_dialogs imnodes stb imguicolortextedit)
+FetchContent_MakeAvailable(glfw imgui portable_file_dialogs stb imguicolortextedit imnodes)
 
 # Auburn zoom fork still references removed ImGuiIO::SetPlatformImeDataFn (imgui 1.91+).
 set(_imnodes_cpp "${imnodes_SOURCE_DIR}/imnodes.cpp")
@@ -93,9 +93,8 @@ target_include_directories(imgui PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
-# PUBLIC so imgui, imnodes, and MM2ED all parse imgui.h with identical config.
-# IMGUI_USER_CONFIG pulls in mm2_imconfig.h which switches to 32-bit draw indices
-# (see that header for why: the imnodes event graph overflows 16-bit indices).
+# IMGUI_USER_CONFIG pulls in mm2_imconfig.h (32-bit draw indices for large meshes /
+# imnodes event graphs).
 target_compile_definitions(imgui PUBLIC
   IMGUI_ENABLE_DOCKING
   IMGUI_USER_CONFIG="mm2_imconfig.h"
@@ -135,6 +134,7 @@ target_include_directories(MM2ED PRIVATE
   ${portable_file_dialogs_SOURCE_DIR}
   ${stb_SOURCE_DIR}
   ${imguicolortextedit_SOURCE_DIR}
+  ${imnodes_SOURCE_DIR}
 )
 
 target_link_libraries(MM2ED PRIVATE imgui imnodes imguicolortextedit glfw OpenGL::GL)
@@ -157,7 +157,6 @@ endif()
 file(GLOB EVENTLANG_SRC CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/src/eventlang/*.cpp
 )
-# EventOps is header-only; AreaNames may be pulled — keep dump lean.
 add_executable(mm2evt_dump
   ${CMAKE_CURRENT_SOURCE_DIR}/tools/mm2evt_dump.cpp
   ${EVENTLANG_SRC}

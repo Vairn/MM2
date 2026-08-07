@@ -349,8 +349,10 @@ void GfxSection::drawTitleTab() {
     ImGui::Image(static_cast<ImTextureID>(titleTexture_), ImVec2(titleCanvasW_ * zoom_, titleCanvasH_ * zoom_));
 }
 
-void GfxSection::draw(App& app) {
+void GfxSection::drawWorkspace(App& app, EditorSelection& sel) {
     (void)app;
+    if (selectedFile_ >= 0)
+        sel.Select(docKind(), EditorSelection::Kind::GfxFile, selectedFile_);
     if (!loaded) {
         ui::EmptyState(isAnm_ ? "No .anm files found in the data folder."
                               : "No .32 files found in the data folder.");
@@ -360,7 +362,10 @@ void GfxSection::draw(App& app) {
     ui::BeginListPanel("gfx_files");
     for (int i = 0; i < static_cast<int>(files_.size()); ++i) {
         if (!ui::ListFilterPass(ui::LegacyMasterDetail("gfx_files"), files_[i].c_str())) continue;
-        if (ImGui::Selectable(files_[i].c_str(), selectedFile_ == i)) selectFile(i);
+        if (ImGui::Selectable(files_[i].c_str(), selectedFile_ == i)) {
+            selectFile(i);
+            sel.Select(docKind(), EditorSelection::Kind::GfxFile, i);
+        }
     }
     ui::ListPanelNextDetail("gfx_view");
     if (selectedFile_ < 0) {
@@ -613,6 +618,27 @@ void GfxSection::draw(App& app) {
     }
 
     ui::EndDetailPanel();
+}
+
+void GfxSection::drawProperties(App& app, EditorSelection& sel) {
+    (void)app;
+    (void)sel;
+    ui::SectionBlock("Graphics viewer");
+    ImGui::TextUnformatted(isReadOnly() ? "Read-only preview" : "Editable");
+    ImGui::TextDisabled("Extension %s · %zu files", ext_, files_.size());
+    if (selectedFile_ >= 0 && selectedFile_ < static_cast<int>(files_.size())) {
+        ImGui::Spacing();
+        ui::SectionBlock("Selected file");
+        ImGui::TextUnformatted(files_[selectedFile_].c_str());
+        if (image_.ok || !image_.frames.empty()) {
+            ImGui::Text("%d frames · depth %d", image_.frameCount, image_.depth);
+            ImGui::TextDisabled("chunk @ 0x%zX", image_.chunkOffset);
+        } else if (!image_.error.empty()) {
+            ui::TextDanger("%s", image_.error.c_str());
+        }
+    } else {
+        ui::EmptyState("No file selected", "Pick a file in the Workspace list");
+    }
 }
 
 }  // namespace mm2

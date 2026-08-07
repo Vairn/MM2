@@ -12,13 +12,20 @@ namespace mm2 {
 
 class MapSection : public Section {
 public:
+    DocKind docKind() const override { return DocKind::Map; }
     const char* title() const override { return "Maps"; }
     const char* fileName() const override { return "map.dat"; }
     bool load(const std::string& dataDir) override;
     bool save(const std::string& dataDir) override;
-    void draw(App& app) override;
+    void drawWorkspace(App& app, EditorSelection& sel) override;
+    void drawProperties(App& app, EditorSelection& sel) override;
+    void focusIndex(int index) override;
+    /** Open screen and select tile at game (y,x). */
+    void focusTile(int screen, int tileY, int tileX);
     void flushPending() override;
     ~MapSection() override;
+
+    int currentScreen() const { return screen_; }
 
     // The four backdrop environments the engine selects between.
     enum class Env { Town, Cavern, Castle, Outdoor };

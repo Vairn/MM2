@@ -20,7 +20,10 @@ std::string hex2(int v) {
     return buf;
 }
 
-std::string formatExpr(const Expr& expr) {
+std::string itemNameComment(int id, const EmitLookups* lookups);
+std::string monsterNameComment(int id, const EmitLookups* lookups);
+
+std::string formatExpr(const Expr& expr, const EmitLookups* lookups) {
     const std::string& k = expr.kind;
     if (k == "class_field" || k == "member_attr") {
         // OP_2D @ 0x16DBA: keep packed args for roundtrip; annotate decode.
@@ -45,12 +48,15 @@ std::string formatExpr(const Expr& expr) {
     if (k == "has_item_id" || k == "consume_item") {
         int probe = expr.getNum("probe", 0);
         char buf[64];
+        std::string line;
         if (probe)
             std::snprintf(buf, sizeof(buf), "consume_item 0x%02X probe=%d", expr.getNum("item"),
                           probe);
         else
             std::snprintf(buf, sizeof(buf), "consume_item 0x%02X", expr.getNum("item"));
-        return buf;
+        line = buf;
+        line += itemNameComment(expr.getNum("item"), lookups);
+        return line;
     }
     if (k == "gold_at_least") return "gold >= " + std::to_string(expr.getNum("amount"));
     if (k == "gems_at_least" || k == "code16")
@@ -69,7 +75,7 @@ std::string formatExpr(const Expr& expr) {
                       "give_item_ok item=0x%02X member=%d charges=%d flags=0x%02X",
                       expr.getNum("item"), expr.getNum("member"), expr.getNum("charges"),
                       expr.getNum("flags"));
-        return buf;
+        return std::string(buf) + itemNameComment(expr.getNum("item"), lookups);
     }
     if (k == "party_effect_ok") {
         std::ostringstream oss;
@@ -92,11 +98,14 @@ std::string formatExpr(const Expr& expr) {
         const int item = expr.getNum("item", expr.getNum("b"));
         const int a = expr.getNum("a", 0);
         // OP_16 packs two args; arg1 is discarded by VM but must roundtrip.
+        std::string line;
         if (a)
             std::snprintf(buf, sizeof(buf), "party_has_item 0x%02X a=0x%02X", item, a);
         else
             std::snprintf(buf, sizeof(buf), "party_has_item 0x%02X", item);
-        return buf;
+        line = buf;
+        line += itemNameComment(item, lookups);
+        return line;
     }
     if (k == "count_title_nibble") {
         char buf[48];
@@ -177,8 +186,37 @@ std::string stringRefComment(const std::string& ref,
     return std::string("  # \"") + one + "\"";
 }
 
+std::string itemNameComment(int id, const EmitLookups* lookups) {
+    if (!lookups || !lookups->itemName) return {};
+    const std::string nm = lookups->itemName(id);
+    if (nm.empty() || nm[0] == '#') return {};
+    std::string one = nm;
+    for (char& c : one)
+        if (c == '\n') c = '@';
+    while (!one.empty() && (one.back() == ' ' || one.back() == '\t')) one.pop_back();
+    if (one.size() > 56) one = one.substr(0, 53) + "...";
+    for (char& c : one)
+        if (c == '"') c = '\'';
+    return std::string("  # ") + one;
+}
+
+std::string monsterNameComment(int id, const EmitLookups* lookups) {
+    if (!lookups || !lookups->monsterName) return {};
+    const std::string nm = lookups->monsterName(id);
+    if (nm.empty() || nm[0] == '#') return {};
+    std::string one = nm;
+    for (char& c : one)
+        if (c == '\n') c = '@';
+    while (!one.empty() && (one.back() == ' ' || one.back() == '\t')) one.pop_back();
+    if (one.size() > 56) one = one.substr(0, 53) + "...";
+    for (char& c : one)
+        if (c == '"') c = '\'';
+    return std::string("  # ") + one;
+}
+
 void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::string, std::string>& lookup,
-                std::vector<std::string>& lines, int locId, const EventFileAst* file);
+                std::vector<std::string>& lines, int locId, const EventFileAst* file,
+                const EmitLookups* lookups);
 
 std::string firstOverlayStringHint(const Location& oloc, int eventId) {
     if (eventId < 0 || eventId >= static_cast<int>(oloc.scripts.size())) return {};
@@ -214,7 +252,8 @@ std::string firstOverlayStringHint(const Location& oloc, int eventId) {
 }
 
 void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::string, std::string>& lookup,
-                std::vector<std::string>& lines, int locId, const EventFileAst* file) {
+                std::vector<std::string>& lines, int locId, const EventFileAst* file,
+                const EmitLookups* lookups) {
     std::string pad(static_cast<size_t>(depth) * 2, ' ');
     const std::string& k = stmt.kind;
 
@@ -256,7 +295,7 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
         return;
     }
     if (k == "set_cond") {
-        lines.push_back(pad + "set_cond " + formatExpr(stmt.cond));
+        lines.push_back(pad + "set_cond " + formatExpr(stmt.cond, lookups));
         return;
     }
     if (k == "skip_if_true") {
@@ -275,11 +314,11 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
         return;
     }
     if (k == "if") {
-        lines.push_back(pad + "if " + formatExpr(stmt.cond) + ":");
-        for (const auto& s : stmt.thenBody) formatStmt(s, depth + 1, lookup, lines, locId, file);
+        lines.push_back(pad + "if " + formatExpr(stmt.cond, lookups) + ":");
+        for (const auto& s : stmt.thenBody) formatStmt(s, depth + 1, lookup, lines, locId, file, lookups);
         if (!stmt.elseBody.empty()) {
             lines.push_back(pad + "else:");
-            for (const auto& s : stmt.elseBody) formatStmt(s, depth + 1, lookup, lines, locId, file);
+            for (const auto& s : stmt.elseBody) formatStmt(s, depth + 1, lookup, lines, locId, file, lookups);
         }
         return;
     }
@@ -384,22 +423,97 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
     if (k == "fight") {
         std::ostringstream oss;
         oss << pad << "fight monsters";
+        std::vector<int> mids;
         auto mit = stmt.lists.find("monsters");
         if (mit != stmt.lists.end())
-            for (int x : mit->second) oss << " " << hex2(x);
+            for (int x : mit->second) {
+                oss << " " << hex2(x);
+                mids.push_back(x);
+            }
         oss << " flags";
         auto fit = stmt.lists.find("flags");
         if (fit != stmt.lists.end())
             for (int x : fit->second) oss << " " << hex2(x);
+        // Name annotation: grouped spawn list after the opcode.
+        if (!mids.empty() && lookups && lookups->monsterName) {
+            std::string names;
+            int prev = -1;
+            int run = 0;
+            auto flush = [&](int id, int n) {
+                if (id == 0 || n <= 0) return;
+                std::string nm = lookups->monsterName(id);
+                if (nm.empty() || nm[0] == '#') {
+                    char hx[8];
+                    std::snprintf(hx, sizeof(hx), "0x%02X", id);
+                    nm = hx;
+                }
+                if (!names.empty()) names += ", ";
+                if (n > 1) names += std::to_string(n) + "x ";
+                names += nm;
+            };
+            for (int m : mids) {
+                if (m == 0) continue;
+                if (m == prev)
+                    ++run;
+                else {
+                    flush(prev, run);
+                    prev = m;
+                    run = 1;
+                }
+            }
+            flush(prev, run);
+            if (fit != stmt.lists.end() && fit->second.size() >= 2 && fit->second[0] != 0 &&
+                fit->second[1] > 0) {
+                std::string nm = lookups->monsterName(fit->second[0]);
+                if (nm.empty() || nm[0] == '#') {
+                    char hx[8];
+                    std::snprintf(hx, sizeof(hx), "0x%02X", fit->second[0]);
+                    nm = hx;
+                }
+                if (!names.empty()) names += " + ";
+                names += std::to_string(fit->second[1]) + "x " + nm + " overflow";
+            }
+            if (!names.empty()) {
+                std::string one = names;
+                for (char& c : one)
+                    if (c == '\n') c = '@';
+                if (one.size() > 64) one = one.substr(0, 61) + "...";
+                oss << "  # fixed: " << one;
+            }
+        }
         lines.push_back(oss.str());
         return;
     }
     if (k == "fight_b") {
         std::ostringstream oss;
         oss << pad << "fight_b";
+        std::vector<int> mids;
         auto it = stmt.lists.find("data");
         if (it != stmt.lists.end())
-            for (int x : it->second) oss << " " << hex2(x);
+            for (int x : it->second) {
+                oss << " " << hex2(x);
+                if (x != 0) mids.push_back(x);
+            }
+        if (!mids.empty() && lookups && lookups->monsterName) {
+            std::string names;
+            std::vector<int> seen;
+            for (int m : mids) {
+                if (std::find(seen.begin(), seen.end(), m) != seen.end()) continue;
+                seen.push_back(m);
+                std::string nm = lookups->monsterName(m);
+                if (nm.empty() || nm[0] == '#') continue;
+                if (!names.empty()) names += ", ";
+                names += nm;
+            }
+            if (!names.empty()) {
+                if (names.size() > 48) names = names.substr(0, 45) + "...";
+                oss << "  # random pool: " << names;
+            } else {
+                oss << "  # seeded random";
+            }
+        } else {
+            oss << "  # seeded random";
+        }
         lines.push_back(oss.str());
         return;
     }
@@ -459,11 +573,11 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
         return;
     }
     if (k == "give_item") {
+        const int item = stmt.getNum("item");
         char buf[96];
         std::snprintf(buf, sizeof(buf), "give_item item=0x%02X member=%d charges=%d flags=0x%02X",
-                      stmt.getNum("item"), stmt.getNum("member"), stmt.getNum("charges"),
-                      stmt.getNum("flags"));
-        lines.push_back(pad + buf);
+                      item, stmt.getNum("member"), stmt.getNum("charges"), stmt.getNum("flags"));
+        lines.push_back(pad + buf + itemNameComment(item, lookups));
         return;
     }
     if (k == "clear_tile_event") {
@@ -525,14 +639,14 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
     }
     if (k == "unlifted") {
         lines.push_back(pad + "@unlifted {");
-        for (const auto& s : stmt.body) formatStmt(s, depth + 1, lookup, lines, locId, file);
+        for (const auto& s : stmt.body) formatStmt(s, depth + 1, lookup, lines, locId, file, lookups);
         lines.push_back(pad + "}");
         return;
     }
     if (k == "unreachable") {
         // Keep as real stmts so text/AST roundtrip still emits retail dead tails.
         lines.push_back(pad + "# unreachable (prior go_to/abort/end stops script):");
-        for (const auto& s : stmt.body) formatStmt(s, depth, lookup, lines, locId, file);
+        for (const auto& s : stmt.body) formatStmt(s, depth, lookup, lines, locId, file, lookups);
         return;
     }
     if (k == "raw_op") {
@@ -568,7 +682,7 @@ std::string formatTriggerCond(const Trigger& t) {
 }  // namespace
 
 std::string emitLocation(const Location& loc, const std::string& areaComment,
-                         const EventFileAst* file) {
+                         const EventFileAst* file, const EmitLookups* lookups) {
     std::vector<std::string> lines;
     if (!areaComment.empty()) lines.push_back("# " + areaComment);
     lines.push_back("location " + std::to_string(loc.id));
@@ -681,7 +795,7 @@ std::string emitLocation(const Location& loc, const std::string& areaComment,
         if (sc.body.empty() && !sc.isPlainText) continue;
         lines.push_back("");
         lines.push_back("script " + sc.name + ":  @event " + std::to_string(sc.eventId));
-        for (const auto& stmt : sc.body) formatStmt(stmt, 1, lookup, lines, loc.id, file);
+        for (const auto& stmt : sc.body) formatStmt(stmt, 1, lookup, lines, loc.id, file, lookups);
     }
 
     std::ostringstream out;

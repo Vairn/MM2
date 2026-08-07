@@ -17,11 +17,13 @@ public:
         : title_(title), ext_(ext), isAnm_(isAnm) {}
     ~GfxSection() override;
 
+    DocKind docKind() const override { return isAnm_ ? DocKind::GfxAnm : DocKind::Gfx32; }
     const char* title() const override { return title_; }
     const char* fileName() const override { return ""; }  // scans many files
     bool load(const std::string& dataDir) override;       // scans the folder
     bool save(const std::string& dataDir) override { (void)dataDir; return false; }
-    void draw(App& app) override;
+    void drawWorkspace(App& app, EditorSelection& sel) override;
+    void drawProperties(App& app, EditorSelection& sel) override;
 
 private:
     void selectFile(int idx);

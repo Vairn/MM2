@@ -30,16 +30,17 @@ static const char* castName(SpellCast c) {
     }
 }
 
-void SpellsSection::draw(App& app) {
+void SpellsSection::drawWorkspace(App& app, EditorSelection& sel) {
     (void)app;
     if (!loaded) {
-        ui::EmptyState("spells.dat not loaded.");
+        ui::EmptyState("spells.dat not loaded", "Open a folder containing spells.dat");
         return;
     }
+    if (sel.doc == DocKind::Spells && sel.kind == EditorSelection::Kind::Spell && sel.index >= 0 &&
+        sel.index < kSpellsRecordCount)
+        selected_ = sel.index;
 
-    if (!ui::BeginMasterList(layout_, "spell_list", "96 spells")) {
-        return;
-    }
+    if (!ui::BeginMasterList(layout_, "spell_list")) return;
     int prevSchool = -1;
     for (int i = 0; i < kSpellsRecordCount; ++i) {
         const SpellInfo& info = SpellsFile::info(i);
@@ -54,10 +55,17 @@ void SpellsSection::draw(App& app) {
             ImGui::TextDisabled("%s", info.school == SpellSchool::Sorcerer ? "Sorcerer" : "Cleric");
             prevSchool = sch;
         }
-        if (ImGui::Selectable(label, selected_ == i)) selected_ = i;
+        if (ImGui::Selectable(label, selected_ == i)) {
+            selected_ = i;
+            sel.Select(DocKind::Spells, EditorSelection::Kind::Spell, i);
+        }
     }
     ui::EndMasterListBeginDetail(layout_, "spell_detail");
+    drawSpellDetail();
+    ui::EndMasterDetail();
+}
 
+void SpellsSection::drawSpellDetail() {
     const SpellInfo& info = SpellsFile::info(selected_);
     SpellRecord& r = file_.records[selected_];
     char prefix = info.school == SpellSchool::Sorcerer ? 'S' : 'C';
@@ -155,8 +163,39 @@ void SpellsSection::draw(App& app) {
         DrawHexView("spell_hex", bytes, 2, off);
         ui::EndHexBlock();
     }
+}
 
-    ui::EndMasterDetail();
+void SpellsSection::drawProperties(App& app, EditorSelection& sel) {
+    (void)app;
+    if (!loaded) {
+        ui::EmptyState("Not loaded", "spells.dat missing from the data folder");
+        return;
+    }
+    if (sel.doc == DocKind::Spells && sel.kind == EditorSelection::Kind::Spell && sel.index >= 0 &&
+        sel.index < kSpellsRecordCount)
+        selected_ = sel.index;
+    if (selected_ < 0 || selected_ >= kSpellsRecordCount) selected_ = 0;
+    if (sel.kind == EditorSelection::Kind::None || sel.doc != DocKind::Spells)
+        sel.Select(DocKind::Spells, EditorSelection::Kind::Spell, selected_);
+
+    const SpellInfo& info = SpellsFile::info(selected_);
+    const SpellRecord& r = file_.records[selected_];
+    ui::PanelHeader(info.name, "secondary");
+    ui::SectionBlock("Summary");
+    {
+        ui::FormTable form("spell_summary");
+        if (form.begin()) {
+            form.row("School", [&] {
+                ImGui::TextUnformatted(info.school == SpellSchool::Sorcerer ? "Sorcerer" : "Cleric");
+            });
+            form.row("Cost", [&] { ImGui::TextUnformatted(formatSpellCost(info).c_str()); });
+            form.row("Raw", [&] {
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%02X %02X", r.b0, r.b1);
+                ImGui::TextUnformatted(buf);
+            });
+        }
+    }
 }
 
 }  // namespace mm2
