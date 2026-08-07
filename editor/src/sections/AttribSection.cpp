@@ -228,6 +228,36 @@ void AttribSection::drawWorkspace(App& app, EditorSelection& sel) {
         ImGui::EndTable();
     }
 
+    ui::SectionBlock("Door", "+0x12 strength · +0x13 trap");
+    {
+        ui::FormGrid grid("attrib_door");
+        if (grid.begin()) {
+            grid.row2(
+                "Bash strength (+0x12)",
+                [&] {
+                    ui::SetFieldShort();
+                    int v = s.raw[attrib_off::kDoorStrength];
+                    if (ImGui::InputInt("##doorstr", &v)) {
+                        s.raw[attrib_off::kDoorStrength] = static_cast<uint8_t>(v & 0xFF);
+                        dirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Materialized to A4-$5608; consumed by the bash handler at ASM 0x9C2A.");
+                },
+                "Unlock trap (+0x13)",
+                [&] {
+                    ui::SetFieldShort();
+                    int v = s.raw[attrib_off::kDoorTrap];
+                    if (ImGui::InputInt("##doortrap", &v)) {
+                        s.raw[attrib_off::kDoorTrap] = static_cast<uint8_t>(v & 0xFF);
+                        dirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Materialized to A4-$5607; consumed by the unlock handler at ASM 0x20D6E.");
+                });
+        }
+    }
+
     if (ui::BeginHexBlock("Raw record")) {
         DrawHexView("attrib_hex", s.raw.data(), kAttribRecordSize, screen_ * kAttribRecordSize);
         ui::EndHexBlock();
@@ -245,10 +275,37 @@ void AttribSection::drawProperties(App& app, EditorSelection& sel) {
     ui::SectionBlock("Screen");
     ImGui::Text("%d: %s", screen_, areaLabel(screen_).c_str());
     ImGui::TextDisabled("%s", s.isOutside() ? "overland" : envTypeName(s.envType()));
+    if (!s.isOutside())
+        ImGui::TextDisabled("level %d · complex %04X", s.level(), s.complexId());
     ImGui::Text("Entry (%d, %d)", s.entryX(), s.entryY());
     ImGui::Text("Transition → %d (%s)", s.transitionScreen(),
                 areaLabel(s.transitionScreen()).c_str());
     ImGui::TextDisabled("Flags 0x%02X", s.raw[attrib_off::kFlags]);
+    if (s.raw[attrib_off::kFlags2] != 0)
+        ImGui::TextDisabled("Flags2 0x%02X", s.raw[attrib_off::kFlags2]);
+    ui::SectionBlock("Door");
+    ui::FormTable form("attrib_prop_door");
+    if (form.begin()) {
+        form.row("Bash strength", [&] {
+            ui::SetFieldShort();
+            int v = s.doorStrength();
+            if (ImGui::InputInt("##pdoorstr", &v)) {
+                file_.screens[screen_].raw[attrib_off::kDoorStrength] = static_cast<uint8_t>(v & 0xFF);
+                dirty = true;
+            }
+        });
+        form.row("Unlock trap", [&] {
+            ui::SetFieldShort();
+            int v = s.doorTrap();
+            if (ImGui::InputInt("##pdoortrap", &v)) {
+                file_.screens[screen_].raw[attrib_off::kDoorTrap] = static_cast<uint8_t>(v & 0xFF);
+                dirty = true;
+            }
+        });
+    }
+    ui::SectionBlock("Era gate");
+    ImGui::Text("Gate %d", s.eraGate());
+    ImGui::TextDisabled("events run when this == current era");
 }
 
 }  // namespace mm2

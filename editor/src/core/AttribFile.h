@@ -10,11 +10,18 @@
 //     +0x05..+0x08  world adjacency: 4 neighbour screen ids (opposite pairs
 //                   (0x05,0x07) and (0x06,0x08)); == area id when interior.
 //                   Verified fully symmetric across all 60 records.
+//     +0x0E  entry coord (packed (Y<<4)|X party spawn/safe square)
+//     +0x0F  era gate (events run when this == current era index)
+//     +0x11  sublayout param (observed)
+//     +0x12  door strength (materialized A4-$5608; bash @ 0x9C2A)
+//     +0x13  door trap (materialized A4-$5607; unlock @ 0x20D6E)
+//     +0x14  sublayout param (observed)
 //     +0x15  outside area label byte / interior complex-id hi byte
 //     +0x15..+0x16  complex id (big-endian word, shared town<->cavern)
 //     +0x17  level/floor (interior)
+//     +0x1B  flags2 (observed; nonzero on a few screens)
 //     +0x20..+0x3F  roof flags (32 bytes * 8 bits = 256 roof bits)
-//   Remaining bytes still unresolved; preserved raw.
+//   Otherwise preserved raw.
 
 #include <array>
 #include <string>
@@ -39,10 +46,13 @@ constexpr int kEntryCoord = 0x0E;       // packed (Y<<4)|X party entry pos
 constexpr int kEraGate = 0x0F;          // compared vs current era index
 constexpr int kOutsideLabel = 0x15;
 constexpr int kComplexId = 0x15;        // big-endian word (interior)
+constexpr int kDoorStrength = 0x12;     // materialized A4-$5608; bash @ 0x9C2A
+constexpr int kDoorTrap = 0x13;         // materialized A4-$5607; unlock @ 0x20D6E
 constexpr int kTransitionCoord = 0x16;  // packed (Y<<4)|X dest pos
 constexpr int kLevel = 0x17;
 constexpr int kTransitionScreen = 0x18;
 constexpr int kFlags = 0x1A;            // btst bitfield (bits 0,3,4,5,6,7)
+constexpr int kFlags2 = 0x1B;           // observed (a few screens: 0xB0,0xD0,0xE0)
 constexpr int kRoofBits = 0x20;   // 32 bytes
 constexpr int kRoofBytes = 32;
 }  // namespace attrib_off
@@ -67,6 +77,8 @@ struct AttribScreen {
     }
     uint8_t level() const { return raw[attrib_off::kLevel]; }
     uint8_t eraGate() const { return raw[attrib_off::kEraGate]; }
+    uint8_t doorStrength() const { return raw[attrib_off::kDoorStrength]; }
+    uint8_t doorTrap() const { return raw[attrib_off::kDoorTrap]; }
     uint8_t transitionScreen() const { return raw[attrib_off::kTransitionScreen]; }
     uint8_t flags() const { return raw[attrib_off::kFlags]; }
     int entryX() const { return raw[attrib_off::kEntryCoord] & 0x0F; }
