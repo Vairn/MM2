@@ -125,6 +125,15 @@ set(MM2_AUTOMAP_SOURCES
   src/gameplay/RosterSkills.cpp
 )
 
+# Play HUD chrome (classic + Agui) — shared by mm2 and GameSession-based goldens.
+set(MM2_PLAY_HUD_SOURCES
+  src/ui/PlayHudKind.cpp
+  src/ui/PlayHudFactory.cpp
+  src/ui/ClassicPlayHud.cpp
+  src/ui/AguiPlayHud.cpp
+  src/ui/AguiAtlas.cpp
+)
+
 if(NOT AMIGA)
   add_executable(image32_golden tests/image32_golden.c)
   target_link_libraries(image32_golden PRIVATE mm2_codecs mm2_audio_stub)
@@ -344,6 +353,7 @@ if(NOT AMIGA)
     src/GameSession.cpp
     ${MM2_AUTOMAP_SOURCES}
     ${MM2_PLATFORM_SOURCES}
+    ${MM2_PLAY_HUD_SOURCES}
     src/events/ScriptedSceneEngine.cpp
     src/gameplay/Movement.cpp
     src/gameplay/PlaySessionInput.cpp
@@ -385,6 +395,7 @@ if(NOT AMIGA)
     src/GameSession.cpp
     ${MM2_AUTOMAP_SOURCES}
     ${MM2_PLATFORM_SOURCES}
+    ${MM2_PLAY_HUD_SOURCES}
     src/events/ScriptedSceneEngine.cpp
     src/gameplay/Movement.cpp
     src/gameplay/PlaySessionInput.cpp
@@ -498,11 +509,7 @@ set(MM2_GAME_SOURCES
   src/ui/AmigaCharacterUi.cpp
   src/ui/RosterSkillDisplay.cpp
   src/ui/PlayTownServiceUi.cpp
-  src/ui/PlayHudKind.cpp
-  src/ui/PlayHudFactory.cpp
-  src/ui/ClassicPlayHud.cpp
-  src/ui/AguiPlayHud.cpp
-  src/ui/AguiAtlas.cpp
+  ${MM2_PLAY_HUD_SOURCES}
   ${MM2_PLATFORM_SOURCES}
 )
 

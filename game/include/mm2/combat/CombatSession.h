@@ -147,6 +147,9 @@ public:
     /** True while sheet cast awaits party/item/monster pick outside combat. */
     bool sheetCastPending() const { return exploration_cast_; }
 
+    /** 0x4AAA (+ 0xFD8C/0xFE00 front-rank expand on fall). */
+    void applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint16_t dmg, const char *mon_name);
+
 private:
     struct ArenaReward {
         bool active = false;
@@ -233,8 +236,6 @@ private:
     int pickMonsterMeleeTarget103BA(GameStateView &gs);
     /** 0x10478: to-hit/damage vs party; writes -$F0C. */
     uint16_t monsterMeleeDamage10478(GameStateView &gs, int mon_slot, int party_slot);
-    /** 0x4AAA KO path after monster hit. */
-    void applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint16_t dmg, const char *mon_name);
     /** Seed data-hunk tables -$6F2E / -$7464 into GS (once per fight). */
     void seedCombatStaticTables(GameStateView &gs);
     /** 0x10894: resist/halve/status/damage; messages + 0x10ED4 HP apply. */

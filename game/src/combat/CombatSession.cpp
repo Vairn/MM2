@@ -4998,9 +4998,11 @@ void CombatSession::applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint
      * codec hp_max), NOT +$74 (HP ceiling / codec hp_current). Same path as
      * eventVmApplyOp31Damage. */
     victim.condition = static_cast<uint8_t>(victim.condition & 0xEF);
+    bool fell = false; /* 0x4AAA local -$3(a5): set when KO / already-KO→dead */
     if ((victim.condition & 0x40) != 0) {
         victim.condition = 0x81;
         victim.hp_max = 0;
+        fell = true;
         audio::playSoundSeq(6, gs.soundsEnabled(), gs.walkBeepEnabled());
         std::snprintf(status_line_, sizeof(status_line_), "%s %s %s - %s falls!", mon_name, verb,
                       victim_name, victim_name);
@@ -5011,10 +5013,18 @@ void CombatSession::applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint
     } else {
         victim.condition = static_cast<uint8_t>(victim.condition | 0x40);
         victim.hp_max = 0;
+        fell = true;
         /* 0xFD8C / 0xFE0C: play_sound_seq id 6 on party KO ("goes down" / "is killed"). */
         audio::playSoundSeq(6, gs.soundsEnabled(), gs.walkBeepEnabled());
         std::snprintf(status_line_, sizeof(status_line_), "%s %s %s - %s falls!", mon_name, verb,
                       victim_name, victim_name);
+    }
+    /* 0xFDF4..0xFE00 (after 0x4AAA sets condition >= $40): if -$5E4D < party
+     * size -$795A → addq.b #1,-$5E4D, then 0x12848 redraws the strip. Pulls
+     * the next back-rank slot into hand-to-hand (checkmark / melee options). */
+    if (fell && front_rank_count_ < party_count_) {
+        ++front_rank_count_;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_FRONT_RANK_N, static_cast<uint8_t>(front_rank_count_));
     }
 }
 

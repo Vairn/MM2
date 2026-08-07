@@ -53,7 +53,7 @@
 #define MM2_GS_RETREAT_DIFF     (-0x560D)  /* byte  ($A9F3) = attrib 0x0D; flee if rng<$thresh @ 0x116CA/0x13148 */
 #define MM2_GS_PARTY_RAN_LATCH  (-0x5E4C)  /* byte  ($A1B4) set #1 on successful char Run @ 0x116D2; → 0x11646 */
 #define MM2_GS_MELEE_RANGE_N    (-0x0524)  /* byte  ($FADC) monsters in melee reach; 0x11D0C / AI @ 0x1079A */
-#define MM2_GS_FRONT_RANK_N     (-0x5E4D)  /* byte  ($A1B3) party front-rank cutoff; 0x11D0C / 0x103BA */
+#define MM2_GS_FRONT_RANK_N     (-0x5E4D)  /* byte  ($A1B3) party front-rank cutoff; 0x11D0C / 0xFE00 KO expand / 0x103BA */
 #define MM2_GS_ATTRIB_FLAGS     (-0x5600)  /* byte  ($AA00) = attrib 0x1A flags */
 #define MM2_GS_SIGN_ENV_ID      (-0x79E3)  /* byte  ($861D) OP_0B table pick @ 0x15772 */
 #define MM2_GS_RUNTIME_ENV      (-0x7660)  /* byte  ($89A0) area gfx env id; surface_flag&0xF @ 0x1650 */

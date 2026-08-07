@@ -483,6 +483,72 @@ int main()
         expect(!has50, "sprite gallery: 5th distinct picture dropped by cap", fails);
     }
 
+    /* ---- 0xFD8C/0xFE00: KO expands -$5E4D so the next back-rank slot steps up. */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[1];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x0F);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(mon, MM2_MON_OFF_DAMAGE, 0x01);
+
+        /* Outdoor + 6 members: 0x11DDE front = rng/2 + party - 2 → 4..5 (< 6). */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_VIEW_MODE, 1);
+        std::memset(&roster, 0, sizeof(roster));
+        launch = Mm2PartyLaunch{};
+        launch.party_count = 6;
+        for (int i = 0; i < 6; ++i) {
+            char name[8];
+            std::snprintf(name, sizeof(name), "P%d", i + 1);
+            mm2_roster_set_name(&roster.records[i], name);
+            roster.records[i].hp_current = 50;
+            roster.records[i].hp_max = 50;
+            roster.records[i].speed_current = 50;
+            roster.records[i].condition = 0;
+            launch.roster_slots[i] = static_cast<int8_t>(i);
+        }
+        seedFixedEncounter(gs, 1);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "ko-expand: enter outdoor fight", fails);
+
+        /* 0x11D0C rolls -$5E4D at round-loop entry (after party options). */
+        platform::KeyState keys{};
+        keys.last_ascii = ' ';
+        combat.tick(gs, world, keys);
+        if (combat.state() == CombatState::AwaitingPartyOptions) {
+            keys.last_ascii = 'A';
+            combat.tick(gs, world, keys);
+        }
+        for (int i = 0; i < 32 && combat.active() && combat.state() != CombatState::AwaitingCommand; ++i) {
+            keys.last_ascii = ' ';
+            combat.tick(gs, world, keys);
+        }
+        expect(combat.state() == CombatState::AwaitingCommand, "ko-expand: reached command turn", fails);
+
+        int front_before = 0;
+        for (int i = 0; i < 6; ++i) {
+            if (combat.partySlotInFrontRank(i)) {
+                ++front_before;
+            }
+        }
+        expect(front_before >= 4 && front_before < 6,
+               "ko-expand: outdoor front rank is 4..5 before KO", fails);
+        expect(!combat.partySlotInFrontRank(front_before),
+               "ko-expand: slot at cutoff is back-rank before KO", fails);
+
+        combat.applyPartyDamage4AAA(gs, 0, 50, "Rat");
+        expect((roster.records[0].condition & 0x40) != 0, "ko-expand: slot 0 unconscious", fails);
+        expect(combat.partySlotInFrontRank(front_before),
+               "ko-expand: next slot gains front-rank check after KO (0xFE00)", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_FRONT_RANK_N) == static_cast<uint8_t>(front_before + 1),
+               "ko-expand: A4-$5E4D matches expanded cutoff", fails);
+    }
+
     /* Combat cast @ 0x11A90 / 0x79EE: level+number on message band, no spell grid. */
     {
         rng.reseed(1);
