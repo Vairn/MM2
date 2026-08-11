@@ -204,7 +204,9 @@ void buildFrustum(const std::array<uint8_t, kHoodBytes> &hood, const FacingCtx &
     }
 
     auto norm = [&](int a, int bb) {
-        if (slots[a] != 0 && slots[bb] == static_cast<uint8_t>(WallField::Door)) {
+        // ASM 0x2B72/0x2B88/0x2B9E/0x2BB4 flatten value 3 (torch) to 1 when the
+        // front slot (a) is solid. Door (2) keeps its +0x10 door frame.
+        if (slots[a] != 0 && slots[bb] == static_cast<uint8_t>(WallField::Torch)) {
             slots[bb] = static_cast<uint8_t>(WallField::Wall);
         }
     };

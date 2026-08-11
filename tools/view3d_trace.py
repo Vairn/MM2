@@ -202,7 +202,7 @@ def build_frustum(hood: Sequence[int], f: FacingCtx) -> List[int]:
                 put_slot(slots, S_F15, b(3), d1, sh_fwd)
 
     def norm(a: int, bb: int) -> None:
-        # Door (3) beside an open side → plain wall (1) @0x2B6A..0x2BBC.
+        # Torch (3) beside an open side → plain wall (1) @0x2B6A..0x2BBC.
         if slots[a] != 0 and slots[bb] == 3:
             slots[bb] = 1
 

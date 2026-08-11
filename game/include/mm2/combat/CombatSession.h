@@ -44,6 +44,7 @@ enum class CombatState : uint8_t {
     AwaitingItemPick,         /* 0xB56E: 'A'..'F' backpack letter (Recharge/Dup/Enchant/Uncurse) */
     AwaitingExchangeWith,     /* 0x11B1A → 0x20FF2: 'with (1-N)?' (first slot = active) */
     AwaitingActionAck,        /* 0x132E6: delay(-$79AD)*$19+1 frames, or key advances */
+    AwaitingVictoryDismiss,   /* 0x124D2 victory panel; any key ends fight (ASM delay $32) */
 };
 
 enum class CombatOutcome : uint8_t { None, Victory, Fled, Defeated };
@@ -81,10 +82,34 @@ public:
                state_ == CombatState::AwaitingCastNumber || state_ == CombatState::AwaitingCastTarget ||
                state_ == CombatState::AwaitingAttackTarget || state_ == CombatState::AwaitingPartyPick ||
                state_ == CombatState::AwaitingItemPick || state_ == CombatState::AwaitingExchangeWith ||
-               state_ == CombatState::AwaitingActionAck;
+               state_ == CombatState::AwaitingActionAck || state_ == CombatState::AwaitingVictoryDismiss;
     }
     CombatState state() const { return state_; }
     CombatOutcome lastOutcome() const { return outcome_; }
+    /** Per-survivor XP share shown on the 0x124D2 victory panel (-$6FC6 after divide). */
+    uint32_t victoryXpShare() const { return victory_xp_share_; }
+
+    /** Remake Full Auto (Tier 3) — not in retail; Ctrl-A is the ASM quick path. */
+    void setAutoEnabled(bool on);
+    bool autoEnabled() const { return auto_enabled_; }
+    /** Apply decideAuto for AwaitingCommand: strike / cast / end turn. */
+    bool runAutoCommand(GameStateView &gs);
+    /** Complete AwaitingCastTarget / AwaitingPartyPick / AwaitingAttackTarget. */
+    bool runAutoPicker(GameStateView &gs);
+
+    /** Accessors for CombatAuto::decide (policy reads). */
+    void autoCommandFlags(bool &melee, bool &shoot, bool &cast) const
+    {
+        commandFlagsForActiveSlot(melee, shoot, cast);
+    }
+    int autoPartyCount() const { return party_count_; }
+    int autoAliveMonsterCount() const { return countAliveMonsters(); }
+    int autoFirstAliveMonster() const { return firstAliveMonster(); }
+    const Mm2RosterRecord *autoRosterRecord(int party_slot) const
+    {
+        const int idx = rosterIndexForPartySlot(party_slot);
+        return (idx >= 0 && roster_) ? &roster_->records[idx] : nullptr;
+    }
 
     /** Arena Games ticket combat (OP_0E selector 0x08 / asm 0x9F04-0x9F2C):
      *  call before enter() so a Victory grants the color/screen gold table
@@ -350,11 +375,19 @@ private:
     uint8_t bribe_roll_ = 0;     /* rng(1,100) latched at party-options entry */
     uint8_t bribe_demand_ = 0;   /* attrib+0x11 → A4-$5609 @ 0x12F58 */
     uint8_t overflow_type_ = 0;
-    uint8_t surprise_mode_ = 0;  /* 2 = party surprised, 3 = monsters surprised */
+    uint8_t surprise_mode_ = 0;  /* 2 = you surprised them, 3 = monsters surprised you */
     uint32_t xp_pool_ = 0;       /* -$6FC6: combat XP accrued from kills this fight */
+    uint32_t victory_xp_share_ = 0; /* 0x12490: -$6FC6 after / survivor count */
+    uint16_t victory_battles_won_ = 0; /* -$7970 after 0x1215A addq */
     uint8_t saved_panel_mode_ = 0;
     /** Set once at startRoundLoop (0x12A22 / 0x135BE); cleared on fight exit. */
     bool round_layout_active_ = false;
+    /** Remake Full Auto latch — cleared on fight exit. */
+    bool auto_enabled_ = false;
+    bool auto_buff_latch_ = false;
+    /** Pending Auto party-pick / monster letter after resolvePlayerCast. */
+    int auto_pending_party_slot_ = -1;
+    int auto_pending_monster_slot_ = -1;
     ArenaReward arena_reward_{};
 
     char status_line_[160] = {};

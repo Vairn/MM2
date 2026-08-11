@@ -515,7 +515,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         if (hit < 0) {
             break;
         }
-        eventVmClearTileEventFlag(gs.a4(), static_cast<int>(cy), static_cast<int>(cx));
+        eventVmClearTileEventFlag(gs.a4(), world, static_cast<int>(cy), static_cast<int>(cx));
         gs.setCoordX(kPortalDstX[hit]);
         gs.setCoordY(kPortalDstY[hit]);
         mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
@@ -548,7 +548,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
             std::snprintf(iname, sizeof(iname), "item #%u", static_cast<unsigned>(item_id));
         }
         if (eventVmPartyGiveItem(gs.a4(), roster, launch, item_id, 0, 0)) {
-            eventVmClearTileEventFlag(gs.a4(), static_cast<int>(gs.coordY()),
+            eventVmClearTileEventFlag(gs.a4(), world, static_cast<int>(gs.coordY()),
                                       static_cast<int>(gs.coordX()));
             mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
                           static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));

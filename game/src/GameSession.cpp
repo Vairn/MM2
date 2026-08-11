@@ -20,6 +20,8 @@
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/gfx/CombatPanel.h"
 
+#include "mm2_found_items.h"
+
 #include "mm2/platform/Audio.h"
 #include "mm2/platform/Platform.h"
 #if MM2_HOST_AMIGA
@@ -407,11 +409,16 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     mm2_party_launch_apply(gs_.a4(), &launch_);
     /* Reload path @ 0x86F6 parses the roster.dat global tail back into A4;
      * restore the 24-byte event/quest bank (-$798B) so quest flags and
-     * hireling A..X unlocks persist across sessions. */
+     * hireling A..X unlocks persist across sessions. Also restore battles
+     * won/lost (-$7970/-$796E @ tail +$040/+$042; stream @ 0x83F2 / 0x8414). */
     for (int i = 0; i < MM2_ROSTER_TAIL_EVENT_BANK_LEN; ++i) {
         mm2_gs_set_u8(gs_.a4(), MM2_GS_EVENT_VAR_BANK + i,
                       mm2_roster_tail_u8(&roster_, MM2_ROSTER_TAIL_EVENT_BANK + i));
     }
+    mm2_gs_set_u16(gs_.a4(), MM2_GS_BATTLES_WON,
+                   mm2_roster_tail_u16(&roster_, MM2_ROSTER_TAIL_BATTLES_WON));
+    mm2_gs_set_u16(gs_.a4(), MM2_GS_BATTLES_LOST,
+                   mm2_roster_tail_u16(&roster_, MM2_ROSTER_TAIL_BATTLES_LOST));
 
     mm2_image32_set_preview_opaque(0);
 
@@ -466,6 +473,9 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     }
 
     automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_, launch_);
+
+    /* game_world_boot @ 0xFAC: -$7F14 living check → Death Strikes if wipe. */
+    maybeBeginPartyWipeGameOver();
 
     markDirty();
 
@@ -572,6 +582,8 @@ void GameSession::tickBootstrap()
         automap_.markPartyTileIfCartographer(gs_.screenId(), gs_.coordX(), gs_.coordY(), roster_,
                                                launch_);
         bootstrapping_ = false;
+        /* Same 0xFAC living check as SDL start once assets/events are ready. */
+        maybeBeginPartyWipeGameOver();
         MM2_DBG("MM2 GOTO: bootstrap DONE assets_ok=%d\n", assets_ok_ ? 1 : 0);
         markDirty();
         return;
@@ -750,16 +762,32 @@ void GameSession::finishCombat()
      * any post-combat script can fire, mirroring the ROM's -$7F1A pending
      * latch (0x16368-0x1637C). */
     mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 0);
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
 
-    /* Total wipe: retail plays funeral tones @ 0x7DCC then leaves corpses at the
-     * entry square for temple raise. Remake must not persist an all-dead party
-     * (finishCombat used to save immediately → soft-lock saves). */
+    /* Total wipe (defeat or flee with no living): retail 0x11646 then the play
+     * loop's -$7F14 living check → Death Strikes @ 0x14106. Skip tile re-scan
+     * so the encounter Y/N cannot stack under the blue panel. */
     const bool total_wipe =
-        combat_.lastOutcome() == combat::CombatOutcome::Defeated && partyAllDead();
-    if (!total_wipe) {
-        saveRosterWithGlobalTail(); /* persist combat XP/gold/HP */
+        partyAllDead() && combat_.lastOutcome() != combat::CombatOutcome::Victory;
+    if (total_wipe) {
+        /* Wipe outranks OP_0E FD post-fight (abort=1); do not leave the latch set. */
+        fd_await_combat_ = false;
+        Mm2FoundItems empty{};
+        mm2_found_items_write(gs_.a4(), &empty);
+        mm2_gs_set_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH, 0);
+        if (events_loaded_) {
+            events_.haltUiForHostOverlay(gs_);
+        }
+        if (world_.loaded()) {
+            gameplay::syncCurrentCellFlags(gs_, world_);
+            gameplay::sessionInteractionGate(gs_);
+        }
+        beginPartyWipeGameOver();
+        markDirty();
+        return;
     }
+
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+    saveRosterWithGlobalTail(); /* persist combat XP/gold/HP */
 
     runPendingEvents();
     refreshWorldAfterEventTransition();
@@ -768,9 +796,7 @@ void GameSession::finishCombat()
         gameplay::syncCurrentCellFlags(gs_, world_);
         gameplay::sessionInteractionGate(gs_);
     }
-    if (total_wipe) {
-        beginPartyWipeGameOver();
-    } else if (fd_await_combat_) {
+    if (fd_await_combat_) {
         resumeOp0eFdAfterCombat();
     }
     markDirty();
@@ -798,6 +824,10 @@ void GameSession::saveRosterWithGlobalTail()
             mm2_roster_tail_set_u8(&roster_, MM2_ROSTER_TAIL_EVENT_BANK + i,
                                    mm2_gs_u8(gs_.a4(), MM2_GS_EVENT_VAR_BANK + i));
         }
+        mm2_roster_tail_set_u16(&roster_, MM2_ROSTER_TAIL_BATTLES_WON,
+                                mm2_gs_u16(gs_.a4(), MM2_GS_BATTLES_WON));
+        mm2_roster_tail_set_u16(&roster_, MM2_ROSTER_TAIL_BATTLES_LOST,
+                                mm2_gs_u16(gs_.a4(), MM2_GS_BATTLES_LOST));
     }
     char *const path = mm2_path_scratch_a();
     if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
@@ -811,29 +841,63 @@ bool GameSession::partyAllDead() const
                                                   &launch_) == 0;
 }
 
-void GameSession::beginPartyWipeGameOver()
+void GameSession::openDeathStrikesPanel(bool bump_ctr)
 {
-    if (overlay_ == PlayOverlay::GameOver) {
+    if (overlay_ == PlayOverlay::DeathStrikes) {
         return;
     }
-    /* 0x7DCC funeral tones are generative play_tone voices; remake stand-in is
-     * play_sound_seq id 6 (same family as party KO @ 0xFE0C). */
-    audio::playSoundSeq(6, gs_.soundsEnabled(), gs_.walkBeepEnabled());
-    /* 0x11646 / 0x7DCC funeral presentation — message band, then title on dismiss. */
-    std::snprintf(status_message_, sizeof(status_message_),
-                  "The party has been defeated...\nAll members have died!");
-    overlay_ = PlayOverlay::GameOver;
+    if (events_loaded_) {
+        events_.haltUiForHostOverlay(gs_);
+    }
+    if (bump_ctr && gs_.valid()) {
+        /* 0x14112: addq.w #1,-$7972 */
+        const uint16_t ctr = mm2_gs_u16(gs_.a4(), MM2_GS_OP0E_FD_CTR);
+        mm2_gs_set_u16(gs_.a4(), MM2_GS_OP0E_FD_CTR,
+                       static_cast<uint16_t>(ctr < 0xFFFFu ? ctr + 1u : 0xFFFFu));
+    }
+    events::eventVmDeathStrikesLines(status_message_, sizeof(status_message_));
+    /* 0x141BA: play_sound_seq id 7 before wait-ENTER. */
+    audio::playSoundSeq(7, gs_.soundsEnabled(), gs_.walkBeepEnabled());
+    overlay_ = PlayOverlay::DeathStrikes;
+    markDirty();
+}
+
+void GameSession::beginPartyWipeGameOver()
+{
+    /* Retail all-dead: game_world_boot @ 0xFAC (-$7F14) → -$7ED2 → 0x14106.
+     * Same panel as OP_0E FD abort==3. */
+    openDeathStrikesPanel(/*bump_ctr=*/true);
 }
 
 void GameSession::maybeBeginPartyWipeGameOver()
 {
-    /* Overworld / post-event wipe @ 0x9F22 — same funeral as combat defeat. */
-    if (overlay_ == PlayOverlay::GameOver || combat_.active()) {
+    if (overlay_ == PlayOverlay::DeathStrikes || combat_.active()) {
         return;
     }
     if (partyAllDead()) {
         beginPartyWipeGameOver();
     }
+}
+
+void GameSession::finishDeathStrikesGotoTown()
+{
+    /* 0x141CE: move.b -$79AC,-$79F2; jsr -$7FB6; jsr 0x1A1F8 Goto Town. */
+    const uint8_t town = mm2_gs_u8(gs_.a4(), MM2_GS_SAVED_TOWN_ID);
+    gs_.setScreenId(town);
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_ID, town);
+    if (town < 5) {
+        goto_town_filter_ = static_cast<uint8_t>(town + 1);
+    }
+    /* Do NOT saveRoster here. 0x141CE only copies -$79AC→-$79F2, then -$7FB6,
+     * then Goto Town @ 0x1A1F8 — no save_game_state. Writing dead HP/cond $81
+     * to roster.dat made a wipe permanent across restarts. */
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_PREV, 0xFF);
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_ID, 0xFF);
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_SIGN_ENV_ID, 7);
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+    mm2_gs_set_u8(gs_.a4(), -0x79E4, 0);
+    mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+    back_to_goto_town_ = true;
 }
 
 void GameSession::runPendingEvents()
@@ -888,6 +952,8 @@ void GameSession::tickEventInput(const platform::KeyState &keys)
     maybeOpenDeathStrikes();
     maybeOpenFdPrintChrome();
     maybeOpenTownServiceMenu();
+    /* OP_31 living abort @ 0x1717E → SCRIPT_ABORT; open Death Strikes when idle. */
+    maybeBeginPartyWipeGameOver();
     if (events_.blocksMovement() != blocking_before || events_.textView().layerCount() != layers_before ||
         events_.textView().textEntryRevision() != entry_rev_before) {
         markDirty();
@@ -1303,8 +1369,8 @@ void GameSession::executeRest()
             hireling_pay += roster_.records[idx].gold; /* +$66 daily fee */
         }
     }
-    /* 0x19B1E: -$7E6C → 0x6ACE — heroes only (index < $18); pool remainder on first.
-     * Always called (even amount 0) so Rest consolidates hero gold like retail. */
+    /* 0x19B1E: -$7E6C → 0x6ACE — heroes only (index < $18); deduct + re-share.
+     * Always called (even amount 0); 0x6ACE then splits pooled gold equally. */
     if (!events::eventVmPartyTryPayGold(a4, &roster_, &launch_, hireling_pay)) {
         /* 0x19EA0 inline string. */
         mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
@@ -1463,11 +1529,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         if (search_identify_pick_member_) {
             if (keys.escape || ch == 27) {
                 search_identify_pick_member_ = false;
-                std::snprintf(status_message_, sizeof(status_message_),
-                              "Search...\nThe Party Has found a:\nTreasure!\n%s\n"
-                              "1) Open It\n2) Find Trap\n3) Detect Magic\n4) Leave it",
-                              search_identify_container_[0] ? search_identify_container_
-                                                            : "Treasure!");
+                status_message_[0] = '\0';
                 markDirty();
                 return;
             }
@@ -1509,16 +1571,14 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         if (ch == '1' || ch == '2') {
             search_identify_find_traps_ = (ch == '2');
             search_identify_pick_member_ = true;
-            std::snprintf(status_message_, sizeof(status_message_),
-                          "Who Will Try (1 - %d) ", launch_.party_count);
+            status_message_[0] = '\0';
             markDirty();
             return;
         }
         if (ch == '3') {
             char det[96];
             events::eventVmSearchDetectMagic(gs_.a4(), search_identify_rating_, det, sizeof(det));
-            std::snprintf(status_message_, sizeof(status_message_),
-                          "%s\n1) Open It\n2) Find Trap\n3) Detect Magic\n4) Leave it", det);
+            std::snprintf(status_message_, sizeof(status_message_), "%s", det);
             markDirty();
             return;
         }
@@ -1535,13 +1595,14 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
     }
 
     if (overlay_ == PlayOverlay::DeathStrikes) {
-        /* 0x14106: wait key #$D (ENTER) then Goto Town @ 0x1A1F8. */
+        /* 0x14106: wait key #$D (ENTER); 0x141CE -$79AC→-$79F2 then Goto Town @ 0x1A1F8.
+         * Do NOT re-run inn registry (0x1A1B2) — that would stamp the death tile as the
+         * last inn. Resume at the already-saved town id. */
         const char ch = static_cast<char>(keys.last_ascii);
         if (ch == '\r' || ch == '\n' || keys.enter) {
             overlay_ = PlayOverlay::None;
             status_message_[0] = '\0';
-            events_.armInnGotoTown();
-            maybeFinishInnRegistry();
+            finishDeathStrikesGotoTown();
             markDirty();
         }
         return;
@@ -1581,8 +1642,8 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                 fd_name_buf_[0] = '\0';
                 fd_print_stage_ = 0;
                 mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 3);
-                events_.armDeathStrikes();
-                maybeOpenDeathStrikes();
+                /* Same 0x14106 panel as OP_0E FD abort==3 (addq -$7972 inside). */
+                openDeathStrikesPanel(/*bump_ctr=*/true);
                 markDirty();
                 return;
             }
@@ -2137,16 +2198,16 @@ void GameSession::tickOverlayAnimations()
     bool changed = false;
     for (int step = 0; step < steps; ++step) {
         if (combat_.active()) {
-            /* ASM player/ack waits (0x119C2 / 0x6798) only poll + Delay(1) —
-             * they do not re-place or tick the combat BOB. Advancing .anm here
-             * forced a full-screen copy + masked blit every cel (Amiga hitch). */
-            if (!combat_.awaitingInput()) {
-                if (step == 0) {
-                    refreshCombatSprites();
-                }
-                for (int i = 0; i < combat_sprite_count_; ++i) {
-                    changed |= combat_sprites_[i].tick();
-                }
+            /* Retail composites the whole 3D view (including the encounter/monster
+             * BOBs) every vblank regardless of the input poll — the .anm cels keep
+             * cycling while the player idles on A-Attack / command / ack prompts.
+             * (0x119C2 / 0x6798 wait only on Delay(1); the viewport animator is
+             * elsewhere and not gated on the key.) */
+            if (step == 0) {
+                refreshCombatSprites();
+            }
+            for (int i = 0; i < combat_sprite_count_; ++i) {
+                changed |= combat_sprites_[i].tick();
             }
         }
         if (scripted_loaded_ && scripted_scene_.active()) {
@@ -2157,9 +2218,8 @@ void GameSession::tickOverlayAnimations()
                 changed |= events_.textView().tickAnimation();
             }
         }
-        if (overlay_ == PlayOverlay::SearchIdentify && search_container_.loaded()) {
-            changed |= search_container_.tick();
-        }
+        /* Search Identify chest @ 0x1B306 is a static place(0,$40,$20) — no
+         * sequence advance while the 1..4 menu is up (Loop was showing open). */
     }
     if (changed) {
 #if MM2_HOST_AMIGA
@@ -2245,6 +2305,12 @@ void GameSession::tick(const platform::KeyState &keys)
             return;
         }
         const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(keys.last_ascii)));
+        /* Remake Full Auto (Tier 3): Ctrl+T toggles; clears on fight exit. */
+        if (keys.ctrl && ch == 'T') {
+            combat_.setAutoEnabled(!combat_.autoEnabled());
+            markDirty();
+            return;
+        }
         /* 0x11B6E: V or Q → -$7E00 view active slot (digit = '1'+-$4F5); turn not spent. */
         if ((ch == 'V' || ch == 'Q') && combat_.awaitingCommand()) {
             const int slot = combat_.activePartySlot();
@@ -2267,7 +2333,37 @@ void GameSession::tick(const platform::KeyState &keys)
         const int leader_disk_before = combat_.leaderSpriteDiskIndex();
         char status_before[160];
         std::snprintf(status_before, sizeof(status_before), "%s", combat_.statusLine());
-        const bool ended = combat_.tick(gs_, world_, keys);
+
+        bool ended = false;
+        const bool idle_input =
+            keys.last_ascii == 0 && !keys.escape && !keys.space && !keys.enter && !keys.any_key;
+        if (combat_.autoEnabled() && idle_input) {
+            using combat::CombatState;
+            const CombatState st = combat_.state();
+            if (st == CombatState::AwaitingCommand) {
+                ended = combat_.runAutoCommand(gs_);
+            } else if (st == CombatState::AwaitingCastTarget || st == CombatState::AwaitingPartyPick ||
+                       st == CombatState::AwaitingAttackTarget) {
+                ended = combat_.runAutoPicker(gs_);
+            } else if (st == CombatState::AwaitingSurpriseDismiss ||
+                       st == CombatState::AwaitingActionAck ||
+                       st == CombatState::AwaitingVictoryDismiss) {
+                platform::KeyState synth{};
+                synth.last_ascii = ' ';
+                synth.space = true;
+                synth.any_key = true;
+                ended = combat_.tick(gs_, world_, synth);
+            } else if (st == CombatState::AwaitingPartyOptions) {
+                platform::KeyState synth{};
+                synth.last_ascii = 'A';
+                ended = combat_.tick(gs_, world_, synth);
+            } else {
+                ended = combat_.tick(gs_, world_, keys);
+            }
+        } else {
+            ended = combat_.tick(gs_, world_, keys);
+        }
+
         if (ended) {
             markDirty();
             finishCombat();
@@ -2308,6 +2404,13 @@ void GameSession::tick(const platform::KeyState &keys)
         return;
     }
 
+    /* Funeral / Death Strikes must outrank a leftover event Yes/No wait — otherwise
+     * tickEventInput steals keys and OP_02 keeps painting under the death band. */
+    if (overlay_ == PlayOverlay::GameOver || overlay_ == PlayOverlay::DeathStrikes) {
+        tickOverlayInput(keys);
+        return;
+    }
+
     if (events_loaded_ && events_.blocksMovement()) {
         tickEventInput(keys);
         return;
@@ -2319,6 +2422,8 @@ void GameSession::tick(const platform::KeyState &keys)
     maybeFinishInnRegistry();
     maybeOpenDeathStrikes();
     maybeOpenFdPrintChrome();
+    /* Play-loop living check (0xFAC / post-OP_31 / rest illness / traps). */
+    maybeBeginPartyWipeGameOver();
 
     if (overlay_ != PlayOverlay::None) {
         tickOverlayInput(keys);
@@ -2429,12 +2534,11 @@ void GameSession::maybeFinishInnRegistry()
 
 void GameSession::maybeOpenDeathStrikes()
 {
-    if (!events_.takePendingDeathStrikes() || overlay_ != PlayOverlay::None) {
+    /* OP_0E FD abort==3 already did addq -$7972 before armDeathStrikes(). */
+    if (!events_.takePendingDeathStrikes() || overlay_ == PlayOverlay::DeathStrikes) {
         return;
     }
-    events::eventVmDeathStrikesLines(status_message_, sizeof(status_message_));
-    overlay_ = PlayOverlay::DeathStrikes;
-    markDirty();
+    openDeathStrikesPanel(/*bump_ctr=*/false); /* ctr already bumped in EventTownServices */
 }
 
 void GameSession::loadFdPrintChromePage()
@@ -2557,14 +2661,16 @@ void GameSession::ensureEndgameArtLoaded()
 
 void GameSession::armSearchContainerArt()
 {
-    /* 0x1B2CE: jsr -$7FC2(id) — same sign_sprite_load path as OP_0B. */
+    /* 0x1B2CE: jsr -$7FC2(id) — same sign_sprite_load path as OP_0B.
+     * Identify wait is a static BOB (0x1B306 place); do not Loop the open
+     * sequence until Open resolves and place(-1) clears the sprite. */
     clearSearchContainerArt();
     if (!data_dir_ || !gs_.valid()) {
         return;
     }
     const int id = events::eventVmSearchContainerAnmId(gs_.a4());
     /* id $47 → 71.anm: absent from retail ADF + repo; loadFromTableId no-ops. */
-    (void)search_container_.loadFromTableId(data_dir_, id, gfx::AnmLoopMode::Loop, false);
+    (void)search_container_.loadFromTableId(data_dir_, id, gfx::AnmLoopMode::HoldLast, false);
 }
 
 void GameSession::clearSearchContainerArt()
@@ -2913,8 +3019,12 @@ void GameSession::blitCombatSprites()
     const int slot_y = round_layout ? gfx::play_layout::kCombatView3DSkyY : gfx::play_layout::kViewOriginY;
     const int slot_w =
         round_layout ? gfx::play_layout::kCombatView3DViewportW : gfx::play_layout::kViewW;
+    /* Round hood yellow console_box is 0x0D rows @ 0x136AA — not the 0x0E
+     * backdrop cell height. Clamping to 0x0E lets tall .anm cels paint over the
+     * row-0x0E hood h_line (feet over the red border). */
     const int slot_h =
-        round_layout ? gfx::play_layout::kCombatView3DViewportH : gfx::play_layout::kViewH;
+        round_layout ? (gfx::play_layout::kCombatViewportBoxHeightCells * 8)
+                     : gfx::play_layout::kViewH;
 
     for (int i = 0; i < combat_sprite_count_; ++i) {
         if (!combat_sprites_[i].loaded()) {
@@ -2965,11 +3075,11 @@ void GameSession::renderOverlays()
         compositor_.drawText(8, 17 * 8, status_message_, 255, 255, 255, 255);
         break;
     case PlayOverlay::GameOver: {
-        /* Funeral band after combat_defeat_retreat @ 0x11646 / tones @ 0x7DCC. */
-        gfx::fillCellRect(compositor_, 1, 0x11, 38, 4);
-        int row = 0x11;
+        /* Full console wipe — do not leave OP_02 encounter lines under the funeral. */
+        gfx::fillCellRect(compositor_, 1, 0x11, 38, 8);
+        int row = 0x12;
         const char *p = status_message_;
-        while (*p && row <= 0x14) {
+        while (*p && row <= 0x15) {
             char line[40];
             int n = 0;
             while (*p && *p != '\n' && n < 38) {
@@ -2982,17 +3092,28 @@ void GameSession::renderOverlays()
             compositor_.drawText(8, row * 8, line, 255, 80, 80, 255);
             ++row;
         }
-        compositor_.drawText(8, row * 8, "(any key — return to title)", 180, 180, 180, 255);
+        compositor_.drawText(8, 0x16 * 8, "(any key — return to title)", 180, 180, 180, 255);
         break;
     }
     case PlayOverlay::DeathStrikes: {
-        /* 0x14106: win_define(7,6,$21,$11) → cells (7,6)-(33,17) = 27×12;
-         * drawConsoleBox(row,col,w,h) = (6,7,0x1B,0x0C). Print at win-relative (2,1+i). */
-        compositor_.drawConsoleBox(6, 7, 0x1B, 0x0C, 255, 0, 0);
-        gfx::fillCellRect(compositor_, 8, 7, 0x19, 0x0A);
-        int row = 7;
+        /* 0x14106: win_define(7,6,$21,$11) → cells (7,6)-(33,17) = 27×12.
+         * A-pen ← -$7A4C (14), then -$7F74 @ 0x425A draws console_box glyphs
+         * (0x10..0x15 / 0x0E/0x0F) — blue frame, not the red chrome border.
+         * Text pen ← -$7A52; lines from A4-$6D60 at win-relative (2,1+i). */
+        using namespace gfx::play_layout;
+        constexpr int kWinCol = 7;
+        constexpr int kWinRow = 6;
+        constexpr int kWinW = 0x1B; /* x2($21)-x1($7)+1 */
+        constexpr int kWinH = 0x0C; /* y2($11)-y1($6)+1 */
+
+        gfx::fillCellRect(compositor_, kWinCol, kWinRow, kWinW, kWinH);
+        compositor_.drawConsoleBox(kWinRow, kWinCol, kWinW, kWinH, kUiBlueBorderR, kUiBlueBorderG,
+                                   kUiBlueBorderB);
+        gfx::fillCellRect(compositor_, kWinCol + 1, kWinRow + 1, kWinW - 2, kWinH - 2);
+
+        int row = kWinRow + 1; /* window-relative row 1 */
         const char *p = status_message_;
-        while (*p && row <= 0x10) {
+        while (*p && row < kWinRow + kWinH - 1) {
             char line[40];
             int n = 0;
             while (*p && *p != '\n' && n < 38) {
@@ -3002,8 +3123,8 @@ void GameSession::renderOverlays()
             if (*p == '\n') {
                 ++p;
             }
-            /* Window-relative (2, 1+i) → absolute col 9, row 7+i. */
-            compositor_.drawText(9 * 8, row * 8, line, 255, 255, 255, 255);
+            /* Window-relative col 2 → absolute col 9. */
+            compositor_.drawText((kWinCol + 2) * 8, row * 8, line, 255, 255, 255, 255);
             ++row;
         }
         break;
@@ -3047,25 +3168,73 @@ void GameSession::renderOverlays()
         break;
     }
     case PlayOverlay::SearchIdentify: {
-        /* Identify menu @ 0x1B3F2 — container -$7FC2 over viewport + console band. */
+        /* search_payoff_ui @ 0x1B19C:
+         *   win_define(0x16,3,0x26,0x0F) + B-pen -$7A4C (14)
+         *   -$7FBC place(0, $40, $20) → mode $17 @ 0x23E24: dst (0x40, 0x28)
+         *   text inside the window; options from -$68FE at rel rows 8..11 */
+        constexpr int kWinX1 = 0x16;
+        constexpr int kWinY1 = 3;
+        constexpr int kWinX2 = 0x26;
+        constexpr int kWinY2 = 0x0F;
+        constexpr int kWinW = kWinX2 - kWinX1 + 1;
+        constexpr int kWinH = kWinY2 - kWinY1 + 1;
+        /* Pen 14 ≈ blue window frame (data hunk -$7A4C). */
+        using namespace gfx::play_layout;
+        constexpr uint8_t kBorderR = kUiBlueBorderR;
+        constexpr uint8_t kBorderG = kUiBlueBorderG;
+        constexpr uint8_t kBorderB = kUiBlueBorderB;
+
         if (search_container_.loaded()) {
+            /* Same simple-path as OP_0B blitCentered(0): (64, 40). */
             search_container_.blitCentered(compositor_, 0);
         }
-        gfx::fillCellRect(compositor_, 1, 0x11, 38, 8);
-        int row = 0x11;
-        const char *p = status_message_;
-        while (*p && row <= 0x18) {
-            char line[40];
-            int n = 0;
-            while (*p && *p != '\n' && n < 38) {
-                line[n++] = *p++;
+
+        gfx::fillCellRect(compositor_, kWinX1, kWinY1, kWinW, kWinH);
+        compositor_.drawConsoleBox(kWinY1, kWinX1, kWinW, kWinH, kBorderR, kBorderG, kBorderB);
+
+        auto winText = [&](int rel_col, int rel_row, const char *text) {
+            compositor_.drawText((kWinX1 + rel_col) * 8, (kWinY1 + rel_row) * 8, text, 255, 255, 255, 255);
+        };
+
+        if (search_identify_pick_member_) {
+            winText(1, 1, "Search...");
+            char who[40];
+            std::snprintf(who, sizeof(who), "Who Will Try (1 - %d) ", launch_.party_count);
+            winText(1, 3, who);
+        } else {
+            /* 0x1B312..0x1B3E0 layout (window-relative). */
+            winText(1, 1, "Search...");
+            winText(1, 3, "The Party Has");
+            winText(1, 4, "found a:");
+            const char *cname =
+                search_identify_container_[0] ? search_identify_container_ : "Treasure!";
+            /* 0x1B36A justify center for container name at row 6. */
+            const int name_len = static_cast<int>(std::strlen(cname));
+            const int name_col = (kWinW - name_len) / 2;
+            winText(name_col > 0 ? name_col : 0, 6, cname);
+            if (status_message_[0] != '\0' && std::strstr(status_message_, "Contents magical")) {
+                /* Detect Magic result replaces the header band briefly. */
+                int row = 1;
+                const char *p = status_message_;
+                while (*p && row <= 5) {
+                    char line[40];
+                    int n = 0;
+                    while (*p && *p != '\n' && n < 38) {
+                        line[n++] = *p++;
+                    }
+                    line[n] = '\0';
+                    if (*p == '\n') {
+                        ++p;
+                    }
+                    winText(1, row, line);
+                    ++row;
+                }
             }
-            line[n] = '\0';
-            if (*p == '\n') {
-                ++p;
+            static const char *const kOpts[4] = {"1) Open It", "2) Find Trap", "3) Detect Magic",
+                                                 "4) Leave it"};
+            for (int i = 0; i < 4; ++i) {
+                winText(1, 8 + i, kOpts[i]);
             }
-            compositor_.drawText(8, row * 8, line, 255, 255, 128, 255);
-            ++row;
         }
         break;
     }
@@ -3158,6 +3327,9 @@ void GameSession::renderFrame(bool overlay_anim_only)
         }
 #else
         if (combat_round_layout) {
+            /* 0x135BE: wipe exploration dividers + clear the combat band before
+             * the narrow hood is painted (SDL host has no Amiga chrome cache). */
+            hud().drawCombatChrome(compositor_);
             renderCombatBackdrop();
         } else {
             renderView3D();
@@ -3165,14 +3337,11 @@ void GameSession::renderFrame(bool overlay_anim_only)
 #endif
         refreshCombatSprites();
         if (combat_round_layout) {
-#if MM2_HOST_AMIGA
-            /* Rebuild path already stamped lines via drawCombatScreenChrome. */
-#else
-            hud().drawCombatLines(compositor_);
-#endif
             blitCombatSprites();
-            /* Sprites may paint past the narrow hood — re-mask the divider col. */
+            /* Sprites may paint past the narrow hood — re-mask the divider col,
+             * restamp hood rules (row 0x0E h_line), then the yellow frame. */
             maskCombatBackdropBleed(compositor_);
+            hud().drawCombatLines(compositor_);
             hud().drawCombatViewportFrame(compositor_);
             hud().drawCombatViewportDivider(compositor_);
         } else {
@@ -3197,7 +3366,8 @@ void GameSession::renderFrame(bool overlay_anim_only)
                 } else {
                     renderIndoorView3DBase();
                 }
-                drawSpellEyeOverlayIfActive(compositor_, env_, world_, gs_, assets_ok_);
+                /* Spell-eye 5×5 lives in the Protect column (0x1E74 @ 0xE8), not the
+                 * 3D cache — draw after drawRightColumn so chrome does not erase it. */
                 mm2_amiga_viewport_cache_save();
                 if (!world_.isOutdoor()) {
                     blitIndoorTorches();
@@ -3205,7 +3375,6 @@ void GameSession::renderFrame(bool overlay_anim_only)
             }
 #else
             renderView3D();
-            drawSpellEyeOverlayIfActive(compositor_, env_, world_, gs_, assets_ok_);
 #endif
             /* Walls blit past x=216 and erase the viewport/right-column divider. */
             hud().drawViewportDivider(compositor_);
@@ -3228,6 +3397,9 @@ void GameSession::renderFrame(bool overlay_anim_only)
     if (combat_active) {
         hud().drawCombatRightColumn(compositor_, combat_view);
         hud().drawCombatOptionsBar(compositor_, combat_view);
+        if (combat_view.show_victory) {
+            gfx::drawCombatVictoryPanel(compositor_, combat_view);
+        }
     } else {
         gfx::PlayRightPanel panel = right_panel_;
         if (scripted_active) {
@@ -3245,6 +3417,8 @@ void GameSession::renderFrame(bool overlay_anim_only)
             const bool protect_panel = panel == gfx::PlayRightPanel::Protect;
             const gfx::PlayProtectValues prot = protectValues();
             hud().drawRightColumn(compositor_, panel, protect_panel ? &prot : nullptr);
+            /* 0x1E74 / 0x4672 refresh: eye overlay after Protect clear (0x5E28). */
+            drawSpellEyeOverlayIfActive(compositor_, env_, world_, gs_, assets_ok_);
         }
     }
 
@@ -3257,7 +3431,8 @@ void GameSession::renderFrame(bool overlay_anim_only)
     /* OP_04 door labels / OP_05/06/0B viewport overlays must not paint over modal
      * sheets (character sheet, quick ref, etc.) — retail hides the 3D hood entirely. */
     /* OP_0B service sign stays visible during shop menus; drop only OP_02 intro text. */
-    if (!combat_active && events_loaded_ && !scripted_active && !viewportHiddenByOverlay()) {
+    if (!combat_active && events_loaded_ && !scripted_active && !viewportHiddenByOverlay() &&
+        overlay_ != PlayOverlay::GameOver && overlay_ != PlayOverlay::DeathStrikes) {
         if (overlay_ == PlayOverlay::TownService) {
             events_.textView().drawPersistentViewportOverlays(compositor_);
             events_.textView().drawServiceSignOverlay(compositor_);
@@ -3345,6 +3520,7 @@ void GameSession::renderFrameCombatAnimOnly()
     blitCombatSprites();
     if (round_layout) {
         maskCombatBackdropBleed(compositor_);
+        hud().drawCombatLines(compositor_);
         hud().drawCombatViewportFrame(compositor_);
         hud().drawCombatViewportDivider(compositor_);
     } else {
@@ -3407,12 +3583,13 @@ void GameSession::renderFrameView3DOnly()
         } else {
             renderIndoorView3DBase();
         }
-        drawSpellEyeOverlayIfActive(compositor_, env_, world_, gs_, assets_ok_);
         mm2_amiga_viewport_cache_save();
         if (!world_.isOutdoor()) {
             blitIndoorTorches();
         }
         hud().drawViewportDivider(compositor_);
+        /* Eye overlay is in the Protect column — leave prior frame's eye pixels;
+         * full chrome rebuild (markDirty) redraws it after drawRightColumn. */
     }
 
     if (text_dirty_) {
@@ -3421,7 +3598,8 @@ void GameSession::renderFrameView3DOnly()
                                gs_.valid() ? gs_.facingKey() : 'N', protect_panel);
         /* Console message band (OP_01/02/03 + text-entry cursor). Partial 3D
          * refresh previously skipped this and left torn/stale glyphs. */
-        if (events_loaded_ && !viewportHiddenByOverlay()) {
+        if (events_loaded_ && !viewportHiddenByOverlay() && overlay_ != PlayOverlay::GameOver &&
+            overlay_ != PlayOverlay::DeathStrikes) {
             if (overlay_ == PlayOverlay::TownService) {
                 events_.textView().drawPersistentViewportOverlays(compositor_);
                 events_.textView().drawServiceSignOverlay(compositor_);
@@ -3431,7 +3609,8 @@ void GameSession::renderFrameView3DOnly()
             }
         }
         renderOverlays();
-    } else if (events_loaded_) {
+    } else if (events_loaded_ && overlay_ != PlayOverlay::GameOver &&
+               overlay_ != PlayOverlay::DeathStrikes) {
         events_.textView().drawPersistentViewportOverlays(compositor_);
         events_.textView().drawServiceSignOverlay(compositor_);
         events_.textView().drawPegasusIllustration(compositor_);
@@ -3456,7 +3635,8 @@ void GameSession::renderFrameTextOnly()
     gfx::fillCellRect(compositor_, 1, 0x11, 38, 6);
 
     if (events_loaded_ && !combat_.active() &&
-        !(scripted_loaded_ && scripted_scene_.active()) && !viewportHiddenByOverlay()) {
+        !(scripted_loaded_ && scripted_scene_.active()) && !viewportHiddenByOverlay() &&
+        overlay_ != PlayOverlay::GameOver && overlay_ != PlayOverlay::DeathStrikes) {
         if (overlay_ == PlayOverlay::TownService) {
             events_.textView().drawPersistentViewportOverlays(compositor_);
             events_.textView().drawServiceSignOverlay(compositor_);

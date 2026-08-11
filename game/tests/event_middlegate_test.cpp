@@ -1349,7 +1349,8 @@ int main(int argc, char **argv)
         mm2::events::eventRunFixedEncounter(gs, text, wait, block, 12, /*variant_b=*/false, &combat,
                                              &fixedWorld);
 
-        expect(mm2_gs_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE) == 0x80, "OP_12 seeds mode = 0x80 (fixed)", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE) == 0x00,
+               "OP_12 fixed fight: enter() strips #$80 → mode 0 (0x12CFE)", fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS) == 9, "OP_12 seeds monster_slots[0]", fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT) == 1,
                "OP_12 sets SCRIPT_ABORT so the VM yields to combat", fails);
@@ -1358,13 +1359,24 @@ int main(int argc, char **argv)
                "OP_2B's gate is clear before the fight resolves", fails);
 
         mm2::platform::KeyState keys{};
-        keys.last_ascii = 'A';
-        combat.tick(gs, fixedWorld, keys); /* party options -> round loop -> member turn */
-        keys.last_ascii = 'A';
-        combat.tick(gs, fixedWorld, keys); /* attack resolves; kill message awaits a key */
-        keys.last_ascii = ' ';
-        const bool ended = combat.tick(gs, fixedWorld, keys); /* ack -> victory */
-        expect(ended, "acknowledging the kill message ends the fight", fails);
+        bool ended = false;
+        for (int i = 0; i < 64 && combat.active(); ++i) {
+            keys = mm2::platform::KeyState{};
+            switch (combat.state()) {
+            case mm2::combat::CombatState::AwaitingSurpriseDismiss:
+            case mm2::combat::CombatState::AwaitingPartyOptions:
+            case mm2::combat::CombatState::AwaitingCommand:
+            case mm2::combat::CombatState::AwaitingAttackTarget:
+                keys.last_ascii = 'A';
+                break;
+            default:
+                keys.space = true;
+                keys.last_ascii = ' ';
+                break;
+            }
+            ended = combat.tick(gs, fixedWorld, keys);
+        }
+        expect(ended || !combat.active(), "dismissing the victory panel ends the fight", fails);
         expect(!combat.active(), "combat inactive after victory", fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 1,
                "OP_2B's gate (COMBAT_VICTORY_LATCH) set after victory", fails);
@@ -1414,12 +1426,22 @@ int main(int argc, char **argv)
         expect(combat.active(), "arena selector queues CombatSession via eventRunFixedEncounter", fails);
 
         mm2::platform::KeyState keys{};
-        keys.last_ascii = 'A';
-        combat.tick(gs, arenaWorld, keys); /* party options -> member turn */
-        keys.last_ascii = 'A';
-        combat.tick(gs, arenaWorld, keys); /* attack kills; message awaits a key */
-        keys.last_ascii = ' ';
-        combat.tick(gs, arenaWorld, keys); /* ack -> victory */
+        for (int i = 0; i < 64 && combat.active(); ++i) {
+            keys = mm2::platform::KeyState{};
+            switch (combat.state()) {
+            case mm2::combat::CombatState::AwaitingSurpriseDismiss:
+            case mm2::combat::CombatState::AwaitingPartyOptions:
+            case mm2::combat::CombatState::AwaitingCommand:
+            case mm2::combat::CombatState::AwaitingAttackTarget:
+                keys.last_ascii = 'A';
+                break;
+            default:
+                keys.space = true;
+                keys.last_ascii = ' ';
+                break;
+            }
+            combat.tick(gs, arenaWorld, keys);
+        }
         expect(!combat.active(), "arena combat resolves after Attack", fails);
         expect(combat.lastOutcome() == mm2::combat::CombatOutcome::Victory,
                "arena combat outcome == Victory", fails);
@@ -2328,15 +2350,15 @@ int main(int argc, char **argv)
 
         expect(eventVmPartyTryPayGold(nullptr, &pay_roster, &pay_launch, 40),
                "OP_24 succeeds when gold enough", fails);
-        expect(pay_roster.records[0].gold == 10 && pay_roster.records[1].gold == 0,
-               "OP_24 pools remainder on first eligible member", fails);
+        expect(pay_roster.records[0].gold == 5 && pay_roster.records[1].gold == 5,
+               "OP_24 pools remainder then re-shares across eligible members", fails);
 
         expect(!eventVmPartyTryPayGems(nullptr, &pay_roster, &pay_launch, 13),
                "OP_25 fails when gems short", fails);
         expect(eventVmPartyTryPayGems(nullptr, &pay_roster, &pay_launch, 8),
                "OP_25 succeeds when gems enough", fails);
-        expect(pay_roster.records[0].gems == 4 && pay_roster.records[1].gems == 0,
-               "OP_25 pools remainder gems on first eligible", fails);
+        expect(pay_roster.records[0].gems == 2 && pay_roster.records[1].gems == 2,
+               "OP_25 pools remainder then re-shares gems", fails);
 
         expect(eventVmPartyTryPayGold(nullptr, &pay_roster, &pay_launch, 0),
                "OP_24 amount 0 succeeds", fails);

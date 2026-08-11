@@ -1,12 +1,14 @@
 #include "mm2/combat/CombatSession.h"
 
 #include "mm2/CppStdCompat.h"
+#include "mm2/combat/CombatAuto.h"
 #include "mm2/combat/EncounterPicker.h"
 #include "mm2/events/EventVmHelpers.h"
 #include "mm2/events/TownServiceTransactions.h"
 #include "mm2/gameplay/SpellBook.h"
 #include "mm2/platform/Audio.h"
 #include "mm2_create_character.h"
+#include "mm2_found_items.h"
 
 #include <cstring>
 
@@ -50,6 +52,13 @@ uint8_t friendCountFromMonsters(uint8_t type, const void *ctx)
     const int count = MM2_MON_ADD_FRIENDS_COUNT(&ab);
     return static_cast<uint8_t>(count > 255 ? 255 : count);
 }
+
+/* ASM 0x12830: A4-$6FBC monster status 4-char abbreviations, indexed by
+ * left-shift count of -$519[slot] until bit7 set. Bit0 ("Hurt") is set only
+ * when damage lands @ 0x10EEA — not on spawn. */
+const char *const kMonsterStatusAbbrev[8] = {"Enca", "Mdls", "Held",
+                                             "Aslp", "Afrd", "Weak",
+                                             "Siln", "Hurt"};
 
 }  // namespace
 
@@ -115,17 +124,15 @@ void CombatSession::syncMonsterSlotsToGs(GameStateView &gs) const
     if (!a4) {
         return;
     }
-    int alive = 0;
+    /* HP/status/speed only. Do NOT rewrite -$77BE here: that byte is the full
+     * encounter live total (visible + overflow), owned by enter / 0x10CCE
+     * compact / breed — collapsing it to "alive battle slots" wiped +N packs. */
     for (int i = 0; i < MM2_GS_MONSTER_BATTLE_SLOTS; ++i) {
         const int hp = slots_[i].hp < 0 ? 0 : slots_[i].hp;
         mm2_gs_set_u16(a4, MM2_GS_MONSTER_HP + i * 2, static_cast<uint16_t>(hp));
         mm2_gs_set_u8(a4, MM2_GS_MONSTER_STATUS + i, slots_[i].alive ? slots_[i].status : 0);
         mm2_gs_set_u8(a4, MM2_GS_MONSTER_SPEED + i, static_cast<uint8_t>(slots_[i].speed));
-        if (slots_[i].alive) {
-            ++alive;
-        }
     }
-    mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, static_cast<uint8_t>(alive));
 }
 
 bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
@@ -137,6 +144,10 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
     saved_panel_mode_ = gs.rightPanelMode();
     gs.setRightPanelMode(2); /* 0x12C6E: A4-$79B2 := 2 (combat panel). */
     mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 0);
+    auto_enabled_ = false;
+    auto_buff_latch_ = false;
+    auto_pending_party_slot_ = -1;
+    auto_pending_monster_slot_ = -1;
 
     /* 0x12CE0: recompute live count from script-seeded slots *before* the
      * random picker; 0x12CFE: jsr 0x1213E only when mode < $80; else subi #$80
@@ -179,7 +190,7 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
         m.hp = m.max_hp;
         m.speed = decodeMonsterSpeed(rec);
         m.alive = m.max_hp > 0;
-        m.status = m.alive ? 1 : 0; /* bit0 awake */
+        m.status = 0; /* 0x10EEA bset #0 only on damage → "Hurt"; healthy = blank */
     }
     /* 0x4C8E unpack: treasure byte 0x10 bits 5/6/7 → A4-$11C2/$11C1/$11C0 (bribe gates).
      * Accumulate across live slots (addq.b per monster). */
@@ -314,7 +325,9 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
 void CombatSession::applySurpriseRoll(GameStateView &gs)
 {
     /* Encounter-setup surprise @ 0x12EE2: rng(1,100) vs front-rank speed and
-     * levitate; mode 2 = party surprised, 3 = monsters surprised. */
+     * levitate. ASM strings @ 0x131EA / 0x13206:
+     *   mode 2 = "You surprised the monsters!" (party advantage → options bar)
+     *   mode 3 = "The monsters surprised you!" (ambush → skip options @ 0x12F70) */
     const int roll = rng_->range(1, 100);
     int front_speed = 10;
     for (int i = 0; i < party_count_ && i < MM2_GS_PARTY_SIZE; ++i) {
@@ -339,7 +352,7 @@ void CombatSession::beginEncounterUi(GameStateView &gs, const world::MapWorld &w
     const uint8_t mode = mm2_gs_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE);
     if (mode == 3) {
         surprise_mode_ = 3;
-        setStatus("The monsters are surprised!");
+        setStatus("The monsters surprised you!"); /* 0x13206 */
         state_ = CombatState::AwaitingSurpriseDismiss;
         return;
     }
@@ -349,12 +362,12 @@ void CombatSession::beginEncounterUi(GameStateView &gs, const world::MapWorld &w
     }
 
     if (surprise_mode_ == 2) {
-        setStatus("The monsters surprised you!");
+        setStatus("You surprised the monsters!"); /* 0x131EA */
         state_ = CombatState::AwaitingSurpriseDismiss;
         return;
     }
     if (surprise_mode_ == 3) {
-        setStatus("The monsters are surprised!");
+        setStatus("The monsters surprised you!"); /* 0x13206 */
         state_ = CombatState::AwaitingSurpriseDismiss;
         return;
     }
@@ -385,9 +398,9 @@ void CombatSession::recomputeRangeCounts(GameStateView &gs)
         mm2_gs_set_u8(gs.a4(), MM2_GS_MELEE_RANGE_N, static_cast<uint8_t>(melee)); /* 0x11D60 */
     }
     if (handicap == 2) {
-        melee /= 2; /* 0x11D66 party surprised */
+        melee /= 2; /* 0x11D66 you surprised them */
     } else if (handicap == 3) {
-        melee *= 2; /* 0x11D82 monsters surprised */
+        melee *= 2; /* 0x11D82 monsters surprised you */
     }
     int alive = 0;
     for (int i = 0; i < MM2_GS_MONSTER_BATTLE_SLOTS; ++i) {
@@ -634,8 +647,137 @@ void CombatSession::beginActionAck(GameStateView &gs)
     state_ = CombatState::AwaitingActionAck;
 }
 
+void CombatSession::setAutoEnabled(bool on)
+{
+    auto_enabled_ = on;
+    std::snprintf(status_line_, sizeof(status_line_), on ? "Auto ON" : "Auto OFF");
+}
+
+bool CombatSession::runAutoCommand(GameStateView &gs)
+{
+    if (state_ != CombatState::AwaitingCommand || active_party_slot_ < 0) {
+        return false;
+    }
+
+    const AutoDecision d = decideAuto(*this, gs, auto_buff_latch_);
+    auto_pending_party_slot_ = d.party_slot;
+    auto_pending_monster_slot_ = d.monster_slot;
+
+    auto stampAndAck = [&]() {
+        if (state_ == CombatState::Inactive) {
+            return;
+        }
+        if (active_party_slot_ >= 0 && active_party_slot_ < MM2_GS_PARTY_SIZE) {
+            party_acted_[active_party_slot_] = true;
+            active_party_slot_ = -1;
+        }
+        if (state_ != CombatState::AwaitingActionAck) {
+            beginActionAck(gs);
+        }
+    };
+
+    switch (d.action) {
+    case AutoAction::StrikeShoot:
+        beginPlayerStrike(gs, true, false);
+        if (state_ == CombatState::AwaitingAttackTarget) {
+            return false;
+        }
+        stampAndAck();
+        return state_ == CombatState::Inactive;
+    case AutoAction::StrikeMelee:
+        beginPlayerStrike(gs, false, false);
+        if (state_ == CombatState::AwaitingAttackTarget) {
+            return false;
+        }
+        stampAndAck();
+        return state_ == CombatState::Inactive;
+    case AutoAction::Cast:
+        if (d.flat < 0) {
+            stampAndAck();
+            return state_ == CombatState::Inactive;
+        }
+        resolvePlayerCast(gs, d.flat);
+        if (state_ == CombatState::AwaitingCastTarget || state_ == CombatState::AwaitingPartyPick ||
+            state_ == CombatState::AwaitingItemPick || state_ == CombatState::AwaitingAttackTarget) {
+            return false;
+        }
+        stampAndAck();
+        return state_ == CombatState::Inactive;
+    case AutoAction::EndTurn:
+    default:
+        stampAndAck();
+        return state_ == CombatState::Inactive;
+    }
+}
+
+bool CombatSession::runAutoPicker(GameStateView &gs)
+{
+    if (state_ == CombatState::AwaitingPartyPick) {
+        const int slot = auto_pending_party_slot_ >= 0 ? auto_pending_party_slot_ : 0;
+        auto_pending_party_slot_ = -1;
+        const char key = static_cast<char>('1' + slot);
+        if (!tickPartyPick(gs, key)) {
+            return false;
+        }
+        if (state_ == CombatState::AwaitingActionAck && active_party_slot_ >= 0) {
+            party_acted_[active_party_slot_] = true;
+            active_party_slot_ = -1;
+        }
+        return state_ == CombatState::Inactive;
+    }
+
+    if (state_ == CombatState::AwaitingCastTarget) {
+        /* tickCastTarget treats letter as battle-slot index (D43C-style). */
+        int battle = auto_pending_monster_slot_;
+        if (battle < 0) {
+            battle = firstAliveMonster();
+        }
+        auto_pending_monster_slot_ = -1;
+        if (battle < 0) {
+            return false;
+        }
+        const char key = static_cast<char>('A' + battle);
+        if (!tickCastTarget(gs, key)) {
+            /* Fall back to letter A (first packed alive) if battle index > live count. */
+            if (!tickCastTarget(gs, 'A')) {
+                return false;
+            }
+        }
+        if (state_ == CombatState::AwaitingActionAck && active_party_slot_ >= 0) {
+            party_acted_[active_party_slot_] = true;
+            active_party_slot_ = -1;
+        }
+        return state_ == CombatState::Inactive;
+    }
+
+    if (state_ == CombatState::AwaitingAttackTarget) {
+        if (!tickAttackTarget(gs, 'A')) {
+            return false;
+        }
+        if (state_ == CombatState::AwaitingActionAck && active_party_slot_ >= 0) {
+            party_acted_[active_party_slot_] = true;
+            active_party_slot_ = -1;
+        }
+        return state_ == CombatState::Inactive;
+    }
+
+    return false;
+}
+
 bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const platform::KeyState &keys)
 {
+    if (state_ == CombatState::AwaitingVictoryDismiss) {
+        /* ASM 0x12602 delays #$32 after the panel; remake waits for any key so
+         * the blue-border victory screen is readable. */
+        const bool keyed = keys.last_ascii != 0 || keys.space || keys.enter || keys.any_key;
+        if (!keyed) {
+            return false;
+        }
+        round_layout_active_ = false;
+        state_ = CombatState::Inactive;
+        return true;
+    }
+
     if (state_ == CombatState::AwaitingActionAck) {
         /* Key skip matches 0x6798; otherwise burn one hold frame per tick.
          * Old logic decremented then advanced when hitting 0 on the same tick,
@@ -659,6 +801,8 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
         if (keys.last_ascii == 0) {
             return false;
         }
+        /* 0x12F6A: mode==3 → beq $13198 → jsr $12a22 (round loop, no options).
+         * Mode 2 falls through to the Options: A-Attack bar @ 0x12F74. */
         if (surprise_mode_ == 3) {
             startRoundLoop(gs, world);
         } else {
@@ -1018,8 +1162,11 @@ void CombatSession::beginRound(GameStateView &gs)
 bool CombatSession::checkOutcome(GameStateView &gs, const world::MapWorld & /*world*/)
 {
     if (firstAliveMonster() < 0) {
-        finishVictory(gs);
-        return true;
+        /* Rewards + victory panel; stay active until AwaitingVictoryDismiss acks. */
+        if (state_ != CombatState::AwaitingVictoryDismiss) {
+            finishVictory(gs);
+        }
+        return false;
     }
 
     /* 0x13282: -$795A==0 → end; 0x12C5A latch/TD → 0x11646 flee. */
@@ -1043,6 +1190,10 @@ void CombatSession::runUntilDecisionOrEnd(GameStateView &gs, const world::MapWor
 {
     for (;;) {
         if (checkOutcome(gs, world)) {
+            return;
+        }
+        /* Victory panel armed — stop auto-resolving until the player dismisses. */
+        if (state_ == CombatState::AwaitingVictoryDismiss || state_ == CombatState::Inactive) {
             return;
         }
 
@@ -1122,6 +1273,9 @@ void CombatSession::runUntilDecisionOrEnd(GameStateView &gs, const world::MapWor
             mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_TURN_SLOT, static_cast<uint8_t>(done_slot));
         }
         if (checkOutcome(gs, world)) {
+            return;
+        }
+        if (state_ == CombatState::AwaitingVictoryDismiss || state_ == CombatState::Inactive) {
             return;
         }
         beginActionAck(gs);
@@ -2987,6 +3141,10 @@ void CombatSession::compactMonsterSlot(GameStateView &gs, int slot)
         audio::playSoundSeq(8, gs.soundsEnabled(), gs.walkBeepEnabled());
         return;
     }
+    /* last = min(live, 10): when live stays >= 10, the shift copies slot[10] →
+     * slot[9] (overflow reservoir promotes into the A–J list). ASM leaves
+     * slot[10] intact for the next promote — clearing it (or zeroing
+     * MONSTER_SLOTS[10] / overflow_type) stopped replacements from appearing. */
     const int last = (live < 0x0A) ? static_cast<int>(live) : 0x0A;
     for (int i = slot; i < last; ++i) {
         slots_[i] = slots_[i + 1];
@@ -2996,12 +3154,25 @@ void CombatSession::compactMonsterSlot(GameStateView &gs, int slot)
         mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + i,
                       mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_ACTED + i + 1));
     }
-    if (last < MM2_GS_MONSTER_BATTLE_SLOTS) {
+    if (last < 0x0A) {
+        /* Vacate the new end of the visible list only (live dropped below 10). */
         slots_[last] = CombatMonster{};
         monster_acted_[last] = false;
         mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + last, 0);
-        if (last < 10) {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + last, 0);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + last, 0);
+    } else if (overflow_type_ != 0 && monsters_ && overflow_type_ < MM2_MONSTER_RECORD_COUNT) {
+        /* Keep type id at [10] as the overflow alias (enter seeds it the same way). */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + 0x0A, overflow_type_);
+        if (!slots_[0x0A].alive || slots_[0x0A].type != overflow_type_) {
+            const Mm2MonsterRecord &rec = monsters_->records[overflow_type_];
+            CombatMonster &m = slots_[0x0A];
+            m.type = overflow_type_;
+            m.max_hp = static_cast<int>(mm2_monster_decode_hp(&rec));
+            m.hp = m.max_hp;
+            m.speed = decodeMonsterSpeed(rec);
+            m.alive = m.max_hp > 0;
+            m.status = 0;
+            monster_acted_[0x0A] = false;
         }
     }
     syncMonsterSlotsToGs(gs);
@@ -5045,13 +5216,14 @@ void CombatSession::finishVictory(GameStateView &gs)
     /* 0x10B74 accrues kill XP into the fight pool; 0x12430 divides -$6FC6 by
      * the count of members with roster+$26 < $80 and adds the share to each
      * (+$62). Unconscious (0 HP, condition still < $80) receive a full share. */
+    victory_xp_share_ = 0;
     if (reward_count > 0 && xp_pool_ > 0) {
-        const uint32_t share = xp_pool_ / static_cast<uint32_t>(reward_count);
+        victory_xp_share_ = xp_pool_ / static_cast<uint32_t>(reward_count);
         for (int i = 0; i < party_count_ && i < MM2_GS_PARTY_SIZE; ++i) {
             if (!partySlotEligibleForRewards(i)) {
                 continue;
             }
-            roster_->records[rosterIndexForPartySlot(i)].experience += share;
+            roster_->records[rosterIndexForPartySlot(i)].experience += victory_xp_share_;
         }
     }
 
@@ -5079,10 +5251,23 @@ void CombatSession::finishVictory(GameStateView &gs)
                       static_cast<unsigned long>(xp_pool_));
     }
     arena_reward_ = ArenaReward{};
+    /* 0x12592 → 0x1215A: addq.w #1,-$7970 (battles won; persisted in roster.dat). */
+    {
+        uint16_t won = mm2_gs_u16(gs.a4(), MM2_GS_BATTLES_WON);
+        if (won < 0xFFFF) {
+            ++won;
+        }
+        mm2_gs_set_u16(gs.a4(), MM2_GS_BATTLES_WON, won);
+        victory_battles_won_ = won;
+    }
     /* 0x125FC: play_sound_seq id 3 (victory sting). */
     audio::playSoundSeq(3, gs.soundsEnabled(), gs.walkBeepEnabled());
-    round_layout_active_ = false;
-    state_ = CombatState::Inactive;
+    /* Keep round chrome under the panel; 0x124D2 overlays (0x10,3)-(0x26,0x0D). */
+    auto_enabled_ = false;
+    auto_buff_latch_ = false;
+    auto_pending_party_slot_ = -1;
+    auto_pending_monster_slot_ = -1;
+    state_ = CombatState::AwaitingVictoryDismiss;
 }
 
 void CombatSession::finishLeave(GameStateView &gs, bool fled)
@@ -5090,32 +5275,53 @@ void CombatSession::finishLeave(GameStateView &gs, bool fled)
     gs.setRightPanelMode(saved_panel_mode_); /* 0x131B8 */
     round_layout_active_ = false;
     outcome_ = fled ? CombatOutcome::Fled : CombatOutcome::Defeated;
-    if (!fled && roster_ && launch_) {
-        /* combat_defeat_retreat @ 0x11646 (party wipe path via 0x12C66):
+    if (roster_ && launch_) {
+        /* combat_defeat_retreat @ 0x11646 (called for party "Run" success @
+         * 0x1314E, char-flee round-end @ 0x12C66, and party wipe @ 0x12C66):
          *   0x1164A: unpack -$560C (attrib entry_coord 0x0E via loader 0x923E)
-         *     lo nibble → -$79F1 (X), hi nibble → -$79F0 (Y).
+         *     lo nibble → -$79F1 (X), hi nibble → -$79F0 (Y). This restore
+         *     happens for BOTH a successful flee and a defeat — the party is
+         *     moved back to the entry/safe square.
          *   jsr -$7E96 (funeral audio) — presentation.
-         *   addq.w #1,-$796E — music transpose; skip (audio).
+         *   addq.w #1,-$796E — battles lost (endgame @ 0x1538A; also flee).
          *   move.w #1,-$4F4E (ENCOUNTER_REDRAW).
-         *   if -$523==0: members with cond>=$10 → cond=$81 (0x1168C–0x116AA).
-         * Flee leaves coords and conditions alone. */
+         *   if -$523(time distort)==0: members with cond>=$10 → cond=$81
+         *     (0x1166E..0x116AA). */
         const uint8_t packed = mm2_gs_u8(gs.a4(), MM2_GS_ENTRY_COORD);
         gs.setCoordX(static_cast<uint8_t>(packed & 0x0F));
         gs.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
-        mm2_gs_set_u16(gs.a4(), MM2_GS_ENCOUNTER_REDRAW, 1);
-        for (int i = 0; i < party_count_ && i < MM2_GS_PARTY_SIZE; ++i) {
-            const int idx = rosterIndexForPartySlot(i);
-            if (idx < 0) {
-                continue;
+        {
+            uint16_t lost = mm2_gs_u16(gs.a4(), MM2_GS_BATTLES_LOST);
+            if (lost < 0xFFFF) {
+                ++lost;
             }
-            Mm2RosterRecord &rec = roster_->records[idx];
-            if (rec.condition >= 0x10) {
-                rec.condition = 0x81;
+            mm2_gs_set_u16(gs.a4(), MM2_GS_BATTLES_LOST, lost);
+        }
+        mm2_gs_set_u16(gs.a4(), MM2_GS_ENCOUNTER_REDRAW, 1);
+        /* -$7E96 → 0x63EE: clear found-item / gold / gems buffer on flee or wipe. */
+        {
+            Mm2FoundItems empty{};
+            mm2_found_items_write(gs.a4(), &empty);
+        }
+        if (mm2_gs_u8(gs.a4(), MM2_GS_TIME_DISTORT) == 0) {
+            for (int i = 0; i < party_count_ && i < MM2_GS_PARTY_SIZE; ++i) {
+                const int idx = rosterIndexForPartySlot(i);
+                if (idx < 0) {
+                    continue;
+                }
+                Mm2RosterRecord &rec = roster_->records[idx];
+                if (rec.condition >= 0x10) {
+                    rec.condition = 0x81;
+                }
             }
         }
     }
     setStatus(fled ? "The party flees!" : "The party has been defeated...");
     arena_reward_ = ArenaReward{};
+    auto_enabled_ = false;
+    auto_buff_latch_ = false;
+    auto_pending_party_slot_ = -1;
+    auto_pending_monster_slot_ = -1;
     state_ = CombatState::Inactive;
 }
 
@@ -5162,6 +5368,9 @@ gfx::CombatPanelView CombatSession::panelView() const
                             state_ == CombatState::AwaitingAttackTarget;
     view.show_party_pick = state_ == CombatState::AwaitingPartyPick;
     view.show_item_pick = state_ == CombatState::AwaitingItemPick;
+    view.show_victory = state_ == CombatState::AwaitingVictoryDismiss;
+    view.victory_xp_share = victory_xp_share_;
+    view.victory_battles_won = victory_battles_won_;
     view.cast_level = cast_level_;
     /* Sticky after 0x12A22 — not derived from ephemeral picker states. */
     view.label_monster_slots = round_layout_active_;
@@ -5171,6 +5380,14 @@ gfx::CombatPanelView CombatSession::panelView() const
             mm2_roster_name_to_cstr(&roster_->records[idx], view.options_for, sizeof(view.options_for));
         }
         commandFlagsForActiveSlot(view.opt_melee, view.opt_shoot, view.opt_cast);
+    }
+
+    if (auto_enabled_ && view.message[0] == '\0') {
+        std::snprintf(view.message, sizeof(view.message), "Auto");
+    } else if (auto_enabled_) {
+        char prefixed[160];
+        std::snprintf(prefixed, sizeof(prefixed), "Auto %s", view.message);
+        std::snprintf(view.message, sizeof(view.message), "%s", prefixed);
     }
 
     int alive_total = 0;
@@ -5193,8 +5410,24 @@ gfx::CombatPanelView CombatSession::panelView() const
             /* 0x12742: check when battle slot index < A4-$524 melee-range count. */
             line.show_checkmark = i < melee_range_count_;
             line.highlighted = (active_monster_slot_ >= 0 && i == active_monster_slot_);
-            if (slots_[i].hp > 0 && slots_[i].hp < slots_[i].max_hp) {
-                std::snprintf(line.status_suffix, sizeof(line.status_suffix), "Hurt");
+            /* 0x12796..0x1283E: when the slot status byte is nonzero, print the
+             * 4-char abbreviation whose index is the left-shift count to bit7:
+             *   A4-$6FBC = {Enca,Mdls,Held,Aslp,Afrd,Weak,Siln,Hurt}
+             * Bit0 ("Hurt") is set by damage @ 0x10EEA — full-HP monsters stay
+             * status 0 and take the blank 5-space path @ 0x1279C. */
+            const uint8_t st = slots_[i].status;
+            if (st != 0) {
+                int idx = 0;
+                uint8_t sh = st;
+                while (sh < 0x80 && idx < 8) {
+                    sh = static_cast<uint8_t>(sh << 1);
+                    ++idx;
+                }
+                if (idx > 7) {
+                    idx = 7;
+                }
+                std::snprintf(line.status_suffix, sizeof(line.status_suffix), "%s",
+                              kMonsterStatusAbbrev[idx]);
             }
             mm2_monster_name_to_cstr(&monsters_->records[slots_[i].type], line.name, sizeof(line.name));
         }

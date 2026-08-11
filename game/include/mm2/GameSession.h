@@ -104,8 +104,8 @@ private:
         ExchangeOrder,  /* 0x20F58: Exchange (1-N) / with (1-N) */
         DismissHireling, /* 0x141F4: Dismiss whom (1-N)?; hireling only */
         UnlockWho,      /* 0x1AE2E: who tries unlock (1-N) */
-        GameOver,       /* party wipe — no living members; return to title */
-        DeathStrikes,   /* 0x14106 OP_0E FD abort==3 panel; ENTER → Goto Town */
+        GameOver,       /* unused wipe path — combat/all-dead uses DeathStrikes @ 0x14106 */
+        DeathStrikes,   /* 0x14106 blue panel; ENTER → Goto Town (last inn) */
         FdPrintChrome,  /* 0x1493C PTR0 / post-fight pages / WAFE name entry */
     };
 
@@ -171,10 +171,14 @@ private:
     void saveRosterWithGlobalTail();
     /** True when every party slot has (condition & 0xE0) != 0 — roster_count_living @ 0x47A2. */
     bool partyAllDead() const;
-    /** Total wipe: funeral prompt, do not persist corpses, then title on dismiss. */
+    /** Open 0x14106 Death Strikes (blue panel). bump_ctr → addq -$7972. */
+    void openDeathStrikesPanel(bool bump_ctr);
+    /** All-dead from combat/rest/trap/OP_31/boot — same panel as OP_0E FD abort==3. */
     void beginPartyWipeGameOver();
-    /** If the party is fully dead and not already on GameOver, start the funeral. */
+    /** If the party is fully dead and Death Strikes is not already up, open it. */
     void maybeBeginPartyWipeGameOver();
+    /** 0x141CE / 0x1A1F8: Goto Town from SAVED_TOWN_ID (no inn re-registry). */
+    void finishDeathStrikesGotoTown();
     bool overlayBlocksInput() const;
     void tickEventInput(const platform::KeyState &keys);
     void tickOverlayAnimations();
@@ -262,7 +266,8 @@ private:
     char search_identify_container_[24]{};
     bool search_identify_pick_member_ = false;
     bool search_identify_find_traps_ = false;
-    /** 0x1B2CE -$7FC2: container sign sprite (70..74.anm) over viewport. */
+    /** 0x1B2CE -$7FC2: container sign sprite (70..74.anm) over viewport.
+     *  Placed via -$7FBC(0,$40,$20) → (64,40); held static during Identify. */
     gfx::ViewportAnmOverlay search_container_{};
     /** 0x14EC2 endgame.32 blit @ (x=$20,y=$40) during post-fight FD pages. */
     mm2_image32_file endgame_{};

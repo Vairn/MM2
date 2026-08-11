@@ -60,6 +60,11 @@ struct CombatPanelView {
     /** Distinct picture ids for AGA multi-BOB gallery (back-to-front = low→high). */
     int sprite_slot_count = 0;
     CombatSpriteSlot sprite_slots[kAgaCombatSpriteCap]{};
+    /** 0x124D2 victory panel (blue glyph-5 rules + XP share). */
+    bool show_victory = false;
+    uint32_t victory_xp_share = 0;
+    /** Battles won after 0x1215A addq (-$7970); used for "Nth battle." */
+    uint16_t victory_battles_won = 0;
 };
 
 /** Black viewport interior (replaces exploration 3D hood during combat). */
@@ -73,5 +78,8 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view);
 
 /** Right column during combat: round roster (0x129CC) or pre-combat name box (0x12DA2). */
 void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view);
+
+/** Victory panel @ 0x124D2: clear (0x10,3)-(0x26,0x0D), pen -$7A4D blue rules, XP text. */
+void drawCombatVictoryPanel(ScreenCompositor &c, const CombatPanelView &view);
 
 }  // namespace mm2::gfx

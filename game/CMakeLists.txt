@@ -205,6 +205,7 @@ if(NOT AMIGA)
     tests/combat_setup_test.cpp
     src/combat/EncounterPicker.cpp
     src/combat/CombatSession.cpp
+    src/combat/CombatAuto.cpp
     src/events/EventVmHelpers.cpp
     src/events/TownServiceTransactions.cpp
     src/gameplay/ExploreActions.cpp
@@ -266,6 +267,39 @@ if(NOT AMIGA)
   target_include_directories(party_hp_format_test PRIVATE include)
   target_link_libraries(party_hp_format_test PRIVATE mm2_codecs mm2_audio_stub)
 
+  add_executable(repro_fight_refire
+    tests/repro_fight_refire.cpp
+    src/events/EventRuntime.cpp
+    src/events/EventVmHelpers.cpp
+    src/events/EventPartyEffects.cpp
+    src/events/EventTownServices.cpp
+    src/events/EventSkillBuy.cpp
+    src/events/TownServiceTransactions.cpp
+    src/events/TownServiceMenu.cpp
+    src/events/EventCombatEncounter.cpp
+    src/events/EventTextView.cpp
+    src/events/ServiceSignResolver.cpp
+    src/events/ScriptedSceneEngine.cpp
+    src/combat/EncounterPicker.cpp
+    src/combat/CombatSession.cpp
+    src/combat/CombatAuto.cpp
+    src/gameplay/ExploreActions.cpp
+    src/gameplay/Movement.cpp
+    src/gameplay/RosterSkills.cpp
+    src/ui/PlayTownServiceUi.cpp
+    src/gfx/ViewportAnmOverlay.cpp
+    src/gfx/GfxBackend.cpp
+    src/gfx/ScreenCompositor.cpp
+    src/gfx/PlayScreenChrome.cpp
+    src/gfx/CombatPanel.cpp
+    src/gfx/PartyStatusFormat.cpp
+    src/gfx/mm2_font8x8.c
+    src/world/MapWorld.cpp
+    src/runtime/Mm2Alloc.cpp
+    src/runtime/PathScratch.cpp)
+  target_include_directories(repro_fight_refire PRIVATE include)
+  target_link_libraries(repro_fight_refire PRIVATE mm2_codecs mm2_audio_stub)
+
   add_executable(event_middlegate_test
     tests/event_middlegate_test.cpp
     src/events/EventRuntime.cpp
@@ -281,6 +315,7 @@ if(NOT AMIGA)
     src/events/ScriptedSceneEngine.cpp
     src/combat/EncounterPicker.cpp
     src/combat/CombatSession.cpp
+    src/combat/CombatAuto.cpp
     src/gameplay/ExploreActions.cpp
     src/gameplay/Movement.cpp
     src/gameplay/RosterSkills.cpp
@@ -313,6 +348,7 @@ if(NOT AMIGA)
     src/events/ScriptedSceneEngine.cpp
     src/combat/EncounterPicker.cpp
     src/combat/CombatSession.cpp
+    src/combat/CombatAuto.cpp
     src/gameplay/ExploreActions.cpp
     src/gameplay/Movement.cpp
     src/gameplay/RosterSkills.cpp
@@ -383,6 +419,7 @@ if(NOT AMIGA)
     src/events/ServiceSignResolver.cpp
     src/combat/EncounterPicker.cpp
     src/combat/CombatSession.cpp
+    src/combat/CombatAuto.cpp
     src/ui/PlayTownServiceUi.cpp
     src/gfx/ViewportAnmOverlay.cpp
     src/runtime/Mm2Alloc.cpp
@@ -425,6 +462,7 @@ if(NOT AMIGA)
     src/events/ServiceSignResolver.cpp
     src/combat/EncounterPicker.cpp
     src/combat/CombatSession.cpp
+    src/combat/CombatAuto.cpp
     src/ui/PlayTownServiceUi.cpp
     src/gfx/ViewportAnmOverlay.cpp
     src/runtime/Mm2Alloc.cpp
@@ -488,6 +526,7 @@ set(MM2_GAME_SOURCES
   src/world/MapWorld.cpp
   src/combat/EncounterPicker.cpp
   src/combat/CombatSession.cpp
+  src/combat/CombatAuto.cpp
   src/events/EventRuntime.cpp
   src/events/EventVmHelpers.cpp
   src/events/EventPartyEffects.cpp

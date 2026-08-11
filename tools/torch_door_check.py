@@ -17,11 +17,11 @@ FRONT_TORCH_XY = (105, 52)
 
 
 def torch_blit_for(kind: str, depth: int, code: int, frame: int, mirror: bool = False):
-    """Mirror wiki/maze-walker/view3d.js torchBlitFor (fixed: code must be 2)."""
-    if code != 2 or depth > 2:
+    """Mirror wiki/maze-walker/view3d.js torchBlitFor (torch overlay = field 3)."""
+    if code != 3 or depth > 2:
         return None
     flicker = 0
-    base = frame - 0x10 if code == 2 else frame
+    base = frame - 0x10 if code == 3 else frame
     left_far = {12, 14, 2, 3}
     right_far = {13, 15, 2, 3}
     if kind == "front":
@@ -42,8 +42,8 @@ def torch_blit_for(kind: str, depth: int, code: int, frame: int, mirror: bool = 
 
 
 def old_torch_blit_for(kind: str, depth: int, code: int, frame: int):
-    """Pre-fix bug: torchBlitFor required code === 3 (door)."""
-    if code != 3 or depth > 2:
+    """Pre-fix bug: torchBlitFor required code === 2 (door) instead of 3 (torch)."""
+    if code != 2 or depth > 2:
         return None
     if kind == "front":
         return (0x12 + depth * 3, (105, 108, 107)[depth], (44, 52, 60)[depth])
@@ -53,21 +53,21 @@ def old_torch_blit_for(kind: str, depth: int, code: int, frame: int):
 def check_pos(visual, x, y, facing, label: str) -> None:
     scene = build_scene(visual, x, y, facing)
     print(f"=== {label} ({x},{y}) facing {FACE[facing & 3]} ===")
-    door_front = [b for b in scene.blits if b.kind == "front" and b.code == 3]
-    torch_slots = [b for b in scene.blits if b.code == 2]
+    door_front = [b for b in scene.blits if b.kind == "front" and b.code == 2]
+    torch_slots = [b for b in scene.blits if b.code == 3]
     old_on_door = []
     new_on_door = []
     for b in scene.blits:
         tb_old = old_torch_blit_for(b.kind, b.depth, b.code, b.frame)
         tb_new = torch_blit_for(b.kind, b.depth, b.code, b.frame, mirror=False)
-        if b.code == 3 and b.kind == "front" and tb_old:
+        if b.code == 2 and b.kind == "front" and tb_old:
             old_on_door.append((b, tb_old))
-        if b.code == 3 and b.kind == "front" and tb_new:
+        if b.code == 2 and b.kind == "front" and tb_new:
             new_on_door.append((b, tb_new))
     print(f"  front door blits: {len(door_front)}")
     for b in door_front:
         print(f"    depth={b.depth} frame={b.frame} @ ({b.x},{b.y}) code={b.code}")
-    print(f"  torch wall slots (code=2): {len(torch_slots)}")
+    print(f"  torch wall slots (code=3): {len(torch_slots)}")
     for b in torch_slots:
         print(f"    {b.kind} depth={b.depth} frame={b.frame} code={b.code}")
     print(f"  OLD bug torch on door: {len(old_on_door)}")

@@ -188,14 +188,22 @@ static inline int mm2_map_passability_blocked(uint8_t collision_cell, char facin
     return walls != 0;
 }
 
-/* Page-1 wall low bit for the facing direction (unlock/bash lock clear @ 0x4B06). */
+/* Page-1 wall low bit for the facing direction (unlock/bash lock @ 0x4B06).
+ *
+ * The original rotates the party facing into a FILE SLOT via the -$55D8 bundle
+ * mask (set @ 0x5642..0x568A: N=0xC0 E=0x30 S=0x0C W=0x03) — and bash @ 0x9B88
+ * and clear_lock @ 0x4B06 AND the collision byte against that SAME bundle, then
+ * wall-only 0x55. So facing "N" actually reads the file's WEST slot (0x40),
+ * not the N wall bit (0x01); this is the same rotation mm2_map_facing_shift
+ * (N=6 -> bits 6-7 = W) applies to the visual page. Keep this in lock-step with
+ * mm2_map_facing_mask_hi & 0x55. */
 static inline uint8_t mm2_map_facing_wall_bit(char facing_key)
 {
     switch (facing_key) {
-    case 'N': return MM2_MAP_COLL_N_WALL;
-    case 'E': return MM2_MAP_COLL_E_WALL;
-    case 'S': return MM2_MAP_COLL_S_WALL;
-    case 'W': return MM2_MAP_COLL_W_WALL;
+    case 'N': return MM2_MAP_COLL_W_WALL; /* bundle 0xC0 & 0x55 -> bit6 (file W) */
+    case 'E': return MM2_MAP_COLL_S_WALL; /* bundle 0x30 & 0x55 -> bit4 (file S) */
+    case 'S': return MM2_MAP_COLL_E_WALL; /* bundle 0x0C & 0x55 -> bit2 (file E) */
+    case 'W': return MM2_MAP_COLL_N_WALL; /* bundle 0x03 & 0x55 -> bit0 (file N) */
     default: return 0;
     }
 }

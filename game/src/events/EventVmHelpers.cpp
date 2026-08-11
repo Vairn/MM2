@@ -80,6 +80,188 @@ Mm2RosterRecord *rosterRecordMut(Mm2RosterFile *roster, int roster_idx)
     return &roster->records[roster_idx];
 }
 
+/** $7BBE: share gold equally among eligible (< 0x18) members; needs 2+ eligible.
+ *  Truncating divide remainder accrues to the initiator (first eligible slot). */
+void partyShareGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                    int count)
+{
+    int eligible[MM2_PARTY_LAUNCH_SLOTS];
+    int n = 0;
+    uint32_t total = 0;
+    for (int i = 0; i < count; ++i) {
+        if (!partySlotEligible(a4, launch, i)) {
+            continue;
+        }
+        uint32_t gold = 0;
+        bool have = false;
+        if (roster && launch) {
+            const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[i]);
+            if (rec) {
+                gold = rec->gold;
+                have = true;
+            }
+        } else if (a4) {
+            const int idx = partyRosterIndex(a4, i);
+            if (idx >= 0) {
+                gold = mm2_gs_u32(a4, MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x66);
+                have = true;
+            }
+        }
+        if (have) {
+            eligible[n++] = i;
+            total += gold;
+        }
+    }
+    if (n <= 1) {
+        return; /* $7BBE: nothing to share with a single member. */
+    }
+    const uint32_t share = total / static_cast<uint32_t>(n);
+    for (int k = 0; k < n; ++k) {
+        const int i = eligible[k];
+        if (roster && launch) {
+            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[i]);
+            if (rec) {
+                rec->gold = share;
+                total -= share;
+            }
+        } else if (a4) {
+            const int idx = partyRosterIndex(a4, i);
+            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x66;
+            mm2_gs_set_u32(a4, off, share);
+            total -= share;
+        }
+    }
+    /* Rounding remainder -> initiator (first eligible). */
+    const int first = eligible[0];
+    if (total) {
+        if (roster && launch) {
+            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[first]);
+            if (rec) {
+                rec->gold = static_cast<uint32_t>(rec->gold + total);
+            }
+        } else if (a4) {
+            const int idx = partyRosterIndex(a4, first);
+            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x66;
+            mm2_gs_set_u32(a4, off,
+                           mm2_gs_u32(a4, off) + total);
+        }
+    }
+}
+
+/** $7CB0: share gems equally among ALL party members (via -$795a count). */
+void partyShareGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                    int count)
+{
+    uint32_t total = 0;
+    for (int i = 0; i < count; ++i) {
+        if (roster && launch) {
+            const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[i]);
+            if (rec) {
+                total += rec->gems;
+            }
+        } else if (a4) {
+            const int idx = partyRosterIndex(a4, i);
+            if (idx >= 0) {
+                total += mm2_gs_u16(a4, MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x5C);
+            }
+        }
+    }
+    if (count <= 0) {
+        return;
+    }
+    const uint16_t share = static_cast<uint16_t>(total / static_cast<uint32_t>(count));
+    for (int i = 0; i < count; ++i) {
+        if (roster && launch) {
+            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[i]);
+            if (rec) {
+                rec->gems = share;
+                total -= share;
+            }
+        } else if (a4) {
+            const int idx = partyRosterIndex(a4, i);
+            if (idx < 0) {
+                continue;
+            }
+            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x5C;
+            mm2_gs_set_u16(a4, off, share);
+            total -= share;
+        }
+    }
+    /* Rounding remainder -> initiator (slot 0). */
+    if (total) {
+        if (roster && launch) {
+            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[0]);
+            if (rec) {
+                rec->gems = static_cast<uint16_t>(rec->gems + static_cast<uint16_t>(total));
+            }
+        } else if (a4) {
+            const int idx = partyRosterIndex(a4, 0);
+            if (idx >= 0) {
+                const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x5C;
+                mm2_gs_set_u16(a4, off,
+                               static_cast<uint16_t>(mm2_gs_u16(a4, off) + static_cast<uint16_t>(total)));
+            }
+        }
+    }
+}
+
+/** $7D3E: share food equally among ALL party members (via -$795a count). */
+void partyShareFood(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                    int count)
+{
+    uint32_t total = 0;
+    for (int i = 0; i < count; ++i) {
+        if (roster && launch) {
+            const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[i]);
+            if (rec) {
+                total += rec->food;
+            }
+        } else if (a4) {
+            const int idx = partyRosterIndex(a4, i);
+            if (idx >= 0) {
+                total += mm2_gs_u8(a4, MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x25);
+            }
+        }
+    }
+    if (count <= 0) {
+        return;
+    }
+    const uint8_t share = static_cast<uint8_t>(total / static_cast<uint32_t>(count));
+    for (int i = 0; i < count; ++i) {
+        if (roster && launch) {
+            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[i]);
+            if (rec) {
+                rec->food = share;
+                total -= share;
+            }
+        } else if (a4) {
+            const int idx = partyRosterIndex(a4, i);
+            if (idx < 0) {
+                continue;
+            }
+            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x25;
+            mm2_gs_set_u8(a4, off, share);
+            total -= share;
+        }
+    }
+    /* Rounding remainder -> initiator (slot 0). */
+    if (total) {
+        if (roster && launch) {
+            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[0]);
+            if (rec) {
+                rec->food = static_cast<uint8_t>(rec->food + static_cast<uint8_t>(total));
+            }
+        } else if (a4) {
+            const int idx = partyRosterIndex(a4, 0);
+            if (idx >= 0) {
+                const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x25;
+                mm2_gs_set_u8(a4, off,
+                              static_cast<uint8_t>(mm2_gs_u8(a4, off) + static_cast<uint8_t>(total)));
+            }
+        }
+    }
+}
+
 /* Item storage is Structure-of-Arrays (Mm2RosterRecord: equipped_id[6]/
  * equipped_charges[6]/equipped_flags[6], then backpack_id/charges/flags) — the
  * SoA layout confirmed by OP_16 @ 0x16520 and OP_19 @ 0x165D8. */
@@ -553,10 +735,15 @@ bool eventVmPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch
     return false;
 }
 
-void eventVmClearTileEventFlag(uint8_t *a4, int y, int x)
+void eventVmClearTileEventFlag(uint8_t *a4, world::MapWorld &world, int y, int x)
 {
     /* OP_14 @ 0x16398: andi #$7F on collision page -$54BA[(y<<4)|x] AND on
-     * the current-cell latch -$55D6 (single byte — not an indexed array). */
+     * the current-cell latch -$55D6 (single byte — not an indexed array).
+     * Mirrors the ROM: it is the persistent map collision page that makes the
+     * main-loop gate (0x1258: -$55D6 bit7) stop re-firing a cleared fight tile.
+     * The port's runtime GS flags are the -$55D6 / -$54BA analog; the map's
+     * collision page must ALSO have the event bit cleared so the tile does not
+     * re-match a triplet on a later return (revisit-after-move re-fire bug). */
     const int idx = tileIndex(y, x);
     if (!a4 || idx < 0) {
         return;
@@ -565,11 +752,17 @@ void eventVmClearTileEventFlag(uint8_t *a4, int y, int x)
                   static_cast<uint8_t>(mm2_gs_u8(a4, MM2_GS_TILE_VISITED + idx) & static_cast<uint8_t>(~0x80)));
     mm2_gs_set_u8(a4, MM2_GS_TILE_RT_FLAGS,
                   static_cast<uint8_t>(mm2_gs_u8(a4, MM2_GS_TILE_RT_FLAGS) & static_cast<uint8_t>(~0x80)));
+    if (world.loaded() && y >= 0 && y < MM2_MAP_GRID_DIM && x >= 0 && x < MM2_MAP_GRID_DIM) {
+        Mm2MapScreen &screen = world.mapFileMut().screens[world.currentScreen()];
+        const int midx = y * MM2_MAP_GRID_DIM + x;
+        screen.collision[midx] =
+            static_cast<uint8_t>(screen.collision[midx] & static_cast<uint8_t>(~MM2_MAP_COLL_EVENT));
+    }
 }
 
 void eventVmConsumeTileEncounterFlag(uint8_t *a4, world::MapWorld &world, int y, int x)
 {
-    eventVmClearTileEventFlag(a4, y, x);
+    eventVmClearTileEventFlag(a4, world, y, x);
     if (!world.loaded() || y < 0 || y >= MM2_MAP_GRID_DIM || x < 0 || x >= MM2_MAP_GRID_DIM) {
         return;
     }
@@ -1314,6 +1507,13 @@ bool eventVmPartyTryPayGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLa
             remain = 0;
         }
     }
+    /* 0x6ACE epilogue → jsr $7BBE: re-share the pooled remainder equally among
+     * all eligible (< 0x18) members; any rounding remainder goes to the first
+     * (initiator). Without this, a pool-pay piles every member's gold onto one. */
+    if (pooled) {
+        partyShareGold(a4, roster, launch, count);
+    }
+
     const bool ok = pooled || amount == 0;
     if (a4 && ok) {
         mm2_gs_set_u8(a4, MM2_GS_COND_FLAG, 1); /* 0x6B2E */
@@ -1371,6 +1571,11 @@ bool eventVmPartyTryPayGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLa
             remain = 0;
         }
     }
+    /* 0x6B9A epilogue → jsr $7CB0: re-share the pooled gems remainder equally
+     * among ALL party members; rounding remainder to the first. */
+    if (pooled) {
+        partyShareGems(a4, roster, launch, count);
+    }
     return pooled || amount == 0;
 }
 
@@ -1423,6 +1628,11 @@ bool eventVmPartyTryPayFood(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLa
             pooled = true;
             remain = 0;
         }
+    }
+    /* 0x6C66 epilogue → jsr $7D3E: re-share the pooled food remainder equally
+     * among ALL party members; rounding remainder to the first. */
+    if (pooled) {
+        partyShareFood(a4, roster, launch, count);
     }
     return pooled || amount == 0;
 }

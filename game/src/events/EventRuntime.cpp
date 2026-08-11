@@ -511,6 +511,13 @@ void EventRuntime::abortScript(GameStateView &gs)
     restoreOverlayIfIdle(gs);
 }
 
+void EventRuntime::haltUiForHostOverlay(GameStateView &gs)
+{
+    abortScript(gs);
+    text_.clearConsoleMessageLayers();
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 0);
+}
+
 void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t op)
 {
     char text_buf[256];
@@ -691,7 +698,7 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
         break;
     }
     case 0x14:
-        eventVmClearTileEventFlag(gs.a4(), gs.coordY(), gs.coordX());
+        eventVmClearTileEventFlag(gs.a4(), world, gs.coordY(), gs.coordX());
         break;
     case 0x16: {
         /* event_op16_scan_party_items @ 0x16520: reads 2 bytes (arg1 read then

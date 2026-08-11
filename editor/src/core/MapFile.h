@@ -18,8 +18,9 @@ constexpr int kMapFileSize = kMapScreens * kMapScreenSize;
 
 // Visual page (page 0): four 2-bit wall fields per cell — walls only, no event bit.
 //   bits 0-1 North   2-3 East   4-5 South   6-7 West
-//   0 open   1 wall   2 wall+torch   3 door
-enum class VisualWall : uint8_t { Open = 0, Wall = 1, Torch = 2, Door = 3 };
+//   0 open   1 wall   2 door   3 wall+torch   (verified: bash/unlock CMPI #$2 = door;
+//   frustum flatten 0x2Bxx targets value 3 = torch; renderer +0x10 door frame = 2)
+enum class VisualWall : uint8_t { Open = 0, Wall = 1, Door = 2, Torch = 3 };
 
 inline int visualWallN(uint8_t cell) { return cell & 3; }
 inline int visualWallE(uint8_t cell) { return (cell >> 2) & 3; }

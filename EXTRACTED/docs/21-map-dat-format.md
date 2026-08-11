@@ -19,7 +19,7 @@ Four 2-bit fields per cell (from `MapFile.h`):
 
 | Bits | Direction | Values |
 |------|-----------|--------|
-| 0–1 | North | `0` open, `1` wall, `2` wall+torch, `3` door |
+| 0–1 | North | `0` open, `1` wall, `2` door, `3` wall+torch |
 | 2–3 | East | same |
 | 4–5 | South | same |
 | 6–7 | West | same |

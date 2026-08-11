@@ -897,7 +897,7 @@ incomplete; **Unknown** = behaviour not traced.
 | `21` | Verified | Patch map tile + `EXIT_FLAGS \|= 4` (redraw bit2 @ `0x16A34`) |
 | `22` | Verified | Era range gate (`-$79B5`) |
 | `23` | Verified | Day-of-year gate (`0x16ADA`). day = low byte of `-$79DE[era]`. `arg1=0xB5`→odd-day, `arg1=0xB6`→even-day, else inclusive byte range `[arg1,arg2]`. Ported byte-exact (the `0xB5`/`0xB6` odd/even-day cases were previously missing). See §OP_23 |
-| `24` | Verified | Gold pool-pay via `0x155DA` + `-$7E6C`→`0x6ACE`: sum party gold `+$66` (slots with roster idx `<0x18`), if ≥ amount deduct and pool remainder on first eligible. Cond = success |
+| `24` | Verified | Gold pool-pay via `0x155DA` + `-$7E6C`→`0x6ACE`: sum party gold `+$66` (slots with roster idx `<0x18`), if ≥ amount deduct, pool the remainder, then `jsr $7BBE` re-shares it equally among eligible members (remainder to first). Cond = success |
 | `25` | Verified | Gems pool-pay via `-$7E66`→`0x6B9A` (same pattern for `+$5C` u16). **Not** tickets/keys (those are OP_0E `0x08` / OP_28). Handler reads 2 arg bytes; ROM skip-table entry is 2 — see §Notes on `*_SKIPTOK` |
 | `26`/`27` | Verified | Member select @ `0x16BC0`: on success `cond=slot`, `-$5D42=slot`, `-$5D3F=slot`; reject dead (`+$26≥$81`); ESC aborts. Input-path difference 26 vs 27 still presentation-only |
 | `28` | Verified | Backpack-only consume (`+$3A`); 1st arg discarded; always consumes on hit → cond |
@@ -1248,7 +1248,7 @@ incorrect.
 **Scenario:** “Travel for 25 gold (y/n)?” — you accept and have enough gold.
 
 - **A.** `OP_24` is **check only** (gold ≥ amount); a later op/engine call deducts if you proceed.
-- **B.** `OP_24` both checks and subtracts gold immediately when true (pool remainder onto first eligible member).
+- **B.** `OP_24` both checks and subtracts gold immediately when true; the pooled remainder is then re-shared equally across eligible members (`jsr $7BBE`, remainder to the initiator).
 - **C.** `OP_24` checks individual member gold, not party total.
 - **D.** Failed check still deducts partial gold.
 

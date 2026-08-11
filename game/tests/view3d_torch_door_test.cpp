@@ -1,5 +1,7 @@
-// Regression: townt.32 overlay must not appear on map.dat field-3 doors.
+// Regression: townt.32 overlay must not appear on map.dat field-2 doors.
 // Gateway Temple door cell (6,7); approach from (6,6) or alley (7,7) facing N.
+// Visual encoding verified in ASM (bash/unlock 0x9B48 CMPI #$2 = door; renderer
+// 0x2C46 +0x10 = door): field 2 = door, field 3 = wall+torch.
 //
 // Usage: view3d_torch_door_test <data_dir>
 
@@ -58,7 +60,7 @@ int main(int argc, char **argv)
         for (int i = 0; i < scene.num_torch_blits; ++i) {
             const mm2::gfx::View3DBlit &b = scene.torch_blits[static_cast<size_t>(i)];
             if (b.code != mm2::gfx::kMapVisualWallTorch) {
-                std::fprintf(stderr, "FAIL: %s torch_blits[%d] code=%u (expected 2)\n", cam.label, i,
+                std::fprintf(stderr, "FAIL: %s torch_blits[%d] code=%u (expected 3)\n", cam.label, i,
                              static_cast<unsigned>(b.code));
                 ++fails;
             }
@@ -88,6 +90,43 @@ int main(int argc, char **argv)
         if (scene.num_torch_blits < 1) {
             std::fprintf(stderr, "FAIL: (7,3) N expected >=1 torch_blit, got %d\n",
                          scene.num_torch_blits);
+            ++fails;
+        }
+    }
+
+    /* ASM frustum flatten regression (0x2B6A..0x2BBC): a torch (field 3) on a far
+     * slot behind a solid front must be flattened to a plain wall (1), NOT keep
+     * a torch overlay. Constructed synthetic page-0: facing N at (8,8) with a
+     * solid north wall ahead, open cell ahead, and a torch (0xC0 = N field 3)
+     * on the left-far slot S_F13. */
+    {
+        std::array<uint8_t, mm2::gfx::kMapPageSize> page{};
+        page.fill(0);
+        const auto at = [&](int x, int y, uint8_t v) { page[static_cast<size_t>((y << 4) | x)] = v; };
+        at(8, 8, 0x01);  // front center: N field = wall
+        at(8, 9, 0x00);  // ahead cell: open
+        at(7, 9, 0xC0);  // left-far cell: N field = 3 (torch)
+        const mm2::gfx::View3DMapBuffers cb = mm2::gfx::buildView3DMapBuffers(page.data());
+
+        mm2::gfx::View3DCamera c{};
+        c.x = 8;
+        c.y = 8;
+        c.facing = 0;
+        const mm2::gfx::View3DScene scene = mm2::gfx::buildView3DScene(cb, c);
+        if (scene.num_torch_blits != 0) {
+            std::fprintf(stderr, "FAIL: torch on far slot behind solid front should be flattened, got %d torch_blits\n",
+                         scene.num_torch_blits);
+            ++fails;
+        }
+        bool sawPlainFarLeft = false;
+        for (int i = 0; i < scene.num_blits; ++i) {
+            const mm2::gfx::View3DBlit &b = scene.blits[static_cast<size_t>(i)];
+            if (b.latX == -2 && b.code == static_cast<uint8_t>(mm2::gfx::WallField::Wall)) {
+                sawPlainFarLeft = true;
+            }
+        }
+        if (!sawPlainFarLeft) {
+            std::fprintf(stderr, "FAIL: expected flattened plain wall on far-left slot, none found\n");
             ++fails;
         }
     }

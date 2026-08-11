@@ -281,6 +281,11 @@
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_setup_test.dir\\src\\combat\\CombatAuto.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_setup_test.dir\\src\\events\\EventVmHelpers.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventVmHelpers.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventVmHelpers.cpp"
 },
@@ -481,6 +486,151 @@
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\tests\\repro_fight_refire.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\repro_fight_refire.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\repro_fight_refire.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\EventRuntime.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventRuntime.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventRuntime.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\EventVmHelpers.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventVmHelpers.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventVmHelpers.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\EventPartyEffects.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventPartyEffects.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventPartyEffects.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\EventTownServices.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventTownServices.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventTownServices.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\EventSkillBuy.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventSkillBuy.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventSkillBuy.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\TownServiceTransactions.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\TownServiceTransactions.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\TownServiceTransactions.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\TownServiceMenu.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\TownServiceMenu.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\TownServiceMenu.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\EventCombatEncounter.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventCombatEncounter.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventCombatEncounter.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\EventTextView.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventTextView.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\EventTextView.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\ServiceSignResolver.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\ServiceSignResolver.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\ServiceSignResolver.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\events\\ScriptedSceneEngine.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\ScriptedSceneEngine.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\ScriptedSceneEngine.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\combat\\EncounterPicker.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\EncounterPicker.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\EncounterPicker.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\combat\\CombatSession.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatSession.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatSession.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\combat\\CombatAuto.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\gameplay\\ExploreActions.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\ExploreActions.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\ExploreActions.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\gameplay\\Movement.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\Movement.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\Movement.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\gameplay\\RosterSkills.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\RosterSkills.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\RosterSkills.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\ui\\PlayTownServiceUi.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayTownServiceUi.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayTownServiceUi.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\gfx\\ViewportAnmOverlay.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\ViewportAnmOverlay.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\ViewportAnmOverlay.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\gfx\\GfxBackend.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\GfxBackend.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\GfxBackend.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\gfx\\ScreenCompositor.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\ScreenCompositor.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\ScreenCompositor.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\gfx\\PlayScreenChrome.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\PlayScreenChrome.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\PlayScreenChrome.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\gfx\\CombatPanel.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\CombatPanel.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\CombatPanel.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\gfx\\PartyStatusFormat.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\PartyStatusFormat.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\PartyStatusFormat.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\cc.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu11 -o CMakeFiles\\repro_fight_refire.dir\\src\\gfx\\mm2_font8x8.c.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\mm2_font8x8.c",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\mm2_font8x8.c"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\world\\MapWorld.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\world\\MapWorld.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\world\\MapWorld.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\runtime\\Mm2Alloc.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\runtime\\Mm2Alloc.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\runtime\\Mm2Alloc.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\repro_fight_refire.dir\\src\\runtime\\PathScratch.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\runtime\\PathScratch.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\runtime\\PathScratch.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\event_middlegate_test.dir\\tests\\event_middlegate_test.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\event_middlegate_test.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\event_middlegate_test.cpp"
 },
@@ -548,6 +698,11 @@
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\event_middlegate_test.dir\\src\\combat\\CombatSession.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatSession.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatSession.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\event_middlegate_test.dir\\src\\combat\\CombatAuto.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp"
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
@@ -688,6 +843,11 @@
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\event_town_skills_test.dir\\src\\combat\\CombatSession.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatSession.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatSession.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\event_town_skills_test.dir\\src\\combat\\CombatAuto.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp"
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
@@ -861,6 +1021,31 @@
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\playscreen_golden.dir\\src\\ui\\PlayHudKind.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayHudKind.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayHudKind.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\playscreen_golden.dir\\src\\ui\\PlayHudFactory.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayHudFactory.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayHudFactory.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\playscreen_golden.dir\\src\\ui\\ClassicPlayHud.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\ClassicPlayHud.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\ClassicPlayHud.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\playscreen_golden.dir\\src\\ui\\AguiPlayHud.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\AguiPlayHud.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\AguiPlayHud.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\playscreen_golden.dir\\src\\ui\\AguiAtlas.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\AguiAtlas.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\AguiAtlas.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\playscreen_golden.dir\\src\\events\\ScriptedSceneEngine.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\ScriptedSceneEngine.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\events\\ScriptedSceneEngine.cpp"
 },
@@ -1006,6 +1191,11 @@
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\playscreen_golden.dir\\src\\combat\\CombatAuto.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\playscreen_golden.dir\\src\\ui\\PlayTownServiceUi.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayTownServiceUi.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayTownServiceUi.cpp"
 },
@@ -1058,6 +1248,31 @@
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_golden.dir\\src\\platform\\sdl\\AudioSDL.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\platform\\sdl\\AudioSDL.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\platform\\sdl\\AudioSDL.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_golden.dir\\src\\ui\\PlayHudKind.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayHudKind.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayHudKind.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_golden.dir\\src\\ui\\PlayHudFactory.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayHudFactory.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\PlayHudFactory.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_golden.dir\\src\\ui\\ClassicPlayHud.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\ClassicPlayHud.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\ClassicPlayHud.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_golden.dir\\src\\ui\\AguiPlayHud.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\AguiPlayHud.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\AguiPlayHud.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_golden.dir\\src\\ui\\AguiAtlas.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\AguiAtlas.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\AguiAtlas.cpp"
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
@@ -1203,6 +1418,11 @@
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_golden.dir\\src\\combat\\CombatSession.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatSession.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatSession.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_golden.dir\\src\\combat\\CombatAuto.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp"
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
@@ -1368,6 +1588,11 @@
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\mm2.dir\\src\\combat\\CombatSession.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatSession.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatSession.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\mm2.dir\\src\\combat\\CombatAuto.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\combat\\CombatAuto.cpp"
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",

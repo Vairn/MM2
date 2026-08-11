@@ -36,6 +36,11 @@ enum {
      * (stream write loop @0x8302..0x834A), then u16 party size -> A4-$795A. */
     MM2_ROSTER_TAIL_PARTY_ROSTER_IDX = 0x028,
     MM2_ROSTER_TAIL_PARTY_SIZE = 0x038,
+    /* After era/subday @ 0x03A/0x03C: three words @ 0x83D0..0x8414 —
+     * OP0E FD ctr (-$7972), battles won (-$7970), battles lost (-$796E). */
+    MM2_ROSTER_TAIL_OP0E_FD_CTR = 0x03E,
+    MM2_ROSTER_TAIL_BATTLES_WON = 0x040,
+    MM2_ROSTER_TAIL_BATTLES_LOST = 0x042,
     /* 24-byte event/quest bank -> A4-$798B (write @0x84A2). The roster/party
      * UI gates hireling-page entries (letters A..X) on bank[letter] != 0
      * (tst.b -$798B(a4,d0) @0x586 / 0x7B6 / 0xB68) — hireling availability. */

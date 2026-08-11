@@ -186,7 +186,7 @@
  * Parallel per-monster-slot arrays, index 0..10 (MM2_GS_MONSTER_BATTLE_SLOTS).
  * Per-party-member acted flags are index 0..7 (party slot, not roster index). */
 #define MM2_GS_MONSTER_HP           (-0x53A)   /* word[11] ($7AC4) current HP */
-#define MM2_GS_MONSTER_STATUS       (-0x519)   /* byte[11] ($7AE5) bit0=awake/active */
+#define MM2_GS_MONSTER_STATUS       (-0x519)   /* byte[11] ($7AE5) bit0=Hurt (set on damage @ 0x10EEA); &0xFE=afflictions */
 #define MM2_GS_MONSTER_SPEED        (-0x50E)   /* byte[11] ($7AF0) initiative */
 #define MM2_GS_MONSTER_ACTED        (-0x5E4A)  /* byte[10] ($21B4) acted-this-round flags */
 #define MM2_GS_PARTY_ACTED          (-0x5E40)  /* byte[8]  ($21BE) acted-this-round flags */
@@ -285,6 +285,10 @@
 #define MM2_GS_OP0E_FD_PTR5     (-0x5D92)  /* long[10] */
 #define MM2_GS_OP0E_FD_MODE     (-0x71DC)  /* byte  ($8E24) set $FD after table fill */
 #define MM2_GS_OP0E_FD_CTR      (-0x7972)  /* word  addq @ 0x14112 (abort==3 / -$7ED2) */
+/* Party battle tallies (roster.dat tail @ +$040 / +$042; endgame @ 0x1536A / 0x1538A).
+ * Victory presentation 0x1215A addq -$7970; defeat/flee 0x11664 addq -$796E. */
+#define MM2_GS_BATTLES_WON      (-0x7970)  /* word  ($8690) "Nth battle" @ 0x1215A */
+#define MM2_GS_BATTLES_LOST     (-0x796E)  /* word  ($8692) flee/wipe count @ 0x11664 */
 /* -$7DDC key_read_scripted @ 0x97A2 (doc 44): replay buffer + cursors. */
 #define MM2_GS_SCRIPTED_KEY_BUF (-0x119A)  /* byte[] key stream; $FF end/wrap */
 #define MM2_GS_SCRIPTED_KEY_IDX (-0x1110)  /* word  read cursor; $FFFF = reset */

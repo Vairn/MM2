@@ -14,6 +14,7 @@
 #include "mm2_party_launch.h"
 #include "mm2/gamestate.h"
 #include "mm2_gamestate.h"
+#include "mm2_map_codec.h"
 
 namespace {
 
@@ -25,6 +26,42 @@ bool expect(bool cond, const char *msg, int &fails)
         return false;
     }
     return true;
+}
+
+/* Door-lock facing rotation regression: the ASM reads the collision byte against
+ * the -$55D8 bundle mask (N=0xC0 -> wall bit 0x40 = file W), the SAME rotation
+ * mm2_map_facing_shift uses on the visual page. mm2_map_facing_wall_bit must be
+ * kept in lock-step with mm2_map_facing_mask_hi & 0x55 (bash @ 0x9B88, clear_lock
+ * @ 0x4B06). A cell with ONLY its file-W wall bit (0x40) set:
+ *   - facing N must read it as a locked door
+ *   - facing E/S/W must NOT read it as locked  */
+void testDoorLockRotation(int &fails)
+{
+    Mm2MapScreen s{};
+    Mm2MapScreen *sp = &s;
+    /* x=3,y=5 collision cell = 0x40 (file W wall only). */
+    s.collision[static_cast<size_t>(5 * MM2_MAP_GRID_DIM + 3)] = MM2_MAP_COLL_W_WALL;
+
+    expect(mm2_map_door_locked_at(sp, 3, 5, 'N') != 0, "file-W wall bit reads locked facing N", fails);
+    expect(mm2_map_door_locked_at(sp, 3, 5, 'E') == 0, "not locked facing E", fails);
+    expect(mm2_map_door_locked_at(sp, 3, 5, 'S') == 0, "not locked facing S", fails);
+    expect(mm2_map_door_locked_at(sp, 3, 5, 'W') == 0, "not locked facing W", fails);
+
+    /* clear clears only the facing's rotated bit (N->file W). */
+    mm2_map_clear_door_lock(sp, 3, 5, 'N');
+    expect(mm2_map_collision_at(sp, 3, 5) == 0, "clear door lock N clears file-W bit", fails);
+
+    /* Symmetric: a file-N wall bit (0x01) reads locked only facing W. */
+    s.collision[static_cast<size_t>(5 * MM2_MAP_GRID_DIM + 3)] = MM2_MAP_COLL_N_WALL;
+    expect(mm2_map_door_locked_at(sp, 3, 5, 'W') != 0, "file-N wall bit reads locked facing W", fails);
+    expect(mm2_map_door_locked_at(sp, 3, 5, 'N') == 0, "not locked facing N (file-N bit)", fails);
+
+    /* Full bundle masking: byte 0x44 = file W (bit6) + file E (bit2) walls. */
+    s.collision[static_cast<size_t>(5 * MM2_MAP_GRID_DIM + 3)] = 0x44;
+    expect(mm2_map_door_locked_at(sp, 3, 5, 'N') != 0, "0x44, locked facing N (file W bit set)", fails);
+    expect(mm2_map_door_locked_at(sp, 3, 5, 'E') == 0, "0x44, not locked facing E (file S unset)", fails);
+    expect(mm2_map_door_locked_at(sp, 3, 5, 'S') != 0, "0x44, locked facing S (file E bit set)", fails);
+    expect(mm2_map_door_locked_at(sp, 3, 5, 'W') == 0, "0x44, not locked facing W (file N unset)", fails);
 }
 
 }  // namespace
@@ -96,8 +133,10 @@ int main(int argc, char **argv)
     expect(gs.coordX() == 2 && gs.coordY() == 0, "after dark-passable step at (2,0)", fails);
     expect(gs.lightFactor() == 4, "dark destination drains light @ 0x69DC", fails);
 
+    testDoorLockRotation(fails);
+
     if (fails == 0) {
-        std::printf("OK: movement_middlegate_test (13 checks)\n");
+        std::printf("OK: movement_middlegate_test (20 checks)\n");
         return 0;
     }
     return 1;

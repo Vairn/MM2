@@ -84,7 +84,7 @@ bool eventVmPartyHasItem(const uint8_t *a4, const Mm2RosterFile *roster,
 bool eventVmPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                                      uint8_t item_id);
 
-void eventVmClearTileEventFlag(uint8_t *a4, int y, int x);
+void eventVmClearTileEventFlag(uint8_t *a4, world::MapWorld &world, int y, int x);
 
 /** event_tile_scanner post-fight @ 0x1773A/0x17756: clear runtime + map collision
  *  event bits so the tile does not re-arm until map reload. */
@@ -173,16 +173,19 @@ void eventVmApplyTreasure(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaun
 void eventVmExecEngineCall(uint8_t *a4, uint8_t index, world::MapWorld *world);
 
 /** OP_24 @ 0x16B54 → -$7E6C → 0x6ACE: if party gold (sum +$66 over slots with
- *  roster index < 0x18) >= amount, deduct amount and pool the remainder onto
- *  the first eligible member (others cleared). Returns true on success. */
+ *  roster index < 0x18) >= amount, deduct amount, pool the remainder, then
+ *  re-share it equally among all eligible members ($7BBE; remainder to first).
+ *  Returns true on success. */
 bool eventVmPartyTryPayGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                             uint32_t amount);
 
-/** OP_25 @ 0x16B82 → -$7E66 → 0x6B9A: same pool/deduct for gems (+$5C, u16). */
+/** OP_25 @ 0x16B82 → -$7E66 → 0x6B9A: same pool/deduct + re-share ($7CB0) for
+ *  gems (+$5C, u16). */
 bool eventVmPartyTryPayGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                             uint16_t amount);
 
-/** Bribe food pay @ 0x6C66 (thunk -$7E60): pool/deduct party food (+$25, u8). */
+/** Bribe food pay @ 0x6C66 (thunk -$7E60): pool/deduct + re-share ($7D3E) party
+ *  food (+$25, u8). */
 bool eventVmPartyTryPayFood(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                             uint8_t amount);
 

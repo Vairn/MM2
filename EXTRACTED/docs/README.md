@@ -180,6 +180,7 @@ Middlegate `(2,10)`) are unrelated** — see doc 28 §5.2.1.
 | Doc | Description |
 |-----|-------------|
 | [`58-amiga-audio-in-exe.md`](58-amiga-audio-in-exe.md) | **Current** — Paula wavetable; 10 DATA sequences + title; remake `mm2::audio` |
+| [59-asm-cpp-fidelity-audit.md](59-asm-cpp-fidelity-audit.md) | **2026-08 static audit** — ranked ASM → C++ divergences and recommended fix order |
 | [`25-audio-sounds-music.md`](25-audio-sounds-music.md) | Controls menu Sounds/Walk Beep (still useful) |
 | [`25-mm2-music-format.md`](25-mm2-music-format.md) | **Superseded / wrong** — mistook save-state + blits for music |
 | [`26-audio-callpaths-title-death-shared.md`](26-audio-callpaths-title-death-shared.md) | **Superseded / wrong** — title “song” was graphics |

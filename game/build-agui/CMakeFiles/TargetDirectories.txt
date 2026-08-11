@@ -18,6 +18,7 @@ C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/explore_commands_
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/automap_golden.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/character_sheet_input_test.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/party_hp_format_test.dir
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/repro_fight_refire.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/event_middlegate_test.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/event_town_skills_test.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/event_op_demo.dir

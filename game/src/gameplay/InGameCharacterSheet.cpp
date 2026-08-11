@@ -580,17 +580,17 @@ void InGameCharacterSheet::renderSpellBook(gfx::ScreenCompositor &c, const Mm2Ro
         return;
     }
 
-    /* Spell-book popup @ 0x675A: window -$7C74(row $A, col $7, w $1D, h $13).
-       Grid renderer @ 0x6622: title $673C, header $6747, rows = level 1..9,
-       known marks = font glyph $17, columns spaced every 2 cells from col $5.
+    /* Spell-book popup @ 0x6732 / cast @ 0x6E08: -$7C74(x=$A, y=7, w=$1D, h=$13).
+       Grid @ 0x65FA: win-relative cursor (col,row) — title (5,1), header (1,2),
+       level digit/marks at row level+2 (0x6622), marks col = slot*2+5, glyph $17.
        Combat/sheet 'V' is view-only — no cast prompts (doc 43 §6.1). */
-    constexpr int kWinRow = 10;
-    constexpr int kWinCol = 7;
-    constexpr int kWinW = 29;
-    constexpr int kWinH = 14;
+    constexpr int kWinRow = 7;
+    constexpr int kWinCol = 0x0A;
+    constexpr int kWinW = 0x1D;
+    constexpr int kWinH = 0x13;
     constexpr int kTitleRow = kWinRow + 1;
-    constexpr int kHeaderRow = kWinRow + 3;
-    constexpr int kGridRowBase = kWinRow + 4;
+    constexpr int kHeaderRow = kWinRow + 2;
+    constexpr int kGridRowBase = kWinRow + 3;
     constexpr int kLvlCol = kWinCol + 2;
     constexpr int kMarkColBase = kWinCol + 5;
     constexpr uint8_t kKnownMark = 0x17;
@@ -627,7 +627,7 @@ void InGameCharacterSheet::renderCastPicker(gfx::ScreenCompositor &c, const Mm2R
     renderSpellBook(c, roster, launch, party_slot);
 
     /* Prompt row: combat mode uses row $0F; exploration uses $15 (0x79F2/0x7A04). */
-    constexpr int kPromptRow = 0x16;
+    constexpr int kPromptRow = 0x15;
     if (session.cast_phase == CastPromptPhase::Level) {
         drawCellText(c, kPromptRow, 0x02, " Spell Level: ", 255, 255, 255);
     } else {

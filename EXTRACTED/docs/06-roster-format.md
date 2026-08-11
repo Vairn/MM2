@@ -121,7 +121,10 @@ Tail byte indices used by the editor mirror the memcpy order in that routine; se
 `EXTRACTED/decomp/mm2_roster_codec.h` (`MM2_ROSTER_TAIL_*`,
 `mm2_roster_tail_u8/u16`). **Party selection persists here**: 8×u16 roster
 indices @ tail `+$028` (→ `-$796A`, `0xFFFF` = empty; stream loop @ `0x8302`)
-then u16 party size @ `+$038` (→ `-$795A` @ `0x836A`); the event/quest bank
+then u16 party size @ `+$038` (→ `-$795A` @ `0x836A`); then after era/subday
+(`+$03A`/`+$03C`) three words @ `0x83D0..0x8414`: OP0E FD ctr (`+$03E` →
+`-$7972`), **battles won** (`+$040` → `-$7970`, addq @ `0x1215A`), **battles
+lost** (`+$042` → `-$796E`, addq @ `0x11664`); the event/quest bank
 (hireling A..X availability) @ `+$7CE` (→ `-$798B`, write @ `0x84A2`).
 
 ### Direct global bytes (also event-script targets)
@@ -133,6 +136,9 @@ then u16 party size @ `+$038` (→ `-$795A` @ `0x836A`); the event/quest bank
 | `-$79B6` | `era` | Timeline index 0..9 |
 | `-$79B5` | `era_low` | Low byte of era word; **g=0x84** for event gating |
 | `-$79B4` | `time_subday` | 256 ticks = 1 day |
+| `-$7972` | `op0e_fd_ctr` | word; addq @ `0x14112` |
+| `-$7970` | **battles won** | word; victory `0x1215A`; endgame print @ `0x1536A` |
+| `-$796E` | **battles lost** | word; flee/wipe `0x11664`; endgame print @ `0x1538A` |
 | `-$79AB` | `light_factor` | Light / Lasting Light; darkness drain |
 | `-$79AA` | `endgame_score_a` | Level+10 on class-quest finish |
 | `-$79A9` | `endgame_score_b` | Level+20 on class-quest finish |

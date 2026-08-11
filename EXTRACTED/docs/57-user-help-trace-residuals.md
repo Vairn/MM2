@@ -49,10 +49,10 @@ engine depth, not a short playtest ask.
 | **ASM leaf / A4** | `combat_defeat_retreat` **`0x11646`**; reads **`A4-$560C`**, unpacks lo nibble → `-$79F1` (`coord_b` / X), hi nibble → `-$79F0` (`coord_a` / Y), then funeral audio `-$7E96`. Same unpack pattern at `0x123A`, `0x1C6A`, `0x6F32`, `0x918E`. |
 | **Engine** | On party wipe (and related retreat paths), party XY is restored from the **current screen’s attrib entry/safe square**, not from a combat-saved “last step”. |
 | **ASM note (2026-07-10)** | **Not a missing combat writer.** `-$560C` = **`attrib.dat` byte `0x0E`** (`entry_coord`) inside the current-screen buffer at `A4-$561A` (loader **`0x923E`** bulk-copies 64 bytes). Mapping: buffer+`0x0E` → `-$560C` (see [`12-attrib-dat-format.md`](12-attrib-dat-format.md)). |
-| **How to hit** | Any combat that ends in wipe: random step fight outdoors, arena ticket fight, or scripted `OP_12`/`OP_13`. Also compare **successful Run** vs **full wipe**. Known entry squares (attrib `0x0E`): Middlegate `(7,5)`, Atlantium `(15,15)`, Tundara `(8,11)`, Vulcania `(7,2)`, Sandsobar `(1,8)`, Middlegate Cavern `(15,8)`. |
-| **Watch / dump** | After wipe: do you snap to that map’s entry square? Same map or town recall? Flee-without-wipe: coords unchanged? If remake dumps A4: `-$560C`, `-$79F0`, `-$79F1`, `-$79F2` (screen id). |
-| **Priority** | **High** — wrong respawn breaks exploration after death. |
-| **Remake (2026-07-10)** | **Wired.** `materializeScreenAttrib` copies attrib → `A4-$561A`; `finishLeave(false)` unpacks `-$560C` → coords. Verified Middlegate `(7,5)` etc. from `attrib.dat`. |
+| **How to hit** | Any combat that ends in wipe: random step fight outdoors, arena ticket fight, or scripted `OP_12`/`OP_13`. **Also successful Run** — the party “Run” @ `0x1312A` success, the per-character Run latch @ round-end `0x12C66`, and the wipe path all `jsr $11646`, so a successful flee restores the entry/safe square exactly like a wipe. Known entry squares (attrib `0x0E`): Middlegate `(7,5)`, Atlantium `(15,15)`, Tundara `(8,11)`, Vulcania `(7,2)`, Sandsobar `(1,8)`, Middlegate Cavern `(15,8)`. |
+| **Watch / dump** | After wipe **or successful Run**: do you snap to that map’s entry square? If remake dumps A4: `-$560C`, `-$79F0`, `-$79F1`, `-$79F2` (screen id). |
+| **Priority** | **High** — wrong respawn breaks exploration after death (and a fleeing party must land on the safe square, not stay in combat). |
+| **Remake (2026-07-10)** | **Wired.** `materializeScreenAttrib` copies attrib → `A4-$561A`; `finishLeave()` unpacks `-$560C` → coords for **both** flee and wipe (`fled` only selects the outcome/message). Verified Middlegate `(7,5)` etc. from `attrib.dat`. |
 
 ### 2. `-$79E1` darkness / can’t-see gate — `0x53C0`
 

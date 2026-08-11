@@ -73,6 +73,19 @@ void setupTwoMemberParty(Mm2RosterFile &roster, Mm2PartyLaunch &launch)
     launch.roster_slots[1] = 1;
 }
 
+/* Seeds OP_12 pack: 10 listed slots + overflow_type + extras (tail2).
+ * 0x12CE0 total = #nonzero slots + extras when overflow_type != 0. */
+void seedOverflowEncounter(mm2::GameStateView &gs, uint8_t monster_type, uint8_t overflow_extras)
+{
+    uint8_t *a4 = gs.a4();
+    mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_MODE, 0x80);
+    for (int i = 0; i < MM2_GS_MONSTER_SLOT_COUNT; ++i) {
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, monster_type);
+    }
+    mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_OVERFLOW_TYPE, monster_type);
+    mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, overflow_extras);
+}
+
 /* Seeds a fixed (OP_12-style, mode=0x80) single-monster encounter directly
  * into A4 — mirrors eventRunFixedEncounter's own field writes. */
 void seedFixedEncounter(mm2::GameStateView &gs, uint8_t monster_type)
@@ -98,6 +111,41 @@ bool fightToEnd(mm2::combat::CombatSession &combat, mm2::GameStateView &gs, cons
             return true;
         }
         if (!combat.active()) {
+            return true;
+        }
+    }
+    return !combat.active();
+}
+
+/* Drive Full Auto until fight ends (surprise/options/ack/victory synth). */
+bool autoFightToEnd(mm2::combat::CombatSession &combat, mm2::GameStateView &gs,
+                    const mm2::world::MapWorld &world, int max_ticks = 128)
+{
+    using mm2::combat::CombatState;
+    combat.setAutoEnabled(true);
+    for (int i = 0; i < max_ticks; ++i) {
+        if (!combat.active()) {
+            return true;
+        }
+        bool ended = false;
+        const CombatState st = combat.state();
+        if (st == CombatState::AwaitingCommand) {
+            ended = combat.runAutoCommand(gs);
+        } else if (st == CombatState::AwaitingCastTarget || st == CombatState::AwaitingPartyPick ||
+                   st == CombatState::AwaitingAttackTarget) {
+            ended = combat.runAutoPicker(gs);
+        } else if (st == CombatState::AwaitingPartyOptions) {
+            mm2::platform::KeyState keys{};
+            keys.last_ascii = 'A';
+            ended = combat.tick(gs, world, keys);
+        } else {
+            mm2::platform::KeyState keys{};
+            keys.last_ascii = ' ';
+            keys.space = true;
+            keys.any_key = true;
+            ended = combat.tick(gs, world, keys);
+        }
+        if (ended || !combat.active()) {
             return true;
         }
     }
@@ -163,6 +211,81 @@ int main()
                fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 1,
                "victory scenario: COMBAT_VICTORY_LATCH set (OP_2B gate)", fails);
+        expect(mm2_gs_u16(gs.a4(), MM2_GS_BATTLES_WON) == 1,
+               "victory scenario: battles won incremented (-$7970 / 0x1215A)", fails);
+    }
+
+    /* ---- Overflow pack: kill promotes reservoir slot 10 into A–J (0x10CCE). */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x00); /* 1 HP */
+        setMonsterField(mon, MM2_MON_OFF_XP, 0x10);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(mon, MM2_MON_OFF_DAMAGE, 0x00);
+        std::memcpy(mon.name, "Orc\0\0\0\0\0\0\0\0\0\0\0\0", MM2_MONSTER_NAME_SIZE);
+
+        setupParty(roster, launch, /*might=*/99, /*speed=*/99, /*hp=*/999);
+        seedOverflowEncounter(gs, 7, /*overflow_extras=*/5);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "overflow: enter ok", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_COUNT) == 15,
+               "overflow: 0x12CE0 total = 10 listed + 5 extras (not collapsed to 11)", fails);
+        {
+            const gfx::CombatPanelView v0 = combat.panelView();
+            expect(v0.overflow_more == 5, "overflow: +5 more before first kill", fails);
+            int occ = 0;
+            for (int i = 0; i < v0.monster_line_count && i < 10; ++i) {
+                if (v0.monster_lines[i].occupied) {
+                    ++occ;
+                }
+            }
+            expect(occ == 10, "overflow: 10 visible A–J rows occupied at start", fails);
+        }
+
+        platform::KeyState keys{};
+        keys.last_ascii = 'A';
+        combat.tick(gs, world, keys); /* encounter options → command */
+        for (int i = 0; i < 32 && combat.active() && combat.state() != CombatState::AwaitingCommand; ++i) {
+            keys.last_ascii = ' ';
+            combat.tick(gs, world, keys);
+        }
+        expect(combat.state() == CombatState::AwaitingCommand, "overflow: reached command turn", fails);
+
+        keys.last_ascii = 'A';
+        combat.tick(gs, world, keys);
+        if (combat.state() == CombatState::AwaitingAttackTarget) {
+            keys.last_ascii = 'A';
+            combat.tick(gs, world, keys);
+        }
+        for (int i = 0; i < 16 && combat.active() &&
+             combat.state() == CombatState::AwaitingActionAck; ++i) {
+            keys.last_ascii = ' ';
+            combat.tick(gs, world, keys);
+        }
+
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_COUNT) == 14,
+               "overflow: -$77BE decremented once after kill", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_ENCOUNTER_OVERFLOW_TYPE) == 7,
+               "overflow: type alias at MONSTER_SLOTS[10] survives compact", fails);
+        {
+            const gfx::CombatPanelView v1 = combat.panelView();
+            expect(v1.overflow_more == 4, "overflow: +N drops by one after kill", fails);
+            int occ = 0;
+            for (int i = 0; i < v1.monster_line_count && i < 10; ++i) {
+                if (v1.monster_lines[i].occupied) {
+                    ++occ;
+                }
+            }
+            expect(occ == 10, "overflow: kill promotes reservoir — still 10 visible", fails);
+        }
+        expect(combat.active(), "overflow: fight continues with remaining pack", fails);
     }
 
     /* ---- XP split @ 0x12430: unconscious (0 HP, condition < $80) gets a share. */
@@ -309,6 +432,11 @@ int main()
         seedFixedEncounter(gs, 5);
         /* Thresh $65 → every roll 1..100 succeeds (ASM cmp/bcc). */
         mm2_gs_set_u8(gs.a4(), MM2_GS_RETREAT_DIFF, 0x65);
+        /* 0x1164A: a successful flee restores from -$560C too (not just wipe).
+         * Set a distinctive entry square and a current coord far from it. */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENTRY_COORD, 0x12); /* (2,1) */
+        gs.setCoordX(5);
+        gs.setCoordY(7);
 
         CombatSession combat;
         combat.bindParty(&roster, &launch);
@@ -336,6 +464,8 @@ int main()
                "run scenario: -$5E4C set on successful Run", fails);
         expect(mm2_gs_u16(gs.a4(), MM2_GS_PARTY_COUNT) == 0,
                "run scenario: Char-Run shrinks -$795A", fails);
+        expect(gs.coordX() == 2 && gs.coordY() == 1,
+               "run scenario: flee restores entry_coord (2,1)", fails);
     }
 
     /* ---- Random picker (0x1213E/0x12072/0x11F0A) invariants, exercised
@@ -549,6 +679,97 @@ int main()
                "ko-expand: A4-$5E4D matches expanded cutoff", fails);
     }
 
+    /* ---- 0x12796..0x1283E: status suffix from -$519; bit0 ("Hurt") is set only
+     * by damage @ 0x10EEA (bset #0). Full-HP monsters stay status 0 → blank
+     * 5-space path @ 0x1279C. */
+    {
+        rng.reseed(7);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord mon0 = monsters.records[1];
+        setMonsterField(mon0, MM2_MON_OFF_HP, 0x0F);     /* 16 HP */
+        setMonsterField(mon0, MM2_MON_OFF_SPEED, 0x00);  /* slow: party acts first */
+        setMonsterField(mon0, MM2_MON_OFF_DAMAGE, 0x01);
+        monsters.records[1] = mon0;
+        Mm2MonsterRecord mon1 = monsters.records[2];
+        setMonsterField(mon1, MM2_MON_OFF_HP, 0x0F);
+        setMonsterField(mon1, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(mon1, MM2_MON_OFF_DAMAGE, 0x01);
+        monsters.records[2] = mon1;
+
+        setupParty(roster, launch, /*might=*/99, /*speed=*/99, /*hp=*/999);
+        uint8_t *a4 = gs.a4();
+        mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_MODE, 0x80);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 0, 1);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 1, 2);
+        for (int i = 2; i < MM2_GS_MONSTER_SLOT_COUNT; ++i) {
+            mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, 0);
+        }
+        mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_OVERFLOW_TYPE, 0);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 2);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "status-suffix: enter two-monster fight", fails);
+
+        /* Party acts first (speed 99 > monster speed 1) → round roster is built. */
+        platform::KeyState keys{};
+        keys.last_ascii = ' ';
+        combat.tick(gs, world, keys);
+        if (combat.state() == CombatState::AwaitingPartyOptions) {
+            keys.last_ascii = 'A';
+            combat.tick(gs, world, keys);
+        }
+        for (int i = 0; i < 32 && combat.active() && combat.state() != CombatState::AwaitingCommand; ++i) {
+            keys.last_ascii = ' ';
+            combat.tick(gs, world, keys);
+        }
+        expect(combat.state() == CombatState::AwaitingCommand,
+               "status-suffix: reached round command turn", fails);
+
+        gfx::CombatPanelView view = combat.panelView();
+        expect(view.label_monster_slots, "status-suffix: round roster visible", fails);
+        /* Full HP → status 0 → blank suffix (not "Hurt"). */
+        bool slot0_blank = false, slot1_blank = false;
+        for (int i = 0; i < view.monster_line_count && i < 10; ++i) {
+            if (view.monster_lines[i].letter == 'A' && view.monster_lines[i].occupied) {
+                slot0_blank = view.monster_lines[i].status_suffix[0] == '\0';
+            }
+            if (view.monster_lines[i].letter == 'B' && view.monster_lines[i].occupied) {
+                slot1_blank = view.monster_lines[i].status_suffix[0] == '\0';
+            }
+        }
+        expect(slot0_blank && slot1_blank,
+               "status-suffix: full-HP monsters have blank suffix (not Hurt)", fails);
+
+        /* Attack slot A → 0x10EEA bset #0 → "Hurt" on A only. */
+        keys.last_ascii = 'A';
+        combat.tick(gs, world, keys);
+        if (combat.state() == CombatState::AwaitingAttackTarget) {
+            keys.last_ascii = 'A';
+            combat.tick(gs, world, keys);
+        }
+        for (int i = 0; i < 16 && combat.active() &&
+             combat.state() == CombatState::AwaitingActionAck; ++i) {
+            keys.last_ascii = ' ';
+            combat.tick(gs, world, keys);
+        }
+        view = combat.panelView();
+        bool a_hurt = false, b_still_blank = false;
+        for (int i = 0; i < view.monster_line_count && i < 10; ++i) {
+            if (view.monster_lines[i].letter == 'A' && view.monster_lines[i].occupied) {
+                a_hurt = std::strcmp(view.monster_lines[i].status_suffix, "Hurt") == 0;
+            }
+            if (view.monster_lines[i].letter == 'B' && view.monster_lines[i].occupied) {
+                b_still_blank = view.monster_lines[i].status_suffix[0] == '\0';
+            }
+        }
+        expect(a_hurt, "status-suffix: damaged monster shows Hurt", fails);
+        expect(b_still_blank, "status-suffix: undamaged monster stays blank", fails);
+    }
+
     /* Combat cast @ 0x11A90 / 0x79EE: level+number on message band, no spell grid. */
     {
         rng.reseed(1);
@@ -642,6 +863,109 @@ int main()
         const uint8_t t1 = pickType(1);
         const uint8_t t2 = pickType(99991);
         expect(t1 != t2, "encounterAddsFriends differs across seeds (monsters not always same)", fails);
+    }
+
+    /* ---- Full Auto (remake): strike-only finishes a 1-HP fight. ---- */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x00); /* 1 HP */
+        setMonsterField(mon, MM2_MON_OFF_XP, 0x2E);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(mon, MM2_MON_OFF_DAMAGE, 0x00);
+
+        setupParty(roster, launch, /*might=*/99, /*speed=*/99, /*hp=*/999);
+        seedFixedEncounter(gs, 7);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "auto-strike: enter ok", fails);
+
+        const bool ended = autoFightToEnd(combat, gs, world);
+        expect(ended, "auto-strike: Auto finishes fight", fails);
+        expect(combat.lastOutcome() == CombatOutcome::Victory, "auto-strike: Victory", fails);
+        expect(!combat.autoEnabled(), "auto-strike: Auto cleared on exit", fails);
+    }
+
+    /* ---- Full Auto: cleric First Aid on hurt ally, then finish. ---- */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x00); /* 1 HP — dies after heal turn */
+        setMonsterField(mon, MM2_MON_OFF_XP, 0x2E);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(mon, MM2_MON_OFF_DAMAGE, 0x00);
+
+        std::memset(&roster, 0, sizeof(roster));
+        mm2_roster_set_name(&roster.records[0], "Fighter");
+        mm2_roster_set_name(&roster.records[1], "Cleric");
+        roster.records[0].class_id = 0; /* Knight */
+        roster.records[0].might_current = 99;
+        roster.records[0].speed_current = 1;
+        roster.records[0].hp_current = 100; /* ceiling */
+        roster.records[0].hp_max = 10;      /* working — critically hurt */
+        roster.records[0].condition = 0;
+        roster.records[1].class_id = 3; /* Cleric */
+        roster.records[1].might_current = 20;
+        roster.records[1].speed_current = 99;
+        roster.records[1].hp_current = 80;
+        roster.records[1].hp_max = 80;
+        roster.records[1].spell_level = 1;
+        roster.records[1].sp_current = 20;
+        roster.records[1].level = 1;
+        roster.records[1].condition = 0;
+        mm2::gameplay::spellLearnInBook(roster.records[1], 3); /* First Aid */
+
+        launch = Mm2PartyLaunch{};
+        launch.party_count = 2;
+        launch.roster_slots[0] = 0;
+        launch.roster_slots[1] = 1;
+
+        seedFixedEncounter(gs, 7);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "auto-heal: enter ok", fails);
+
+        const uint16_t hp_before = roster.records[0].hp_max;
+        bool saw_heal = false;
+        combat.setAutoEnabled(true);
+        for (int i = 0; i < 128 && combat.active(); ++i) {
+            const CombatState st = combat.state();
+            bool ended = false;
+            if (st == CombatState::AwaitingCommand) {
+                ended = combat.runAutoCommand(gs);
+            } else if (st == CombatState::AwaitingCastTarget || st == CombatState::AwaitingPartyPick ||
+                       st == CombatState::AwaitingAttackTarget) {
+                ended = combat.runAutoPicker(gs);
+            } else if (st == CombatState::AwaitingPartyOptions) {
+                platform::KeyState keys{};
+                keys.last_ascii = 'A';
+                ended = combat.tick(gs, world, keys);
+            } else {
+                platform::KeyState keys{};
+                keys.last_ascii = ' ';
+                keys.space = true;
+                keys.any_key = true;
+                ended = combat.tick(gs, world, keys);
+            }
+            if (std::strstr(combat.statusLine(), "First Aid") != nullptr) {
+                saw_heal = true;
+            }
+            if (ended) {
+                break;
+            }
+        }
+        expect(saw_heal || roster.records[0].hp_max > hp_before, "auto-heal: First Aid applied", fails);
+        expect(combat.lastOutcome() == CombatOutcome::Victory, "auto-heal: fight ends in Victory", fails);
     }
 
     if (fails == 0) {

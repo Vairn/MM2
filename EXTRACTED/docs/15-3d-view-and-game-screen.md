@@ -99,12 +99,12 @@ Each cell is one byte, four **2-bit** fields. **No event bit** on page 0.
 
 | bits | field | values |
 |------|-------|--------|
-| 0-1  | North | `0` open, `1` wall, `2` wall+torch, `3` door |
+| 0-1  | North | `0` open, `1` wall, `2` door, `3` wall+torch |
 | 2-3  | East  | same |
 | 4-5  | South | same |
 | 6-7  | West  | same |
 
-Example: `0x08` → E=2 (torch); `0x80` → W=2 (torch); `0xB3` → N=3 and S=3 (doors).
+Example: `0x08` → E=2 (door); `0x80` → W=2 (door); `0xB3` → N=3 and S=3 (torch).
 The 3D hood (`0x2900`) reads **only** these bytes from `A4-$55BA`.
 
 #### Page-1 collision layout (2 bits per side + darkness + event)
@@ -134,7 +134,7 @@ E=950, S=125 cells).
 on the **collision** page (`A4-$54BA`; copied to `A4-$55D6` after hood refresh).
 Verified: every tile-event triplet lands on a collision cell with `0x80` set.
 `event_tile_scanner` @`0x175E2` uses tile id `(y<<4)|x`. **Do not** treat page-0
-visual `0x80` as an event — that byte is W=2 (torch) in the visual encoding.
+visual `0x80` as an event — that byte is W=2 (door) in the visual encoding.
 
 ### Wall-piece primitives (each blits from the wall set `-$7A06`)
 

@@ -47,6 +47,10 @@ public:
     /** Resume VM after SPACE or Y/N; returns false when script finished. */
     bool continueInput(GameStateView &gs, world::MapWorld &world, const platform::KeyState &keys);
 
+    /** Host funeral / GameOver: drop Yes/No waits and console OP_02 layers so a
+     *  post-wipe tile re-prompt cannot stack under the death band. */
+    void haltUiForHostOverlay(GameStateView &gs);
+
     bool isActive() const { return script_active_; }
     bool blocksMovement() const { return script_active_ || wait_ != EventVmWait::None; }
 
