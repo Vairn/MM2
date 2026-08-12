@@ -114,14 +114,15 @@ public:
      * encounter_xp_budget_init (doc 35 / EncounterPicker.h) and combat_setup_test,
      * i.e. budget = sum(hp_current)/8 unscaled. Using 1 (/16) silently halved the
      * budget and starved small/solo parties of random encounters.
-     * Retail delay is 0; on a modern vsync display that is ~2 frames and combat
-     * hit/miss lines are unreadable. Default to 3 (still 0..9 via Controls). */
+     * Retail delay is 0; on a modern vsync display that is ~2 Delay ticks and
+     * combat hit/miss lines are unreadable. Default to 5 (manual default; still
+     * 0..9 via Controls). */
     void initControlsDefaults()
     {
         mm2_gs_set_u8(a4_, MM2_GS_SOUNDS_FLAG, 1);
         mm2_gs_set_u8(a4_, MM2_GS_WALK_BEEP_FLAG, 1);
         mm2_gs_set_u8(a4_, MM2_GS_DISPOSITION, 2);
-        mm2_gs_set_u8(a4_, MM2_GS_DELAY, 3);
+        mm2_gs_set_u8(a4_, MM2_GS_DELAY, 5);
     }
 
     /* New game @ 0x19B28 clears protect vars -$79A6..-$79AB; panel mode 1. */

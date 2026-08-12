@@ -28,12 +28,20 @@ constexpr uint8_t kBorderR = 255;
 constexpr uint8_t kBorderG = 0;
 constexpr uint8_t kBorderB = 0;
 
-/* Blue modal frames: Death Strikes / Search use A4-$7A4C (pen 14) via -$7F74
- * console_box glyphs; Victory rules use A4-$7A4D (pen 20) glyph 5. Both read
- * as light blue on the play palette — approximate RGB for host SDL. */
-constexpr uint8_t kUiBlueBorderR = 0x55;
+/* Blue modal frames: outdoor init @ 0x2680E stores A4-$7A4C = pen $16 and
+ * A4-$7A50 = pen $12 (town.32 / play palette). Controls @ 0x13CCE paints the
+ * window with -$7A4C then prints with -$7A50. Death Strikes / Search use
+ * -$7A4C via -$7F74 console_box; Victory rules use A4-$7A4D (pen 20) glyph 5.
+ * RGB matches town.32 pens $16 / $12 / $14-ish border highlight. */
+constexpr uint8_t kUiBlueFillR = 51;   /* pen $16 — Controls window fill */
+constexpr uint8_t kUiBlueFillG = 51;
+constexpr uint8_t kUiBlueFillB = 119;
+constexpr uint8_t kUiBlueBorderR = 0x55; /* brighter frame approx (pens $14/$15) */
 constexpr uint8_t kUiBlueBorderG = 0x88;
 constexpr uint8_t kUiBlueBorderB = 0xFF;
+constexpr uint8_t kUiYellowTextR = 255; /* pen $12 — Controls / OP_06 text+border */
+constexpr uint8_t kUiYellowTextG = 255;
+constexpr uint8_t kUiYellowTextB = 0;
 
 // Interior first-person lattice (View3D / 0x2ECE).
 constexpr int kViewOriginX = 8;

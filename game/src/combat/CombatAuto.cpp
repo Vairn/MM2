@@ -116,19 +116,6 @@ bool allyNeedsCure(uint8_t cond, int flat)
     return false;
 }
 
-bool allyCriticallyHurt(const Mm2RosterRecord &rec)
-{
-    if (rec.hp_max <= 0 || rec.condition >= 0x80) {
-        return false;
-    }
-    const int ceiling = rec.hp_current > 0 ? static_cast<int>(rec.hp_current) : 1;
-    const int hp = static_cast<int>(rec.hp_max);
-    if (hp <= 15) {
-        return true;
-    }
-    return hp * 100 <= ceiling * 35;
-}
-
 int healFlatPreference[] = {5, 7, 3}; /* Power Cure, Cure Wounds, First Aid */
 int cureFlatPreference[] = {16, 22, 1, 30};
 
@@ -193,7 +180,16 @@ AutoDecision decideAuto(CombatSession &combat, GameStateView &gs, bool &buff_lat
 
     auto strikeFallback = [&]() {
         if (shoot) {
-            d.action = AutoAction::StrikeShoot;
+            /* Ninja (class 5) and Robber (class 6) want Melee — assassinate/backstab */
+            if (caster->class_id == 5 || caster->class_id == 6) {
+                if (melee) {
+                    d.action = AutoAction::StrikeMelee;
+                } else {
+                    d.action = AutoAction::EndTurn;
+                }
+            } else {
+                d.action = AutoAction::StrikeShoot;
+            }
         } else if (melee) {
             d.action = AutoAction::StrikeMelee;
         } else {
@@ -227,13 +223,16 @@ AutoDecision decideAuto(CombatSession &combat, GameStateView &gs, bool &buff_lat
             }
         }
 
-        /* --- 1b. Emergency heal --- */
+        /* --- 1b. Heal any injured member (priority: lowest HP) --- */
         int worst_slot = -1;
         int worst_hp = 0x7fffffff;
         for (int p = 0; p < combat.autoPartyCount(); ++p) {
             const Mm2RosterRecord *ally = combat.autoRosterRecord(p);
-            if (!ally || !allyCriticallyHurt(*ally)) {
+            if (!ally || ally->hp_max <= 0 || ally->condition >= 0x80) {
                 continue;
+            }
+            if (ally->hp_max >= ally->hp_current) {
+                continue; /* not injured */
             }
             if (static_cast<int>(ally->hp_max) < worst_hp) {
                 worst_hp = static_cast<int>(ally->hp_max);

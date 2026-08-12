@@ -1169,7 +1169,7 @@ int searchThievery(const Mm2RosterRecord &rec)
 }  // namespace
 
 bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
-                             char *msg, size_t msg_cap)
+                             char *msg, size_t msg_cap, const Mm2ItemsFile *items)
 {
     /* 0x1AC94 distribute + 0x1B4D4 epilogue. */
     if (!a4) {
@@ -1232,6 +1232,12 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
         }
     }
 
+    /* Party-panel reward text @ 0x1ACFA: share line, then up to 3 finder lines
+     * at rows 0x14..0x16 from 0x1AB0C ("Name found Item" [+ flags&$3F]). */
+    char finder_lines[3][48]{};
+    int finder_n = 0;
+    bool packs_full = false;
+
     for (int s = 0; s < MM2_FOUND_ITEM_SLOTS; ++s) {
         if (mm2_gs_u8(a4, -0x5AD2) != 0) {
             break;
@@ -1258,6 +1264,29 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
                     mm2_gs_set_u8(a4, MM2_GS_FOUND_ITEM_CHARGES + s, 0);
                     mm2_gs_set_u8(a4, MM2_GS_FOUND_ITEM_FLAGS + s, 0);
                     placed = true;
+                    if (finder_n < 3) {
+                        char pname[MM2_ROSTER_NAME_SIZE + 1];
+                        mm2_roster_name_to_cstr(rec, pname, sizeof(pname));
+                        char iname[MM2_ITEMS_NAME_SIZE + 1];
+                        iname[0] = '\0';
+                        if (items && id < MM2_ITEMS_RECORD_COUNT) {
+                            mm2_item_name_to_cstr(&items->records[id], iname, sizeof(iname));
+                        }
+                        if (!iname[0]) {
+                            std::snprintf(iname, sizeof(iname), "Item#%u",
+                                          static_cast<unsigned>(id));
+                        }
+                        const uint8_t plus = static_cast<uint8_t>(flags & 0x3F);
+                        if (plus != 0) {
+                            std::snprintf(finder_lines[finder_n], sizeof(finder_lines[finder_n]),
+                                          "%s found %s +%u", pname, iname,
+                                          static_cast<unsigned>(plus));
+                        } else {
+                            std::snprintf(finder_lines[finder_n], sizeof(finder_lines[finder_n]),
+                                          "%s found %s", pname, iname);
+                        }
+                        ++finder_n;
+                    }
                     break;
                 }
             }
@@ -1266,19 +1295,30 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
             const uint8_t ov = mm2_gs_u8(a4, -0x5AD2);
             mm2_gs_set_u8(a4, -0x5AD2, static_cast<uint8_t>(ov + 1));
             mm2_gs_set_u8(a4, MM2_GS_FOUND_SENTINEL, MM2_FOUND_SENTINEL_FILLED);
+            packs_full = true;
             break;
         }
     }
 
     mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 3);
     if (msg && msg_cap > 0) {
-        /* 0x1ACFA..0x1AD5E: "Each share = N Gold" [+ " + M Gems"]. */
+        /* 0x1ACFA..0x1AD5E share line (gems inline on same row in ASM). */
+        size_t used = 0;
         if (gems_each != 0) {
-            std::snprintf(msg, msg_cap, "Each share = %u Gold\n+ %u Gems",
-                          static_cast<unsigned>(gold_each), static_cast<unsigned>(gems_each));
+            used = static_cast<size_t>(
+                std::snprintf(msg, msg_cap, "Each share = %u Gold + %u Gems",
+                              static_cast<unsigned>(gold_each),
+                              static_cast<unsigned>(gems_each)));
         } else {
-            std::snprintf(msg, msg_cap, "Each share = %u Gold",
-                          static_cast<unsigned>(gold_each));
+            used = static_cast<size_t>(std::snprintf(msg, msg_cap, "Each share = %u Gold",
+                                                     static_cast<unsigned>(gold_each)));
+        }
+        for (int i = 0; i < finder_n && used + 1 < msg_cap; ++i) {
+            used += static_cast<size_t>(
+                std::snprintf(msg + used, msg_cap - used, "\n%s", finder_lines[i]));
+        }
+        if (packs_full && used + 1 < msg_cap) {
+            std::snprintf(msg + used, msg_cap - used, "\nBackpacks full!");
         }
     }
     return true;
@@ -1286,7 +1326,7 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
 
 SearchPrepareResult eventVmSearchPrepare(uint8_t *a4, Mm2RosterFile *roster,
                                          const Mm2PartyLaunch *launch, gameplay::Rng *rng,
-                                         SearchPrepareOut *out)
+                                         SearchPrepareOut *out, const Mm2ItemsFile *items)
 {
     if (out) {
         out->rating = 0;
@@ -1328,8 +1368,8 @@ SearchPrepareResult eventVmSearchPrepare(uint8_t *a4, Mm2RosterFile *roster,
     }
 
     /* Short path @ 0x1B49A → distribute immediately. */
-    char tmp[96];
-    eventVmSearchDistribute(a4, roster, launch, tmp, sizeof(tmp));
+    char tmp[sizeof(SearchPrepareOut::msg)];
+    eventVmSearchDistribute(a4, roster, launch, tmp, sizeof(tmp), items);
     if (out) {
         std::snprintf(out->msg, sizeof(out->msg), "%s", tmp);
     }
@@ -1341,7 +1381,7 @@ bool eventVmSearchPayoff(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunc
 {
     /* One-shot: prepare; if Identify needed, auto-Open (no modal). */
     SearchPrepareOut prep{};
-    const SearchPrepareResult r = eventVmSearchPrepare(a4, roster, launch, nullptr, &prep);
+    const SearchPrepareResult r = eventVmSearchPrepare(a4, roster, launch, nullptr, &prep, nullptr);
     if (r == SearchPrepareResult::Nothing) {
         if (msg && msg_cap > 0) {
             std::snprintf(msg, msg_cap, "%s", prep.msg);
@@ -1349,7 +1389,7 @@ bool eventVmSearchPayoff(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunc
         return false;
     }
     if (r == SearchPrepareResult::NeedIdentify) {
-        eventVmSearchDistribute(a4, roster, launch, msg, msg_cap);
+        eventVmSearchDistribute(a4, roster, launch, msg, msg_cap, nullptr);
         return true;
     }
     if (msg && msg_cap > 0) {
@@ -1364,9 +1404,12 @@ SearchOpenResult eventVmSearchOpenOrFind(uint8_t *a4, Mm2RosterFile *roster,
 {
     /* 0x1AEC2 (Open) / 0x1AF6E (Find): member pick already done by host.
      * Thievery +$1E vs rng(1,100): fail if roll<=$60 AND roll>thievery.
-     * Trap spring @ 0x1AA70: damage = rating*2+4 via 0x1A90E (OP_31-style). */
+     * Trap spring @ 0x1AA70 → trap_damage_apply @ 0x1A90E:
+     *   - Class 5 (Robber) or 6 (Ninja): single-target only
+     *   - All others: loop over ALL party members
+     *   - Per-member resistance: thievery + RESIST_BUFF_A vs rng(1,100)
+     *     (full immunity if threshold >= roll, via 0x4952). */
     SearchOpenResult r;
-    (void)a4;
     if (!roster || !launch || party_slot < 0 || party_slot >= launch->party_count) {
         r.aborted = true;
         return r;
@@ -1386,10 +1429,45 @@ SearchOpenResult eventVmSearchOpenOrFind(uint8_t *a4, Mm2RosterFile *roster,
     const int roll = rng ? rng->range(1, 100) : 1;
     const bool fail = (roll <= 0x60) && (roll > thievery);
     if (fail && rating != 0) {
-        /* Trap: damage = rating*2+4 (0x1AA7C..0x1AA86). */
         r.trapped = true;
-        r.trap_damage = static_cast<uint16_t>(static_cast<uint16_t>(rating) * 2u + 4u);
-        eventVmApplyOp31Damage(rec, r.trap_damage);
+        /* Trap: damage = rating*2+4 (0x1AA7C..0x1AA86) applied party-wide. */
+        const uint16_t trap_damage = static_cast<uint16_t>(static_cast<uint16_t>(rating) * 2u + 4u);
+        r.trap_damage = trap_damage;
+
+        /* ASM checks the FIRST party member's class for targeting. */
+        const int first_idx = launch->roster_slots[0];
+        bool single_target = false;
+        if (first_idx >= 0 && first_idx < MM2_ROSTER_RECORD_COUNT) {
+            const uint8_t cid = roster->records[first_idx].class_id;
+            single_target = (cid == 5 || cid == 6);
+        }
+
+        for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+            if (single_target && i != party_slot) {
+                continue;
+            }
+            const int mem_idx = launch->roster_slots[i];
+            if (mem_idx < 0 || mem_idx >= MM2_ROSTER_RECORD_COUNT) {
+                continue;
+            }
+            Mm2RosterRecord *member = &roster->records[mem_idx];
+
+            if (member->condition >= 0x80) {
+                continue; /* already dead — skip (from 0x4952) */
+            }
+
+            /* Per-member resistance: thievery + RESIST_BUFF_A vs rng(1,100) @ 0x4952. */
+            int resist = static_cast<int>(member->thievery_percent);
+            if (a4) {
+                resist += static_cast<int>(mm2_gs_u8(a4, MM2_GS_RESIST_BUFF_A));
+            }
+            const int resist_roll = rng ? rng->range(1, 100) : 1;
+            if (resist >= resist_roll) {
+                continue; /* full immunity */
+            }
+
+            eventVmApplyOp31Damage(member, trap_damage);
+        }
     }
     /* Find Traps always opens after the roll (0x1AFDA → Open with rating $FF skip).
      * Open opens unless we treat fail as still opening after trap — ASM Open

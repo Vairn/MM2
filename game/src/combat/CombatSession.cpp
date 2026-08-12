@@ -622,16 +622,32 @@ void CombatSession::resolveBribeTry(GameStateView &gs)
 }
 
 /* 0x132E6 → -$7E84 (0x6798): arg = DELAY*$19+1; half = max(1, arg/2);
- * loop does delay(1) then tests the pre-decrement count, so hold = half+1
- * frames (Delay 0 → 2 VBLs). Any key skips (poll -$7BD2). */
-static int combatActionAckFrames(const GameStateView &gs)
+ * loop does Delay(1) then tests the pre-decrement count, so hold = half+1
+ * dos.library ticks (Delay 0 → 2×1/50 s). Any key skips (poll -$7BD2).
+ * Remake maps each Delay unit onto platform::nowTicks() (~60 Hz) so pacing
+ * is wall-clock, not "one main-loop iteration". */
+static int combatActionAckFrames(const GameStateView &gs, bool auto_enabled = false)
 {
-    const int arg = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_DELAY)) * 0x19 + 1;
+    const uint8_t delay = mm2_gs_u8(gs.a4(), MM2_GS_DELAY);
+    /* Delay 0: host synthesizes SPACE each frame (GameSession) — no hold window.
+     * Retail still runs 0x6798(1) (~2 Delay ticks); remake treats 0 as turbo. */
+    if (delay == 0) {
+        return 0;
+    }
+    const int arg = static_cast<int>(delay) * 0x19 + 1;
     int half = arg / 2;
     if (half < 1) {
         half = 1;
     }
-    return half + 1;
+    int frames = half + 1;
+    if (auto_enabled) {
+        /* Auto has no human key to pace — force a readable window (~0.7 s). */
+        constexpr int kAutoMin = 40;
+        if (frames < kAutoMin) {
+            frames = kAutoMin;
+        }
+    }
+    return frames;
 }
 
 void CombatSession::beginActionAck(GameStateView &gs)
@@ -643,7 +659,11 @@ void CombatSession::beginActionAck(GameStateView &gs)
     for (int i = 0; i < MM2_GS_PARTY_SIZE; ++i) {
         mm2_gs_set_u8(gs.a4(), MM2_GS_PARTY_ACTED + i, party_acted_[i] ? 1 : 0);
     }
-    ack_frames_left_ = combatActionAckFrames(gs);
+    const int frames = combatActionAckFrames(gs, auto_enabled_);
+    ack_until_tick_ = platform::nowTicks() + static_cast<uint32_t>(frames);
+    /* Disarm until SPACE/ENTER are up so a held continue-prompt key cannot
+     * skip the entire ack on the first frame. last_ascii is already edged. */
+    ack_key_skip_armed_ = false;
     state_ = CombatState::AwaitingActionAck;
 }
 
@@ -779,18 +799,28 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
     }
 
     if (state_ == CombatState::AwaitingActionAck) {
-        /* Key skip matches 0x6798; otherwise burn one hold frame per tick.
-         * Old logic decremented then advanced when hitting 0 on the same tick,
-         * so Delay 0 (1 programmed frame) never left the message on screen. */
-        const bool keyed = keys.last_ascii != 0 || keys.space || keys.enter;
-        if (!keyed && ack_frames_left_ > 0) {
-            --ack_frames_left_;
-            return false;
+        /* Key skip matches 0x6798. SPACE/ENTER are level-sampled for continue
+         * prompts elsewhere — require a release after ack start so a held key
+         * does not instantly clear every combat message. */
+        if (!keys.space && !keys.enter) {
+            ack_key_skip_armed_ = true;
         }
-        ack_frames_left_ = 0;
+        const bool keyed =
+            keys.last_ascii != 0 || ((keys.space || keys.enter) && ack_key_skip_armed_);
+        if (!keyed) {
+            /* Signed 16-bit delta: nowTicks wraps like ACE timerGet. */
+            const int16_t left = static_cast<int16_t>(static_cast<uint16_t>(ack_until_tick_) -
+                                                      static_cast<uint16_t>(platform::nowTicks()));
+            if (left > 0) {
+                return false;
+            }
+        }
+        ack_until_tick_ = platform::nowTicks();
         /* 0x132E6 host: pace multi-target spell lines one ack each. */
         if (advanceCombatMessageQueue()) {
-            ack_frames_left_ = combatActionAckFrames(gs);
+            const int frames = combatActionAckFrames(gs, auto_enabled_);
+            ack_until_tick_ = platform::nowTicks() + static_cast<uint32_t>(frames);
+            ack_key_skip_armed_ = false;
             return false;
         }
         runUntilDecisionOrEnd(gs, world);

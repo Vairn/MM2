@@ -178,14 +178,26 @@ static inline void mm2_map_facing_delta(char facing_key, int8_t *dx, int8_t *dy)
  * Interior passability first gate @ 0x9424: current collision cell
  * (A4-$55D6) AND facing bundle (A4-$55D8) AND #$55 (wall bits only).
  * Darkness high bits do not block; they drain light @ 0x69DC after a step.
- * Returns 0 if passable (-1 in original), 1 if blocked.
- * GAP: full 0x9424 path (doors, swim, barriers) not traced yet.
+ * Returns 0 if passable (-1 in original), 1 if wall bits set (caller must
+ * then run the outdoor skill/water override or indoor visual-field message —
+ * see gameplay::step / 0x9424).
  */
 static inline int mm2_map_passability_blocked(uint8_t collision_cell, char facing_key)
 {
     const uint8_t mask = mm2_map_facing_mask_hi(facing_key);
     const uint8_t walls = (uint8_t)(collision_cell & mask & MM2_MAP_COLL_PASS_WALL_MASK);
     return walls != 0;
+}
+
+/* Outdoor terrain class @ 0x9524 (A4-$720A, data-hunk low-32 of the 256 table):
+ * visual tid & 0x1F → class. 1=mountain, 3=forest, 4=water. */
+static inline uint8_t mm2_map_outdoor_terrain_class(uint8_t visual_cell)
+{
+    static const uint8_t kClass[32] = {
+        0, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0,
+    };
+    return kClass[visual_cell & 0x1F];
 }
 
 /* Page-1 wall low bit for the facing direction (unlock/bash lock @ 0x4B06).

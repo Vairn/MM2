@@ -58,9 +58,106 @@ uint8_t collisionAt(const world::MapWorld &world, int x, int y)
     return world.collisionAt(x, y);
 }
 
-bool passabilityBlocked(const world::MapWorld &world, int x, int y, char facing_key)
+/* Outdoor visual sample with neighbour wrap (hood row0 layout @ 0x190C). */
+uint8_t visualAtWrapped(const world::MapWorld &world, int x, int y)
 {
-    return mm2_map_passability_blocked(collisionAt(world, x, y), facing_key) != 0;
+    int screen = world.currentScreen();
+    int lx = x;
+    int ly = y;
+    if (lx < 0) {
+        const int n = world.neighborScreen(3);
+        if (n < 0) {
+            return 0;
+        }
+        screen = n;
+        lx += MM2_MAP_GRID_DIM;
+    } else if (lx >= MM2_MAP_GRID_DIM) {
+        const int n = world.neighborScreen(1);
+        if (n < 0) {
+            return 0;
+        }
+        screen = n;
+        lx -= MM2_MAP_GRID_DIM;
+    }
+    if (ly < 0) {
+        const int n = world.neighborScreen(2);
+        if (n < 0) {
+            return 0;
+        }
+        screen = n;
+        ly += MM2_MAP_GRID_DIM;
+    } else if (ly >= MM2_MAP_GRID_DIM) {
+        const int n = world.neighborScreen(0);
+        if (n < 0) {
+            return 0;
+        }
+        screen = n;
+        ly -= MM2_MAP_GRID_DIM;
+    }
+    if (lx < 0 || ly < 0 || lx >= MM2_MAP_GRID_DIM || ly >= MM2_MAP_GRID_DIM) {
+        return 0;
+    }
+    return world.mapFile().screens[screen].visual[static_cast<size_t>((ly << 4) | lx)];
+}
+
+/* Full passability @ 0x9424. Returns ObstructionMsg::None when passable (−1). */
+ObstructionMsg passabilityObstruction(const world::MapWorld &world, GameStateView &gs, int x, int y,
+                                      char facing_key, Mm2RosterFile *roster,
+                                      const Mm2PartyLaunch *launch)
+{
+    const uint8_t coll = collisionAt(world, x, y);
+    if (mm2_map_passability_blocked(coll, facing_key) == 0) {
+        return ObstructionMsg::None;
+    }
+
+    /* Indoor (−$79E2==0): visual 2-bit field → obstruction index; torch(3)→Solid(1). */
+    if (!world.isOutdoor()) {
+        const uint8_t vis = world.visualPage()[static_cast<size_t>((y << 4) | (x & 0x0F))];
+        int field = (vis >> mm2_map_facing_shift(facing_key)) & 3;
+        if (field == 3) {
+            field = 1;
+        }
+        return static_cast<ObstructionMsg>(field);
+    }
+
+    /* Outdoor: wall bits gate a terrain-class override @ 0x9480..0x9518.
+     * Hood row0 indices 1 then 0 = one step forward, then current visual.
+     * Class 1 → Mountaineering (0x0B) count≥2; class 3 → Pathfinder (0x0D);
+     * class 4 + runtime env $0A → Walk on Water (−$79A7) or "Can't swim!". */
+    ObstructionMsg result = ObstructionMsg::None;
+    const uint8_t runtime_env = mm2_attrib_runtime_env_id(&world.attrib());
+    const bool walk_water = gs.walkWaterFlag() != 0;
+
+    int8_t dx = 0;
+    int8_t dy = 0;
+    mm2_map_facing_delta(facing_key, &dx, &dy);
+
+    for (int idx = 1; idx >= 0; --idx) {
+        const int vx = (idx == 1) ? (x + dx) : x;
+        const int vy = (idx == 1) ? (y + dy) : y;
+        const uint8_t terr = mm2_map_outdoor_terrain_class(visualAtWrapped(world, vx, vy));
+
+        bool handled = false;
+        if (terr == 1 || terr == 3) {
+            const uint8_t skill_id = (terr == 1) ? 0x0Bu : 0x0Du;
+            const int count =
+                events::eventVmCountPartyNibbleMatches(gs.a4(), roster, launch, skill_id);
+            handled = true;
+            if (count < 2) {
+                result = ObstructionMsg::Impassable;
+            }
+        } else if (terr == 4 && runtime_env == 0x0A) {
+            handled = true;
+            if (!walk_water) {
+                result = ObstructionMsg::CantSwim;
+            }
+        }
+
+        if (handled) {
+            break;
+        }
+    }
+    return result;
 }
 
 /* world_edge_resolve @ 0x1D0A — neighbour byte from materialized attrib 0x05..0x08. */
@@ -340,8 +437,11 @@ MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward, Mm2Rost
     const int sx = static_cast<int>(gs.coordX());
     const int sy = static_cast<int>(gs.coordY());
 
-    if (passabilityBlocked(world, sx, sy, step_facing)) {
+    const ObstructionMsg obstruct =
+        passabilityObstruction(world, gs, sx, sy, step_facing, roster, launch);
+    if (obstruct != ObstructionMsg::None) {
         r.blocked = true;
+        r.obstruction = obstruct;
         return r;
     }
 

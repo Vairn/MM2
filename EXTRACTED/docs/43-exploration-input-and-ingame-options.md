@@ -172,7 +172,8 @@ screen. The Options panel labels the key `C Controls`. (The same thunk `-$7D5E` 
 `82A2` is what doc 39 §1 previously labelled "Create character" — that mapping is wrong;
 doc 39 already flags it as a gap. In-game and title `C` both open Controls.)
 
-Layout (window `-$7C74(9,3,$1E,$14)` = x 9, y 3, w 30, h 20; border colors `-$7A4C/-$7A50`):
+Layout (window `-$7C74(9,3,$1E,$14)` = **x1,y1,x2,y2** cells `(9,3)-(30,20)` →
+**22×18**; fill pen `-$7A4C` / yellow frame+text `-$7A50`):
 
 | Row (y) | Col (x) | Text |
 |---------|---------|------|

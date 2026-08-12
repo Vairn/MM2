@@ -101,6 +101,11 @@
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\mm2_audio_stub.dir\\src\\platform\\PlatformStub.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\platform\\PlatformStub.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\platform\\PlatformStub.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\cc.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/include -O3 -DNDEBUG -std=gnu11 -o CMakeFiles\\image32_golden.dir\\tests\\image32_golden.c.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\image32_golden.c",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\image32_golden.c"
 },
@@ -398,6 +403,16 @@
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\cc.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu11 -o CMakeFiles\\automap_golden.dir\\src\\gfx\\mm2_font8x8.c.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\mm2_font8x8.c",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\mm2_font8x8.c"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\automap_golden.dir\\src\\gfx\\PartyStatusFormat.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\PartyStatusFormat.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\PartyStatusFormat.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\automap_golden.dir\\src\\gfx\\PlayScreenChrome.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\PlayScreenChrome.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\PlayScreenChrome.cpp"
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",

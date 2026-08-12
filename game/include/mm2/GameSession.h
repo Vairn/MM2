@@ -97,6 +97,7 @@ private:
         QuitConfirm,
         Controls,
         StatusMessage,
+        SearchReward, /* 0x1ACFA: clear party panel, gold/gems + who found */
         Automap,
         TownService,
         RestConfirm,
@@ -202,6 +203,8 @@ private:
     void armSearchContainerArt();
     void clearSearchContainerArt();
     void showStatusMessage(const char *msg);
+    /** Chest/search loot @ 0x1ACFA — replaces party name rows 0x13..0x16. */
+    void showSearchReward(const char *msg);
     void markDirty();
 #if MM2_HOST_AMIGA
     void markView3DDirty();

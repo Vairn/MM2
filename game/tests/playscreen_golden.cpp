@@ -17,12 +17,29 @@ const char *parseDataDir(int argc, char **argv)
 {
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
-        if (std::strncmp(arg, "--gfx=", 6) == 0 || std::strncmp(arg, "--cga-palette=", 14) == 0) {
+        if (std::strncmp(arg, "--gfx=", 6) == 0 || std::strncmp(arg, "--cga-palette=", 14) == 0 ||
+            std::strncmp(arg, "--overlay=", 10) == 0) {
             continue;
         }
         return arg;
     }
     return "../..";
+}
+
+char parseOverlayKey(int argc, char **argv)
+{
+    for (int i = 1; i < argc; ++i) {
+        if (std::strncmp(argv[i], "--overlay=", 10) == 0) {
+            const char *v = argv[i] + 10;
+            if (std::strcmp(v, "controls") == 0) {
+                return 'c';
+            }
+            if (std::strcmp(v, "automap") == 0) {
+                return 'm';
+            }
+        }
+    }
+    return 0;
 }
 
 void parseGfxOptions(int argc, char **argv)
@@ -44,6 +61,7 @@ void parseGfxOptions(int argc, char **argv)
 int main(int argc, char **argv)
 {
     parseGfxOptions(argc, argv);
+    const char overlay_key = parseOverlayKey(argc, argv);
     const char *data_dir = parseDataDir(argc, argv);
     mm2::gfx::initPcGfxFallbackDir(data_dir, nullptr);
 
@@ -83,8 +101,19 @@ int main(int argc, char **argv)
     }
     session.render();
 
+    if (overlay_key) {
+        mm2::platform::KeyState keys{};
+        keys.last_ascii = overlay_key;
+        keys.any_key = true;
+        session.tick(keys);
+        session.render();
+    }
+
     const mm2::gfx::ScreenCompositor &c = session.compositor();
-    std::FILE *f = std::fopen("playscreen_golden.ppm", "wb");
+    const char *out_name = overlay_key ? (overlay_key == 'm' ? "playscreen_golden_automap.ppm"
+                                                             : "playscreen_golden_controls.ppm")
+                                       : "playscreen_golden.ppm";
+    std::FILE *f = std::fopen(out_name, "wb");
     if (!f) {
         std::fprintf(stderr, "FAIL: cannot write ppm\n");
         return 1;
@@ -100,7 +129,7 @@ int main(int argc, char **argv)
     std::fclose(f);
     session.shutdown();
 
-    std::printf("OK: playscreen_golden.ppm written (party=%d gfx=%d cga_pal=%d)\n", count,
+    std::printf("OK: %s written (party=%d gfx=%d cga_pal=%d)\n", out_name, count,
                 static_cast<int>(mm2::gfx::gfxSettings().resolved), mm2::gfx::gfxSettings().cga_palette);
     return 0;
 }

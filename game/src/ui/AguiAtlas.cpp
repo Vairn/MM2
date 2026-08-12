@@ -81,13 +81,16 @@ bool AguiAtlas::load(const char *data_dir)
         return false;
     }
 
+    /* data_dir may be ``amiga/`` (dist); also accept sibling ``ui/agui`` next to it. */
     const char *rel_paths[] = {
         "ui/agui/agui_atlas.rgba",
+        "../ui/agui/agui_atlas.rgba",
         "data/ui/agui/agui_atlas.rgba",
         "game/data/ui/agui/agui_atlas.rgba",
     };
     const char *json_rels[] = {
         "ui/agui/agui_atlas.json",
+        "../ui/agui/agui_atlas.json",
         "data/ui/agui/agui_atlas.json",
         "game/data/ui/agui/agui_atlas.json",
     };
@@ -95,7 +98,7 @@ bool AguiAtlas::load(const char *data_dir)
     char rgba_path[MM2_PATH_SCRATCH_CAP];
     char json_path[MM2_PATH_SCRATCH_CAP];
     bool found = false;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         if (mm2::joinDataPath(rgba_path, MM2_PATH_SCRATCH_CAP, data_dir, rel_paths[i]) &&
             mm2::joinDataPath(json_path, MM2_PATH_SCRATCH_CAP, data_dir, json_rels[i])) {
             FILE *probe = std::fopen(rgba_path, "rb");

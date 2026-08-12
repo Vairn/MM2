@@ -87,6 +87,66 @@ void textAt(ScreenCompositor &c, int col, int row, const char *text, uint8_t r =
 #endif
 }
 
+/* Long lines wrap onto the band's following rows instead of running off the
+ * right edge (PC + Amiga alike): the round band is cleared rows 0x0F..0x11 by
+ * 0x1119E, so up to 3 wrapped rows fit; pre-round keeps one status row. */
+void textAtWrapped(ScreenCompositor &c, int col, int row, const char *text, int max_cols,
+                   int max_rows, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255)
+{
+    if (!text || max_cols <= 0 || max_rows <= 0) {
+        return;
+    }
+    char line[80];
+    int len = 0;
+    int rows_used = 0;
+    const auto flush = [&]() {
+        if (len <= 0) {
+            return;
+        }
+        line[len] = '\0';
+        textAt(c, col, row + rows_used, line, r, g, b);
+        ++rows_used;
+        len = 0;
+    };
+    const char *p = text;
+    while (*p != '\0' && rows_used < max_rows) {
+        while (*p == ' ') {
+            ++p;
+        }
+        const char *w = p;
+        while (*w != '\0' && *w != ' ') {
+            ++w;
+        }
+        const int wlen = static_cast<int>(w - p);
+        if (wlen == 0) {
+            break;
+        }
+        if (len > 0 && len + 1 + wlen <= max_cols) {
+            line[len++] = ' ';
+            for (int i = 0; i < wlen; ++i) {
+                line[len++] = p[i];
+            }
+        } else {
+            flush();
+            const char *q = p;
+            int remain = wlen;
+            while (remain > 0 && rows_used < max_rows) {
+                const int take = remain < max_cols ? remain : max_cols;
+                for (int i = 0; i < take; ++i) {
+                    line[len++] = q[i];
+                }
+                q += take;
+                remain -= take;
+                if (remain > 0) {
+                    flush();
+                }
+            }
+        }
+        p = w;
+    }
+    flush();
+}
+
 /* "+N more" name pluralisation @ 0x12706/0x12E9C: append 's' unless the
  * name already ends in 's' or exactly one extra monster. */
 void formatOverflowName(char *out, size_t cap, const char *name, int extra)
@@ -127,12 +187,14 @@ void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view)
         /* Pre-combat encounter list @ 0x12D80..0x12E7E: yellow console_box at
          * cols 0x16..0x26 row 1, height = names + 2 (+3 when > 10), monster
          * names at window col 1 (screen 0x17) rows 2.., overflow "+N more" at
-         * window (4, 0xC) and the pluralised name at window (1, 0xD). */
+         * window (4, 0xC) and the pluralised name at window (1, 0xD).
+         * win_open @ 0x21B9A blacks the full window first — border glyphs are
+         * sparse, so without that wipe the 3D hatch shows through the frame. */
         const bool overflow = view.overflow_more > 0;
         const int box_rows = view.monster_line_count + 2 + (overflow ? 3 : 0);
+        fillCellRect(c, kCombatEncounterBoxCol, 1, kCombatEncounterBoxWidthCells, box_rows);
         c.drawConsoleBox(1, kCombatEncounterBoxCol, kCombatEncounterBoxWidthCells, box_rows, kCombatBoxR,
                          kCombatBoxG, kCombatBoxB);
-        fillCellRect(c, kCombatEncounterBoxCol + 1, 2, kCombatEncounterBoxWidthCells - 2, box_rows - 2);
 
         for (int i = 0; i < view.monster_line_count; ++i) {
             textAt(c, kCombatEncounterBoxCol + 1, 2 + i, view.monster_lines[i].name);
@@ -265,7 +327,7 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
     if (view.show_cast_target) {
         /* Cast: 0xD52E family. Fight/Shoot: status already "Fight/Shoot which (A-x)?". */
         if (view.message[0] != '\0') {
-            textAt(c, 1, msg_row, view.message);
+            textAtWrapped(c, 1, msg_row, view.message, 0x26, round_layout ? 3 : 1);
         } else {
             textAt(c, 1, msg_row, "Which monster?");
         }
@@ -274,14 +336,14 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
     if (view.show_party_pick) {
         /* 0xD2EA patches "On whom (1-N)?" — message already in view.message. */
         if (view.message[0] != '\0') {
-            textAt(c, 1, msg_row, view.message);
+            textAtWrapped(c, 1, msg_row, view.message, 0x26, round_layout ? 3 : 1);
         }
         return;
     }
     if (view.show_item_pick) {
         /* 0xB56E / Use pick — prompt already in view.message. */
         if (view.message[0] != '\0') {
-            textAt(c, 1, msg_row, view.message);
+            textAtWrapped(c, 1, msg_row, view.message, 0x26, round_layout ? 3 : 1);
         }
         return;
     }
@@ -320,7 +382,7 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
 
     if (view.message[0] != '\0') {
         /* Surprise strings @ 0x12F30/0x12F44 also go through -$7EC0 → row $11. */
-        textAt(c, 1, msg_row, view.message);
+        textAtWrapped(c, 1, msg_row, view.message, 0x26, round_layout ? 3 : 1);
     }
 }
 

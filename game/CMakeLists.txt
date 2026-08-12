@@ -114,7 +114,7 @@ if(NOT AMIGA)
   target_include_directories(mm2_codecs PUBLIC ${MM2_DECOMP})
 
   # Tests link Movement/EventVmHelpers/CombatSession without SDL audio.
-  add_library(mm2_audio_stub STATIC src/platform/AudioStub.cpp)
+  add_library(mm2_audio_stub STATIC src/platform/AudioStub.cpp src/platform/PlatformStub.cpp)
   target_include_directories(mm2_audio_stub PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 endif()
 
@@ -239,6 +239,8 @@ if(NOT AMIGA)
     src/gameplay/ExploreActions.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
+    src/gfx/PartyStatusFormat.cpp
+    src/gfx/PlayScreenChrome.cpp
     src/gfx/EnvAssets.cpp
     src/gfx/GfxBackend.cpp
     src/gfx/OutdoorView3D.cpp
@@ -590,7 +592,9 @@ endif()
 target_include_directories(${_mm2_target} PRIVATE include)
 
 if(AMIGA)
-  target_compile_options(${_mm2_target} PRIVATE -ffreestanding -fno-exceptions -fno-rtti)
+  # -fno-rtti / -fno-threadsafe-statics are C++-only (avoids cc1 warnings on .c).
+  target_compile_options(${_mm2_target} PRIVATE -ffreestanding -fno-exceptions)
+  target_compile_options(${_mm2_target} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti -fno-threadsafe-statics>)
   target_compile_options(${_mm2_target} PUBLIC -Wall -Wextra)
   target_include_directories(${_mm2_target} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include/freestanding_stl

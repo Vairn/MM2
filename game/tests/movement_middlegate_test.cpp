@@ -64,6 +64,76 @@ void testDoorLockRotation(int &fails)
     expect(mm2_map_door_locked_at(sp, 3, 5, 'W') == 0, "0x44, not locked facing W (file N unset)", fails);
 }
 
+/* Outdoor 0x9424 skill/water override: screen 14 (surf $AA → env $0A). */
+void testOutdoorTerrainSkills(mm2::world::MapWorld &world, mm2::GameStateView &gs, int &fails)
+{
+    expect(world.enterScreen(14), "enter outdoor screen 14", fails);
+    gs.setScreenId(14);
+
+    Mm2RosterFile roster{};
+    Mm2PartyLaunch launch{};
+    launch.party_count = 2;
+    launch.roster_slots[0] = 0;
+    launch.roster_slots[1] = 1;
+    roster.records[0].condition = 0;
+    roster.records[1].condition = 0;
+    /* Non-empty name so rosterRecord() does not skip the slots. */
+    roster.records[0].name[0] = 'A';
+    roster.records[1].name[0] = 'B';
+
+    auto pack_skills = [&](int slot0_lo, int slot0_hi, int slot1_lo, int slot1_hi) {
+        reinterpret_cast<uint8_t *>(&roster.records[0])[0x50] =
+            static_cast<uint8_t>((slot0_hi << 4) | (slot0_lo & 0x0F));
+        reinterpret_cast<uint8_t *>(&roster.records[1])[0x50] =
+            static_cast<uint8_t>((slot1_hi << 4) | (slot1_lo & 0x0F));
+    };
+
+    /* Mountain at (2,1): stand (2,0) facing N. Class 1 needs Mountaineering×2. */
+    pack_skills(0, 0, 0, 0);
+    gs.setCoordX(2);
+    gs.setCoordY(0);
+    gs.setFacingKey('N');
+    mm2_gs_set_u8(gs.a4(), MM2_GS_WALK_WATER_FLAG, 0);
+    mm2::gameplay::MoveResult m0 = mm2::gameplay::step(world, gs, true, &roster, &launch);
+    expect(m0.blocked && m0.obstruction == mm2::gameplay::ObstructionMsg::Impassable,
+           "mountain without skills → Impassable!", fails);
+    expect(gs.coordX() == 2 && gs.coordY() == 0, "mountain block keeps coords", fails);
+
+    pack_skills(0x0B, 0, 0x0B, 0); /* two Mountaineering nibbles across party */
+    m0 = mm2::gameplay::step(world, gs, true, &roster, &launch);
+    expect(m0.moved && !m0.blocked && gs.coordX() == 2 && gs.coordY() == 1,
+           "two Mountaineering allow mountain step", fails);
+
+    /* Forest at (4,0): stand (3,0) facing E. Class 3 needs Pathfinder×2. */
+    pack_skills(0, 0, 0, 0);
+    gs.setCoordX(3);
+    gs.setCoordY(0);
+    gs.setFacingKey('E');
+    mm2::gameplay::MoveResult m1 = mm2::gameplay::step(world, gs, true, &roster, &launch);
+    expect(m1.blocked && m1.obstruction == mm2::gameplay::ObstructionMsg::Impassable,
+           "forest without skills → Impassable!", fails);
+
+    pack_skills(0x0D, 0, 0x0D, 0);
+    m1 = mm2::gameplay::step(world, gs, true, &roster, &launch);
+    expect(m1.moved && !m1.blocked && gs.coordX() == 4 && gs.coordY() == 0,
+           "two Pathfinder allow forest step", fails);
+
+    /* Water at (6,8): stand (6,7) facing N. Env $0A → need Walk on Water. */
+    pack_skills(0, 0, 0, 0);
+    gs.setCoordX(6);
+    gs.setCoordY(7);
+    gs.setFacingKey('N');
+    mm2_gs_set_u8(gs.a4(), MM2_GS_WALK_WATER_FLAG, 0);
+    mm2::gameplay::MoveResult m2 = mm2::gameplay::step(world, gs, true, &roster, &launch);
+    expect(m2.blocked && m2.obstruction == mm2::gameplay::ObstructionMsg::CantSwim,
+           "water without Walk on Water → Can't swim!", fails);
+
+    mm2_gs_set_u8(gs.a4(), MM2_GS_WALK_WATER_FLAG, 1);
+    m2 = mm2::gameplay::step(world, gs, true, &roster, &launch);
+    expect(m2.moved && !m2.blocked && gs.coordX() == 6 && gs.coordY() == 8,
+           "Walk on Water allows water step", fails);
+}
+
 }  // namespace
 
 int main(int argc, char **argv)
@@ -134,9 +204,10 @@ int main(int argc, char **argv)
     expect(gs.lightFactor() == 4, "dark destination drains light @ 0x69DC", fails);
 
     testDoorLockRotation(fails);
+    testOutdoorTerrainSkills(world, gs, fails);
 
     if (fails == 0) {
-        std::printf("OK: movement_middlegate_test (20 checks)\n");
+        std::printf("OK: movement_middlegate_test (outdoor skills + water)\n");
         return 0;
     }
     return 1;

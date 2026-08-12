@@ -234,6 +234,14 @@ build CMakeFiles/mm2_audio_stub.dir/src/platform/AudioStub.cpp.obj: CXX_COMPILER
   OBJECT_DIR = CMakeFiles\mm2_audio_stub.dir
   OBJECT_FILE_DIR = CMakeFiles\mm2_audio_stub.dir\src\platform
 
+build CMakeFiles/mm2_audio_stub.dir/src/platform/PlatformStub.cpp.obj: CXX_COMPILER__mm2_audio_stub_Release C$:/_20260421_/D-REC/development/MM2/game/src/platform/PlatformStub.cpp || cmake_object_order_depends_target_mm2_audio_stub
+  DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
+  DEP_FILE = CMakeFiles\mm2_audio_stub.dir\src\platform\PlatformStub.cpp.obj.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++17
+  INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include
+  OBJECT_DIR = CMakeFiles\mm2_audio_stub.dir
+  OBJECT_FILE_DIR = CMakeFiles\mm2_audio_stub.dir\src\platform
+
 
 # =============================================================================
 # Link build statements for STATIC_LIBRARY target mm2_audio_stub
@@ -242,7 +250,7 @@ build CMakeFiles/mm2_audio_stub.dir/src/platform/AudioStub.cpp.obj: CXX_COMPILER
 #############################################
 # Link the static library libmm2_audio_stub.a
 
-build libmm2_audio_stub.a: CXX_STATIC_LIBRARY_LINKER__mm2_audio_stub_Release CMakeFiles/mm2_audio_stub.dir/src/platform/AudioStub.cpp.obj
+build libmm2_audio_stub.a: CXX_STATIC_LIBRARY_LINKER__mm2_audio_stub_Release CMakeFiles/mm2_audio_stub.dir/src/platform/AudioStub.cpp.obj CMakeFiles/mm2_audio_stub.dir/src/platform/PlatformStub.cpp.obj
   LANGUAGE_COMPILE_FLAGS = -O3 -DNDEBUG
   OBJECT_DIR = CMakeFiles\mm2_audio_stub.dir
   POST_BUILD = cd .
@@ -1144,6 +1152,22 @@ build CMakeFiles/automap_golden.dir/src/gfx/mm2_font8x8.c.obj: C_COMPILER__autom
   OBJECT_DIR = CMakeFiles\automap_golden.dir
   OBJECT_FILE_DIR = CMakeFiles\automap_golden.dir\src\gfx
 
+build CMakeFiles/automap_golden.dir/src/gfx/PartyStatusFormat.cpp.obj: CXX_COMPILER__automap_golden_Release C$:/_20260421_/D-REC/development/MM2/game/src/gfx/PartyStatusFormat.cpp || cmake_object_order_depends_target_automap_golden
+  DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
+  DEP_FILE = CMakeFiles\automap_golden.dir\src\gfx\PartyStatusFormat.cpp.obj.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++17
+  INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp
+  OBJECT_DIR = CMakeFiles\automap_golden.dir
+  OBJECT_FILE_DIR = CMakeFiles\automap_golden.dir\src\gfx
+
+build CMakeFiles/automap_golden.dir/src/gfx/PlayScreenChrome.cpp.obj: CXX_COMPILER__automap_golden_Release C$:/_20260421_/D-REC/development/MM2/game/src/gfx/PlayScreenChrome.cpp || cmake_object_order_depends_target_automap_golden
+  DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
+  DEP_FILE = CMakeFiles\automap_golden.dir\src\gfx\PlayScreenChrome.cpp.obj.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++17
+  INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp
+  OBJECT_DIR = CMakeFiles\automap_golden.dir
+  OBJECT_FILE_DIR = CMakeFiles\automap_golden.dir\src\gfx
+
 build CMakeFiles/automap_golden.dir/src/gfx/EnvAssets.cpp.obj: CXX_COMPILER__automap_golden_Release C$:/_20260421_/D-REC/development/MM2/game/src/gfx/EnvAssets.cpp || cmake_object_order_depends_target_automap_golden
   DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
   DEP_FILE = CMakeFiles\automap_golden.dir\src\gfx\EnvAssets.cpp.obj.d
@@ -1192,7 +1216,7 @@ build CMakeFiles/automap_golden.dir/src/runtime/PathScratch.cpp.obj: CXX_COMPILE
 #############################################
 # Link the executable automap_golden.exe
 
-build automap_golden.exe: CXX_EXECUTABLE_LINKER__automap_golden_Release CMakeFiles/automap_golden.dir/tests/automap_golden.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/AutomapView.cpp.obj CMakeFiles/automap_golden.dir/src/world/AutomapState.cpp.obj CMakeFiles/automap_golden.dir/src/gameplay/RosterSkills.cpp.obj CMakeFiles/automap_golden.dir/src/events/EventVmHelpers.cpp.obj CMakeFiles/automap_golden.dir/src/gameplay/ExploreActions.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/ScreenCompositor.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/mm2_font8x8.c.obj CMakeFiles/automap_golden.dir/src/gfx/EnvAssets.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/GfxBackend.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/OutdoorView3D.cpp.obj CMakeFiles/automap_golden.dir/src/world/MapWorld.cpp.obj CMakeFiles/automap_golden.dir/src/runtime/PathScratch.cpp.obj | libmm2_codecs.a libmm2_audio_stub.a || libmm2_audio_stub.a libmm2_codecs.a
+build automap_golden.exe: CXX_EXECUTABLE_LINKER__automap_golden_Release CMakeFiles/automap_golden.dir/tests/automap_golden.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/AutomapView.cpp.obj CMakeFiles/automap_golden.dir/src/world/AutomapState.cpp.obj CMakeFiles/automap_golden.dir/src/gameplay/RosterSkills.cpp.obj CMakeFiles/automap_golden.dir/src/events/EventVmHelpers.cpp.obj CMakeFiles/automap_golden.dir/src/gameplay/ExploreActions.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/ScreenCompositor.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/mm2_font8x8.c.obj CMakeFiles/automap_golden.dir/src/gfx/PartyStatusFormat.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/PlayScreenChrome.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/EnvAssets.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/GfxBackend.cpp.obj CMakeFiles/automap_golden.dir/src/gfx/OutdoorView3D.cpp.obj CMakeFiles/automap_golden.dir/src/world/MapWorld.cpp.obj CMakeFiles/automap_golden.dir/src/runtime/PathScratch.cpp.obj | libmm2_codecs.a libmm2_audio_stub.a || libmm2_audio_stub.a libmm2_codecs.a
   FLAGS = -O3 -DNDEBUG
   LINK_LIBRARIES = libmm2_codecs.a  libmm2_audio_stub.a  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\automap_golden.dir

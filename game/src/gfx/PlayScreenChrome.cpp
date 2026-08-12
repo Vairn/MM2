@@ -208,6 +208,11 @@ void drawPlayScreenChrome(ScreenCompositor &c)
     drawPlayScreenChromeStatic(c);
 }
 
+void drawPlayOuterFrame(ScreenCompositor &c)
+{
+    outerFrame(c);
+}
+
 void drawPlayViewportDivider(ScreenCompositor &c)
 {
     vLine(c, 0, 0x10, 0x1B);

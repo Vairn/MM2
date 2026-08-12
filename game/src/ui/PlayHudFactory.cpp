@@ -5,6 +5,13 @@
 
 namespace mm2::ui {
 
+namespace {
+
+ClassicPlayHud g_classic_hud;
+AguiPlayHud g_agui_hud;
+
+}  // namespace
+
 std::unique_ptr<IPlayHud> createPlayHud(PlayHudKind kind)
 {
     switch (kind) {
@@ -18,14 +25,14 @@ std::unique_ptr<IPlayHud> createPlayHud(PlayHudKind kind)
 
 IPlayHud *acquirePlayHud(PlayHudKind kind)
 {
-    static ClassicPlayHud classic;
-    static AguiPlayHud agui;
+    // File-scope (not function-local) statics: freestanding Amiga has no
+    // __cxa_guard_acquire/release for thread-safe local static init.
     switch (kind) {
     case PlayHudKind::Agui:
-        return &agui;
+        return &g_agui_hud;
     case PlayHudKind::Classic:
     default:
-        return &classic;
+        return &g_classic_hud;
     }
 }
 

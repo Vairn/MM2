@@ -24,6 +24,7 @@ bool joinAnmPath(char *path, size_t cap, const char *data_dir, int disk_index)
 
 AnmPlanarPool &AnmPlanarPool::instance()
 {
+    // Function-local static is fine with Amiga -fno-threadsafe-statics (no __cxa_guard_*).
     static AnmPlanarPool pool;
     return pool;
 }

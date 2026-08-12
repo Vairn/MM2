@@ -137,6 +137,24 @@ int main(int argc, char **argv)
     }
     dumpPpm(session.compositor(), "combat_golden_3_round.ppm");
 
+    /* Keep fighting until a message longer than the 38-col band shows up so
+     * the word-wrap path can be eyeballed (combat_golden_4_wrap.ppm). */
+    bool dumped_wrap = false;
+    for (int i = 0; i < 200 && session.combatSession().active(); ++i) {
+        const auto view = session.combatSession().panelView();
+        if (!dumped_wrap && std::strlen(view.message) > 38) {
+            dumpPpm(session.compositor(), "combat_golden_4_wrap.ppm");
+            dumped_wrap = true;
+        }
+        if (session.combatSession().awaitingPartyOptions() ||
+            session.combatSession().awaitingCommand() ||
+            session.combatSession().state() == mm2::combat::CombatState::AwaitingAttackTarget) {
+            tickKey(session, 'A');
+        } else {
+            tickKey(session, ' ', false, /*space=*/true);
+        }
+    }
+
     session.shutdown();
     std::printf("OK: combat_golden PPMs written\n");
     return 0;

@@ -140,23 +140,39 @@ KeyState pollInput()
     const bool right = kb[SDL_SCANCODE_RIGHT] != 0 || kb[SDL_SCANCODE_KP_6] != 0;
     const bool arrow = up || down || left || right;
 
-    /* First arrow frame fires immediately; while held, re-fire ~8 Hz so walk
-     * does not burn a step every vsync. */
+    /* Arrow pacing (Amiga indoor key_read_3d @ 0x1E9CE waits via 0x6798(8) ≈
+     * 100 ms when idle; PC redraw is far faster so we must rate-limit here).
+     * Fire on press, then wait an initial delay before the first re-fire —
+     * otherwise a normal ~150 ms tap lands two steps/turns in one press. */
     static bool s_arrow_held = false;
+    static bool s_arrow_repeating = false;
     static Uint32 s_arrow_last_ms = 0;
-    constexpr Uint32 kArrowRepeatMs = 120;
+    constexpr Uint32 kArrowInitialRepeatMs = 280;
+    constexpr Uint32 kArrowRepeatMs = 180;
     if (arrow) {
         const Uint32 now = SDL_GetTicks();
-        if (!s_arrow_held || now - s_arrow_last_ms >= kArrowRepeatMs) {
+        if (!s_arrow_held) {
             k.up = up;
             k.down = down;
             k.left = left;
             k.right = right;
             s_arrow_last_ms = now;
             s_arrow_held = true;
+            s_arrow_repeating = false;
+        } else {
+            const Uint32 need = s_arrow_repeating ? kArrowRepeatMs : kArrowInitialRepeatMs;
+            if (now - s_arrow_last_ms >= need) {
+                k.up = up;
+                k.down = down;
+                k.left = left;
+                k.right = right;
+                s_arrow_last_ms = now;
+                s_arrow_repeating = true;
+            }
         }
     } else {
         s_arrow_held = false;
+        s_arrow_repeating = false;
     }
 
     /* Edge-trigger letters/digits and named menu keys so combat/menus get one
@@ -331,16 +347,25 @@ bool resolveDataDir(const char *hint, char *out, size_t out_cap)
         std::snprintf(out, out_cap, "%s", (dir && dir[0]) ? dir : ".");
     };
 
-    /* Explicit CLI path: validate only that directory (matches playscreen_golden). */
+    /* Explicit CLI path: that directory, or an ``amiga`` child (distribute layout). */
     if (hint && hint[0] && !(hint[0] == '.' && hint[1] == '\0')) {
         if (probeMapDat(hint)) {
             writeResolved(hint);
             return true;
         }
+        char amiga_child[MM2_PATH_SCRATCH_CAP];
+        if (joinDataPath(amiga_child, sizeof(amiga_child), hint, "amiga") && probeMapDat(amiga_child)) {
+            writeResolved(amiga_child);
+            return true;
+        }
         return false;
     }
 
-    static const char *const kCandidates[] = {hint, ".", "..", "../..", "../../.."};
+    /* Default: cwd / parents, plus ``amiga`` subfolders used by the dist package. */
+    static const char *const kCandidates[] = {
+        hint, ".", "amiga", "./amiga", "..", "../amiga", "../..", "../../amiga", "../../..",
+        "../../../amiga",
+    };
     for (const char *dir : kCandidates) {
         if (probeMapDat(dir)) {
             writeResolved(dir);

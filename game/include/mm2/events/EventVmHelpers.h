@@ -5,6 +5,7 @@
 
 #include "mm2_party_launch.h"
 #include "mm2_roster_codec.h"
+#include "mm2_items_codec.h"
 #include "mm2_gamestate.h"
 #include "mm2_event_codec.h"
 
@@ -120,18 +121,23 @@ enum class SearchPrepareResult : uint8_t {
 struct SearchPrepareOut {
     uint8_t rating = 0; /* display rating after 0x1B270 re-roll */
     char container_name[24]{}; /* -$6A54[env_row][score-1] @ 0x1B37A */
-    char msg[160]{};
+    /* Gold/gems + up to 3 "Name found Item" lines for party-panel reward UI. */
+    char msg[256]{};
 };
 
 /** Prepare Search: nothing / short-path distribute / long-path Identify modal.
- *  Long path does NOT clear the found buffer — call distribute after Open/Find. */
+ *  Long path does NOT clear the found buffer — call distribute after Open/Find.
+ *  Optional `items` names loot on the short-path distribute message. */
 SearchPrepareResult eventVmSearchPrepare(uint8_t *a4, Mm2RosterFile *roster,
                                          const Mm2PartyLaunch *launch, gameplay::Rng *rng,
-                                         SearchPrepareOut *out);
+                                         SearchPrepareOut *out,
+                                         const Mm2ItemsFile *items = nullptr);
 
-/** Distribute found buffer @ 0x1AC94 (after Open/Find or short path). */
+/** Distribute found buffer @ 0x1AC94 (after Open/Find or short path).
+ *  `msg` receives the party-panel reward text (0x1ACFA): share line then
+ *  per-item "Name found Item" lines (optional `items` for names). */
 bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
-                             char *msg, size_t msg_cap);
+                             char *msg, size_t msg_cap, const Mm2ItemsFile *items = nullptr);
 
 /** Legacy one-shot: prepare + auto-distribute (no Identify modal). Prefer
  *  eventVmSearchPrepare when a UI can host 0x1B3F2. */

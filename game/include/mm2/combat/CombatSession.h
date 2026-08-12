@@ -43,7 +43,7 @@ enum class CombatState : uint8_t {
     AwaitingPartyPick,        /* 0xD2EA / 0xD312: '1'..'N' party member (Heroism/Frenzy) */
     AwaitingItemPick,         /* 0xB56E: 'A'..'F' backpack letter (Recharge/Dup/Enchant/Uncurse) */
     AwaitingExchangeWith,     /* 0x11B1A → 0x20FF2: 'with (1-N)?' (first slot = active) */
-    AwaitingActionAck,        /* 0x132E6: delay(-$79AD)*$19+1 frames, or key advances */
+    AwaitingActionAck,        /* 0x132E6: delay(-$79AD)*$19+1 nowTicks, or key advances */
     AwaitingVictoryDismiss,   /* 0x124D2 victory panel; any key ends fight (ASM delay $32) */
 };
 
@@ -396,7 +396,11 @@ private:
     char msg_queue_[kMsgQueueCap][160]{};
     int msg_queue_len_ = 0;
     int msg_queue_idx_ = 0;
-    int ack_frames_left_ = 0; /* 0x132E6: DELAY*$19+1; key also advances */
+    /** 0x132E6: deadline on platform::nowTicks() (Delay units ≈ VBlank ticks). */
+    uint32_t ack_until_tick_ = 0;
+    /** SPACE/ENTER must release once after ack starts before they can skip (held
+     * continue-prompt keys must not burn through the timed wait). */
+    bool ack_key_skip_armed_ = true;
 };
 
 }  // namespace mm2::combat

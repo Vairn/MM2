@@ -44,6 +44,10 @@ void drawPlayScreenChromeStatic(ScreenCompositor &c);
 
 void drawPlayScreenChrome(ScreenCompositor &c);
 
+/** Outer red glyph frame only (-$7F7A) — overland_map_view @ 0x223A redraws it
+ * over the blacked-out play interior. */
+void drawPlayOuterFrame(ScreenCompositor &c);
+
 /** Red v-line col 0x1B rows 0..0x10 — repaint after 3D hood (walls overwrite x=216). */
 void drawPlayViewportDivider(ScreenCompositor &c);
 

@@ -4,6 +4,7 @@
 // See EXTRACTED/docs/43-exploration-input-and-ingame-options.md.
 
 #include "mm2/GameState.h"
+#include "mm2/gameplay/ExploreActions.h"
 #include "mm2/world/MapWorld.h"
 
 #include "mm2_party_launch.h"
@@ -25,6 +26,8 @@ struct MoveResult {
     bool moved = false;
     bool blocked = false;
     bool screen_changed = false;
+    /* 0x9424 obstruction index when blocked: 0..6, or ObstructionMsg::None. */
+    ObstructionMsg obstruction = ObstructionMsg::None;
 };
 
 /* Rotate facing without moving (0x5838). Sets event latch -$7952. */
