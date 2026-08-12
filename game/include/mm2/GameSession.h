@@ -167,8 +167,8 @@ private:
     void maybeTriggerStepEncounter();
     void finishCombat();
     /** save_game_state @ 0x823C mirror: sync live GS words into the roster.dat
-     *  global tail (party -$796A/-$795A, event bank -$798B = hireling A..X
-     *  unlocks) and write the file. */
+     *  global tail (calendar -$79DE/-$79CA/-$79B6/-$79B4, party -$796A/-$795A,
+     *  event bank -$798B = hireling A..X unlocks) and write the file. */
     void saveRosterWithGlobalTail();
     /** True when every party slot has (condition & 0xE0) != 0 — roster_count_living @ 0x47A2. */
     bool partyAllDead() const;

@@ -4,7 +4,15 @@
 
 #include <SDL.h>
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
@@ -20,7 +28,42 @@ SDL_Renderer *g_renderer = nullptr;
 SDL_Texture *g_texture = nullptr;
 int g_tex_w = 0;
 int g_tex_h = 0;
+int g_requested_scale = 2;
 int g_scale = 2;
+
+constexpr int kFbW = 320;
+constexpr int kFbH = 200;
+
+int dpiAdjustedScale(int requested)
+{
+    if (requested < 1) {
+        requested = 1;
+    }
+    float ddpi = 96.f;
+    if (SDL_GetDisplayDPI(0, &ddpi, nullptr, nullptr) != 0 || ddpi < 48.f) {
+        return requested;
+    }
+    int adj = static_cast<int>(std::lround(static_cast<double>(requested) * (static_cast<double>(ddpi) / 96.0)));
+    if (adj < requested) {
+        adj = requested;
+    }
+    SDL_DisplayMode mode{};
+    if (SDL_GetDesktopDisplayMode(0, &mode) == 0 && mode.w > 0 && mode.h > 0) {
+        const int max_s = std::min(mode.w / kFbW, mode.h / kFbH);
+        if (max_s >= 1 && adj > max_s) {
+            adj = max_s;
+        }
+    }
+    return adj;
+}
+
+void applyWindowScale()
+{
+    g_scale = dpiAdjustedScale(g_requested_scale);
+    if (g_window) {
+        SDL_SetWindowSize(g_window, kFbW * g_scale, kFbH * g_scale);
+    }
+}
 
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
 constexpr Uint32 kTexturePixelFormat = SDL_PIXELFORMAT_RGBA8888;
@@ -36,6 +79,10 @@ bool init(int *argc, char ***argv)
 {
     (void)argc;
     (void)argv;
+    /* These hints are sampled at SDL_Init / CreateTexture — setting them after
+     * CreateRenderer left DWM/DPI bilinear-scaling the 8×8 glyphs (1px jitter). */
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return false;
@@ -54,8 +101,7 @@ bool init(int *argc, char ***argv)
         return false;
     }
 
-    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
     return true;
 }
@@ -259,20 +305,33 @@ void presentFrame(const uint8_t *rgba, int width, int height)
         g_texture = SDL_CreateTexture(g_renderer, kTexturePixelFormat, SDL_TEXTUREACCESS_STREAMING, width, height);
         g_tex_w = width;
         g_tex_h = height;
+        if (g_texture) {
+            SDL_SetTextureScaleMode(g_texture, SDL_ScaleModeNearest);
+        }
     }
 
     if (!g_texture) {
         return;
     }
 
-    const int scaled_w = width * g_scale;
-    const int scaled_h = height * g_scale;
     int win_w = 0;
     int win_h = 0;
     if (SDL_GetRendererOutputSize(g_renderer, &win_w, &win_h) != 0) {
         SDL_GetWindowSize(g_window, &win_w, &win_h);
     }
-
+    /* Integer letterbox only — fractional dst sizes shift 8×8 cells by a pixel. */
+    int scale = g_scale;
+    if (win_w > 0 && win_h > 0) {
+        const int fit = std::min(win_w / width, win_h / height);
+        if (fit > 0) {
+            scale = fit;
+        }
+    }
+    if (scale < 1) {
+        scale = 1;
+    }
+    const int scaled_w = width * scale;
+    const int scaled_h = height * scale;
     const int dst_x = std::max(0, (win_w - scaled_w) / 2);
     const int dst_y = std::max(0, (win_h - scaled_h) / 2);
     SDL_Rect dst{dst_x, dst_y, scaled_w, scaled_h};
@@ -289,9 +348,9 @@ void waitVblank() {}
 void setPresentScale(int scale)
 {
     if (scale > 0) {
-        g_scale = scale;
+        g_requested_scale = scale;
     }
-
+    applyWindowScale();
 }
 
 void setWindowTitle(const char *title)
@@ -304,10 +363,11 @@ void setWindowTitle(const char *title)
 
 void setWindowSize(int width, int height)
 {
-    if (g_window && width > 0 && height > 0) {
-        SDL_SetWindowSize(g_window, width, height);
-    }
-
+    (void)width;
+    (void)height;
+    /* AppHost passes 320×N / 200×N; apply DPI so the window stays the old
+     * on-screen size after per-monitor awareness (640×400 was shrinking). */
+    applyWindowScale();
 }
 
 void delayMs(int ms) { SDL_Delay(static_cast<Uint32>(ms)); }

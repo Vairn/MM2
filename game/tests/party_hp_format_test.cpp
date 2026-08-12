@@ -59,6 +59,17 @@ int main()
     formatPartyStatusLine(buf, sizeof(buf), 0, "Vairn", 120, PartyStatusPrefix::Exploration);
     ok &= expect("vairn shifts hp left", buf, " 1) Vairn /120");
 
+    mm2::gfx::formatPrintNumber(1, buf, sizeof(buf), 3, ' ');
+    ok &= expect("print_number day 1", buf, "  1");
+    mm2::gfx::formatPrintNumber(900, buf, sizeof(buf), 4, ' ');
+    ok &= expect("print_number year 900", buf, " 900");
+    mm2::gfx::formatPrintNumber(0, buf, sizeof(buf), 1, ' ');
+    ok &= expect("print_number light 0", buf, "0");
+    mm2::gfx::formatPrintNumber(10, buf, sizeof(buf), 1, ' ');
+    ok &= expect("print_number width min", buf, "10");
+    mm2::gfx::formatPrintNumber(100, buf, sizeof(buf), 1, ' ');
+    ok &= expect("print_number 100", buf, "100");
+
     mm2::gfx::formatSlashStatCurrent(0, buf, sizeof(buf), 5);
     ok &= expect("slash field zero", buf, "    0");
     mm2::gfx::formatSlashStatCurrent(1190, buf, sizeof(buf), 5);

@@ -154,6 +154,10 @@ void printWrapped(gfx::ScreenCompositor &c, int start_col, int start_row, int en
 
     for (int i = 0; text[i]; ++i) {
         if (text[i] == '\n') {
+            /* win_putchar $0A @ 0x218EA: col←0, row+1. Do not also wrap — a
+             * line that fills cols 1..38 (38 glyphs) already sits on the last
+             * cell; wrapping after the last glyph + this newline made a blank
+             * row (Svendegard / desert-trader intros). */
             ++row;
             if (row > end_row) {
                 break;
@@ -165,8 +169,6 @@ void printWrapped(gfx::ScreenCompositor &c, int start_col, int start_row, int en
             }
             continue;
         }
-        charAt(c, col, row, text[i], r, g, b);
-        ++col;
         if (col > end_col) {
             col = start_col;
             ++row;
@@ -174,6 +176,8 @@ void printWrapped(gfx::ScreenCompositor &c, int start_col, int start_row, int en
                 break;
             }
         }
+        charAt(c, col, row, text[i], r, g, b);
+        ++col;
     }
 }
 
@@ -268,11 +272,11 @@ int countPopupLines(const char *text)
             col = 0;
             continue;
         }
-        ++col;
         if (col >= 20) {
             ++lines;
             col = 0;
         }
+        ++col;
     }
     return lines;
 }

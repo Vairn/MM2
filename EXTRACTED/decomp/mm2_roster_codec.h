@@ -32,10 +32,18 @@ enum {
         MM2_ROSTER_CHAR_SECTION_SIZE / MM2_ROSTER_RECORD_SIZE, /* 48 */
     MM2_ROSTER_TAIL_SIZE =
         MM2_ROSTER_FILE_SIZE - MM2_ROSTER_CHAR_SECTION_SIZE, /* 0x820 */
+    /* Calendar: save_game_state @0x823C writes day[10] from -$79DE, then
+     * year[10] from -$79CA (0x8272 / 0x82B8, $14 bytes each, then LE swap). */
+    MM2_ROSTER_TAIL_DAY = 0x000,
+    MM2_ROSTER_TAIL_YEAR = 0x014,
+    MM2_ROSTER_TAIL_ERA_COUNT = 10,
     /* Party selection: 8 x u16 LE roster indices (0xFFFF = empty) -> A4-$796A
      * (stream write loop @0x8302..0x834A), then u16 party size -> A4-$795A. */
     MM2_ROSTER_TAIL_PARTY_ROSTER_IDX = 0x028,
     MM2_ROSTER_TAIL_PARTY_SIZE = 0x038,
+    /* era -> -$79B6 @ 0x838C; subday -> -$79B4 @ 0x83AE. */
+    MM2_ROSTER_TAIL_ERA = 0x03A,
+    MM2_ROSTER_TAIL_SUBDAY = 0x03C,
     /* After era/subday @ 0x03A/0x03C: three words @ 0x83D0..0x8414 —
      * OP0E FD ctr (-$7972), battles won (-$7970), battles lost (-$796E). */
     MM2_ROSTER_TAIL_OP0E_FD_CTR = 0x03E,

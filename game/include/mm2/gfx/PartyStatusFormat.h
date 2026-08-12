@@ -32,6 +32,10 @@ enum class PartyStatusPrefix : uint8_t {
 size_t formatPartyStatusLine(char *out, size_t cap, int slot_index, const char *name, uint16_t hp,
                              PartyStatusPrefix prefix_style = PartyStatusPrefix::Exploration);
 
+/** print_number @ 0x22480 / -$7BDE: left-pad to `width` (clamped 1..24) with `pad`.
+ *  Extra digits are kept (width is a minimum, not a truncate). */
+void formatPrintNumber(uint32_t value, char *out, size_t cap, int width, char pad = ' ');
+
 /** Quick Ref + character sheet: right-align current in [0, field_width) for a fixed '/' column. */
 void formatSlashStatCurrent(uint16_t value, char *out, size_t cap, int field_width);
 

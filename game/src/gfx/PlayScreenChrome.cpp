@@ -254,14 +254,16 @@ void drawPlayStatusBar(ScreenCompositor &c, int day, int year, char facing_key, 
     textAt(c, 1, row, new_game ? "'O' Options" : "'P' Protect");
 
     char buf[16];
-    /* col 13: "Day=" + day[era] (-$79DE), width 3 (0x630C..0x6332). */
+    /* col 13: "Day=" + print_number(day, width 3, pad ' ') + putchar ' '
+     * (0x630C..0x633C). -$7BDE left-pads; the extra space is after the field. */
     textAt(c, 0x0D, row, "Day=");
-    std::snprintf(buf, sizeof(buf), "%-3d", day);
+    formatPrintNumber(static_cast<uint32_t>(day < 0 ? 0 : day), buf, sizeof(buf), 3, ' ');
     textAt(c, 0x0D + 4, row, buf);
+    textAt(c, 0x0D + 4 + 3, row, " ");
 
-    /* col 22: "Year=" + year[era] (-$79CA), width 4 (0x634C..0x6372). */
+    /* col 22: "Year=" + print_number(year, width 4, pad ' ') (0x634C..0x6372). */
     textAt(c, 0x16, row, "Year=");
-    std::snprintf(buf, sizeof(buf), "%-4d", year);
+    formatPrintNumber(static_cast<uint32_t>(year < 0 ? 0 : year), buf, sizeof(buf), 4, ' ');
     textAt(c, 0x16 + 5, row, buf);
 
     /* col 32: "Face=" + movement key char -$79B1 (0x6382..0x6398). */
@@ -345,13 +347,29 @@ void drawPlayRightColumn(ScreenCompositor &c, PlayRightPanel panel, const PlayPr
         textAt(c, 0x1C, 0x0C, "Forces    %");
 
         if (protect) {
+            /* 0x5EB8..0x5F86: start col $24 (Light) / $25 (Magic/Forces), then
+             * col-- if value>=10 and again if >=100. Light putchar '(' first
+             * (0x5EE4), then -$7BDE(value, width 1, pad space). */
+            const auto valueCol = [](int base, unsigned v) {
+                int col = base;
+                if (v >= 10u) {
+                    --col;
+                }
+                if (v >= 100u) {
+                    --col;
+                }
+                return col;
+            };
             char buf[8];
-            std::snprintf(buf, sizeof(buf), "%u", protect->light);
-            textAt(c, 0x25, 0x0A, buf);
-            std::snprintf(buf, sizeof(buf), "%u", protect->magic);
-            textAt(c, 0x25, 0x0B, buf);
-            std::snprintf(buf, sizeof(buf), "%u", protect->forces);
-            textAt(c, 0x25, 0x0C, buf);
+            const int light_col = valueCol(0x24, protect->light);
+            textAt(c, light_col, 0x0A, "(");
+            formatPrintNumber(protect->light, buf, sizeof(buf), 1, ' ');
+            textAt(c, light_col + 1, 0x0A, buf);
+
+            formatPrintNumber(protect->magic, buf, sizeof(buf), 1, ' ');
+            textAt(c, valueCol(0x25, protect->magic), 0x0B, buf);
+            formatPrintNumber(protect->forces, buf, sizeof(buf), 1, ' ');
+            textAt(c, valueCol(0x25, protect->forces), 0x0C, buf);
 
             int row = 0x0D;
             if (protect->levitate) {

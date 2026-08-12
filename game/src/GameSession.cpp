@@ -43,6 +43,62 @@ void drawSpellEyeOverlayIfActive(gfx::ScreenCompositor &c, const gfx::EnvAssets 
     }
 }
 
+bool rosterTailHasCalendar(const Mm2RosterFile &roster)
+{
+    if (mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_ERA) != 0 ||
+        mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_SUBDAY) != 0) {
+        return true;
+    }
+    for (int e = 0; e < MM2_ROSTER_TAIL_ERA_COUNT; ++e) {
+        const uint16_t day = mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_DAY + e * 2);
+        const uint16_t year = mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_YEAR + e * 2);
+        if (year != 0 || (day >= 1 && day <= 180)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void loadCalendarFromRosterTail(GameStateView &gs, const Mm2RosterFile &roster)
+{
+    if (!gs.valid() || !rosterTailHasCalendar(roster)) {
+        return;
+    }
+    for (int e = 0; e < MM2_GS_ERA_COUNT; ++e) {
+        uint16_t day = mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_DAY + e * 2);
+        uint16_t year = mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_YEAR + e * 2);
+        if (day < 1 || day > 180) {
+            day = 1;
+        }
+        if (year > 999) {
+            year = 999;
+        }
+        mm2_gs_set_u16(gs.a4(), MM2_GS_DAY + e * 2, day);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_YEAR + e * 2, year);
+    }
+    uint16_t era = mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_ERA);
+    if (era >= MM2_GS_ERA_COUNT) {
+        era = static_cast<uint16_t>(MM2_GS_ERA_COUNT - 1);
+    }
+    mm2_gs_set_u16(gs.a4(), MM2_GS_ERA, era);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_TIME_SUBDAY, mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_SUBDAY));
+}
+
+void saveCalendarToRosterTail(const GameStateView &gs, Mm2RosterFile &roster)
+{
+    if (!gs.valid()) {
+        return;
+    }
+    for (int e = 0; e < MM2_GS_ERA_COUNT; ++e) {
+        mm2_roster_tail_set_u16(&roster, MM2_ROSTER_TAIL_DAY + e * 2,
+                                mm2_gs_u16(gs.a4(), MM2_GS_DAY + e * 2));
+        mm2_roster_tail_set_u16(&roster, MM2_ROSTER_TAIL_YEAR + e * 2,
+                                mm2_gs_u16(gs.a4(), MM2_GS_YEAR + e * 2));
+    }
+    mm2_roster_tail_set_u16(&roster, MM2_ROSTER_TAIL_ERA, gs.era());
+    mm2_roster_tail_set_u16(&roster, MM2_ROSTER_TAIL_SUBDAY, mm2_gs_u16(gs.a4(), MM2_GS_TIME_SUBDAY));
+}
+
 void blitImageFrame(gfx::ScreenCompositor &c, const mm2_gfx_sheet &sheet, int frame, int dst_x, int dst_y,
                     int opaque = 0)
 {
@@ -410,7 +466,9 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     /* Reload path @ 0x86F6 parses the roster.dat global tail back into A4;
      * restore the 24-byte event/quest bank (-$798B) so quest flags and
      * hireling A..X unlocks persist across sessions. Also restore battles
-     * won/lost (-$7970/-$796E @ tail +$040/+$042; stream @ 0x83F2 / 0x8414). */
+     * won/lost (-$7970/-$796E @ tail +$040/+$042; stream @ 0x83F2 / 0x8414)
+     * and the calendar (day/year/era/subday @ 0x8272..0x83AE). */
+    loadCalendarFromRosterTail(gs_, roster_);
     for (int i = 0; i < MM2_ROSTER_TAIL_EVENT_BANK_LEN; ++i) {
         mm2_gs_set_u8(gs_.a4(), MM2_GS_EVENT_VAR_BANK + i,
                       mm2_roster_tail_u8(&roster_, MM2_ROSTER_TAIL_EVENT_BANK + i));
@@ -824,6 +882,7 @@ void GameSession::saveRosterWithGlobalTail()
     mm2_roster_tail_set_u16(&roster_, MM2_ROSTER_TAIL_PARTY_SIZE,
                             static_cast<uint16_t>(launch_.party_count));
     if (gs_.valid()) {
+        saveCalendarToRosterTail(gs_, roster_);
         for (int i = 0; i < MM2_ROSTER_TAIL_EVENT_BANK_LEN; ++i) {
             mm2_roster_tail_set_u8(&roster_, MM2_ROSTER_TAIL_EVENT_BANK + i,
                                    mm2_gs_u8(gs_.a4(), MM2_GS_EVENT_VAR_BANK + i));

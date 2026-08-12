@@ -63,6 +63,26 @@ int main(void)
     expect(raw2[MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_TAIL_EVENT_BANK + 3] == 0x01,
            "bank byte on disk");
 
+    /* Calendar words (LE) at the start of the 0x823C stream. */
+    mm2_roster_tail_set_u16(&roster, MM2_ROSTER_TAIL_DAY + 9 * 2, 12);
+    mm2_roster_tail_set_u16(&roster, MM2_ROSTER_TAIL_YEAR + 9 * 2, 900);
+    mm2_roster_tail_set_u16(&roster, MM2_ROSTER_TAIL_ERA, 9);
+    mm2_roster_tail_set_u16(&roster, MM2_ROSTER_TAIL_SUBDAY, 0x55);
+    expect(mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_DAY + 9 * 2) == 12, "day[9] readback");
+    expect(mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_YEAR + 9 * 2) == 900, "year[9] readback");
+    expect(mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_ERA) == 9, "era readback");
+    expect(mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_SUBDAY) == 0x55, "subday readback");
+    expect(mm2_roster_encode(&roster, raw2, sizeof(raw2)) == MM2_ROSTER_OK, "encode calendar");
+    expect(raw2[MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_TAIL_DAY + 18] == 12 &&
+               raw2[MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_TAIL_DAY + 19] == 0,
+           "day[9] LE on disk");
+    expect(raw2[MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_TAIL_YEAR + 18] == 0x84 &&
+               raw2[MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_TAIL_YEAR + 19] == 0x03,
+           "year[9] LE on disk");
+    expect(raw2[MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_TAIL_ERA] == 9 &&
+               raw2[MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_TAIL_ERA + 1] == 0,
+           "era LE on disk");
+
     /* Untouched tail bytes round-trip unchanged. */
     expect(raw2[MM2_ROSTER_CHAR_SECTION_SIZE + 0x100] == (uint8_t)(0x100 * 7 + 3),
            "untouched tail byte preserved");

@@ -56,6 +56,35 @@ size_t formatPartyStatusLine(char *out, size_t cap, int slot_index, const char *
     return std::strlen(out);
 }
 
+void formatPrintNumber(uint32_t value, char *out, size_t cap, int width, char pad)
+{
+    if (!out || cap == 0) {
+        return;
+    }
+    if (width < 1) {
+        width = 1;
+    } else if (width > 24) {
+        width = 24;
+    }
+
+    char digits[16];
+    std::snprintf(digits, sizeof(digits), "%u", value);
+    const int n = static_cast<int>(std::strlen(digits));
+    int pad_n = width - n;
+    if (pad_n < 0) {
+        pad_n = 0;
+    }
+
+    if (static_cast<size_t>(pad_n) + static_cast<size_t>(n) + 1u > cap) {
+        out[0] = '\0';
+        return;
+    }
+    for (int i = 0; i < pad_n; ++i) {
+        out[i] = pad;
+    }
+    std::memcpy(out + pad_n, digits, static_cast<size_t>(n) + 1u);
+}
+
 void formatSlashStatCurrent(uint16_t value, char *out, size_t cap, int field_width)
 {
     if (!out || cap == 0 || field_width <= 0) {
