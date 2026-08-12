@@ -21,6 +21,7 @@
 #include "mm2/gfx/CombatPanel.h"
 
 #include "mm2_found_items.h"
+#include "mm2_town_tables.h"
 
 #include "mm2/platform/Audio.h"
 #include "mm2/platform/Platform.h"
@@ -428,6 +429,9 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
         /* Stock starters (Gene Eric / Cassandra) ship +$20=1 while +$71=4.
          * Rest @ 0x19C9A multiplies SP by +$20 — align working copies now. */
         gameplay::syncRosterWorkingLevelFields(rec);
+        /* If +$20 was stale across several trains, SL can jump (e.g. 1→3) and
+         * skip $64C2/$64A2 rows — OR the missing auto-spells for SL 1..current. */
+        mm2_train_backfill_auto_spells(&rec);
     }
 
     quit_ = false;
@@ -802,6 +806,40 @@ void GameSession::refreshWorldAfterEventTransition()
      * on every shop/town hop is the main Amiga hitch. Evict only when full. */
     hood_torch_cache_valid_ = false;
     markDirty();
+}
+
+void GameSession::handleSpellScreenChange(uint8_t before_screen)
+{
+    /* Exploration cast (Fly @ 0xABCC / Lloyd recall / Town Portal / Nature's Gate /
+     * Surface) set screenId + often X/Y=$FF, then -$79E4. ASM main loop / -$7FDA
+     * reloads attrib for the new screen and, when X==$FF, unpacks entry_coord
+     * (0x1C64). Remake must do both — not only when screenId moved. */
+    if (!data_dir_ || !world_.loaded()) {
+        return;
+    }
+    const bool screen_changed = gs_.screenId() != before_screen;
+    const bool latch = mm2_gs_u8(gs_.a4(), -0x79E4) != 0;
+    if (!screen_changed && !latch) {
+        return;
+    }
+    if (screen_changed) {
+        events_.markScreenChanged();
+        refreshWorldAfterEventTransition();
+    } else {
+        /* Same screen id but Fly/Portal still may need a fresh attrib + spawn. */
+        gameplay::materializeScreenAttrib(gs_, world_);
+    }
+    if (gameplay::applyEntryCoordIfSentinel(gs_)) {
+        gameplay::syncCurrentCellFlags(gs_, world_);
+        gameplay::sessionInteractionGate(gs_);
+    }
+    mm2_gs_set_u8(gs_.a4(), -0x79E4, 0);
+    markDirty();
+}
+
+void GameSession::syncSheetCastAux()
+{
+    sheet_session_.cast_aux_pending = combat_.sheetCastPending();
 }
 
 void GameSession::finishCombat()
@@ -2067,12 +2105,16 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
     if (overlay_ == PlayOverlay::None && !combat_.active() && combat_.sheetCastPending()) {
         if (keys.escape) {
             combat_.tickSheetCastAux(gs_, 0x1B);
+            syncSheetCastAux();
             markDirty();
             return;
         }
         const char ch = static_cast<char>(keys.last_ascii);
         if (ch != 0) {
+            const uint8_t screen_before = gs_.screenId();
             combat_.tickSheetCastAux(gs_, ch);
+            handleSpellScreenChange(screen_before);
+            syncSheetCastAux();
             markDirty();
         }
         return;
@@ -2082,16 +2124,21 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         if (combat_.sheetCastPending()) {
             if (keys.escape) {
                 combat_.tickSheetCastAux(gs_, 0x1B);
+                syncSheetCastAux();
+                sheet_session_.status_line[0] = '\0';
                 markDirty();
                 return;
             }
             const char ch = static_cast<char>(keys.last_ascii);
             if (ch != 0) {
+                const uint8_t screen_before = gs_.screenId();
                 combat_.tickSheetCastAux(gs_, ch);
+                handleSpellScreenChange(screen_before);
                 if (combat_.statusLine()[0]) {
                     std::snprintf(sheet_session_.status_line, sizeof(sheet_session_.status_line), "%s",
                                   combat_.statusLine());
                 }
+                syncSheetCastAux();
                 markDirty();
             }
             return;
@@ -2143,6 +2190,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         const Mm2ItemsFile *items_ptr = has_items_ ? &items_ : nullptr;
         const int cast_before = sheet_session_.cast_spell_flat;
         const int use_before = sheet_session_.pending_use_slot;
+        const uint8_t screen_before = gs_.screenId();
         const gameplay::SheetKeyOutcome outcome =
             ingame_sheet_.handleKey(ch, sheet_session_, roster_, launch_, items_ptr, combat_character_sheet_);
         if (sheet_session_.cast_spell_flat >= 0 && sheet_session_.cast_spell_flat != cast_before) {
@@ -2152,6 +2200,18 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                 std::snprintf(sheet_session_.status_line, sizeof(sheet_session_.status_line), "%s",
                               combat_.statusLine());
             }
+            if (!combat_.sheetCastPending()) {
+                /* Immediate screen-change spells (Surface / Nature's Gate / Town
+                 * Portal) resolved in this call; reload for the new screen. */
+                handleSpellScreenChange(screen_before);
+            } else {
+                /* 0x6E30 prompts on the play message band — leave the sheet. */
+                overlay_ = PlayOverlay::None;
+                combat_character_sheet_ = false;
+                sheet_session_.sub_mode = gameplay::SheetSubMode::Normal;
+                sheet_session_.status_line[0] = '\0';
+            }
+            syncSheetCastAux();
         }
         if (sheet_session_.pending_use_slot >= 0 && sheet_session_.pending_use_slot != use_before) {
             const int u = sheet_session_.pending_use_slot;
@@ -2163,6 +2223,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                 std::snprintf(sheet_session_.status_line, sizeof(sheet_session_.status_line), "%s",
                               combat_.statusLine());
             }
+            syncSheetCastAux();
         }
         if (outcome == gameplay::SheetKeyOutcome::Close) {
             overlay_ = PlayOverlay::None;
@@ -2387,8 +2448,10 @@ void GameSession::tickTorchAnimation()
         return;
     }
 
-    /* key_read_3d @0x1E9CE advances -$667A once per indoor input poll (~vblank). */
-    constexpr int kTicksPerPhase = 2;
+    /* key_read_3d @0x1E9CE advances -$667A once per indoor poll, then
+     * 0x6798(8) ≈ 5×Delay(1) ≈ 100 ms when idle. Pace the remake the same
+     * (6 ticks at nowTicks ~60 Hz), not every other main-loop frame. */
+    constexpr int kTicksPerPhase = 6;
     ++torch_tick_;
     if (torch_tick_ < kTicksPerPhase) {
         return;
@@ -2418,6 +2481,31 @@ void GameSession::tick(const platform::KeyState &keys)
 
     tickOverlayAnimations();
     tickTorchAnimation();
+
+    /* Exploration cast aux (Fly @ 0xABF8 / Lloyd / On whom): state_ stays Inactive;
+     * sheetCastPending() owns the modal until ESC or completion. */
+    if (!combat_.active() && combat_.sheetCastPending()) {
+        if (overlay_ == PlayOverlay::CharacterSheet) {
+            /* Should already have closed; keep keys on the cast prompt. */
+            overlay_ = PlayOverlay::None;
+            combat_character_sheet_ = false;
+        }
+        if (keys.escape) {
+            combat_.tickSheetCastAux(gs_, 0x1B);
+            syncSheetCastAux();
+            markDirty();
+            return;
+        }
+        const char ch = static_cast<char>(keys.last_ascii);
+        if (ch != 0) {
+            const uint8_t screen_before = gs_.screenId();
+            combat_.tickSheetCastAux(gs_, ch);
+            handleSpellScreenChange(screen_before);
+            syncSheetCastAux();
+            markDirty();
+        }
+        return;
+    }
 
     if (combat_.active()) {
         if (overlay_ == PlayOverlay::CharacterSheet) {
@@ -3568,6 +3656,14 @@ void GameSession::renderFrame(bool overlay_anim_only)
 
     if (overlay_ != PlayOverlay::SearchReward && overlay_ != PlayOverlay::Automap) {
         renderPartyPanel();
+    }
+
+    /* Exploration cast prompts (Fly / Lloyd / On whom / Town Portal) — row $11
+     * like -$7EC0 combat setup strings. Must not use combat_.active() chrome. */
+    if (!combat_active && combat_.sheetCastPending() && overlay_ == PlayOverlay::None &&
+        combat_.statusLine()[0]) {
+        gfx::fillCellRect(compositor_, 1, 0x11, 0x26, 1);
+        compositor_.drawText(1 * 8, 0x11 * 8, combat_.statusLine(), 255, 255, 255, 255);
     }
 
     if (combat_active) {

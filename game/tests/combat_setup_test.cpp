@@ -12,6 +12,7 @@
 #include "mm2/combat/CombatSession.h"
 #include "mm2/combat/EncounterPicker.h"
 #include "mm2/events/EventVmHelpers.h"
+#include "mm2/gameplay/Movement.h"
 #include "mm2/gameplay/SpellBook.h"
 #include "mm2/world/MapWorld.h"
 
@@ -462,10 +463,64 @@ int main()
                "run scenario: COMBAT_VICTORY_LATCH stays clear on flee", fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_PARTY_RAN_LATCH) == 1,
                "run scenario: -$5E4C set on successful Run", fails);
-        expect(mm2_gs_u16(gs.a4(), MM2_GS_PARTY_COUNT) == 0,
-               "run scenario: Char-Run shrinks -$795A", fails);
+        /* Manual Run: fled PC leaves the fight table only, then rejoins — not inn Dismiss. */
+        expect(launch.party_count == 1 && launch.roster_slots[0] == 0,
+               "run scenario: launch party not dismissed by Char-Run", fails);
+        expect(mm2_gs_u16(gs.a4(), MM2_GS_PARTY_COUNT) == 1,
+               "run scenario: -$795A restored after flee", fails);
         expect(gs.coordX() == 2 && gs.coordY() == 1,
                "run scenario: flee restores entry_coord (2,1)", fails);
+    }
+
+    /* Two-member Char-Run: shrink mid-fight must not drop the runner from launch_. */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon2 = monsters.records[5];
+        setMonsterField(mon2, MM2_MON_OFF_HP, 0x3F);
+        setMonsterField(mon2, MM2_MON_OFF_SPEED, 0x00);
+
+        Mm2RosterFile roster2{};
+        Mm2PartyLaunch launch2{};
+        std::memset(&roster2, 0, sizeof(roster2));
+        mm2_roster_set_name(&roster2.records[0], "Runner");
+        mm2_roster_set_name(&roster2.records[1], "Stayer");
+        roster2.records[0].might_current = 1;
+        roster2.records[0].speed_current = 99;
+        roster2.records[0].hp_current = 999;
+        roster2.records[0].hp_max = 999;
+        roster2.records[1].might_current = 1;
+        roster2.records[1].speed_current = 1;
+        roster2.records[1].hp_current = 999;
+        roster2.records[1].hp_max = 999;
+        launch2.party_count = 2;
+        launch2.roster_slots[0] = 0;
+        launch2.roster_slots[1] = 1;
+        seedFixedEncounter(gs, 5);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RETREAT_DIFF, 0x65);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENTRY_COORD, 0x12);
+
+        CombatSession combat;
+        combat.bindParty(&roster2, &launch2);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        combat.enter(gs, world);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_RETREAT_DIFF, 0x65);
+
+        platform::KeyState keys{};
+        keys.last_ascii = 'A';
+        combat.tick(gs, world, keys);
+        keys.last_ascii = 'R';
+        combat.tick(gs, world, keys);
+        const bool ended = fightToEnd(combat, gs, world, ' ');
+        expect(ended, "run-2: fight ends after Char-Run", fails);
+        expect(combat.lastOutcome() == CombatOutcome::Fled, "run-2: outcome Fled", fails);
+        expect(launch2.party_count == 2, "run-2: launch still has 2", fails);
+        expect(launch2.roster_slots[0] == 0 && launch2.roster_slots[1] == 1,
+               "run-2: both roster slots kept", fails);
+        expect(mm2_gs_u16(gs.a4(), MM2_GS_PARTY_COUNT) == 2,
+               "run-2: GS party count restored to 2", fails);
     }
 
     /* ---- Random picker (0x1213E/0x12072/0x11F0A) invariants, exercised
@@ -837,6 +892,82 @@ int main()
         expect(std::strstr(combat.statusLine(), "Awaken") != nullptr, "cast: status names spell", fails);
     }
 
+    /* Identify Monster @ 0xB760: one positioned band (not 0x132E6 queued lines). */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        Mm2RosterFile roster{};
+        Mm2PartyLaunch launch{};
+        Mm2MonstersFile monsters{};
+        std::memset(&monsters, 0, sizeof(monsters));
+        std::memcpy(monsters.records[1].name, "Rat", 3);
+        setMonsterField(monsters.records[1], MM2_MON_OFF_HP, 0x0F);
+        setMonsterField(monsters.records[1], MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(monsters.records[1], MM2_MON_OFF_DAMAGE, 0x01);
+
+        setupParty(roster, launch, /*might=*/50, /*speed=*/99, /*hp=*/100);
+        roster.records[0].class_id = 4; /* Sorcerer */
+        roster.records[0].spell_level = 2;
+        roster.records[0].sp_current = 20;
+        roster.records[0].gems = 10;
+        mm2::gameplay::spellLearnInBook(roster.records[0], 9); /* S2/3 Identify Monster */
+
+        uint8_t *a4 = gs.a4();
+        mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_MODE, 0x80);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 0, 1);
+        for (int i = 1; i < MM2_GS_MONSTER_SLOT_COUNT; ++i) {
+            mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, 0);
+        }
+        mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_OVERFLOW_TYPE, 0);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 1);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "identify: enter fight", fails);
+
+        platform::KeyState keys{};
+        keys.last_ascii = ' ';
+        combat.tick(gs, world, keys);
+        if (combat.state() == CombatState::AwaitingPartyOptions) {
+            keys.last_ascii = 'A';
+            combat.tick(gs, world, keys);
+        }
+        for (int i = 0; i < 32 && combat.active() && combat.state() != CombatState::AwaitingCommand; ++i) {
+            keys.last_ascii = ' ';
+            combat.tick(gs, world, keys);
+        }
+        expect(combat.state() == CombatState::AwaitingCommand, "identify: reached command turn", fails);
+
+        keys.last_ascii = 'C';
+        combat.tick(gs, world, keys);
+        keys.last_ascii = '2';
+        combat.tick(gs, world, keys);
+        keys.last_ascii = '3';
+        combat.tick(gs, world, keys);
+        expect(combat.state() == CombatState::AwaitingCastTarget, "identify: D43C letter-pick", fails);
+        keys.last_ascii = 'A';
+        combat.tick(gs, world, keys);
+        expect(combat.state() == CombatState::AwaitingActionAck, "identify: -$7DDC wait", fails);
+
+        const char *block = combat.statusLine();
+        expect(std::strchr(block, '\n') != nullptr, "identify: one newline-separated block", fails);
+        expect(std::strstr(block, "#1 Rat:") != nullptr, "identify: #type name: header", fails);
+        expect(std::strstr(block, "HP =") != nullptr && std::strstr(block, "AC =") != nullptr &&
+                   std::strstr(block, "Undead") != nullptr && std::strstr(block, "Special Power") != nullptr &&
+                   std::strstr(block, "Bonus on Touch") != nullptr &&
+                   std::strstr(block, "Magic Resistance") != nullptr,
+               "identify: HP/AC/flags in the same block", fails);
+
+        keys.last_ascii = ' ';
+        combat.tick(gs, world, keys);
+        const bool still_paging = combat.state() == CombatState::AwaitingActionAck &&
+                                  std::strstr(combat.statusLine(), "HP =") != nullptr &&
+                                  std::strchr(combat.statusLine(), '\n') == nullptr;
+        expect(!still_paging, "identify: one ack dismisses the whole block", fails);
+    }
+
     /* ---- Seeded-random picker: different seeds → different type picks ---- */
     {
         Mm2AttribRecord attrib{};
@@ -966,6 +1097,143 @@ int main()
         }
         expect(saw_heal || roster.records[0].hp_max > hp_before, "auto-heal: First Aid applied", fails);
         expect(combat.lastOutcome() == CombatOutcome::Victory, "auto-heal: fight ends in Victory", fails);
+    }
+
+    /* Exploration/sheet cast @ 0x6E30: CombatSession.party_count_ is 0 until
+     * combat enter. Without a sync from launch, castSpellFromSheet no-ops and
+     * combat-only leaves never fail. */
+    {
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        Mm2RosterFile sroster{};
+        Mm2PartyLaunch slaunch{};
+        mm2_roster_clear_record(&sroster.records[0]);
+        mm2_roster_set_name(&sroster.records[0], "Mage");
+        sroster.records[0].class_id = 4;
+        sroster.records[0].level = 6;
+        sroster.records[0].spell_level = 3;
+        sroster.records[0].sp_current = 42;
+        sroster.records[0].sp_max = 42;
+        sroster.records[0].gems = 10;
+        gameplay::spellLearnInBook(sroster.records[0], 3);
+        gameplay::spellLearnInBook(sroster.records[0], 4);
+        gameplay::spellLearnInBook(sroster.records[0], 15);
+        slaunch.party_count = 1;
+        slaunch.roster_slots[0] = 0;
+
+        CombatSession scast;
+        scast.bindParty(&sroster, &slaunch);
+        scast.bindRng(&rng);
+        expect(!scast.active(), "explore-cast: starts Inactive", fails);
+        expect(!scast.sheetCastPending(), "explore-cast: not pending", fails);
+
+        scast.castSpellFromSheet(gs, 0, 4);
+        expect(std::strstr(scast.statusLine(), "Light") != nullptr, "explore-cast: Light runs", fails);
+        expect(!scast.sheetCastPending(), "explore-cast: Light does not linger", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_LIGHT_FACTOR) == 1, "explore-cast: Light sets factor", fails);
+
+        /* Multi-member party: sheet slot 1 must cast as that roster member, not
+         * fight_roster_slots_ default 0 (Sir Felgar / "? (stub)" regression). */
+        {
+            Mm2RosterFile multi{};
+            Mm2PartyLaunch ml{};
+            mm2_roster_clear_record(&multi.records[0]);
+            mm2_roster_clear_record(&multi.records[1]);
+            mm2_roster_set_name(&multi.records[0], "Felgar");
+            mm2_roster_set_name(&multi.records[1], "Cassandra");
+            multi.records[0].class_id = 0; /* Knight — no book */
+            multi.records[1].class_id = 4; /* Sorcerer */
+            multi.records[1].level = 6;
+            multi.records[1].spell_level = 3;
+            multi.records[1].sp_current = 42;
+            multi.records[1].sp_max = 42;
+            gameplay::spellLearnInBook(multi.records[1], 4);
+            ml.party_count = 2;
+            ml.roster_slots[0] = 0;
+            ml.roster_slots[1] = 1;
+            CombatSession mcast;
+            mcast.bindParty(&multi, &ml);
+            mcast.bindRng(&rng);
+            mcast.castSpellFromSheet(gs, 1, 4);
+            expect(std::strstr(mcast.statusLine(), "Cassandra") != nullptr,
+                   "explore-cast: slot1 uses Cassandra name", fails);
+            expect(std::strstr(mcast.statusLine(), "stub") == nullptr,
+                   "explore-cast: slot1 is not stub", fails);
+            expect(std::strstr(mcast.statusLine(), "Light") != nullptr,
+                   "explore-cast: slot1 Light runs", fails);
+        }
+
+        scast.castSpellFromSheet(gs, 0, 3);
+        expect(std::strstr(scast.statusLine(), "Spell Failed") != nullptr,
+               "explore-cast: Flame Arrow fails out of combat", fails);
+        expect(!scast.sheetCastPending(), "explore-cast: Flame Arrow skips target pick", fails);
+        expect(!scast.active(), "explore-cast: Flame Arrow stays Inactive", fails);
+
+        /* spells.dat combat-only buffs (byte0 0x40): must fail in explore before
+         * bumping GS counters — Invisibility S3/3, Shield S4/5. */
+        gameplay::spellLearnInBook(sroster.records[0], 16);
+        gameplay::spellLearnInBook(sroster.records[0], 24);
+        const uint8_t invis_before = mm2_gs_u8(gs.a4(), MM2_GS_INVIS_COUNTER);
+        const uint8_t shield_before = mm2_gs_u8(gs.a4(), MM2_GS_SHIELD_COUNTER);
+        const uint16_t sp_before_invis = sroster.records[0].sp_current;
+        scast.castSpellFromSheet(gs, 0, 16);
+        expect(std::strstr(scast.statusLine(), "Spell Failed") != nullptr,
+               "explore-cast: Invisibility fails (dat combat-only)", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_INVIS_COUNTER) == invis_before,
+               "explore-cast: Invisibility does not bump -$799C", fails);
+        expect(sroster.records[0].sp_current == sp_before_invis,
+               "explore-cast: Invisibility does not spend SP", fails);
+        scast.castSpellFromSheet(gs, 0, 24);
+        expect(std::strstr(scast.statusLine(), "Spell Failed") != nullptr,
+               "explore-cast: Shield fails (dat combat-only)", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_SHIELD_COUNTER) == shield_before,
+               "explore-cast: Shield does not bump -$799B", fails);
+
+        /* Cleric Bless C1/3 — same combat-only gate. */
+        {
+            Mm2RosterFile croster{};
+            Mm2PartyLaunch claunch{};
+            mm2_roster_clear_record(&croster.records[0]);
+            mm2_roster_set_name(&croster.records[0], "Priest");
+            croster.records[0].class_id = 3;
+            croster.records[0].level = 4;
+            croster.records[0].spell_level = 1;
+            croster.records[0].sp_current = 20;
+            croster.records[0].sp_max = 20;
+            gameplay::spellLearnInBook(croster.records[0], 2);
+            claunch.party_count = 1;
+            claunch.roster_slots[0] = 0;
+            CombatSession ccast;
+            ccast.bindParty(&croster, &claunch);
+            ccast.bindRng(&rng);
+            const uint8_t bless_before = mm2_gs_u8(gs.a4(), MM2_GS_BLESS_COUNTER);
+            ccast.castSpellFromSheet(gs, 0, 2);
+            expect(std::strstr(ccast.statusLine(), "Spell Failed") != nullptr,
+                   "explore-cast: Bless fails (dat combat-only)", fails);
+            expect(mm2_gs_u8(gs.a4(), MM2_GS_BLESS_COUNTER) == bless_before,
+                   "explore-cast: Bless does not bump -$799D", fails);
+        }
+
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS, 0);
+        scast.castSpellFromSheet(gs, 0, 15);
+        expect(scast.sheetCastPending(), "explore-cast: Fly waits for A-E", fails);
+        expect(!scast.active(), "explore-cast: Fly pending is not a fight", fails);
+        expect(std::strstr(scast.statusLine(), "Fly to") != nullptr, "explore-cast: Fly prompt", fails);
+        expect(scast.tickSheetCastAux(gs, 'A'), "explore-cast: Fly accepts A", fails);
+        expect(scast.sheetCastPending(), "explore-cast: Fly waits for 1-4", fails);
+        expect(std::strstr(scast.statusLine(), "1-4") != nullptr, "explore-cast: Fly sector prompt", fails);
+        /* Completing A1 must write screen 5 from A4-$7130[0], not screen 0 from an
+         * unseeded / wrong-offset table; X/Y stay $FF for entry_coord unpack. */
+        expect(scast.tickSheetCastAux(gs, '1'), "explore-cast: Fly accepts 1", fails);
+        expect(gs.screenId() == 5, "explore-cast: Fly A1 → screen 5", fails);
+        expect(gs.coordX() == 0xFF && gs.coordY() == 0xFF, "explore-cast: Fly leaves $FF coords", fails);
+        expect(mm2_gs_u8(gs.a4(), -0x79E4) == 1, "explore-cast: Fly sets -$79E4", fails);
+        expect(!scast.sheetCastPending(), "explore-cast: Fly completes", fails);
+        expect(!scast.active(), "explore-cast: Fly done stays Inactive", fails);
+
+        /* 0x1C64 sentinel unpack (host does this after attrib materialize). */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENTRY_COORD, 0xA3); /* (3,10) */
+        expect(gameplay::applyEntryCoordIfSentinel(gs), "explore-cast: $FF → entry_coord", fails);
+        expect(gs.coordX() == 3 && gs.coordY() == 10, "explore-cast: entry unpack (3,10)", fails);
     }
 
     if (fails == 0) {

@@ -3,8 +3,10 @@
 #include "mm2/CppStdCompat.h"
 #include "mm2/DataPath.h"
 #include "mm2/gfx/Mm2FontGlyphs.h"
+#include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/ui/AmigaCharacterUiLayout.h"
 #include "mm2/ui/CharacterUiFactory.h"
+#include "mm2/gameplay/RosterSkills.h"
 #include "mm2/ui/RosterSkillDisplay.h"
 #include "mm2/Mm2Dbg.h"
 #include "mm2/platform/Platform.h"
@@ -214,6 +216,12 @@ void drawSectionHeader(gfx::ScreenCompositor &c, int row, int col, int width_cel
 void drawRedBorder(gfx::ScreenCompositor &c, int row, int col, int width_cells, int height_cells)
 {
     using namespace amiga_layout;
+    /* Full-screen frame = -$7F7A outerFrame (create $280E0, roster/sheet $084E /
+     * $398C). Smaller rects keep console_box glyphs. */
+    if (row == 0 && col == 0 && width_cells == 40 && height_cells == 24) {
+        gfx::drawPlayOuterFrame(c);
+        return;
+    }
     c.drawConsoleBox(row, col, width_cells, height_cells, kBorderR, kBorderG, kBorderB);
 }
 
@@ -1511,87 +1519,78 @@ private:
         const int hireling_index = hireling ? (sheet_roster_index_ - kRosterHirelingPageOffset) : -1;
         drawRedBorder(c, kSheetBorderRow, kSheetBorderCol, kSheetBorderW, kSheetBorderH);
         char name[16];
-        mm2_roster_name_to_cstr(&rec, name, sizeof(name));
-        char header[80];
-        std::snprintf(header, sizeof(header), "%c) %s: %s %s %s %s%s", sheet_slot_letter_, name,
-                      rec.sex ? "F" : "M", alignHeaderName(rec.alignment_base), raceHeaderName(rec.race),
-                      className(rec.class_id), (rec.class_quest_guild_mask & 0x80) ? "+" : "");
-        drawBorderIntegratedTextAt(c, kSheetBorderRow, kSheetHeaderCol, header);
-        const char *skill_names[6] = {};
-        const int skill_count =
-            hireling ? collectHirelingSkillNames(hireling_index, skill_names, 6)
-                     : collectRosterSkillNames(rec, skill_names, 6);
+        size_t nlen = 0;
+        while (nlen + 1 < sizeof(name) && nlen < static_cast<size_t>(MM2_ROSTER_NAME_SIZE) &&
+               rec.name[nlen] != '\0') {
+            name[nlen] = rec.name[nlen];
+            ++nlen;
+        }
+        name[nlen] = '\0';
+        char left[48];
+        std::snprintf(left, sizeof(left), "%c) %s%s%s", sheet_slot_letter_, name, rec.sex ? ": F " : ": M ",
+                      alignHeaderName(rec.alignment_base));
+        char right[40];
+        std::snprintf(right, sizeof(right), " %s %s%s", raceHeaderName(rec.race), className(rec.class_id),
+                      (rec.class_quest_guild_mask & 0x80) ? "+" : "");
+        const int header_end = kSheetHeaderRaceCol + static_cast<int>(std::strlen(right));
+        c.fillRect(cellX(kSheetHeaderCol), cellY(kSheetHeaderRow),
+                   (header_end - kSheetHeaderCol) * kCellW, kCellH, 0, 0, 0);
+        drawCellText(c, kSheetHeaderRow, kSheetHeaderCol, left);
+        drawCellText(c, kSheetHeaderRow, kSheetHeaderRaceCol, right);
+        const uint8_t packed = mm2::gameplay::rosterSkillPackedByte(rec);
         char buf[48];
-        const int r0 = kSheetStatRowBase;
-        // Left column
         std::snprintf(buf, sizeof(buf), "Lvl=%u", rec.level);
-        drawCellText(c, r0 + 0, kSheetStatColLeft, buf);
+        drawCellText(c, 3, kSheetStatColLeft, buf);
         std::snprintf(buf, sizeof(buf), "Mgt=%u", rec.might_base);
-        drawCellText(c, r0 + 1, kSheetStatColLeft, buf);
+        drawCellText(c, 4, kSheetStatColLeft, buf);
         std::snprintf(buf, sizeof(buf), "Int=%u", rec.intelligence_base);
-        drawCellText(c, r0 + 2, kSheetStatColLeft, buf);
+        drawCellText(c, 5, kSheetStatColLeft, buf);
         std::snprintf(buf, sizeof(buf), "Per=%u", rec.personality_base);
-        drawCellText(c, r0 + 3, kSheetStatColLeft, buf);
+        drawCellText(c, 6, kSheetStatColLeft, buf);
         std::snprintf(buf, sizeof(buf), "End=%u", rec.endurance_base);
-        drawCellText(c, r0 + 4, kSheetStatColLeft, buf);
+        drawCellText(c, 7, kSheetStatColLeft, buf);
         std::snprintf(buf, sizeof(buf), "Spd=%u", rec.speed_base);
-        drawCellText(c, r0 + 5, kSheetStatColLeft, buf);
+        drawCellText(c, 8, kSheetStatColLeft, buf);
         std::snprintf(buf, sizeof(buf), "Acy=%u", rec.accuracy_base);
-        drawCellText(c, r0 + 6, kSheetStatColLeft, buf);
+        drawCellText(c, 9, kSheetStatColLeft, buf);
         std::snprintf(buf, sizeof(buf), "Lck=%u", rec.luck_base);
-        drawCellText(c, r0 + 7, kSheetStatColLeft, buf);
-        // Middle column — HP/SP/AC+SL/thievery/skills/dotted rule (WinUAE layout).
-        // Each row: label+current at kSheetStatColMid, companion value at kSheetStatColSlash.
-        // Row 2 (Int= row) has no mid/right content — natural gap.
-        /* hp_max = live +$5E (damaged in combat/traps), hp_current = +$74 ceiling
-         * — codec names are inverted vs the ASM, so show current=$5E / max=$74. */
+        drawCellText(c, 10, kSheetStatColLeft, buf);
         std::snprintf(buf, sizeof(buf), "HP=%u", rec.hp_max);
-        drawCellText(c, r0 + 0, kSheetStatColMid, buf);
+        drawCellText(c, 3, kSheetStatColMid, buf);
         std::snprintf(buf, sizeof(buf), "/%u", rec.hp_current);
-        drawCellText(c, r0 + 0, kSheetStatColSlash, buf);
+        drawCellText(c, 3, kSheetStatColSlash, buf);
         std::snprintf(buf, sizeof(buf), "SP=%u", rec.sp_current);
-        drawCellText(c, r0 + 1, kSheetStatColMid, buf);
+        drawCellText(c, 4, kSheetStatColMid, buf);
         std::snprintf(buf, sizeof(buf), "/%u", rec.sp_max);
-        drawCellText(c, r0 + 1, kSheetStatColSlash, buf);
-        // r0+2 intentionally empty (aligns with Int= left-only row)
+        drawCellText(c, 4, kSheetStatColSlash, buf);
         std::snprintf(buf, sizeof(buf), "AC=%u", rec.armor_class);
-        drawCellText(c, r0 + 3, kSheetStatColMid, buf);
+        drawCellText(c, 6, kSheetStatColMid, buf);
         std::snprintf(buf, sizeof(buf), "SL=%u", rec.spell_level);
-        drawCellText(c, r0 + 3, kSheetStatColSlash, buf);
+        drawCellText(c, 6, kSheetStatColSlash, buf);
         std::snprintf(buf, sizeof(buf), "Thievery %u%%", rosterDisplayThievery(rec));
-        drawCellText(c, r0 + 4, kSheetStatColMid, buf);
-        if (skill_count >= 1) {
-            drawCellText(c, r0 + 5, kSheetStatColMid, skill_names[0]);
-        } else {
-            drawCellText(c, r0 + 5, kSheetStatColMid, kRosterEmptySkillSlot);
-        }
-
-        if (skill_count >= 2) {
-            drawCellText(c, r0 + 6, kSheetStatColMid, skill_names[1]);
-        } else {
-            drawCellText(c, r0 + 6, kSheetStatColMid, kRosterEmptySkillSlot);
-        }
+        drawCellText(c, 8, kSheetStatColMid, buf);
+        drawCellText(c, 9, kSheetStatColMid, rosterSheetSkillName(static_cast<uint8_t>(packed & 0x0F)));
+        drawCellText(c, 10, kSheetStatColMid, rosterSheetSkillName(static_cast<uint8_t>((packed >> 4) & 0x0F)));
         std::snprintf(buf, sizeof(buf), "Cond= %s", conditionName(rec.condition));
-        drawCellText(c, r0 + 6, kSheetStatColRight, buf);
-        // Right column — Age/Exp stay at kSheetStatColRight (col 26).
-        // Cost/Gems/Food sit at kSheetStatColCost (col 24), 2 left of Age/Exp.
+        drawCellText(c, 10, kSheetStatColCond, buf);
         std::snprintf(buf, sizeof(buf), "Age=%u", rec.age);
-        drawCellText(c, r0 + 0, kSheetStatColRight, buf);
+        drawCellText(c, 3, kSheetStatColRight, buf);
         std::snprintf(buf, sizeof(buf), "Exp=%lu", static_cast<unsigned long>(rec.experience));
-        drawCellText(c, r0 + 1, kSheetStatColRight, buf);
+        drawCellText(c, 4, kSheetStatColRight, buf);
         if (hireling) {
             const uint32_t cost = hirelingDailyCost(hireling_index, rec.level);
-            std::snprintf(buf, sizeof(buf), "Cost=%lu /Day", static_cast<unsigned long>(cost));
+            std::snprintf(buf, sizeof(buf), "Cost=%lu", static_cast<unsigned long>(cost));
+            drawCellText(c, 6, kSheetStatColCost, buf);
+            drawCellText(c, 6, kSheetStatColCostDay, "/Day");
         } else {
             std::snprintf(buf, sizeof(buf), "Gold=%lu", static_cast<unsigned long>(rec.gold));
+            drawCellText(c, 6, kSheetStatColCost, buf);
         }
-        drawCellText(c, r0 + 3, kSheetStatColCost, buf);
         std::snprintf(buf, sizeof(buf), "Gems=%u", rec.gems);
-        drawCellText(c, r0 + 4, kSheetStatColCost, buf);
+        drawCellText(c, 7, kSheetStatColCost, buf);
         std::snprintf(buf, sizeof(buf), "Food=%u", rec.food);
-        drawCellText(c, r0 + 5, kSheetStatColCost, buf);
-        const int divider_w = kSheetBorderCol + kSheetBorderW - 2 - kSheetEquipCol + 1;
-        drawDoubleSectionHeader(c, kSheetDividerRow, kSheetEquipCol, divider_w, " Equipped ", " Backpack ");
+        drawCellText(c, 8, kSheetStatColCost, buf);
+        drawCellText(c, kSheetDividerRow, kSheetEquipCol, "-----(Equipped)-------(Backpack)-----", 200, 200, 200);
         static const char kPackLetters[] = "ABCDEF";
         for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
             const int row = kSheetEquipRowBase + i;

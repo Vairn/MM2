@@ -180,6 +180,13 @@ base (`0x1DCA2`: `$FF`→1000, `≥$80`→100, else 10 when afflicted/HP low).
 Player-facing FAQ labels (A Restore Cond / B Restore Algn / C Donations / D–F
 spells) match this temple dispatch.
 
+**Menu caption bank `A4-$56E6` (str.dat, filled @ `0x1E962`):** seven pointers after
+left-chrome `-$56F6` (`Gold=` / `G-Gather Gold` / `#-Other Char` / `Select (A-F)`):
+`A) Restore Cond`, `B) Restore Algn`, `C) Donations`, `D) Spell C`, `E) Spell C`,
+`F) Spell C`, `D) Spell S`. Temple paints `[0..5]` at col `$13` (`0x1DE60`); mage
+guild paints `[3..6]` at col `$14` (`0x1E5FA`). Offer gates `0x1DAC6` / `0x1D97A`
+also print spell **L-N** at col `$1F`; costs / `---` at col `$23` (`0x1E111`).
+
 #### Tavern (`OP_0E 0x03` → `0x1D208` / jump table `0x1D650`)
 
 | key | leaf | traced behavior |

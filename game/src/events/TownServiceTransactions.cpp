@@ -288,6 +288,23 @@ uint32_t townSvcTempleAlignCost(const Mm2RosterRecord &rec, int map_id)
     return cost;
 }
 
+TownSvcHirelingTempleResult townSvcHirelingTempleAutoHeal(Mm2RosterRecord &rec)
+{
+    /* 0x1E116: free condition clear + HP restore + alignment sync. */
+    TownSvcHirelingTempleResult r;
+    if (rec.condition != 0) {
+        townSvcRestoreCondition(rec);
+        r.condition_cleared = true;
+    }
+    r.hp_restored = townSvcRestoreHp(rec);
+    if (rec.alignment_current != rec.alignment_base) {
+        rec.alignment_base = rec.alignment_current;
+        r.align_restored = true;
+    }
+    r.any_change = r.condition_cleared || r.hp_restored || r.align_restored;
+    return r;
+}
+
 TownSvcHealResult townSvcHeal(Mm2RosterRecord &rec, uint32_t cost)
 {
     /* 0x1D716: gold check (0x1D90C) -> on success 0x1DD48 (HP) + clr.b $26. */
@@ -362,7 +379,8 @@ bool townSvcTrainStat(Mm2RosterRecord &rec, int stat_id, int map_id)
     return false;
 }
 
-TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id, gameplay::Rng *rng)
+TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id, gameplay::Rng *rng,
+                                       int roster_index)
 {
     TownSvcTrainResult r;
     r.old_level = rec.level;
@@ -384,7 +402,10 @@ TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id, gamepla
     }
     r.eligible = true;
 
-    const uint32_t cost = mm2_town_training_cost(rec.level, town.training_town_index);
+    /* 0x2073A: hireling roster index >= $18 → training fee 0. */
+    const uint32_t cost = townSvcIsHirelingRosterIndex(roster_index)
+                              ? 0u
+                              : mm2_town_training_cost(rec.level, town.training_town_index);
     r.cost = cost;
     if (!townSvcCharGoldDeduct(rec, cost)) {
         r.cost = 0;
@@ -479,8 +500,12 @@ TownSvcDonateResult townSvcTempleDonate(uint8_t *a4, Mm2RosterRecord &rec, int m
     return r;
 }
 
-uint32_t townSvcTrainingCost(int level, int map_id)
+uint32_t townSvcTrainingCost(int level, int map_id, int roster_index)
 {
+    /* 0x2073A: hirelings (roster index >= $18) train for free. */
+    if (townSvcIsHirelingRosterIndex(roster_index)) {
+        return 0;
+    }
     Mm2TownCommerce town;
     if (!mm2_town_commerce(map_id, &town)) {
         return 0;
@@ -774,6 +799,32 @@ bool townSvcPartyHasMageGuildMember(const Mm2RosterRecord *const *members, int c
         }
     }
     return false;
+}
+
+uint32_t townSvcSpellOfferGold(const Mm2RosterRecord &rec, gameplay::SpellSchool shop_school,
+                               int spell_index, uint32_t list_gold)
+{
+    /* Shared menu gate: guild 0x1D97A / temple 0x1DAC6. */
+    if (list_gold == 0 || spell_index < 0 || spell_index >= gameplay::kSpellsPerSchool) {
+        return 0;
+    }
+    if (gameplay::spellSchoolForClass(rec.class_id) != shop_school) {
+        return 0; /* guild: class 4/2; temple: class 3/1 */
+    }
+    const gameplay::SpellMeta *table = gameplay::schoolSpellTable(shop_school);
+    if (!table) {
+        return 0;
+    }
+    const uint8_t need_level = table[spell_index].level;
+    /* cmp.b $23(rec), need ; bcs → cost 0 (unsigned below). */
+    if (rec.spell_level < need_level) {
+        return 0;
+    }
+    /* -$7F38: nonzero = already known → cost 0. */
+    if (gameplay::spellKnownInBook(rec, spell_index)) {
+        return 0;
+    }
+    return list_gold;
 }
 
 TownSvcSpellResult townSvcBuySpell(Mm2RosterRecord &rec, int spell_index, uint32_t cost)

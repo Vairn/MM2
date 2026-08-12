@@ -143,6 +143,9 @@ private:
     void tickBookAnimation();
     void skipLogoToAttract();
     void skipLogoToMenu();
+    /** True on any_key only after a full release — one held skip must not
+     *  chain logo → attract → menu. */
+    bool consumeSkipKey(const platform::KeyState &keys);
 
     bool loadItemsDat();
     void releaseItemsDat();
@@ -201,6 +204,7 @@ private:
     int logo_splash_x_ = 10;
     bool logo_fade_armed_ = false;
     bool logo_fade_out_armed_ = false;
+    bool skip_key_armed_ = false;
 
 #if MM2_HOST_AMIGA
     int pegasus_painted_overlay_phase_ = -1;

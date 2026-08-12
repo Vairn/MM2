@@ -100,7 +100,7 @@
 #define MM2_GS_COMBAT_TARGET_SLOT (-0x04F8) /* byte ($FB08) party slot under attack @ 0x103BA */
 #define MM2_GS_LLOYD_SCREEN     (-0x7998)  /* byte  ($8668) Lloyd's Beacon screen @ 0xAB4C */
 #define MM2_GS_LLOYD_COORD      (-0x7997)  /* byte  ($8669) Lloyd's Beacon (Y<<4)|X @ 0xAB62 */
-#define MM2_GS_FLY_SCREEN_TBL   (-0x7120)  /* byte[20] ($8EE0) Fly sector→screen @ 0xACE4 */
+#define MM2_GS_FLY_SCREEN_TBL   (-0x7130)  /* byte[20] ($8ED0) Fly sector→screen @ 0xACE4; data 0xECE */
 /* 0x1086E bank @ -$11AA[mode_d-1]: dmg.b6, dmg.b7, spd2.b6, spd2.b7, mres.b1, mres.b0, mres.b2 */
 #define MM2_GS_MONSTER_FLAG_BASE (-0x11AA) /* byte[] ($EE56) */
 #define MM2_GS_HP_APPLY         (-0x0F0C)  /* word  ($F0F2) 0x10ED4 damage scratch */

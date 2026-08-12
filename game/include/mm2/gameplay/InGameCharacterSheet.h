@@ -2,13 +2,11 @@
 
 // In-game character sheet + Quick Ref overlays (doc 43 §6, §6.3; doc 39 §4).
 //
-// Entry: exploration digits 1–8 or Q (via 0x907A). Text-only sheet (doc 39 §4 title path);
-// book.32 composite @ LAB_4252 / $39B4 — in-game + combat character sheet backdrop.
+// Entry: exploration digits 1–8 or Q (via 0x907A). Backdrop is play outer frame
+// (-$7F7A → 0x422A), same as Quick Ref $595C — not book.32 / console_box.
 
 #include "mm2/gfx/ScreenCompositor.h"
 
-#include "mm2_image32_codec.h"
-#include "mm2_gfx_sheet.h"
 #include "mm2_items_codec.h"
 #include "mm2_party_launch.h"
 
@@ -75,6 +73,8 @@ struct SheetSession {
     CastPromptPhase cast_phase = CastPromptPhase::Level;
     int cast_level = 0; /* 1..9 after level digit accepted */
     int cast_spell_flat = -1; /* 0..47 school-local index when picker completes */
+    /** GameSession: CombatSession still owns party/item/target pick after picker. */
+    bool cast_aux_pending = false;
     /** UsePick result: -1 none; 0..5 equip; 6..11 backpack (slot = v-6). */
     int pending_use_slot = -1;
     char status_line[48] = {};
@@ -102,12 +102,6 @@ public:
     /** Sheet sub-menu @ $8EA6 (C/D/E/G/R/S/T/U). Mutates roster on equip/remove/drop. */
     SheetKeyOutcome handleKey(char key, SheetSession &session, Mm2RosterFile &roster,
                               const Mm2PartyLaunch &launch, const Mm2ItemsFile *items, bool combat_mode = false);
-
-private:
-    mm2_image32_file book_{};
-    mm2_gfx_sheet book_pc_{};
-    bool has_book_ = false;
-    bool book_pc_mode_ = false;
 };
 
 }  // namespace mm2::gameplay

@@ -189,6 +189,10 @@ private:
     void runPendingEvents();
     void refreshEventsForScreen();
     void refreshWorldAfterEventTransition();
+    /** Reload world/env/events if gs screen moved since `before` (spell teleports
+     *  like Fly / recall set screenId directly). Mirrors an OP_0C transition. */
+    void handleSpellScreenChange(uint8_t before_screen);
+    void syncSheetCastAux();
     void maybeQueueScriptedScenes(bool on_start);
     /** Open the interactive town-service overlay when an OP_0E selector requested it. */
     void maybeOpenTownServiceMenu();
@@ -296,7 +300,7 @@ private:
     events::ScriptedSceneEngine scripted_scene_;
     bool scripted_loaded_ = false;
 
-    /** Torch flicker phase (A4-$667A) — advanced each indoor viewport tick. */
+    /** Torch flicker phase (A4-$667A) — advanced on the 0x6798(8) idle poll (~100 ms). */
     int torch_phase_ = 0;
     int torch_tick_ = 0;
     /** Cached from last move/turn: skip torch redraw when the hood has no torch walls. */

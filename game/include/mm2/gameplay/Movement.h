@@ -58,6 +58,10 @@ void advanceTimeTick(GameStateView &gs, uint16_t n, Mm2RosterFile *roster = null
  * so defeat/rest/doors can read -$560C / -$5600 / door bytes from GS. */
 void materializeScreenAttrib(GameStateView &gs, const world::MapWorld &world);
 
+/* 0x1C64 (via -$7FDA): if X/Y is $FF, unpack attrib entry_coord (-$560C) into
+ * -$79F1/-$79F0. Fly / Town Portal / Rest era-warp leave $FF as the spawn sentinel. */
+bool applyEntryCoordIfSentinel(GameStateView &gs);
+
 /* Hood-refresh current-cell latch @ 0x1B1C: collision[(y<<4)|x] → -$55D6. */
 void syncCurrentCellFlags(GameStateView &gs, const world::MapWorld &world);
 

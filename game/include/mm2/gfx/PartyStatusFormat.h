@@ -28,7 +28,8 @@ enum class PartyStatusPrefix : uint8_t {
     CombatBackRank,  /* space — combat strip, not in melee reach (0x128A4) */
 };
 
-/** Full line: prefix + name padded/truncated to 11 + " /" + HP field. Returns strlen(out). */
+/** Full line: prefix + name until NUL + " /" + HP field. Returns strlen(out).
+ *  Condition inverse (0x623A) is applied at draw time to the spaces around the name. */
 size_t formatPartyStatusLine(char *out, size_t cap, int slot_index, const char *name, uint16_t hp,
                              PartyStatusPrefix prefix_style = PartyStatusPrefix::Exploration);
 

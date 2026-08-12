@@ -124,6 +124,11 @@ int mm2_class_spell_level_for(uint8_t class_id, int char_level);
  * Returns 1 when spell level increased (UI prints "and new spells"). */
 int mm2_train_spell_on_levelup(Mm2RosterRecord *rec);
 
+/* OR $64A2/$64C2 auto-spells for SL 1..rec->spell_level into the book. Recovery
+ * for saves where +$20 drift skipped intermediate SL rows (ASM writes only the
+ * newest row because +$20 increments every visit). Idempotent. */
+void mm2_train_backfill_auto_spells(Mm2RosterRecord *rec);
+
 /* ------------------------------------------------------------------------- *
  * Blacksmith static inventories (OP_0E 0x06, handler 0x1C54A; inventory
  * builder 0x1C00E walking `town*6 + slot` into the data-hunk tables selected

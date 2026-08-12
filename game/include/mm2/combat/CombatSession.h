@@ -163,7 +163,9 @@ public:
      *  combat hood BOB leader. -1 if none. */
     int leaderSpriteDiskIndex() const;
 
-    /** Exploration/sheet cast: same leaf path as combat 'C' (sets active slot). */
+    /** Exploration/sheet cast: same leaf path as combat 'C' (sets active slot).
+     *  When Inactive, syncs party_count_ from the bound launch (combat enter is
+     *  the only other writer — without this, out-of-combat casts no-op). */
     void castSpellFromSheet(GameStateView &gs, int party_slot, int flat0);
     /** Sheet/combat Use @ 0xE94A / 0x137F0: charges + effect_byte → spell or stat boost. */
     bool applyItemUse(GameStateView &gs, int party_slot, bool backpack, int slot_index);
@@ -182,6 +184,8 @@ private:
         int screen = 0;
     };
 
+    /** Copy launch_->party_count into party_count_ while combat is Inactive. */
+    void syncExplorePartyCount();
     void beginRound(GameStateView &gs);
     void beginEncounterUi(GameStateView &gs, const world::MapWorld &world);
     /** combat_state_recompute @ 0x11D0C: roll A4-$524 / A4-$5E4D at round-loop entry. */
@@ -208,8 +212,11 @@ private:
     bool tickExchange(GameStateView &gs, char key, bool escape);
     /** Swap party order + acted/block mirrors (0x20FF2 body). */
     void exchangePartySlots(GameStateView &gs, int slot_a, int slot_b);
-    /** 0x116B0 success: dec -$795A, move runner to end, set -$5E4C. */
+    /** 0x116B0 success: dec -$795A, move runner to end, set -$5E4C.
+     *  Combat-table only — does not dismiss from Mm2PartyLaunch (manual: rejoin). */
     void shrinkPartyAfterCharRun(GameStateView &gs, int runner_slot);
+    /** After fight: put fled members back into -$796A from launch_ (manual Run). */
+    void restorePartyAfterCombat(GameStateView &gs);
     int partyCount() const { return party_count_; }
     /** Combat cast picker @ 0x11A90 / 0x79EE — level then number, no LAB_6622 grid. */
     void beginCastPicker();
@@ -263,6 +270,8 @@ private:
     uint16_t monsterMeleeDamage10478(GameStateView &gs, int mon_slot, int party_slot);
     /** Seed data-hunk tables -$6F2E / -$7464 into GS (once per fight). */
     void seedCombatStaticTables(GameStateView &gs);
+    /** Fly sector table @ A4-$7130 / data 0xECE — also needed for explore cast. */
+    void seedFlyScreenTable(GameStateView &gs);
     /** 0x10894: resist/halve/status/damage; messages + 0x10ED4 HP apply. */
     void applySpell108BC(GameStateView &gs, int start_slot, int hit_count, uint8_t mode_d);
     /** 0x10ED4: status wake + HP subtract / kill; returns true if killed. */
@@ -354,6 +363,8 @@ private:
     bool party_blocking_[MM2_GS_PARTY_SIZE]{};
     /** Live -$795A during fight (Char-Run shrinks; Exchange keeps). */
     int party_count_ = 0;
+    /** Combat-local -$796A mirror. Char-Run shrinks this; launch_ stays intact. */
+    int16_t fight_roster_slots_[MM2_GS_PARTY_SIZE]{};
 
     int active_party_slot_ = -1; /* party slot (0..7) awaiting a command */
     int active_monster_slot_ = -1; /* monster slot (0..10) acting this step (A4-$4F7) */
@@ -365,7 +376,10 @@ private:
     int pending_cast_school_ = -1; /* 0=sorc 1=cleric while party-pick cast */
     int force_cast_school_ = -1; /* item-use CD90 school override; -1=from class */
     bool skip_cast_cost_ = false; /* F470 -$3F0C item-cast: skip SP/gem deduct */
-    bool exploration_cast_ = false; /* sheet cast: don't enter combat ack states */
+    bool exploration_cast_ = false; /* sheet/explore cast @ 0x6E30 — not a fight */
+    /** Explore-only modal pick (Fly/Lloyd/On whom). state_ stays Inactive. */
+    enum class ExplorePick : uint8_t { None, Party, Item };
+    ExplorePick explore_pick_ = ExplorePick::None;
     int cast_target_slot_ = -1;  /* 0..9 after 'A'..'J' (0xD500 subi #$41) */
     bool attack_pick_shooting_ = false; /* AwaitingAttackTarget: Shoot vs Fight */
     int cast_aux_ = -1;          /* Fly col 0..4, or multi-step cast scratch */

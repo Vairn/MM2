@@ -326,6 +326,21 @@ void materializeScreenAttrib(GameStateView &gs, const world::MapWorld &world)
     }
 }
 
+bool applyEntryCoordIfSentinel(GameStateView &gs)
+{
+    /* 0x1C64: cmpi.w #$FF, x_arg; beq → unpack -$560C. */
+    if (!gs.valid()) {
+        return false;
+    }
+    if (gs.coordX() != 0xFF && gs.coordY() != 0xFF) {
+        return false;
+    }
+    const uint8_t packed = mm2_gs_u8(gs.a4(), MM2_GS_ENTRY_COORD);
+    gs.setCoordX(static_cast<uint8_t>(packed & 0x0F));
+    gs.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
+    return true;
+}
+
 void syncCurrentCellFlags(GameStateView &gs, const world::MapWorld &world)
 {
     /* 0x1B1C: collision[(y<<4)|x] → -$55D6 (current-cell byte). */

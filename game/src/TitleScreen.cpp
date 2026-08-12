@@ -67,7 +67,7 @@ constexpr int kBotBoxX = 8, kBotBoxY = 104, kBotBoxW = 304, kBotBoxH = 93;
 constexpr int kBookY = 9;    // both books near the top of the top box
 constexpr int kBookLeftX = 16;
 // book.32 page-turn animation: one frame step per N ticks (frames 0..N-1 loop).
-constexpr int kBookStepTicks = 3;
+constexpr int kBookStepTicks = 8;
 // Centered title lines (between the two books) + full-width tagline beneath.
 const char *const kTitleLines[] = {"MIGHT", "and", "MAGIC", "Book Two"};
 const char *const kTitleTagline = "Gates To Another World!";
@@ -345,6 +345,7 @@ void TitleScreen::bootBeginLogoFade()
     state_ticks_ = 0;
     logo_hold_until_ = 0;
     logo_fade_out_armed_ = false;
+    skip_key_armed_ = false;
 #if MM2_HOST_AMIGA
     logo_fade_armed_ = true;
     if (has_nwcp_) {
@@ -714,6 +715,20 @@ void TitleScreen::logoEnter()
     logo_hold_until_ = 0;
     logo_fade_armed_ = false;
     logo_fade_out_armed_ = false;
+    skip_key_armed_ = false;
+}
+
+bool TitleScreen::consumeSkipKey(const platform::KeyState &keys)
+{
+    if (!keys.any_key) {
+        skip_key_armed_ = true;
+        return false;
+    }
+    if (!skip_key_armed_) {
+        return false;
+    }
+    skip_key_armed_ = false;
+    return true;
 }
 
 TitleScreen::LogoAdvance TitleScreen::logoTick(const platform::KeyState &keys)
@@ -722,7 +737,7 @@ TitleScreen::LogoAdvance TitleScreen::logoTick(const platform::KeyState &keys)
         quit_ = true;
         return LogoAdvance::Continue;
     }
-    if (keys.any_key) {
+    if (consumeSkipKey(keys)) {
         return has_intro_ ? LogoAdvance::GoAttract : LogoAdvance::GoMenu;
     }
 
@@ -786,6 +801,7 @@ void TitleScreen::logoDraw() { drawLogoSplash(); }
 void TitleScreen::attractEnter()
 {
     resetAttractTiming();
+    skip_key_armed_ = false;
 #if MM2_HOST_AMIGA
     invalidatePegasusPaint();
 #endif
@@ -806,7 +822,7 @@ TitleScreen::AttractAdvance TitleScreen::attractTick(const platform::KeyState &k
         return AttractAdvance::GoMenu;
     }
 #endif
-    if (keys.any_key) {
+    if (consumeSkipKey(keys)) {
         audio::stopTitleTheme();
         return AttractAdvance::GoMenu;
     }

@@ -30,6 +30,35 @@ Mm2RosterRecord *townSvcMemberRecord(const TownServiceContext &ctx, int party_sl
     return &rec;
 }
 
+int townSvcRosterIndex(const TownServiceContext &ctx, int party_slot)
+{
+    if (!ctx.launch || party_slot < 0 || party_slot >= ctx.launch->party_count ||
+        party_slot >= MM2_PARTY_LAUNCH_SLOTS) {
+        return -1;
+    }
+    return ctx.launch->roster_slots[party_slot];
+}
+
+bool townSvcPartySlotIsHireling(const TownServiceContext &ctx, int party_slot)
+{
+    return townSvcIsHirelingRosterIndex(townSvcRosterIndex(ctx, party_slot));
+}
+
+/* ASM shop initial pick (temple 0x1E35A / guild 0x1E4F0 / smith 0x1C5F0 /
+ * tavern 0x1D3A0): first living slot whose roster index < $18. */
+int townSvcFirstNonHirelingSlot(const TownServiceContext &ctx)
+{
+    if (!ctx.launch) {
+        return -1;
+    }
+    for (int i = 0; i < ctx.launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        if (townSvcMemberRecord(ctx, i) && !townSvcPartySlotIsHireling(ctx, i)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void townSvcRunTemple(ITownServiceUi &ui, const TownServiceContext &ctx)
 {
     for (;;) {
@@ -52,6 +81,18 @@ void townSvcRunTemple(ITownServiceUi &ui, const TownServiceContext &ctx)
         }
         Mm2RosterRecord *rec = townSvcMemberRecord(ctx, slot);
         if (!rec) {
+            continue;
+        }
+
+        /* Hireling (roster >= $18): outer temple loop @ 0x1E396 takes the free
+         * auto-heal leaf instead of the paid A–F menu. */
+        if (townSvcPartySlotIsHireling(ctx, slot)) {
+            const TownSvcHirelingTempleResult hr = townSvcHirelingTempleAutoHeal(*rec);
+            TownSvcHealResult r;
+            r.paid = true;
+            r.cost = 0;
+            r.hp_restored = hr.hp_restored || hr.condition_cleared || hr.align_restored;
+            ui.reportHeal(r);
             continue;
         }
 
@@ -87,8 +128,11 @@ void townSvcRunTemple(ITownServiceUi &ui, const TownServiceContext &ctx)
             break;
         }
         case TempleOption::BuySpell: {
+            const uint32_t offer = townSvcSpellOfferGold(
+                *rec, gameplay::SpellSchool::Cleric, spells[spell_slot].spell_index,
+                spells[spell_slot].gold);
             const TownSvcSpellResult r =
-                townSvcBuySpell(*rec, spells[spell_slot].spell_index, spells[spell_slot].gold);
+                townSvcBuySpell(*rec, spells[spell_slot].spell_index, offer);
             if (r.learned) {
                 ui.reportSpellLearned(r);
             } else if (r.reject == TownSvcSpellReject::NotEnoughGold) {
@@ -123,7 +167,9 @@ void townSvcRunTraining(ITownServiceUi &ui, const TownServiceContext &ctx)
         }
 
         (void)stat_id; /* the Training Hall has no stat sub-option (level-up only) */
-        const TownSvcTrainResult r = townSvcTrainLevelUp(*rec, ctx.map_id, ctx.rng);
+        const int ridx = townSvcRosterIndex(ctx, slot);
+        const TownSvcTrainResult r =
+            townSvcTrainLevelUp(*rec, ctx.map_id, ctx.rng, ridx);
         if (r.eligible && !r.paid) {
             ui.reportNotEnoughGold();
         } else {
@@ -171,13 +217,20 @@ void townSvcRunMageGuild(ITownServiceUi &ui, const TownServiceContext &ctx)
         if (!ui.selectMember(ctx, member)) {
             continue;
         }
+        /* Guild number-key gate @ 0x1E840: hirelings cannot buy spells. */
+        if (townSvcPartySlotIsHireling(ctx, member)) {
+            continue;
+        }
         Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
         if (!rec) {
             continue;
         }
 
+        const uint32_t offer = townSvcSpellOfferGold(
+            *rec, gameplay::SpellSchool::Sorcerer, slots[spell_slot].spell_index,
+            slots[spell_slot].gold);
         const TownSvcSpellResult r =
-            townSvcBuySpell(*rec, slots[spell_slot].spell_index, slots[spell_slot].gold);
+            townSvcBuySpell(*rec, slots[spell_slot].spell_index, offer);
         if (r.learned) {
             ui.reportSpellLearned(r);
         } else if (r.reject == TownSvcSpellReject::NotEnoughGold) {
@@ -228,6 +281,10 @@ void townSvcRunSmith(ITownServiceUi &ui, const TownServiceContext &ctx)
 
         int member = -1;
         if (!ui.selectMember(ctx, member)) {
+            continue;
+        }
+        /* Blacksmith validate @ 0x1C39C: hirelings cannot be the buyer. */
+        if (townSvcPartySlotIsHireling(ctx, member)) {
             continue;
         }
         Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
@@ -493,7 +550,7 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
         switch (opt) {
         case TavernOption::FeedingFrenzy: {
             int member = 0;
-            if (ui.selectMember(ctx, member)) {
+            if (ui.selectMember(ctx, member) && !townSvcPartySlotIsHireling(ctx, member)) {
                 Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
                 if (rec) {
                     townSvcFeedingFrenzy(*rec, ctx.launch, ctx.roster, ctx.map_id);
@@ -507,7 +564,7 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
             if (ui.chooseTavernStatBoost(ctx, data, slot) && slot >= 0 &&
                 slot < kPubStatBoostCount) {
                 int member = 0;
-                if (ui.selectMember(ctx, member)) {
+                if (ui.selectMember(ctx, member) && !townSvcPartySlotIsHireling(ctx, member)) {
                     Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
                     if (rec) {
                         const TownSvcStatBoostResult r =
@@ -523,7 +580,7 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
             int food = -1;
             if (ui.chooseTavernFood(ctx, data, food) && food >= 0 && food < kPubFoodOptions) {
                 int member = 0;
-                if (ui.selectMember(ctx, member)) {
+                if (ui.selectMember(ctx, member) && !townSvcPartySlotIsHireling(ctx, member)) {
                     Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
                     if (rec) {
                         const TownSvcSpecialtyResult r =
@@ -538,7 +595,7 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
         case TavernOption::Tip: {
             /* D @ 0x1CFCA: member → 1gp + RNG + day-pair tips (0x1C962). */
             int member = 0;
-            if (!ui.selectMember(ctx, member)) {
+            if (!ui.selectMember(ctx, member) || townSvcPartySlotIsHireling(ctx, member)) {
                 break;
             }
             Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
@@ -572,7 +629,7 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
         case TavernOption::Rumors: {
             /* E @ 0x1D0B4: cond gate + day-pair rumors (no gold). */
             int member = 0;
-            if (!ui.selectMember(ctx, member)) {
+            if (!ui.selectMember(ctx, member) || townSvcPartySlotIsHireling(ctx, member)) {
                 break;
             }
             Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);

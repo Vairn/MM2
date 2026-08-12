@@ -213,6 +213,15 @@ public:
 /* Resolve a party slot (0..7) to its mutable roster record, or nullptr. */
 Mm2RosterRecord *townSvcMemberRecord(const TownServiceContext &ctx, int party_slot);
 
+/* Party-slot → roster index (A4-$796A), or -1. */
+int townSvcRosterIndex(const TownServiceContext &ctx, int party_slot);
+
+/* True when party slot maps to hireling roster index >= $18. */
+bool townSvcPartySlotIsHireling(const TownServiceContext &ctx, int party_slot);
+
+/* First living non-hireling party slot, or -1 (ASM shop open skip loop). */
+int townSvcFirstNonHirelingSlot(const TownServiceContext &ctx);
+
 /* Run the temple / training menu loop until the UI backend exits. Each accepted
  * option applies the faithful transaction and reports the result via the UI. */
 void townSvcRunTemple(ITownServiceUi &ui, const TownServiceContext &ctx);

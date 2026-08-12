@@ -320,14 +320,68 @@ static uint8_t mm2_stat_bonus_7f56(uint8_t attr)
     return bonus;
 }
 
+static void mm2_train_or_auto_spell(Mm2RosterRecord *rec, uint8_t raw)
+{
+    int flat;
+    int byte_index;
+    if (raw == 0x80) {
+        return;
+    }
+    if (raw > 0x2F) {
+        flat = (int)raw - 0x30;
+    } else {
+        flat = (int)raw;
+    }
+    /* Spell book is 48 bits at +$51..+$56; ignore out-of-range flats. */
+    if (flat < 0 || flat >= 48) {
+        return;
+    }
+    byte_index = 5 + (flat >> 3); /* $51 - $4C */
+    rec->spells[byte_index] =
+        (uint8_t)(rec->spells[byte_index] | (uint8_t)(1u << (flat & 7)));
+}
+
+static void mm2_train_grant_auto_spell_row(Mm2RosterRecord *rec, int sl, uint8_t class_id)
+{
+    const uint8_t(*table)[4];
+    int slot;
+    if (!rec || sl < 1 || sl > 10) {
+        return;
+    }
+    table = (class_id == 3 || class_id == 1) ? kTrainAutoCleric : kTrainAutoSorc;
+    for (slot = 0; slot < 4; ++slot) { /* 0x2011A..0x201BE */
+        mm2_train_or_auto_spell(rec, table[sl - 1][slot]);
+    }
+}
+
+void mm2_train_backfill_auto_spells(Mm2RosterRecord *rec)
+{
+    uint8_t class_id;
+    int sl;
+    int max_sl;
+    if (!rec) {
+        return;
+    }
+    class_id = rec->class_id;
+    if (class_id != 1 && class_id != 2 && class_id != 3 && class_id != 4) {
+        return;
+    }
+    max_sl = (int)rec->spell_level;
+    if (max_sl > 10) {
+        max_sl = 10;
+    }
+    for (sl = 1; sl <= max_sl; ++sl) {
+        mm2_train_grant_auto_spell_row(rec, sl, class_id);
+    }
+}
+
 int mm2_train_spell_on_levelup(Mm2RosterRecord *rec)
 {
     int level;
     int new_sl;
+    int sl;
     uint8_t old_sl;
     uint8_t class_id;
-    const uint8_t(*table)[4];
-    int slot;
     uint8_t bonus;
     int sp;
 
@@ -366,26 +420,11 @@ int mm2_train_spell_on_levelup(Mm2RosterRecord *rec)
     /* Sync +$23 (high byte of unknown_22 LE) and keep +$72 via spell_level. */
     rec->unknown_22 = (uint16_t)((rec->unknown_22 & 0x00FFu) | ((uint16_t)new_sl << 8));
 
-    table = (class_id == 3 || class_id == 1) ? kTrainAutoCleric : kTrainAutoSorc;
-    for (slot = 0; slot < 4; ++slot) { /* 0x2011A..0x201BE */
-        uint8_t raw = table[new_sl - 1][slot];
-        int flat;
-        int byte_index;
-        if (raw == 0x80) {
-            continue;
-        }
-        if (raw > 0x2F) {
-            flat = (int)raw - 0x30;
-        } else {
-            flat = (int)raw;
-        }
-        /* Spell book is 48 bits at +$51..+$56; ignore out-of-range flats. */
-        if (flat < 0 || flat >= 48) {
-            continue;
-        }
-        byte_index = 5 + (flat >> 3); /* $51 - $4C */
-        rec->spells[byte_index] =
-            (uint8_t)(rec->spells[byte_index] | (uint8_t)(1u << (flat & 7)));
+    /* ASM ORs only table[new_sl-1] (one visit, +$20 steps by 1). When +$20
+     * drift skips SL increases, a later train can jump SL by 2+ — grant every
+     * skipped $64A2/$64C2 row so SL2 autos are not lost. */
+    for (sl = (int)old_sl + 1; sl <= new_sl; ++sl) {
+        mm2_train_grant_auto_spell_row(rec, sl, class_id);
     }
 
     /* SP @ 0x201C2..0x20228: (-$7F56(INT|PER)+3) * new_sl → +$58/+ $5A. */

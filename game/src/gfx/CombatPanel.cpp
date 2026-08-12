@@ -6,6 +6,8 @@
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/gfx/mm2_font8x8.h"
 
+#include <cstring>
+
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
 #endif
@@ -94,6 +96,31 @@ void textAtWrapped(ScreenCompositor &c, int col, int row, const char *text, int 
                    int max_rows, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255)
 {
     if (!text || max_cols <= 0 || max_rows <= 0) {
+        return;
+    }
+    /* Identify Monster @ 0xB760 (and any other positioned band dump) is one
+     * newline-separated block; keep interior spaces so columns stay put. */
+    if (std::strchr(text, '\n') != nullptr) {
+        int rows_used = 0;
+        const char *p = text;
+        while (*p != '\0' && rows_used < max_rows) {
+            const char *nl = std::strchr(p, '\n');
+            int n = nl ? static_cast<int>(nl - p) : static_cast<int>(std::strlen(p));
+            if (n > max_cols) {
+                n = max_cols;
+            }
+            char line[80];
+            if (n > 0) {
+                std::memcpy(line, p, static_cast<size_t>(n));
+            }
+            line[n] = '\0';
+            textAt(c, col, row + rows_used, line, r, g, b);
+            ++rows_used;
+            if (!nl) {
+                break;
+            }
+            p = nl + 1;
+        }
         return;
     }
     char line[80];

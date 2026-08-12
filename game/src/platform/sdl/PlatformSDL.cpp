@@ -186,37 +186,63 @@ KeyState pollInput()
     const bool right = kb[SDL_SCANCODE_RIGHT] != 0 || kb[SDL_SCANCODE_KP_6] != 0;
     const bool arrow = up || down || left || right;
 
-    /* Arrow pacing (Amiga indoor key_read_3d @ 0x1E9CE waits via 0x6798(8) ≈
-     * 100 ms when idle; PC redraw is far faster so we must rate-limit here).
-     * Fire on press, then wait an initial delay before the first re-fire —
-     * otherwise a normal ~150 ms tap lands two steps/turns in one press. */
+    /* Arrow pacing. Amiga key_read_3d @ 0x1E9CE returns immediately if a key is
+     * already down, then waits via 0x6798(8) ≈ 4×Delay(1) ≈ 80 ms when idle;
+     * A500 hood rebuild then dominates. PC redraw is ~1 ms, so without a floor
+     * hold-repeat runs at the main-loop rate.
+     *
+     * Fire on rising edge; while held, wait an initial delay before the first
+     * re-fire (so a normal ~150 ms tap is one step), then re-fire at ~Amiga
+     * idle cadence. A one-deep buffer latches a press that lands during the
+     * cooldown and delivers it when the gap expires — even if the key is
+     * already up — so taps are not dropped. */
     static bool s_arrow_held = false;
     static bool s_arrow_repeating = false;
     static Uint32 s_arrow_last_ms = 0;
-    constexpr Uint32 kArrowInitialRepeatMs = 280;
-    constexpr Uint32 kArrowRepeatMs = 180;
+    static bool s_arrow_pending = false;
+    static bool s_pend_up = false, s_pend_down = false, s_pend_left = false, s_pend_right = false;
+    constexpr Uint32 kArrowInitialRepeatMs = 180; /* first re-fire while held */
+    constexpr Uint32 kArrowRepeatMs = 100;        /* hold cadence ≈ Amiga idle wait */
+    constexpr Uint32 kArrowMinGapMs = 80;         /* floor between any two steps */
+    const Uint32 now = SDL_GetTicks();
+    auto fire_arrow = [&](bool fu, bool fd, bool fl, bool fr) {
+        k.up = fu;
+        k.down = fd;
+        k.left = fl;
+        k.right = fr;
+        s_arrow_last_ms = now == 0 ? 1 : now;
+        s_arrow_pending = false;
+    };
+    const bool gap_ok = (s_arrow_last_ms == 0) || (now - s_arrow_last_ms >= kArrowMinGapMs);
     if (arrow) {
-        const Uint32 now = SDL_GetTicks();
         if (!s_arrow_held) {
-            k.up = up;
-            k.down = down;
-            k.left = left;
-            k.right = right;
-            s_arrow_last_ms = now;
+            /* Rising edge: step now, or buffer if the previous step is too fresh. */
+            if (gap_ok) {
+                fire_arrow(up, down, left, right);
+            } else {
+                s_arrow_pending = true;
+                s_pend_up = up;
+                s_pend_down = down;
+                s_pend_left = left;
+                s_pend_right = right;
+            }
             s_arrow_held = true;
             s_arrow_repeating = false;
+        } else if (s_arrow_pending && gap_ok) {
+            /* Buffered rising edge matured while the key is still down. */
+            fire_arrow(s_pend_up, s_pend_down, s_pend_left, s_pend_right);
         } else {
             const Uint32 need = s_arrow_repeating ? kArrowRepeatMs : kArrowInitialRepeatMs;
             if (now - s_arrow_last_ms >= need) {
-                k.up = up;
-                k.down = down;
-                k.left = left;
-                k.right = right;
-                s_arrow_last_ms = now;
+                fire_arrow(up, down, left, right);
                 s_arrow_repeating = true;
             }
         }
     } else {
+        /* Key up: deliver a buffered press once the min gap has elapsed. */
+        if (s_arrow_pending && gap_ok) {
+            fire_arrow(s_pend_up, s_pend_down, s_pend_left, s_pend_right);
+        }
         s_arrow_held = false;
         s_arrow_repeating = false;
     }

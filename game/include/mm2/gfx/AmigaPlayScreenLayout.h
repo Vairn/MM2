@@ -132,11 +132,13 @@ constexpr AgaCombatSpriteLayout kAgaCombatSpriteLayout[kAgaCombatSpriteLayoutCou
     {40, 48}, /* front-center */
 };
 
-// In-game modal overlays (Quick Ref @ 0x595C, character sheet @ 0x39B4 family).
-constexpr int kPlayOverlayBorderRow = 1;
-constexpr int kPlayOverlayBorderCol = 1;
-constexpr int kPlayOverlayBorderW = 38;
-constexpr int kPlayOverlayBorderH = 23;
+// In-game modal overlays (Quick Ref @ 0x595C, character sheet wrapper @ 0x398C).
+// Red frame is play outer frame (-$7F7A → 0x422A), NOT console_box: cols 0..39,
+// rows 0..23. Sheet/QR text Locate(1,…) sits inside that frame.
+constexpr int kPlayOverlayBorderRow = 0;
+constexpr int kPlayOverlayBorderCol = 0;
+constexpr int kPlayOverlayBorderW = 40;
+constexpr int kPlayOverlayBorderH = 24;
 
 // Quick Ref table — party_roster_list_draw @ 0x5984 (Locate/Print cols).
 constexpr int kQuickRefHeaderRow1 = 0x01;
@@ -144,17 +146,17 @@ constexpr int kQuickRefHeaderRow2 = 0x0c;
 constexpr int kQuickRefDataRow1Base = 0x03;   // slot + 3
 constexpr int kQuickRefDataRow2Base = 0x0e;   // slot + 14
 constexpr int kQuickRefColIndex = 0x01;
-constexpr int kQuickRefColHpSlash = 0x14;     // HP '/' column
-constexpr int kQuickRefColSpSlash = 0x20;     // SP '/' column
-constexpr int kQuickRefColLvl = 0x08;
-constexpr int kQuickRefColSL = 0x0a;
+constexpr int kQuickRefColHpSlash = 0x14;     // '/' after live HP
+constexpr int kQuickRefColSpCurrent = 0x1b;   // SP current (width-1)
+constexpr int kQuickRefColSpSlash = 0x20;     // '/' then SP max
+constexpr int kQuickRefColSL = 0x08;
+constexpr int kQuickRefColAC = 0x0a;
 constexpr int kQuickRefColAge = 0x0e;
-constexpr int kQuickRefColAC = 0x12;
-constexpr int kQuickRefColGems = 0x18;
-constexpr int kQuickRefColFood = 0x1c;
-constexpr int kQuickRefColCond = 0x20;
+constexpr int kQuickRefColGems = 0x12;
+constexpr int kQuickRefColFood = 0x18;
+constexpr int kQuickRefColCond = 0x1c;
 
-// In-game character sheet slash column (LAB_38EA / title sheet WinUAE path).
-constexpr int kInGameSheetSlashCol = 0x12;
+// LAB_38EA field 2/6: '/' + max at col $11 (not $12).
+constexpr int kInGameSheetSlashCol = 0x11;
 
 }  // namespace mm2::gfx::play_layout

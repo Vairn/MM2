@@ -36,7 +36,7 @@ struct PlayProtectValues {
 /** Solid black fill for a text-cell rectangle (clear_cell_rect @ 0x42DC). */
 void fillCellRect(ScreenCompositor &c, int col, int row, int width_cells, int height_cells);
 
-/** Full-screen black + red console_box for in-game Quick Ref / character sheet. */
+/** Full-screen black + play outer frame (-$7F7A) for in-game Quick Ref / sheet. */
 void drawPlayModalBackdrop(ScreenCompositor &c);
 
 /** Black interior fills + red border/divider glyphs (no dynamic text). */

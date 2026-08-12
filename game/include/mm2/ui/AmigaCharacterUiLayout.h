@@ -9,24 +9,23 @@ constexpr int kCellH = 8;
 inline int cellX(int col) { return col * kCellW; }
 inline int cellY(int row) { return row * kCellH; }
 
-// Red frame via JSR -$809E: font-8 box glyphs 0x0E..0x15 (palette $17 = red on Amiga).
+// Red frame: full-screen modals use play outer frame (-$7F7A → 0x422A,
+// glyphs 1/2/3/4/5/0x0B on cols 0..39 rows 0..23). Smaller popups use
+// console_box glyphs 0x0E..0x15.
 constexpr uint8_t kBorderR = 255;
 constexpr uint8_t kBorderG = 0;
 constexpr uint8_t kBorderB = 0;
 
-// Title roster session — red frame around the whole screen (matches WinUAE
-// screenshot: ~1 cell margin on an NTSC 40x25 text grid = 320x200). The console
-// box routine (-$7F62) draws a near-full-screen outline; prior constants placed
-// it at (col 27, row 21) which framed only the bottom-right corner.
-constexpr int kRosterBorderRow = 1;
-constexpr int kRosterBorderCol = 1;
-constexpr int kRosterBorderW = 38;   // cols 1..39 -> x 8..312 (8px right margin)
-constexpr int kRosterBorderH = 23;   // rows 1..24 -> y 8..192 (8px bottom margin, NTSC 320x200)
+// Title roster / sheet / party-assemble — same -$7F7A outer frame as in-game
+// Quick Ref ($595C) and character sheet ($398C). Text Locate cols start at 1.
+constexpr int kRosterBorderRow = 0;
+constexpr int kRosterBorderCol = 0;
+constexpr int kRosterBorderW = 40;   // cols 0..39
+constexpr int kRosterBorderH = 24;   // rows 0..23 (NTSC 320x200)
 
-// Header sits ABOVE the slot list (centered on the 40-col NTSC grid), matching
-// the WinUAE screenshot: "(View All)" / "Characters" + underline at the top.
+// "(View All)" embedded in top outer-frame row; title below inside the frame.
 constexpr int kRosterTextCols = 40;        // NTSC text columns (320/8) for centering
-constexpr int kRosterViewAllRow = 0x01;    // "(View All)" embedded in top border row
+constexpr int kRosterViewAllRow = 0x00;    // top border row (outer frame)
 constexpr int kRosterTitleRow = 0x03;      // $008b8 "Characters"
 constexpr int kRosterUnderlineRow = 0x04;  // dashes on their own row beneath
 
@@ -42,36 +41,38 @@ constexpr int kRosterHirelingPageOffset = 0x18;
 constexpr int kRosterFooterRow = 0x15;     // $00aec
 constexpr int kRosterFooterCol = 0x02;
 
-// Title sheet modal — same full-screen red frame as the roster list (NTSC 40x25).
-constexpr int kSheetBorderRow = 1;
-constexpr int kSheetBorderCol = 1;
-constexpr int kSheetBorderW = 38;
-constexpr int kSheetBorderH = 23;   // rows 1..24 -> y 8..192 (NTSC 320x200)
+// Title sheet modal — same full-screen outer frame (cols 0..39, rows 0..23).
+constexpr int kSheetBorderRow = 0;
+constexpr int kSheetBorderCol = 0;
+constexpr int kSheetBorderW = 40;
+constexpr int kSheetBorderH = 24;
 
-constexpr int kSheetHeaderRow = 0x01;      // character name embedded in top border row
-constexpr int kSheetHeaderCol = 0x02;
+constexpr int kSheetHeaderRow = 0x01;      // character_sheet_draw locate(1,1)
+constexpr int kSheetHeaderCol = 0x01;
+constexpr int kSheetHeaderRaceCol = 0x16;  // locate(1,$16) then ' ' + race + ' ' + class
 
-// Three-column stat block (title sheet path; matches WinUAE screenshot).
-constexpr int kSheetStatRowBase = 0x04;    // one row down from border (8px)
-constexpr int kSheetStatColLeft = 0x02;
+// LAB_38EA A4-$8AF8/$8AE0 field table (character_sheet_draw $39B4).
+constexpr int kSheetStatRowBase = 0x03;
+constexpr int kSheetStatColLeft = 0x01;
 constexpr int kSheetStatColMid = 0x09;     // HP=/SP=/AC=/Thievery/skills
-constexpr int kSheetStatColSlash = 0x12;   // /max, SL=
-constexpr int kSheetStatColCost = 0x18;    // Cost/Gold, Gems, Food
-constexpr int kSheetStatColRight = 0x1a;   // Age, Exp, Cond=
+constexpr int kSheetStatColSlash = 0x11;   // '/' + max, SL=
+constexpr int kSheetStatColCost = 0x18;    // Gold/Cost, Gems, Food
+constexpr int kSheetStatColRight = 0x19;   // Age, Exp
+constexpr int kSheetStatColCond = 0x16;    // Cond=
+constexpr int kSheetStatColCostDay = 0x22; // hireling "/Day" ($3C0E)
 
-// Equipped/backpack block + footer compressed to fit the NTSC 25-row grid
-// (stats end at row 11; footer must stay inside the row-24 border bottom).
-constexpr int kSheetDividerRow = 0x0c;     // 12
-constexpr int kSheetEquipRowBase = 0x0d;   // 13 -> rows 13..18 (6 item slots)
-constexpr int kSheetEquipCol = 0x02;
-constexpr int kSheetBackpackCol = 0x14;    // 20
+// Equipped/backpack @ $3D18: rows $0D..$12, cols 1 / $14.
+constexpr int kSheetDividerRow = 0x0c;
+constexpr int kSheetEquipRowBase = 0x0d;
+constexpr int kSheetEquipCol = 0x01;
+constexpr int kSheetBackpackCol = 0x14;
 constexpr int kSheetBackpackHeaderCol = kSheetBackpackCol;
 
-constexpr int kSheetFooterRow1 = 0x14;     // 20 — command row 1 ($8FF0)
-constexpr int kSheetFooterRow2 = 0x15;     // 21 — command row 2 ($9017)
-constexpr int kSheetFooterCmdRow3 = 0x16;  // 22 — command row 3 ($903E)
-constexpr int kSheetFooterRow3 = 0x18;     // 24 — bottom border row for ESC prompt
-constexpr int kSheetFooterCol = 0x02;
+constexpr int kSheetFooterRow1 = 0x14;     // $8FF0
+constexpr int kSheetFooterRow2 = 0x15;     // $9017
+constexpr int kSheetFooterCmdRow3 = 0x16;  // $903E
+constexpr int kSheetFooterRow3 = 0x17;     // $6DA6 ESC row
+constexpr int kSheetFooterCol = 0x01;
 
 // In-game party panel (book.32) — NOT title P; kept for create confirm / combat paths.
 constexpr int kPartyPanelBlitX = 0x27 * kCellW;

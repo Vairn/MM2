@@ -109,6 +109,24 @@ void textAt(ScreenCompositor &c, int col, int row, const char *text, uint8_t r =
 #endif
 }
 
+/** -$7C08(1) → SetDrMd 5 (JAM2+INVERSVID): A-pen fills the cell, glyph bits in black. */
+void textAtInverse(ScreenCompositor &c, int col, int row, const char *text)
+{
+    if (!text) {
+        return;
+    }
+    int x = col * 8;
+    const int y = row * 8;
+    for (const char *p = text; *p; ++p) {
+        const unsigned uch = static_cast<unsigned char>(*p);
+        c.fillRect(x, y, 8, 8, 255, 255, 255, 255);
+        if (uch < MM2_FONT8X8_GLYPHS) {
+            c.drawGlyph(x, y, static_cast<uint8_t>(uch), 0, 0, 0);
+        }
+        x += 8;
+    }
+}
+
 void glyphTextAt(ScreenCompositor &c, int col, int row, const char *text)
 {
 #if MM2_HOST_AMIGA
@@ -180,9 +198,11 @@ void playScreenInteriorFills(ScreenCompositor &c)
 
 void drawPlayModalBackdrop(ScreenCompositor &c)
 {
+    /* Quick Ref $595C / sheet $398C: full black, then -$7F7A outer frame @ 0x422A
+     * (cols 0..39, rows 0..23). Not console_box (-$7F62 / glyphs $0E..$15). */
     c.fillRect(0, 0, kScreenW, kScreenH, 0, 0, 0);
-    c.drawConsoleBox(kPlayOverlayBorderRow, kPlayOverlayBorderCol, kPlayOverlayBorderW,
-                     kPlayOverlayBorderH, kBorderR, kBorderG, kBorderB);
+    outerFrame(c);
+    /* clear_rect_preset(3) @ $5312: interior (1,1)-(38,22) — keep frame cells. */
     fillCellRect(c, kPlayOverlayBorderCol + 1, kPlayOverlayBorderRow + 1, kPlayOverlayBorderW - 2,
                  kPlayOverlayBorderH - 2);
 }
@@ -298,35 +318,35 @@ void drawPlayPartyPanel(ScreenCompositor &c, const PlayPartySlot slots[8])
         char line[48];
         formatPartyStatusLine(line, sizeof(line), i, s.name, static_cast<uint16_t>(s.hp), prefix_style);
 
-        /* 0x6150: " n) " (4) + name (variable, until NUL) + " /" + HP.
-         * Split so condition attribute colours only the name (0x6204..0x623A). */
-        constexpr int kPrefixLen = 4;
-        const char *name_start = line + kPrefixLen;
-        const char *slash = std::strstr(name_start, " /");
+        /* 0x6150 / 0x12848: putchar prefix (` n)` or check+digit+`)`), then
+         * -$7C08(1) when +$26 != 0 → SetDrMd 5 (JAM2+INVERSVID @ 0x221EC).
+         * Inverse covers the spaces around the name; '/' is after attr clear. */
+        constexpr int kPrefixLen = 3; /* " n)" / "\x17n)" — space after ')' is inverted */
+        const char *after_prefix = line + kPrefixLen;
+        const char *slash = std::strstr(after_prefix, " /");
         char prefix[kPrefixLen + 1];
-        char name_field[MM2_ROSTER_NAME_SIZE + 1];
+        char name_field[MM2_ROSTER_NAME_SIZE + 4];
         char tail[16];
         std::memcpy(prefix, line, kPrefixLen);
         prefix[kPrefixLen] = '\0';
         if (slash) {
-            const size_t name_len = static_cast<size_t>(slash - name_start);
+            const size_t name_len = static_cast<size_t>(slash - after_prefix);
             const size_t copy_n =
-                name_len < sizeof(name_field) - 1 ? name_len : sizeof(name_field) - 1;
-            std::memcpy(name_field, name_start, copy_n);
-            name_field[copy_n] = '\0';
-            std::snprintf(tail, sizeof(tail), "%s", slash);
+                name_len < sizeof(name_field) - 2 ? name_len : sizeof(name_field) - 2;
+            std::memcpy(name_field, after_prefix, copy_n);
+            name_field[copy_n] = ' ';
+            name_field[copy_n + 1] = '\0';
+            std::snprintf(tail, sizeof(tail), "%s", slash + 1); /* skip the space; inverse ate it */
         } else {
             name_field[0] = '\0';
-            std::snprintf(tail, sizeof(tail), "%s", name_start);
+            std::snprintf(tail, sizeof(tail), "%s", after_prefix);
         }
 
         textAt(c, col, row, prefix);
 
-        /* Text attribute 1 (-$7C08 @ 0x623A) when condition byte +$26 != 0.
-         * GAP: exact palette untraced (0x220BE); rendered as red text. */
         const int name_col = col + kPrefixLen;
         if (s.bad_condition) {
-            textAt(c, name_col, row, name_field, 255, 80, 80);
+            textAtInverse(c, name_col, row, name_field);
         } else {
             textAt(c, name_col, row, name_field);
         }

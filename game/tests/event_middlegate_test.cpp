@@ -31,6 +31,7 @@
 #include "mm2_party_launch.h"
 #include "mm2_gamestate.h"
 #include "mm2_map_codec.h"
+#include "mm2_town_tables.h"
 
 namespace {
 
@@ -374,6 +375,54 @@ void testTownServiceTransactions(int &fails)
         expect(rec.sp_max == 8, "Cleric SP unchanged without spell-level gain", fails);
     }
 
+    /* ---- SL jump 1→3 (stale +$20 / skipped trains) still grants SL2 autos. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 4, 20000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.class_id = 4;
+        rec.experience = 20000; /* Group B L5 = 16000 */
+        rec.intelligence_current = 15;
+        rec.spell_level = 1; /* skipped the L3 SL2 grant */
+        rec.unknown_1a_20[6] = 4;
+        rec.unknown_22 = static_cast<uint16_t>(1u << 8);
+        rec.sp_max = 4;
+        rec.sp_current = 4;
+        mm2::gameplay::spellLearnInBook(rec, 1);
+        mm2::gameplay::spellLearnInBook(rec, 3);
+        mm2::gameplay::spellLearnInBook(rec, 4);
+        mm2::gameplay::spellLearnInBook(rec, 5);
+        const TownSvcTrainResult r = townSvcTrainLevelUp(rec, 0);
+        expect(r.gained_spells && rec.spell_level == 3, "Sorcerer L4→L5 jumps SL1→SL3", fails);
+        expect(mm2::gameplay::spellKnownInBook(rec, 8) && mm2::gameplay::spellKnownInBook(rec, 10) &&
+                   mm2::gameplay::spellKnownInBook(rec, 11),
+               "SL jump still grants SL2 Electric Arrow/Jump/Levitate", fails);
+        expect(mm2::gameplay::spellKnownInBook(rec, 15) && mm2::gameplay::spellKnownInBook(rec, 16) &&
+                   mm2::gameplay::spellKnownInBook(rec, 18),
+               "SL jump still grants SL3 Fly/Invisibility/Web", fails);
+    }
+
+    /* ---- Launch backfill restores SL2 autos on a Cassandra-like book. ---- */
+    {
+        Mm2RosterRecord cass{};
+        mm2_roster_clear_record(&cass);
+        cass.class_id = 4;
+        cass.spell_level = 3;
+        mm2::gameplay::spellLearnInBook(cass, 1);
+        mm2::gameplay::spellLearnInBook(cass, 3);
+        mm2::gameplay::spellLearnInBook(cass, 4);
+        mm2::gameplay::spellLearnInBook(cass, 5);
+        mm2::gameplay::spellLearnInBook(cass, 15);
+        mm2::gameplay::spellLearnInBook(cass, 16);
+        mm2::gameplay::spellLearnInBook(cass, 18);
+        mm2_train_backfill_auto_spells(&cass);
+        expect(mm2::gameplay::spellKnownInBook(cass, 8) && mm2::gameplay::spellKnownInBook(cass, 10) &&
+                   mm2::gameplay::spellKnownInBook(cass, 11),
+               "backfill adds Cassandra's missing SL2 Electric Arrow/Jump/Levitate", fails);
+        expect(mm2::gameplay::spellKnownInBook(cass, 1) && mm2::gameplay::spellKnownInBook(cass, 15),
+               "backfill keeps existing SL1/SL3 bits", fails);
+    }
+
     /* ---- Training XP gate: under threshold -> not eligible AND no charge. ---- */
     {
         Mm2RosterFile roster{};
@@ -573,6 +622,7 @@ void testMageGuildAndTemple(int &fails)
     using mm2::gameplay::kClericSpells;
     using mm2::gameplay::kSorcererSpells;
     using mm2::gameplay::spellKnownInBook;
+    using mm2::gameplay::spellLearnInBook;
 
     /* ---- Static stock + membership-mask data sanity (doc 28, doc 36). ---- */
     {
@@ -617,7 +667,7 @@ void testMageGuildAndTemple(int &fails)
 
         const TownSvcSpellResult again = townSvcBuySpell(rec, 0, 10);
         expect(again.learned && rec.gold == 980u,
-               "re-buying an already-known spell is idempotent, not rejected (no ASM check found)",
+               "buy leaf re-buy of known spell is idempotent; menu offer gate zeros cost first",
                fails);
 
         const TownSvcSpellResult broke = townSvcBuySpell(rec, 2, 1000000);
@@ -633,6 +683,142 @@ void testMageGuildAndTemple(int &fails)
         const TownSvcSpellResult afflicted = townSvcBuySpell(rec, 6, 50);
         expect(!afflicted.learned && afflicted.reject == TownSvcSpellReject::Condition,
                "afflicted character cannot buy spells", fails);
+    }
+
+    /* ---- Menu offer gold gate (guild 0x1D97A / temple 0x1DAC6): class, SL,
+     * already-known. Buy leaf itself stays idempotent on already-known. ---- */
+    {
+        Mm2SpellShopSlot temple[MM2_TEMPLE_SPELL_SLOTS];
+        expect(mm2_temple_spell_stock(0, temple) != 0, "offer-gate uses Middlegate temple stock",
+               fails);
+        Mm2SpellShopSlot guild[MM2_MAGE_GUILD_SLOTS];
+        expect(mm2_mage_guild_stock(0, guild) != 0, "offer-gate uses Middlegate guild stock", fails);
+
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 5, 10000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.condition = 0;
+        rec.class_id = 0; /* Knight — no school */
+        rec.spell_level = 9;
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == 0u,
+               "Knight cannot buy temple cleric spells", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == 0u,
+               "Knight cannot buy guild sorcerer spells", fails);
+
+        rec.class_id = 3; /* Cleric */
+        rec.spell_level = 0;
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == 0u,
+               "Cleric SL0 cannot buy C1 spells", fails);
+        rec.spell_level = 1;
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == temple[0].gold,
+               "Cleric SL1 can buy Apparition", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == 0u,
+               "Cleric cannot buy guild sorcerer spells", fails);
+
+        spellLearnInBook(rec, temple[0].spell_index);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == 0u,
+               "already-known temple spell offers 0 gold", fails);
+
+        rec.class_id = 4; /* Sorcerer */
+        rec.spell_level = 1;
+        std::memset(rec.spells, 0, sizeof(rec.spells));
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == guild[0].gold,
+               "Sorcerer SL1 can buy Awaken", fails);
+        spellLearnInBook(rec, guild[0].spell_index);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == 0u,
+               "already-known guild spell offers 0 gold", fails);
+
+        /* Paladin (class 1) / Archer (class 2) share schools with Cleric / Sorcerer. */
+        rec.class_id = 1; /* Paladin */
+        rec.spell_level = 1;
+        std::memset(rec.spells, 0, sizeof(rec.spells));
+        expect(mm2::gameplay::spellSchoolForClass(1) == mm2::gameplay::SpellSchool::Cleric,
+               "Paladin maps to Cleric school", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == temple[0].gold,
+               "Paladin SL1 can buy temple Cleric spells", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == 0u,
+               "Paladin cannot buy guild Sorcerer spells", fails);
+
+        rec.class_id = 2; /* Archer */
+        expect(mm2::gameplay::spellSchoolForClass(2) == mm2::gameplay::SpellSchool::Sorcerer,
+               "Archer maps to Sorcerer school", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == guild[0].gold,
+               "Archer SL1 can buy guild Sorcerer spells", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == 0u,
+               "Archer cannot buy temple Cleric spells", fails);
+
+        /* Remaining XP to next level (threshold - current), not absolute. */
+        expect(mm2_class_xp_for_level(0, 2) == 1500u, "Knight L2 threshold still 1500", fails);
+        const uint32_t need = mm2_class_xp_for_level(0, 2);
+        const uint32_t have = 500u;
+        expect(need - have == 1000u, "training remaining XP example: 1500-500 = 1000", fails);
+    }
+
+    /* ---- Hireling town-service rules (roster index >= $18). ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 5, 10000);   /* hero */
+        setupMember(roster, 24, 5, 10);     /* hireling slot A, almost broke */
+        Mm2RosterRecord &hero = roster.records[0];
+        Mm2RosterRecord &hire = roster.records[24];
+        hire.condition = 0x10;
+        hire.hp_aux = 40;
+        hire.hp_max = 20;
+        hire.hp_current = 5;
+        hire.alignment_current = 50;
+        hire.alignment_base = 0;
+        hire.experience = mm2_class_xp_for_level(hire.class_id, 6);
+        hire.level = 5;
+
+        expect(townSvcIsHirelingRosterIndex(24), "roster 24 is hireling", fails);
+        expect(!townSvcIsHirelingRosterIndex(0), "roster 0 is not hireling", fails);
+        expect(townSvcTrainingCost(5, 0, 24) == 0u, "hireling training fee is 0 (0x2073A)", fails);
+        expect(townSvcTrainingCost(5, 0, 0) == 250u, "hero Middlegate L5 fee still 250", fails);
+
+        const uint32_t gold_before = hire.gold;
+        const TownSvcTrainResult tr = townSvcTrainLevelUp(hire, 0, nullptr, 24);
+        expect(tr.eligible && tr.paid && tr.leveled, "hireling can train when XP met", fails);
+        expect(tr.cost == 0u, "hireling train charged 0 gold", fails);
+        expect(hire.gold == gold_before, "hireling gold untouched by training", fails);
+        expect(hire.level == 6, "hireling leveled to 6", fails);
+
+        const TownSvcHirelingTempleResult hr = townSvcHirelingTempleAutoHeal(hire);
+        expect(hr.condition_cleared && hr.hp_restored && hr.align_restored,
+               "hireling temple auto-heal clears cond + HP + align", fails);
+        expect(hire.condition == 0 && hire.hp_max == hire.hp_aux &&
+                   hire.alignment_base == hire.alignment_current,
+               "hireling temple auto-heal mutated fields", fails);
+        expect(hire.gold == gold_before, "hireling temple auto-heal is free", fails);
+
+        int members[2] = {0, 24};
+        Mm2PartyLaunch launch{};
+        mm2_party_launch_build(&launch, 1, members, 2);
+        TownServiceContext ctx;
+        ctx.roster = &roster;
+        ctx.launch = &launch;
+        ctx.map_id = 0;
+        expect(townSvcFirstNonHirelingSlot(ctx) == 0, "first non-hireling is hero slot 0", fails);
+        expect(townSvcPartySlotIsHireling(ctx, 1), "party slot 1 is hireling", fails);
+        expect(!townSvcPartySlotIsHireling(ctx, 0), "party slot 0 is hero", fails);
+
+        /* Paid temple heal still charges heroes. */
+        hero.condition = 0x10;
+        hero.hp_aux = 40;
+        hero.hp_max = 20;
+        const uint32_t hero_cost = townSvcTempleHealCost(hero, 0);
+        expect(hero_cost > 0, "afflicted hero has nonzero temple heal cost", fails);
     }
 
     /* ---- Menu driver: whole-party gate denies entry when no one qualifies. ---- */
@@ -658,6 +844,8 @@ void testMageGuildAndTemple(int &fails)
         Mm2RosterFile roster{};
         setupMember(roster, 0, 5, 10000);
         roster.records[0].condition = 0;
+        roster.records[0].class_id = 4; /* Sorcerer — guild school */
+        roster.records[0].spell_level = 1;
         roster.records[0].class_quest_guild_mask = static_cast<uint8_t>(mm2_mage_guild_member_mask(0));
         int member_idx[1] = {0};
         Mm2PartyLaunch launch{};
@@ -681,6 +869,8 @@ void testMageGuildAndTemple(int &fails)
         Mm2RosterFile roster{};
         setupMember(roster, 0, 5, 10000);
         roster.records[0].condition = 0;
+        roster.records[0].class_id = 3; /* Cleric — temple school */
+        roster.records[0].spell_level = 1;
         int member_idx[1] = {0};
         Mm2PartyLaunch launch{};
         mm2_party_launch_build(&launch, 1, member_idx, 1);
@@ -1133,6 +1323,65 @@ void testPlayTownServiceUi(int &fails, const Mm2ItemsFile &items)
         expect(roster.records[0].food == 40 && roster.records[1].food == 40,
                "play tavern A tops all members to 40 food", fails);
         expect(ui.active(), "play tavern stays on top menu after feeding frenzy", fails);
+    }
+
+    /* ---- Temple hireling digit-select: free leaf 0x1E116 — heal text, no A–F menu. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 5, 10000);
+        setupMember(roster, 24, 5, 10);
+        Mm2RosterRecord &hire = roster.records[24];
+        hire.condition = 0x10;
+        hire.hp_aux = 40;
+        hire.hp_max = 20;
+        hire.hp_current = 5;
+        hire.alignment_current = 50;
+        hire.alignment_base = 0;
+        int members[2] = {0, 24};
+        Mm2PartyLaunch launch{};
+        mm2_party_launch_build(&launch, 1, members, 2);
+        uint8_t a4img[static_cast<size_t>(MM2_A4_ANCHOR) + 0x100u]{};
+
+        TownServiceContext ctx;
+        ctx.roster = &roster;
+        ctx.launch = &launch;
+        ctx.items = &items;
+        ctx.a4 = mm2_gs_base_from_image(a4img);
+        ctx.map_id = 0;
+
+        mm2::ui::PlayTownServiceUi ui;
+        townSvcRunTemple(ui, ctx);
+        ui.begin();
+        expect(!ui.templeHirelingHealView(), "temple opens on hero paid menu, not hireling leaf",
+               fails);
+
+        ui.handleKey('2', false); /* party slot 1 = roster 24 hireling */
+        expect(ui.templeHirelingHealView(), "hireling digit enters 0x1E116 heal view", fails);
+        expect(std::strcmp(ui.templeHirelingHealMessage(), "has been healed.") == 0,
+               "hireling heal view shows centered 'has been healed.' text", fails);
+        expect(hire.condition == 0 && hire.hp_max == hire.hp_aux && hire.gold == 10u,
+               "hireling auto-heal is free and clears cond/HP", fails);
+
+        const uint32_t hire_gold = hire.gold;
+        const uint32_t hero_gold = roster.records[0].gold;
+        ui.handleKey('A', false); /* paid menu keys must be ignored on hireling leaf */
+        expect(hire.gold == hire_gold && roster.records[0].gold == hero_gold,
+               "hireling temple view ignores paid A–F keys", fails);
+        expect(ui.templeHirelingHealView(), "hireling heal view stays after ignored A", fails);
+
+        ui.render(comp);
+
+        ui.handleKey('1', false); /* back to hero → paid menu 0x1DD8E */
+        expect(!ui.templeHirelingHealView(), "hero digit returns to paid temple menu", fails);
+        expect(ui.active(), "temple stays open after returning to hero", fails);
+
+        ui.handleKey('2', false);
+        expect(ui.templeHirelingHealView(), "reselecting hireling re-enters heal view", fails);
+        expect(std::strcmp(ui.templeHirelingHealMessage(), "  is healthy.") == 0,
+               "already-healed hireling shows '  is healthy.'", fails);
+
+        ui.handleKey(0, true); /* Esc closes temple (0x1E224 → outer 0x1B exit) */
+        expect(!ui.active(), "Esc from hireling temple leaf closes temple", fails);
     }
 }
 

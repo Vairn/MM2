@@ -25,14 +25,26 @@ constexpr unsigned u32(T v)
     return static_cast<unsigned>(v);
 }
 
-/* Town shop chrome @ asm 0x1C494 (left col 2) + option captions @ 0x1C6BE (col 0x10).
+/* Town shop chrome @ asm 0x1C494 (left col 2) + option captions @ 0x1C6BE.
  * Clear preset 2: cells (1,17)-(38,22). ESC prompt @ 0x6DA6 row 23 col 11. */
 constexpr int kLeftCol = 0x02;
-constexpr int kOptCol = 0x10;
+constexpr int kOptCol = 0x10;        /* generic option band (smith/tavern) */
+constexpr int kTempleOptCol = 0x13;  /* temple captions @ 0x1DE4E */
+constexpr int kGuildOptCol = 0x14;   /* guild captions @ 0x1E5E8 */
+constexpr int kSpellIdCol = 0x1F;    /* L-N id print @ 0x1DAC6 / 0x1D97A */
+constexpr int kCostCol = 0x23;       /* cost / "---" @ 0x1DF30 / 0x1E660 */
 constexpr int kBandRowFirst = 0x11;
 constexpr int kBandRowLast = 0x16;
 constexpr int kEscPromptCol = 0x0B;
 constexpr int kEscPromptRow = 0x17;
+
+/* A4-$56E6: 7 str.dat ptrs loaded @ 0x1E962 (after -$56F6 chrome).
+ * Temple paints [0..5] @ 0x1DE60; guild paints [3..6] @ 0x1E5FA.
+ * Spell rows also get L-N at col $1F from the offer-gate id path. */
+constexpr const char *kTownSpellMenuCaptions[7] = {
+    "A) Restore Cond", "B) Restore Algn", "C) Donations", "D) Spell C",
+    "E) Spell C",      "F) Spell C",      "D) Spell S",
+};
 
 void clearShopMenuBand(gfx::ScreenCompositor &c)
 {
@@ -51,6 +63,29 @@ void drawEscFooter(gfx::ScreenCompositor &c)
     drawCell(c, kEscPromptRow, kEscPromptCol, "( 'ESC' to go back )");
 }
 
+/* Offer-gate id print (0x1DAC6 / 0x1D97A): ASCII level, '-', number at col $1F. */
+void formatSpellIdLn(char *out, size_t out_n, mm2::gameplay::SpellSchool school, int spell_index)
+{
+    const mm2::gameplay::SpellMeta *table = mm2::gameplay::schoolSpellTable(school);
+    if (!table || spell_index < 0 || spell_index >= mm2::gameplay::kSpellsPerSchool) {
+        out[0] = '\0';
+        return;
+    }
+    const mm2::gameplay::SpellMeta &meta = table[spell_index];
+    std::snprintf(out, out_n, "%u-%u", static_cast<unsigned>(meta.level),
+                  static_cast<unsigned>(meta.number));
+}
+
+void formatCostColumn(char *out, size_t out_n, uint32_t offer_gold)
+{
+    /* Zero offer → literal "---" @ 0x1E111; else print gold via -$7E5A. */
+    if (offer_gold == 0) {
+        std::snprintf(out, out_n, "---");
+    } else {
+        std::snprintf(out, out_n, "%u", u32(offer_gold));
+    }
+}
+
 /** Inverse-video service title (0x1C494: -$7C08(1) around "Blacksmith"). */
 void drawInverseTitle(gfx::ScreenCompositor &c, int row, int col, const char *title)
 {
@@ -66,7 +101,7 @@ void drawInverseTitle(gfx::ScreenCompositor &c, int row, int col, const char *ti
 
 void drawShopLeftChrome(gfx::ScreenCompositor &c, const char *title, const char *select_line,
                         const mm2::events::TownServiceContext &ctx, int active_member,
-                        bool show_gather_gold)
+                        bool show_gather_gold, bool hireling_training_cost_label)
 {
     drawInverseTitle(c, kBandRowFirst, kLeftCol, title);
 
@@ -78,7 +113,9 @@ void drawShopLeftChrome(gfx::ScreenCompositor &c, const char *title, const char 
         std::snprintf(member_line, sizeof(member_line), "%d) %s", active_member + 1, name);
         drawCell(c, kBandRowFirst + 1, kLeftCol, member_line);
         char gold_line[24];
-        std::snprintf(gold_line, sizeof(gold_line), "Gold=%u",
+        /* Training hireling chrome @ 0x206D4 prints "Cost=" (daily fee in +$66). */
+        std::snprintf(gold_line, sizeof(gold_line), "%s%u",
+                      hireling_training_cost_label ? "Cost=" : "Gold=",
                       static_cast<unsigned>(rec->gold));
         drawCell(c, kBandRowFirst + 2, kLeftCol, gold_line);
     }
@@ -91,7 +128,7 @@ void drawShopLeftChrome(gfx::ScreenCompositor &c, const char *title, const char 
     drawCell(c, foot_row, kLeftCol, select_line);
 }
 
-void cycleActiveMember(int &slot, const mm2::events::TownServiceContext &ctx)
+void cycleActiveMember(int &slot, const mm2::events::TownServiceContext &ctx, bool skip_hirelings)
 {
     if (!ctx.launch) {
         return;
@@ -102,15 +139,20 @@ void cycleActiveMember(int &slot, const mm2::events::TownServiceContext &ctx)
     }
     for (int step = 1; step <= n; ++step) {
         const int next = (slot + step) % n;
-        if (mm2::events::townSvcMemberRecord(ctx, next)) {
-            slot = next;
-            return;
+        if (!mm2::events::townSvcMemberRecord(ctx, next)) {
+            continue;
         }
+        if (skip_hirelings && mm2::events::townSvcPartySlotIsHireling(ctx, next)) {
+            continue;
+        }
+        slot = next;
+        return;
     }
 }
 
 /** ASM shop member index @ A4-$5A3A: digits 1..8 pick the displayed party slot. */
-bool trySelectMemberByDigit(int &slot, const mm2::events::TownServiceContext &ctx, char ch)
+bool trySelectMemberByDigit(int &slot, const mm2::events::TownServiceContext &ctx, char ch,
+                            bool reject_hirelings)
 {
     if (ch < '1' || ch > '8') {
         return false;
@@ -118,6 +160,9 @@ bool trySelectMemberByDigit(int &slot, const mm2::events::TownServiceContext &ct
     const int party_slot = ch - '1';
     if (!mm2::events::townSvcMemberRecord(ctx, party_slot)) {
         return false;
+    }
+    if (reject_hirelings && mm2::events::townSvcPartySlotIsHireling(ctx, party_slot)) {
+        return false; /* smith 0x1C39C / guild 0x1E840 / tavern 0x1D636 */
     }
     slot = party_slot;
     return true;
@@ -225,10 +270,23 @@ void PlayTownServiceUi::begin()
     smith_identify_pending_ = false;
     temple_spell_slot_ = -1;
     guild_slot_ = -1;
+    /* ASM open skip: first non-hireling for temple/smith/guild/tavern; training
+     * keeps slot 0 (hirelings may train). */
     active_member_ = 0;
+    if (kind_ != Kind::Training) {
+        const int first = mm2::events::townSvcFirstNonHirelingSlot(ctx_);
+        if (first >= 0) {
+            active_member_ = first;
+        }
+    }
     status_[0] = '\0';
+    hireling_heal_msg_[0] = '\0';
     if (kind_ == Kind::Temple) {
         mm2_temple_spell_stock(ctx_.map_id, temple_spell_stock_);
+        /* Outer temple loop @ 0x1E396: hireling slot opens free leaf 0x1E116. */
+        if (mm2::events::townSvcPartySlotIsHireling(ctx_, active_member_)) {
+            applyHirelingTempleAutoHeal(active_member_);
+        }
     } else if (kind_ == Kind::MageGuild && !guild_denied_) {
         buildGuildStock();
     }
@@ -250,6 +308,7 @@ void PlayTownServiceUi::close()
     smith_mode_ = SmithMode::Buy;
     smith_identify_pending_ = false;
     status_[0] = '\0';
+    hireling_heal_msg_[0] = '\0';
 }
 
 const char *PlayTownServiceUi::serviceTitle() const
@@ -290,6 +349,10 @@ const char *PlayTownServiceUi::selectPromptText() const
 
 bool PlayTownServiceUi::showGatherGoldLine() const
 {
+    /* Training skips G for hirelings @ 0x20BBA; temple/smith always show it. */
+    if (kind_ == Kind::Training) {
+        return !mm2::events::townSvcPartySlotIsHireling(ctx_, active_member_);
+    }
     return kind_ == Kind::Temple || kind_ == Kind::Smith;
 }
 
@@ -305,13 +368,68 @@ void PlayTownServiceUi::showActiveMemberGold()
                   static_cast<unsigned>(rec->gold));
 }
 
+void PlayTownServiceUi::applyHirelingTempleAutoHeal(int party_slot)
+{
+    Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, party_slot);
+    if (!rec) {
+        return;
+    }
+    const mm2::events::TownSvcHirelingTempleResult r =
+        mm2::events::townSvcHirelingTempleAutoHeal(*rec);
+    /* Exact exe strings @ 0x1E26A / 0x1E27B (pea targets from 0x1E1E4 / 0x1E1F0). */
+    std::snprintf(hireling_heal_msg_, sizeof(hireling_heal_msg_), "%s",
+                  r.any_change ? "has been healed." : "  is healthy.");
+    status_[0] = '\0';
+    phase_ = Phase::HirelingTemple;
+}
+
+void PlayTownServiceUi::enterTempleMemberView(int party_slot)
+{
+    if (mm2::events::townSvcPartySlotIsHireling(ctx_, party_slot)) {
+        applyHirelingTempleAutoHeal(party_slot);
+    } else {
+        hireling_heal_msg_[0] = '\0';
+        phase_ = Phase::Menu;
+    }
+}
+
+const char *PlayTownServiceUi::templeHirelingHealMessage() const
+{
+    return templeHirelingHealView() ? hireling_heal_msg_ : "";
+}
+
+void PlayTownServiceUi::drawHirelingTempleHeal(gfx::ScreenCompositor &c) const
+{
+    /* Hireling free leaf paint @ 0x1E116 — no left chrome, no A–F captions/costs.
+     * Cursor convention matches paid temple: -$7bfc(row, col). */
+    Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
+    if (rec) {
+        char name[20];
+        mm2_roster_name_to_cstr(rec, name, sizeof(name));
+        char member_line[32];
+        /* 0x1E14E..0x1E176: digit+$31, ')', ' ', name @ (row $12, col $0D). */
+        std::snprintf(member_line, sizeof(member_line), "%d) %s", active_member_ + 1, name);
+        drawCell(c, 0x12, 0x0D, member_line);
+    }
+
+    /* 0x1E1C4: cursor (row $13, col $5); heal/healthy then "  Select another" (0x1E289). */
+    char line[48];
+    std::snprintf(line, sizeof(line), "%s  Select another", hireling_heal_msg_);
+    drawCell(c, 0x13, 0x05, line);
+    /* 0x1E204: cursor (row $14, col $11) + "character." @ 0x1E29A. */
+    drawCell(c, 0x14, 0x11, "character.");
+}
+
 void PlayTownServiceUi::drawLeftChrome(gfx::ScreenCompositor &c) const
 {
     const char *prompt = selectPromptText();
     if (phase_ == Phase::SmithItems) {
         prompt = "Select (A-F)";
     }
-    drawShopLeftChrome(c, serviceTitle(), prompt, ctx_, active_member_, showGatherGoldLine());
+    const bool hireling_cost =
+        kind_ == Kind::Training && mm2::events::townSvcPartySlotIsHireling(ctx_, active_member_);
+    drawShopLeftChrome(c, serviceTitle(), prompt, ctx_, active_member_, showGatherGoldLine(),
+                       hireling_cost);
 }
 
 /** Training hall trainee panel (ASM 0x020988 / 0x20612, strings @ 0x20c4c+). */
@@ -326,7 +444,8 @@ void PlayTownServiceUi::drawTrainingPrompt(gfx::ScreenCompositor &c) const
     const uint32_t threshold = mm2_class_xp_for_level(rec->class_id, next_level);
     const bool eligible =
         threshold != 0 && threshold != 0xffffffffu && rec->experience >= threshold;
-    const uint32_t fee = mm2::events::townSvcTrainingCost(rec->level, ctx_.map_id);
+    const int ridx = mm2::events::townSvcRosterIndex(ctx_, active_member_);
+    const uint32_t fee = mm2::events::townSvcTrainingCost(rec->level, ctx_.map_id, ridx);
 
     char line[48];
     std::snprintf(line, sizeof(line), "Train for level %d", next_level);
@@ -344,9 +463,11 @@ void PlayTownServiceUi::drawTrainingPrompt(gfx::ScreenCompositor &c) const
         drawCell(c, kBandRowFirst + 1, kOptCol, " to level up.");
         drawCell(c, kBandRowFirst + 2, kOptCol, "You need more experience.");
     } else {
+        /* Remaining XP = next-level threshold − current (not the absolute threshold). */
+        const uint32_t remaining =
+            (rec->experience < threshold) ? (threshold - rec->experience) : 0u;
         drawCell(c, kBandRowFirst + 1, kOptCol, " to level up.");
-        std::snprintf(line, sizeof(line), "Need %u XP",
-                      static_cast<unsigned>(threshold));
+        std::snprintf(line, sizeof(line), "Need %u XP", static_cast<unsigned>(remaining));
         drawCell(c, kBandRowFirst + 2, kOptCol, line);
     }
 }
@@ -484,13 +605,16 @@ void PlayTownServiceUi::applyTempleAndReturn(int party_slot)
             (slot.spell_index < mm2::gameplay::kSpellsPerSchool)
                 ? mm2::gameplay::kClericSpells[slot.spell_index].name
                 : "spell";
+        /* Menu offer gate 0x1DAC6 — zero cost if wrong class / SL / already known. */
+        const uint32_t offer = mm2::events::townSvcSpellOfferGold(
+            *rec, mm2::gameplay::SpellSchool::Cleric, slot.spell_index, slot.gold);
         const mm2::events::TownSvcSpellResult r =
-            mm2::events::townSvcBuySpell(*rec, slot.spell_index, slot.gold);
+            mm2::events::townSvcBuySpell(*rec, slot.spell_index, offer);
         if (r.learned) {
             std::snprintf(status_, sizeof(status_), "%s learned %s for %u gp.", name, spell_name,
                           u32(r.cost));
         } else if (r.reject == mm2::events::TownSvcSpellReject::NotEnoughGold) {
-            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(slot.gold));
+            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(offer));
         } else if (r.reject == mm2::events::TownSvcSpellReject::Condition) {
             std::snprintf(status_, sizeof(status_), "%s is afflicted - cannot buy.", name);
         } else {
@@ -516,13 +640,16 @@ void PlayTownServiceUi::applyGuildBuyAndReturn(int party_slot)
     const char *spell_name = (slot.spell_index < mm2::gameplay::kSpellsPerSchool)
                                  ? mm2::gameplay::kSorcererSpells[slot.spell_index].name
                                  : "spell";
+    /* Menu offer gate 0x1D97A — zero cost if wrong class / SL / already known. */
+    const uint32_t offer = mm2::events::townSvcSpellOfferGold(
+        *rec, mm2::gameplay::SpellSchool::Sorcerer, slot.spell_index, slot.gold);
     const mm2::events::TownSvcSpellResult r =
-        mm2::events::townSvcBuySpell(*rec, slot.spell_index, slot.gold);
+        mm2::events::townSvcBuySpell(*rec, slot.spell_index, offer);
     if (r.learned) {
         std::snprintf(status_, sizeof(status_), "%s learned %s for %u gp.", name, spell_name,
                       u32(r.cost));
     } else if (r.reject == mm2::events::TownSvcSpellReject::NotEnoughGold) {
-        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(slot.gold));
+        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(offer));
     } else if (r.reject == mm2::events::TownSvcSpellReject::Condition) {
         std::snprintf(status_, sizeof(status_), "%s is afflicted - cannot buy.", name);
     } else {
@@ -540,14 +667,15 @@ void PlayTownServiceUi::applyTrainingAndReturn(int party_slot)
     }
     char name[20];
     mm2_roster_name_to_cstr(rec, name, sizeof(name));
+    const int ridx = mm2::events::townSvcRosterIndex(ctx_, party_slot);
     const mm2::events::TownSvcTrainResult r =
-        mm2::events::townSvcTrainLevelUp(*rec, ctx_.map_id, ctx_.rng);
+        mm2::events::townSvcTrainLevelUp(*rec, ctx_.map_id, ctx_.rng, ridx);
     if (!r.eligible) {
         /* XP gate (no charge): faithful to the engine charging nothing when the
          * character lacks the experience for the next level. */
         std::snprintf(status_, sizeof(status_), "%s lacks experience to advance.", name);
     } else if (!r.paid) {
-        const uint32_t fee = mm2::events::townSvcTrainingCost(rec->level, ctx_.map_id);
+        const uint32_t fee = mm2::events::townSvcTrainingCost(rec->level, ctx_.map_id, ridx);
         std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(fee));
     } else {
         /* ASM 0x204C8..0x20518: "You gained " + N + " hit points" [, "and new spells"]. */
@@ -827,6 +955,7 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
     if (escape) {
         switch (phase_) {
         case Phase::Menu:
+        case Phase::HirelingTemple:
             close();
             break;
         case Phase::SmithItems:
@@ -857,8 +986,14 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
     }
 
     /* Digits 1..8 and # switch the shop member (A4-$5A3A / left chrome). */
-    if (trySelectMemberByDigit(active_member_, ctx_, ch)) {
+    const bool reject_hireling_digit =
+        kind_ == Kind::Smith || kind_ == Kind::MageGuild || kind_ == Kind::Tavern;
+    if (trySelectMemberByDigit(active_member_, ctx_, ch, reject_hireling_digit)) {
         status_[0] = '\0';
+        /* Temple outer loop @ 0x1E396: hireling → 0x1E116; hero → paid 0x1DD8E. */
+        if (kind_ == Kind::Temple) {
+            enterTempleMemberView(active_member_);
+        }
         if (phase_ == Phase::SmithItems && smith_mode_ != SmithMode::Buy) {
             buildSmithBackpackView();
         }
@@ -867,16 +1002,23 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
     if (ch == '#') {
         switch (phase_) {
         case Phase::Menu:
+        case Phase::HirelingTemple:
         case Phase::SmithItems:
         case Phase::TavernFood:
         case Phase::TavernBoost:
-        case Phase::TavernRumor:
-            cycleActiveMember(active_member_, ctx_);
+        case Phase::TavernRumor: {
+            const bool skip_hirelings =
+                kind_ == Kind::Smith || kind_ == Kind::MageGuild || kind_ == Kind::Tavern;
+            cycleActiveMember(active_member_, ctx_, skip_hirelings);
             status_[0] = '\0';
+            if (kind_ == Kind::Temple) {
+                enterTempleMemberView(active_member_);
+            }
             if (phase_ == Phase::SmithItems && smith_mode_ != SmithMode::Buy) {
                 buildSmithBackpackView();
             }
             return;
+        }
         default:
             break;
         }
@@ -889,6 +1031,10 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
             break;
         }
         if (kind_ == Kind::Temple) {
+            /* Hirelings never enter the paid A–F menu (outer loop @ 0x1E396). */
+            if (mm2::events::townSvcPartySlotIsHireling(ctx_, active_member_)) {
+                break;
+            }
             if (ch == 'A') {
                 temple_opt_ = mm2::events::TempleOption::Heal;
                 applyTempleAndReturn(active_member_);
@@ -900,7 +1046,13 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
                 applyTempleAndReturn(active_member_);
             } else if (ch >= 'D' && ch <= 'F') {
                 const int slot = ch - 'D';
-                if (temple_spell_stock_[slot].gold != 0) {
+                Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
+                const uint32_t offer =
+                    rec ? mm2::events::townSvcSpellOfferGold(
+                              *rec, mm2::gameplay::SpellSchool::Cleric,
+                              temple_spell_stock_[slot].spell_index, temple_spell_stock_[slot].gold)
+                        : 0u;
+                if (offer != 0) {
                     temple_opt_ = mm2::events::TempleOption::BuySpell;
                     temple_spell_slot_ = slot;
                     applyTempleAndReturn(active_member_);
@@ -925,7 +1077,13 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
         } else if (kind_ == Kind::MageGuild) {
             if (ch >= 'A' && ch <= 'D') {
                 const int slot = ch - 'A';
-                if (guild_stock_[slot].gold != 0) {
+                Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
+                const uint32_t offer =
+                    rec ? mm2::events::townSvcSpellOfferGold(
+                              *rec, mm2::gameplay::SpellSchool::Sorcerer,
+                              guild_stock_[slot].spell_index, guild_stock_[slot].gold)
+                        : 0u;
+                if (offer != 0) {
                     guild_slot_ = slot;
                     applyGuildBuyAndReturn(active_member_);
                 }
@@ -994,6 +1152,10 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
     case Phase::Denied:
         close();
         break;
+
+    case Phase::HirelingTemple:
+        /* Digits / # / Esc handled above; A–F / G are not accepted (0x1E21C). */
+        break;
     }
 }
 
@@ -1010,6 +1172,13 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
         drawCell(c, kBandRowFirst, kOptCol, "Sorry, you must be a");
         drawCell(c, kBandRowFirst + 1, kOptCol, "member of this guild");
         drawCell(c, kBandRowFirst + 2, kOptCol, " to purchase spells.");
+        drawEscFooter(c);
+        return;
+    }
+
+    /* Hireling temple leaf @ 0x1E116: heal/healthy text only — no A–F paid menu. */
+    if (phase_ == Phase::HirelingTemple) {
+        drawHirelingTempleHeal(c);
         drawEscFooter(c);
         return;
     }
@@ -1120,12 +1289,37 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
             drawTrainingPrompt(c);
         } else if (kind_ == Kind::Temple) {
             int row = kBandRowFirst;
-            drawCell(c, row++, kOptCol, "A) Restore Cond");
-            drawCell(c, row++, kOptCol, "B) Restore Algn");
-            drawCell(c, row++, kOptCol, "C) Donations");
-            drawCell(c, row++, kOptCol, "D) Spell C");
-            drawCell(c, row++, kOptCol, "E) Spell C");
-            drawCell(c, row++, kOptCol, "F) Spell C");
+            Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
+            /* Captions A4-$56E6[0..5] @ col $13; L-N @ $1F; cost/"---" @ $23. */
+            uint32_t costs[6] = {0, 0, 0, 0, 0, 0};
+            if (rec) {
+                costs[0] = mm2::events::townSvcTempleHealCost(*rec, ctx_.map_id);
+                costs[1] = mm2::events::townSvcTempleAlignCost(*rec, ctx_.map_id);
+                costs[2] = mm2_town_temple_donate_cost(ctx_.map_id);
+            }
+            for (int i = 0; i < 3; ++i) {
+                drawCell(c, row + i, kTempleOptCol, kTownSpellMenuCaptions[i]);
+                char cost_txt[16];
+                formatCostColumn(cost_txt, sizeof(cost_txt), costs[i]);
+                drawCell(c, row + i, kCostCol, cost_txt);
+            }
+            for (int i = 0; i < MM2_TEMPLE_SPELL_SLOTS; ++i) {
+                const Mm2SpellShopSlot &s = temple_spell_stock_[i];
+                const uint32_t offer =
+                    rec ? mm2::events::townSvcSpellOfferGold(*rec, mm2::gameplay::SpellSchool::Cleric,
+                                                             s.spell_index, s.gold)
+                        : 0u;
+                drawCell(c, row + 3 + i, kTempleOptCol, kTownSpellMenuCaptions[3 + i]);
+                char id_txt[8];
+                formatSpellIdLn(id_txt, sizeof(id_txt), mm2::gameplay::SpellSchool::Cleric,
+                                s.spell_index);
+                if (id_txt[0]) {
+                    drawCell(c, row + 3 + i, kSpellIdCol, id_txt);
+                }
+                char cost_txt[16];
+                formatCostColumn(cost_txt, sizeof(cost_txt), offer);
+                drawCell(c, row + 3 + i, kCostCol, cost_txt);
+            }
         } else if (kind_ == Kind::Smith) {
             drawCell(c, kBandRowFirst, kOptCol, "A) Weapons");
             drawCell(c, kBandRowFirst + 1, kOptCol, "B) Today's Specials");
@@ -1134,15 +1328,26 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
             drawCell(c, kBandRowFirst + 4, kOptCol, "E) Sell Items");
             drawCell(c, kBandRowFirst + 5, kOptCol, "F) Identify Items");
         } else if (kind_ == Kind::MageGuild) {
-            int row = kBandRowFirst;
+            /* Captions A4-$56E6[3..6] @ col $14, rows $12..$15 (index+0xF @ 0x1E5E2);
+             * L-N @ $1F; cost @ $23 (0x1E5FA+). */
+            constexpr int kGuildRow0 = 0x12;
+            Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
             for (int i = 0; i < MM2_MAGE_GUILD_SLOTS; ++i) {
                 const Mm2SpellShopSlot &s = guild_stock_[i];
-                char line[48];
-                const char *nm = (s.spell_index < mm2::gameplay::kSpellsPerSchool)
-                                     ? mm2::gameplay::kSorcererSpells[s.spell_index].name
-                                     : "---";
-                std::snprintf(line, sizeof(line), "%c) %s", char('A' + i), nm);
-                drawCell(c, row++, kOptCol, line);
+                const uint32_t offer =
+                    rec ? mm2::events::townSvcSpellOfferGold(
+                              *rec, mm2::gameplay::SpellSchool::Sorcerer, s.spell_index, s.gold)
+                        : 0u;
+                drawCell(c, kGuildRow0 + i, kGuildOptCol, kTownSpellMenuCaptions[3 + i]);
+                char id_txt[8];
+                formatSpellIdLn(id_txt, sizeof(id_txt), mm2::gameplay::SpellSchool::Sorcerer,
+                                s.spell_index);
+                if (id_txt[0]) {
+                    drawCell(c, kGuildRow0 + i, kSpellIdCol, id_txt);
+                }
+                char cost_txt[16];
+                formatCostColumn(cost_txt, sizeof(cost_txt), offer);
+                drawCell(c, kGuildRow0 + i, kCostCol, cost_txt);
             }
         } else if (kind_ == Kind::Tavern) {
             drawCell(c, kBandRowFirst, kOptCol, "A) Feeding frenzy (all");

@@ -7,6 +7,7 @@
 // swappable UI backend (see TownServiceMenu.h); the LOGIC below is ASM-canonical.
 
 #include "mm2/gameplay/ExploreActions.h"
+#include "mm2/gameplay/SpellBook.h"
 #include "mm2_gamestate.h"
 #include "mm2_items_codec.h"
 #include "mm2_party_launch.h"
@@ -41,6 +42,25 @@ struct TownSvcHealResult {
  * (0x1D90C); on success restore HP (0x1DD48) and clear the condition byte
  * (clr.b $26). Prefer townSvcTempleHealCost() for the ASM cost builder. */
 TownSvcHealResult townSvcHeal(Mm2RosterRecord &rec, uint32_t cost);
+
+/* Roster index >= $18 (24) is a hireling slot (party table A4-$796A). */
+inline bool townSvcIsHirelingRosterIndex(int roster_index)
+{
+    return roster_index >= 0x18;
+}
+
+struct TownSvcHirelingTempleResult {
+    bool condition_cleared = false;
+    bool hp_restored = false;
+    bool align_restored = false;
+    bool any_change = false;
+};
+
+/* Temple hireling leaf @ 0x1E116: free clr.b $26, HP restore (0x1DD48), and
+ * alignment_current → alignment_base when mismatched. No gold check. Called
+ * when the outer temple loop selects a hireling (roster index >= $18 @
+ * 0x1E396). */
+TownSvcHirelingTempleResult townSvcHirelingTempleAutoHeal(Mm2RosterRecord &rec);
 
 struct TownSvcAlignResult {
     bool paid = false;
@@ -86,9 +106,13 @@ struct TownSvcTrainResult {
 };
 
 /* Level-up HP @ 0x20390: ($64DA[class]*$64EE[map])/$64E4[map] + -$7F56(+$27).
- * 0x9BCA is bash-door — do not use it here. */
+ * 0x9BCA is bash-door — do not use it here.
+ * `roster_index`: party table value (launch.roster_slots[slot]). When >= $18
+ * (hireling), training fee is forced to 0 (ASM cost builder 0x2073A). Pass -1
+ * when the caller has no party context (tests / non-hireling default). */
 TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id,
-                                       gameplay::Rng *rng = nullptr);
+                                       gameplay::Rng *rng = nullptr,
+                                       int roster_index = -1);
 
 struct TownSvcDonateResult {
     bool paid = false;
@@ -105,7 +129,8 @@ struct TownSvcDonateResult {
 TownSvcDonateResult townSvcTempleDonate(uint8_t *a4, Mm2RosterRecord &rec, int map_id,
                                         gameplay::Rng *rng = nullptr);
 
-uint32_t townSvcTrainingCost(int level, int map_id);
+/* Training fee. `roster_index` >= $18 → 0 (hirelings train free @ 0x2073A). */
+uint32_t townSvcTrainingCost(int level, int map_id, int roster_index = -1);
 uint32_t townSvcHealingCost(int level, int map_id); /* healthy: level×$6714×10 */
 
 /* Why a smith purchase was rejected (matches the engine's error captions @
@@ -226,14 +251,23 @@ struct TownSvcSpellResult {
     uint32_t cost = 0;
 };
 
+/* Mage guild (0x1D97A) / temple (0x1DAC6) menu-slot offer gold. Returns 0 when
+ * the selected character cannot buy the slot — same gate in both shops:
+ *   1) wrong school (guild: Sorcerer/Archer; temple: Cleric/Paladin),
+ *   2) spell_level (+$23 / rec.spell_level) < spell's required level,
+ *   3) spell already known (-$7F38 / spellKnownInBook),
+ * else returns list_gold (static stock decode). ASM still prints the L-N id;
+ * a zero offer paints "---" and blocks the buy leaf via cost==0. */
+uint32_t townSvcSpellOfferGold(const Mm2RosterRecord &rec, gameplay::SpellSchool shop_school,
+                               int spell_index, uint32_t list_gold);
+
 /* Mage guild / temple spell-purchase leaf (0x1D872, shared by both shops). The
- * ASM gate order is: (1) decoded slot cost != 0 (0x1D882 tst.l — an unpopulated
- * slot, not an "already known" check), (2) char condition $26 == 0 (0x1D898),
- * (3) gold check+deduct (0x1D90C == 0x1C9C0), (4) grant: raw record+0x51+(n>>3)
- * bit OR keyed only on the flat spell index `n` (0x1D8D4/0x1D8FA) — idempotent
- * if already known, and NO class-id check was found in the traced ASM, so none
- * is enforced here (a per-class restriction, if any, lives in the menu-open /
- * character-select UI, which is presentation and out of scope). */
+ * ASM gate order is: (1) decoded slot cost != 0 (0x1D882 tst.l — zero when the
+ * menu offer gate above rejected the slot), (2) char condition $26 == 0
+ * (0x1D898), (3) gold check+deduct (0x1D90C == 0x1C9C0), (4) grant: raw
+ * record+0x51+(n>>3) bit OR keyed only on the flat spell index `n`
+ * (0x1D8D4/0x1D8FA) — idempotent if already known. Class / already-known /
+ * spell-level gates live in townSvcSpellOfferGold (menu), not this leaf. */
 TownSvcSpellResult townSvcBuySpell(Mm2RosterRecord &rec, int spell_index, uint32_t cost);
 
 /* General store OP_0E 0x07 → 0xA62C: 100gp gate (0xA75E), then 0xA3AE table

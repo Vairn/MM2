@@ -2,34 +2,18 @@
 
 #include "mm2/CppStdCompat.h"
 
-#include "mm2/DataPath.h"
-
+#include "mm2/gameplay/RosterSkills.h"
 #include "mm2/gameplay/SpellBook.h"
 
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/gfx/PartyStatusFormat.h"
 #include "mm2/gfx/PlayScreenChrome.h"
-#include "mm2/runtime/PathScratch.h"
 #include "mm2/ui/AmigaCharacterUiLayout.h"
 #include "mm2/ui/RosterSkillDisplay.h"
-
-#include "mm2_image32_codec.h"
-
-#include "mm2_gfx_sheet.h"
-
-#include "mm2/platform/Platform.h"
 
 namespace mm2::gameplay {
 
 namespace {
-
-constexpr int kMinBookFramesForSheet = 12; /* LAB_4252 @ 0x422A blits book.32 frame index 11. */
-
-/** PC ``BOOK.16`` is title-menu ornament only (doc 54); sheet composite needs Amiga ``book.32``. */
-bool sheetBookCompositeReady(bool has_book, const mm2_image32_file *book)
-{
-    return has_book && book && book->frame_count >= kMinBookFramesForSheet;
-}
 
 using namespace mm2::ui::amiga_layout;
 using namespace mm2::gfx::play_layout;
@@ -103,143 +87,32 @@ void drawBorderIntegratedTextAt(gfx::ScreenCompositor &c, int row, int col, cons
     drawCellText(c, row, col, text, r, g, b);
 }
 
-void drawCellHorizRule(gfx::ScreenCompositor &c, int row, int col, int len, uint8_t r = 200, uint8_t g = 200,
-                       uint8_t b = 200)
+void copyRosterNameRaw(const Mm2RosterRecord &rec, char *out, size_t cap)
 {
-    for (int i = 0; i < len; ++i) {
-        c.drawGlyph(cellX(col + i), cellY(row), '-', r, g, b, 255);
-    }
-}
-
-void drawDoubleSectionHeader(gfx::ScreenCompositor &c, int row, int col, int width_cells, const char *label1,
-                             const char *label2, uint8_t r = 200, uint8_t g = 200, uint8_t b = 200)
-{
-    const int l1 = static_cast<int>(std::strlen(label1));
-    const int l2 = static_cast<int>(std::strlen(label2));
-    if (width_cells <= l1 + l2) {
-        drawCellText(c, row, col, label1, r, g, b);
+    if (!out || cap == 0) {
         return;
     }
-    const int pad = width_cells - l1 - l2;
-    const int left_rule = pad / 4;
-    const int right_rule = pad / 4;
-    const int mid_rule = pad - left_rule - right_rule;
-    int cx = col;
-    drawCellHorizRule(c, row, cx, left_rule, r, g, b);
-    cx += left_rule;
-    drawCellText(c, row, cx, label1, r, g, b);
-    cx += l1;
-    drawCellHorizRule(c, row, cx, mid_rule, r, g, b);
-    cx += mid_rule;
-    drawCellText(c, row, cx, label2, r, g, b);
-    cx += l2;
-    drawCellHorizRule(c, row, cx, right_rule, r, g, b);
-}
-
-/** Draw label + current (right-aligned before slash) + '/' + max — sheet / Quick Ref style. */
-void drawSlashStat(gfx::ScreenCompositor &c, int row, int label_col, int slash_col, const char *label,
-                   uint16_t current, uint16_t max, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255)
-{
-    const int label_len = static_cast<int>(std::strlen(label));
-    const int field_width = slash_col - (label_col + label_len);
-    if (field_width <= 0) {
-        return;
+    size_t n = 0;
+    while (n + 1 < cap && n < static_cast<size_t>(MM2_ROSTER_NAME_SIZE) && rec.name[n] != '\0') {
+        out[n] = rec.name[n];
+        ++n;
     }
-
-    char buf[24];
-    drawCellText(c, row, label_col, label, r, g, b);
-    gfx::formatSlashStatCurrent(current, buf, sizeof(buf), field_width);
-    drawCellText(c, row, label_col + label_len, buf, r, g, b);
-    drawCellText(c, row, slash_col, "/", r, g, b);
-    std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(max));
-    drawCellText(c, row, slash_col + 1, buf, r, g, b);
+    out[n] = '\0';
 }
 
-/** Quick Ref HP/SP pair: current right-aligned into field ending at slash_col, then '/' + max. */
-void drawQuickRefSlashPair(gfx::ScreenCompositor &c, int row, int slash_col, uint16_t current, uint16_t max)
+/** print_number @ 0x22480 with width 1 (sheet / Quick Ref field printer). */
+void drawPrintNumber(gfx::ScreenCompositor &c, int row, int col, uint32_t value, uint8_t r = 255, uint8_t g = 255,
+                     uint8_t b = 255)
 {
-    constexpr int kValWidth = 5;
     char buf[16];
-    gfx::formatSlashStatCurrent(current, buf, sizeof(buf), kValWidth);
-    drawCellText(c, row, slash_col - kValWidth, buf);
-    drawCellText(c, row, slash_col, "/");
-    std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(max));
-    drawCellText(c, row, slash_col + 1, buf);
+    gfx::formatPrintNumber(value, buf, sizeof(buf), 1);
+    drawCellText(c, row, col, buf, r, g, b);
 }
 
-void blitBookFrame(gfx::ScreenCompositor &c, const mm2_image32_file &book, int frame, int dst_x, int dst_y)
+void drawLabeledNumber(gfx::ScreenCompositor &c, int row, int col, const char *label, uint32_t value)
 {
-    if (frame < 0 || frame >= book.frame_count) {
-        return;
-    }
-    const mm2_image32_frame &f = book.frames[frame];
-    if (!f.rgba) {
-        return;
-    }
-    c.blitRgba(f.rgba, f.width, f.height, dst_x, dst_y);
-}
-
-void blitBookFramePc(gfx::ScreenCompositor &c, const mm2_gfx_sheet &book, int frame, int dst_x, int dst_y)
-{
-    const mm2_gfx_frame *f = mm2_gfx_sheet_frame(&book, frame);
-    if (!f) {
-        return;
-    }
-#if MM2_HOST_AMIGA
-    (void)c;
-    if (!f->bitmap) {
-        return;
-    }
-    platform::blitImage32(&book.img, static_cast<uint16_t>(frame), dst_x, dst_y, 0);
-#else
-    if (!f->rgba) {
-        return;
-    }
-    c.blitRgba(f->rgba, f->width, f->height, dst_x, dst_y, true, 255);
-#endif
-}
-
-/** LAB_4252 @ 0x4252: composite book.32 frames 11,11,5,5,4,3,2,1 @ kPartyPanelBlit*. */
-void blitCharacterSheetBook(gfx::ScreenCompositor &c, bool pc_mode, const mm2_gfx_sheet *book_pc,
-                            const mm2_image32_file *book)
-{
-    static const int kFrames[] = {11, 11, 5, 5, 4, 3, 2, 1};
-    int x = kPartyPanelBlitX;
-    const int y = kPartyPanelBlitY;
-
-    for (int i = 0; i < 8; ++i) {
-        int fi = kFrames[i];
-        int fw = 96;
-        int fh = 60;
-        if (pc_mode && book_pc) {
-            const mm2_gfx_frame *f = mm2_gfx_sheet_frame(book_pc, fi);
-            if (!f && book_pc->img.frame_count > 0) {
-                fi = fi % static_cast<int>(book_pc->img.frame_count);
-                f = mm2_gfx_sheet_frame(book_pc, fi);
-            }
-            if (!f) {
-                continue;
-            }
-            fw = static_cast<int>(f->width);
-            fh = static_cast<int>(f->height);
-            blitBookFramePc(c, *book_pc, fi, x, y);
-        } else if (book && book->frame_count > 0) {
-            if (fi >= book->frame_count) {
-                fi = fi % book->frame_count;
-            }
-            const mm2_image32_frame &f = book->frames[fi];
-            fw = static_cast<int>(f.width);
-            fh = static_cast<int>(f.height);
-            blitBookFrame(c, *book, fi, x, y);
-        } else {
-            continue;
-        }
-        x -= fw;
-        if (x < 0) {
-            x = kPartyPanelBlitX;
-        }
-        (void)fh;
-    }
+    drawCellText(c, row, col, label);
+    drawPrintNumber(c, row, col + static_cast<int>(std::strlen(label)), value);
 }
 
 int rosterIndexForPartySlot(const Mm2PartyLaunch &launch, int party_slot)
@@ -351,35 +224,16 @@ void drawModalEscFooter(gfx::ScreenCompositor &c)
 
 void drawSheetEscFooter(gfx::ScreenCompositor &c)
 {
-    // Retail prompt_esc @ 0x6DA6 uses row $17; sheet commands print at col $01 — keep ESC
-    // left-aligned with the three command rows above (not centered in the red frame).
-    drawBorderIntegratedTextAt(c, overlayBottomRow(), kSheetFooterCol, "( 'ESC' to go back )", 180, 180, 180);
+    /* $6DA6 prints at ($B,$17); outer-frame bottom row is $17. */
+    drawModalEscFooter(c);
 }
 
 }  // namespace
 
-bool InGameCharacterSheet::loadAssets(const char *data_dir)
+bool InGameCharacterSheet::loadAssets(const char * /*data_dir*/)
 {
-    if (has_book_) {
-        return true;
-    }
-    if (!data_dir) {
-        return false;
-    }
-
-    char *path = mm2_path_scratch_a();
-    if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir, "book.32")) {
-        return false;
-    }
-
-    mm2_image32_set_preview_opaque(0);
-    book_pc_mode_ = false;
-    if (mm2_image32_load_file(path, &book_) == MM2_IMAGE32_OK && sheetBookCompositeReady(true, &book_)) {
-        has_book_ = true;
-    } else {
-        mm2_image32_free(&book_);
-    }
-    return has_book_;
+    /* Sheet backdrop is -$7F7A outer frame only (no book.32). Kept for GameSession. */
+    return true;
 }
 
 void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
@@ -394,84 +248,67 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
 
     const Mm2RosterRecord &rec = roster.records[roster_idx];
     const char disp_char = static_cast<char>('1' + party_slot);
-    const bool hireling = roster_idx >= kRosterHirelingPageOffset;
-    const int hireling_index = hireling ? (roster_idx - kRosterHirelingPageOffset) : -1;
+    const SheetSubMode sub = session ? session->sub_mode : SheetSubMode::Normal;
 
     gfx::drawPlayModalBackdrop(c);
 
-    if (sheetBookCompositeReady(has_book_, &book_)) {
-        blitCharacterSheetBook(c, false, nullptr, &book_);
-    }
-
+    /* Header @ $39D4: Locate(1,1) slot+") "+name+sex+align; then Locate(1,$16)
+     * space + race + space + class (+ optional '+'). Row 1 is inside the outer
+     * frame (top border is row 0 via -$7F7A @ 0x422A). */
     char name[16];
-    mm2_roster_name_to_cstr(&rec, name, sizeof(name));
-    char header[80];
-    std::snprintf(header, sizeof(header), "%c) %s: %s %s %s %s%s", disp_char, name, rec.sex ? "F" : "M",
-                  alignHeaderName(rec.alignment_base), raceHeaderName(rec.race), className(rec.class_id),
+    copyRosterNameRaw(rec, name, sizeof(name));
+    char left[48];
+    std::snprintf(left, sizeof(left), "%c) %s%s%s", disp_char, name, rec.sex ? ": F " : ": M ",
+                  alignHeaderName(rec.alignment_base));
+    char right[40];
+    std::snprintf(right, sizeof(right), " %s %s%s", raceHeaderName(rec.race), className(rec.class_id),
                   (rec.class_quest_guild_mask & 0x80) ? "+" : "");
-    drawBorderIntegratedTextAt(c, kPlayOverlayBorderRow, kSheetHeaderCol, header);
+    const int header_end = kSheetHeaderRaceCol + static_cast<int>(std::strlen(right));
+    gfx::fillCellRect(c, kSheetHeaderCol, kSheetHeaderRow, header_end - kSheetHeaderCol, 1);
+    drawCellText(c, kSheetHeaderRow, kSheetHeaderCol, left);
+    drawCellText(c, kSheetHeaderRow, kSheetHeaderRaceCol, right);
 
-    const char *skill_names[6] = {};
-    const int skill_count = hireling ? mm2::ui::collectHirelingSkillNames(hireling_index, skill_names, 6)
-                                     : mm2::ui::collectRosterSkillNames(rec, skill_names, 6);
+    const uint8_t packed = rosterSkillPackedByte(rec);
 
-    char buf[48];
-    const int r0 = kSheetStatRowBase;
-    std::snprintf(buf, sizeof(buf), "Lvl=%u", rec.level);
-    drawCellText(c, r0 + 0, kSheetStatColLeft, buf);
-    std::snprintf(buf, sizeof(buf), "Mgt=%u", rec.might_base);
-    drawCellText(c, r0 + 1, kSheetStatColLeft, buf);
-    std::snprintf(buf, sizeof(buf), "Int=%u", rec.intelligence_base);
-    drawCellText(c, r0 + 2, kSheetStatColLeft, buf);
-    std::snprintf(buf, sizeof(buf), "Per=%u", rec.personality_base);
-    drawCellText(c, r0 + 3, kSheetStatColLeft, buf);
-    std::snprintf(buf, sizeof(buf), "End=%u", rec.endurance_base);
-    drawCellText(c, r0 + 4, kSheetStatColLeft, buf);
-    std::snprintf(buf, sizeof(buf), "Spd=%u", rec.speed_base);
-    drawCellText(c, r0 + 5, kSheetStatColLeft, buf);
-    std::snprintf(buf, sizeof(buf), "Acy=%u", rec.accuracy_base);
-    drawCellText(c, r0 + 6, kSheetStatColLeft, buf);
-    std::snprintf(buf, sizeof(buf), "Lck=%u", rec.luck_base);
-    drawCellText(c, r0 + 7, kSheetStatColLeft, buf);
+    /* LAB_38EA field table — width-1 numbers, no slash-column padding. */
+    drawLabeledNumber(c, 3, kSheetStatColLeft, "Lvl=", rec.level);
+    drawLabeledNumber(c, 3, kSheetStatColMid, "HP=", rec.hp_max);
+    drawLabeledNumber(c, 3, kSheetStatColSlash, "/", rec.hp_current);
+    drawLabeledNumber(c, 3, kSheetStatColRight, "Age=", rec.age);
 
-    /* Codec HP names are inverted vs the ASM: hp_max is roster +$5E (LIVE HP that
-     * combat/traps subtract @ 0x4AAA), hp_current is +$74 (the ceiling). Display
-     * current/max = ($5E, $74) so the "HP=" number tracks damage. */
-    drawSlashStat(c, r0 + 0, kSheetStatColMid, kInGameSheetSlashCol, "HP=", rec.hp_max, rec.hp_current);
-    drawSlashStat(c, r0 + 1, kSheetStatColMid, kInGameSheetSlashCol, "SP=", rec.sp_current, rec.sp_max);
-    std::snprintf(buf, sizeof(buf), "AC=%u", rec.armor_class);
-    drawCellText(c, r0 + 3, kSheetStatColMid, buf);
-    std::snprintf(buf, sizeof(buf), "SL=%u", rec.spell_level);
-    drawCellText(c, r0 + 3, kInGameSheetSlashCol + 1, buf);
+    drawLabeledNumber(c, 4, kSheetStatColLeft, "Mgt=", rec.might_base);
+    drawLabeledNumber(c, 4, kSheetStatColMid, "SP=", rec.sp_current);
+    drawLabeledNumber(c, 4, kSheetStatColSlash, "/", rec.sp_max);
+    drawLabeledNumber(c, 4, kSheetStatColRight, "Exp=", rec.experience);
 
-    std::snprintf(buf, sizeof(buf), "Thievery %u%%", mm2::ui::rosterDisplayThievery(rec));
-    drawCellText(c, r0 + 4, kSheetStatColMid, buf);
-    if (skill_count >= 1) {
-        drawCellText(c, r0 + 5, kSheetStatColMid, skill_names[0]);
-    } else {
-        drawCellText(c, r0 + 5, kSheetStatColMid, mm2::ui::kRosterEmptySkillSlot);
+    drawLabeledNumber(c, 5, kSheetStatColLeft, "Int=", rec.intelligence_base);
+
+    drawLabeledNumber(c, 6, kSheetStatColLeft, "Per=", rec.personality_base);
+    drawLabeledNumber(c, 6, kSheetStatColMid, "AC=", rec.armor_class);
+    drawLabeledNumber(c, 6, kSheetStatColSlash, "SL=", rec.spell_level);
+    drawLabeledNumber(c, 6, kSheetStatColCost, "Gold=", rec.gold);
+
+    drawLabeledNumber(c, 7, kSheetStatColLeft, "End=", rec.endurance_base);
+    drawLabeledNumber(c, 7, kSheetStatColCost, "Gems=", rec.gems);
+
+    drawLabeledNumber(c, 8, kSheetStatColLeft, "Spd=", rec.speed_base);
+    {
+        char th[24];
+        std::snprintf(th, sizeof(th), "Thievery %u%%", mm2::ui::rosterDisplayThievery(rec));
+        drawCellText(c, 8, kSheetStatColMid, th);
     }
-    if (skill_count >= 2) {
-        drawCellText(c, r0 + 6, kSheetStatColMid, skill_names[1]);
-    } else {
-        drawCellText(c, r0 + 6, kSheetStatColMid, mm2::ui::kRosterEmptySkillSlot);
-    }
+    drawLabeledNumber(c, 8, kSheetStatColCost, "Food=", rec.food);
 
-    std::snprintf(buf, sizeof(buf), "Age=%u", rec.age);
-    drawCellText(c, r0 + 0, kSheetStatColRight, buf);
-    std::snprintf(buf, sizeof(buf), "Exp=%lu", static_cast<unsigned long>(rec.experience));
-    drawCellText(c, r0 + 1, kSheetStatColRight, buf);
-    std::snprintf(buf, sizeof(buf), "Gold=%lu", static_cast<unsigned long>(rec.gold));
-    drawCellText(c, r0 + 3, kSheetStatColCost, buf);
-    std::snprintf(buf, sizeof(buf), "Gems=%u", rec.gems);
-    drawCellText(c, r0 + 4, kSheetStatColCost, buf);
-    std::snprintf(buf, sizeof(buf), "Food=%u", rec.food);
-    drawCellText(c, r0 + 5, kSheetStatColCost, buf);
-    std::snprintf(buf, sizeof(buf), "Cond= %s", conditionName(rec.condition));
-    drawCellText(c, r0 + 6, kSheetStatColRight, buf);
+    drawLabeledNumber(c, 9, kSheetStatColLeft, "Acy=", rec.accuracy_base);
+    drawCellText(c, 9, kSheetStatColMid, mm2::ui::rosterSheetSkillName(static_cast<uint8_t>(packed & 0x0F)));
 
-    const int divider_w = kPlayOverlayBorderCol + kPlayOverlayBorderW - 2 - kSheetEquipCol + 1;
-    drawDoubleSectionHeader(c, kSheetDividerRow, kSheetEquipCol, divider_w, " Equipped ", " Backpack ");
+    drawLabeledNumber(c, 10, kSheetStatColLeft, "Lck=", rec.luck_base);
+    drawCellText(c, 10, kSheetStatColMid, mm2::ui::rosterSheetSkillName(static_cast<uint8_t>((packed >> 4) & 0x0F)));
+    char cond[24];
+    std::snprintf(cond, sizeof(cond), "Cond= %s", conditionName(rec.condition));
+    drawCellText(c, 10, kSheetStatColCond, cond);
+
+    drawCellText(c, kSheetDividerRow, kSheetEquipCol, "-----(Equipped)-------(Backpack)-----", 200, 200, 200);
 
     static const char kPackLetters[] = "ABCDEF";
     char iname[16];
@@ -480,7 +317,7 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
         char eline[24];
         if (rec.equipped_id[i]) {
             itemLabel(iname, sizeof(iname), items, rec.equipped_id[i]);
-            std::snprintf(eline, sizeof(eline), "%d) %-10s", i + 1, iname);
+            std::snprintf(eline, sizeof(eline), "%d) %s", i + 1, iname);
         } else {
             std::snprintf(eline, sizeof(eline), "%d)", i + 1);
         }
@@ -488,33 +325,40 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
 
         if (rec.backpack_id[i]) {
             itemLabel(iname, sizeof(iname), items, rec.backpack_id[i]);
-            std::snprintf(eline, sizeof(eline), "%c) %-10s", kPackLetters[i], iname);
+            std::snprintf(eline, sizeof(eline), "%c) %s", kPackLetters[i], iname);
         } else {
             std::snprintf(eline, sizeof(eline), "%c)", kPackLetters[i]);
         }
         drawCellText(c, row, kSheetBackpackCol, eline, 220, 220, 220);
     }
 
-    /* book.32 @ row 18 can overlap footer rows from stale viewport — clear before commands. */
     gfx::fillCellRect(c, kSheetFooterCol, kSheetFooterRow1 - 1, kPlayOverlayBorderW - 2, 4);
 
-    if (combat_mode) {
-        drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "'V' View spell book", 180, 180, 180);
-    } else {
-        drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "'Q' Quick Ref  'C' Cast    'D' Drop", 180, 180, 180);
-        drawCellText(c, kSheetFooterRow2, kSheetFooterCol, "'E' Equip      'G' Gather  'R' Remove", 180, 180, 180);
-        drawCellText(c, kSheetFooterCmdRow3, kSheetFooterCol, "'S' Share  'T' Trade  'U' Use", 180, 180, 180);
-    }
-
-    if (session && session->status_line[0]) {
+    const bool aux_pending = session && session->cast_aux_pending;
+    const bool hide_commands =
+        sub == SheetSubMode::SpellBook || sub == SheetSubMode::CastPicker || aux_pending;
+    if (session && session->status_line[0] && sub != SheetSubMode::SpellBook &&
+        sub != SheetSubMode::CastPicker) {
         drawCellText(c, kSheetFooterRow1 - 1, kSheetFooterCol, session->status_line, 255, 255, 128);
+    }
+    if (!hide_commands) {
+        if (combat_mode) {
+            drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "'V' View spell book", 180, 180, 180);
+        } else {
+            drawCellText(c, kSheetFooterRow1, kSheetFooterCol, "'Q' Quick Ref  'C' Cast    'D' Drop   ", 180, 180,
+                         180);
+            drawCellText(c, kSheetFooterRow2, kSheetFooterCol, "'E' Equip      'G' Gather  'R' Remove ", 180, 180,
+                         180);
+            drawCellText(c, kSheetFooterCmdRow3, kSheetFooterCol, "'S' Share      'T' Trade   'U' Use    ", 180, 180,
+                         180);
+        }
     }
 
     drawSheetEscFooter(c);
 
-    if (session && session->sub_mode == SheetSubMode::SpellBook) {
+    if (sub == SheetSubMode::SpellBook) {
         renderSpellBook(c, roster, launch, party_slot);
-    } else if (session && session->sub_mode == SheetSubMode::CastPicker) {
+    } else if (sub == SheetSubMode::CastPicker) {
         renderCastPicker(c, roster, launch, party_slot, *session);
     }
 }
@@ -525,7 +369,7 @@ void InGameCharacterSheet::renderQuickRef(gfx::ScreenCompositor &c, const Mm2Ros
     gfx::drawPlayModalBackdrop(c);
 
     drawCellText(c, kQuickRefHeaderRow1, kQuickRefColIndex, "#     Name    Hit Points  Spell Points", 255, 255, 128);
-    drawCellText(c, kQuickRefHeaderRow2, kQuickRefColIndex, "# Lvl SL AC Age Gems  Food Condition", 255, 255, 128);
+    drawCellText(c, kQuickRefHeaderRow2, kQuickRefColIndex, "# Lvl SL AC Age Gems  Food Condition  ", 255, 255, 128);
 
     for (int i = 0; i < launch.party_count && i < 8; ++i) {
         const int roster_idx = rosterIndexForPartySlot(launch, i);
@@ -534,32 +378,27 @@ void InGameCharacterSheet::renderQuickRef(gfx::ScreenCompositor &c, const Mm2Ros
         }
         const Mm2RosterRecord &rec = roster.records[roster_idx];
         char name[16];
-        mm2_roster_name_to_cstr(&rec, name, sizeof(name));
+        copyRosterNameRaw(rec, name, sizeof(name));
 
         const int row1 = kQuickRefDataRow1Base + i;
-        char line1[32];
-        std::snprintf(line1, sizeof(line1), "%d)  %-11s", i + 1, name);
-        drawCellText(c, row1, kQuickRefColIndex, line1);
+        char prefix[20];
+        std::snprintf(prefix, sizeof(prefix), "%d) %s ", i + 1, name);
+        drawCellText(c, row1, kQuickRefColIndex, prefix);
         /* hp_max = live +$5E, hp_current = +$74 ceiling (codec names inverted). */
-        drawQuickRefSlashPair(c, row1, kQuickRefColHpSlash, rec.hp_max, rec.hp_current);
-        drawQuickRefSlashPair(c, row1, kQuickRefColSpSlash, rec.sp_current, rec.sp_max);
+        drawPrintNumber(c, row1, kQuickRefColIndex + static_cast<int>(std::strlen(prefix)), rec.hp_max);
+        drawLabeledNumber(c, row1, kQuickRefColHpSlash, "/", rec.hp_current);
+        drawPrintNumber(c, row1, kQuickRefColSpCurrent, rec.sp_current);
+        drawLabeledNumber(c, row1, kQuickRefColSpSlash, "/", rec.sp_max);
 
         const int row2 = kQuickRefDataRow2Base + i;
-        char line2[8];
-        std::snprintf(line2, sizeof(line2), "%d", i + 1);
-        drawCellText(c, row2, kQuickRefColIndex, line2, 200, 200, 200);
-        std::snprintf(line2, sizeof(line2), "%u", rec.level);
-        drawCellText(c, row2, kQuickRefColLvl, line2, 200, 200, 200);
-        std::snprintf(line2, sizeof(line2), "%u", rec.spell_level);
-        drawCellText(c, row2, kQuickRefColSL, line2, 200, 200, 200);
-        std::snprintf(line2, sizeof(line2), "%u", rec.armor_class);
-        drawCellText(c, row2, kQuickRefColAC, line2, 200, 200, 200);
-        std::snprintf(line2, sizeof(line2), "%u", rec.age);
-        drawCellText(c, row2, kQuickRefColAge, line2, 200, 200, 200);
-        std::snprintf(line2, sizeof(line2), "%u", rec.gems);
-        drawCellText(c, row2, kQuickRefColGems, line2, 200, 200, 200);
-        std::snprintf(line2, sizeof(line2), "%u", rec.food);
-        drawCellText(c, row2, kQuickRefColFood, line2, 200, 200, 200);
+        std::snprintf(prefix, sizeof(prefix), "%d) ", i + 1);
+        drawCellText(c, row2, kQuickRefColIndex, prefix, 200, 200, 200);
+        drawPrintNumber(c, row2, kQuickRefColIndex + static_cast<int>(std::strlen(prefix)), rec.level, 200, 200, 200);
+        drawPrintNumber(c, row2, kQuickRefColSL, rec.spell_level, 200, 200, 200);
+        drawPrintNumber(c, row2, kQuickRefColAC, rec.armor_class, 200, 200, 200);
+        drawPrintNumber(c, row2, kQuickRefColAge, rec.age, 200, 200, 200);
+        drawPrintNumber(c, row2, kQuickRefColGems, rec.gems, 200, 200, 200);
+        drawPrintNumber(c, row2, kQuickRefColFood, rec.food, 200, 200, 200);
         drawCellText(c, row2, kQuickRefColCond, conditionName(rec.condition), 200, 200, 200);
     }
 
@@ -580,33 +419,37 @@ void InGameCharacterSheet::renderSpellBook(gfx::ScreenCompositor &c, const Mm2Ro
         return;
     }
 
-    /* Spell-book popup @ 0x6732 / cast @ 0x6E08: -$7C74(x=$A, y=7, w=$1D, h=$13).
-       Grid @ 0x65FA: win-relative cursor (col,row) — title (5,1), header (1,2),
-       level digit/marks at row level+2 (0x6622), marks col = slot*2+5, glyph $17.
-       Combat/sheet 'V' is view-only — no cast prompts (doc 43 §6.1). */
-    constexpr int kWinRow = 7;
-    constexpr int kWinCol = 0x0A;
-    constexpr int kWinW = 0x1D;
-    constexpr int kWinH = 0x13;
-    constexpr int kTitleRow = kWinRow + 1;
-    constexpr int kHeaderRow = kWinRow + 2;
-    constexpr int kGridRowBase = kWinRow + 3;
-    constexpr int kLvlCol = kWinCol + 2;
-    constexpr int kMarkColBase = kWinCol + 5;
+    /* Spell-book popup @ 0x6732 / cast @ 0x6E08: -$7C74 is win_define(x1,y1,x2,y2)
+       = ($A,7,$1D,$13) → cells (10,7)-(29,19), 20×13. Grid @ 0x65FA is window-
+       relative: title (5,1), header (1,2), level digit col 2 / row level+2,
+       marks row index+3 col slot*2+5, glyph $17. */
+    constexpr int kWinX1 = 0x0A;
+    constexpr int kWinY1 = 7;
+    constexpr int kWinX2 = 0x1D;
+    constexpr int kWinY2 = 0x13;
+    constexpr int kWinW = kWinX2 - kWinX1 + 1;
+    constexpr int kWinH = kWinY2 - kWinY1 + 1;
+    constexpr int kTitleRow = kWinY1 + 1;
+    constexpr int kHeaderRow = kWinY1 + 2;
+    constexpr int kGridRowBase = kWinY1 + 3;
+    constexpr int kTitleCol = kWinX1 + 5;
+    constexpr int kHeaderCol = kWinX1 + 1;
+    constexpr int kDigitCol = kWinX1 + 2;
+    constexpr int kMarkColBase = kWinX1 + 5;
     constexpr uint8_t kKnownMark = 0x17;
 
-    c.fillRect(kWinCol * 8, kWinRow * 8, kWinW * 8, kWinH * 8, 0, 0, 128, 255);
-    c.drawConsoleBox(kWinRow, kWinCol, kWinW, kWinH, 255, 255, 0);
+    c.fillRect(kWinX1 * 8, kWinY1 * 8, kWinW * 8, kWinH * 8, 0, 0, 128, 255);
+    c.drawConsoleBox(kWinY1, kWinX1, kWinW, kWinH, 255, 255, 0);
 
-    drawBorderIntegratedText(c, kTitleRow, kWinCol, kWinW, "Spell Book", 255, 255, 128);
-    drawCellText(c, kHeaderRow, kLvlCol, "Lvl 1 2 3 4 5 6 7", 255, 255, 255);
+    drawCellText(c, kTitleRow, kTitleCol, "Spell Book", 255, 255, 128);
+    drawCellText(c, kHeaderRow, kHeaderCol, "Lvl 1 2 3 4 5 6 7", 255, 255, 255);
 
     int flat = 0;
     for (int level = 1; level <= kSpellLevels; ++level) {
         const int row = kGridRowBase + (level - 1);
         char lvl[4];
         std::snprintf(lvl, sizeof(lvl), "%d", level);
-        drawCellText(c, row, kLvlCol, lvl, 255, 255, 255);
+        drawCellText(c, row, kDigitCol, lvl, 255, 255, 255);
 
         const int slots = kSpellsPerLevel[level - 1];
         for (int slot = 0; slot < slots; ++slot) {
@@ -626,15 +469,16 @@ void InGameCharacterSheet::renderCastPicker(gfx::ScreenCompositor &c, const Mm2R
     /* Exploration cast @ 0x6E30: LAB_6622 grid then -$7E12 / 0x79EE prompts. */
     renderSpellBook(c, roster, launch, party_slot);
 
-    /* Prompt row: combat mode uses row $0F; exploration uses $15 (0x79F2/0x7A04). */
+    /* Prompt is on the full-screen window (0x6E68 swaps -$6198 before -$7E12).
+       Explore row $15 / combat $0F (0x79CA/0x79DC); Number at row+1 col $C. */
     constexpr int kPromptRow = 0x15;
-    if (session.cast_phase == CastPromptPhase::Level) {
-        drawCellText(c, kPromptRow, 0x02, " Spell Level: ", 255, 255, 255);
-    } else {
-        char buf[24];
-        std::snprintf(buf, sizeof(buf), " Spell Level: %d", session.cast_level);
-        drawCellText(c, kPromptRow, 0x02, buf, 255, 255, 255);
-        drawCellText(c, kPromptRow, 0x0C, "Number: ", 255, 255, 255);
+    gfx::fillCellRect(c, 1, kPromptRow, 38, 2);
+    drawCellText(c, kPromptRow, 0x02, " Spell Level: ", 255, 255, 255);
+    if (session.cast_phase == CastPromptPhase::Number) {
+        char digit[4];
+        std::snprintf(digit, sizeof(digit), "%d", session.cast_level);
+        drawCellText(c, kPromptRow, 0x02 + 14, digit, 255, 255, 255);
+        drawCellText(c, kPromptRow + 1, 0x0C, "Number: ", 255, 255, 255);
     }
 }
 
@@ -770,18 +614,8 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
             session.cast_spell_flat = flat;
             session.sub_mode = SheetSubMode::Normal;
             session.cast_phase = CastPromptPhase::Level;
-            /* GameSession dispatches via CombatSession::castSpellFromSheet. */
-            {
-                const SpellSchool school = spellSchoolForClass(rec->class_id);
-                const SpellMeta *table = schoolSpellTable(school);
-                if (table) {
-                    char buf[48];
-                    std::snprintf(buf, sizeof(buf), "Cast %s.", table[flat].name);
-                    setStatus(session, buf);
-                } else {
-                    setStatus(session, "Cast.");
-                }
-            }
+            /* GameSession::castSpellFromSheet fills status (fail / prompt / effect). */
+            setStatus(session, "");
             return SheetKeyOutcome::None;
         }
         return SheetKeyOutcome::None;

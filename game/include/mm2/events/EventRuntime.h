@@ -57,6 +57,9 @@ public:
     /** Set when OP_0C map transition ran; caller reloads env + 3D assets. */
     bool screenChanged() const { return screen_changed_; }
     void clearScreenChanged() { screen_changed_ = false; }
+    /** Host (spell-driven) screen transition: mirror OP_0C so the caller
+     *  reloads env + 3D assets for the new screen (Fly / recall teleports). */
+    void markScreenChanged() { screen_changed_ = true; }
 
     EventTextView &textView() { return text_; }
     const EventTextView &textView() const { return text_; }
