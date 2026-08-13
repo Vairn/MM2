@@ -7,6 +7,7 @@
 #include "imgui.h"
 #include "widgets/HexView.h"
 #include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace mm2 {
 
@@ -22,37 +23,52 @@ bool AttribSection::save(const std::string& dataDir) {
     return ok;
 }
 
-void AttribSection::draw(App& app) {
+void AttribSection::focusIndex(int index) {
+    if (index >= 0 && index < kAttribScreens) screen_ = index;
+}
+
+void AttribSection::drawWorkspace(App& app, EditorSelection& sel) {
     (void)app;
     if (!loaded) {
-        ImGui::TextDisabled("attrib.dat not loaded.");
+        ui::EmptyState("attrib.dat not loaded", "Open a folder containing attrib.dat");
         return;
     }
+    if (sel.doc == DocKind::Attrib && sel.index >= 0 && sel.index < kAttribScreens) screen_ = sel.index;
 
+    ui::BeginToolbarRow();
     ui::SetFieldWide();
     std::string cur = std::to_string(screen_) + ": " + areaLabel(screen_);
-    if (ImGui::BeginCombo("Screen", cur.c_str())) {
+    if (ImGui::BeginCombo("##screen", cur.c_str())) {
         for (int i = 0; i < kAttribScreens; ++i) {
             std::string lbl = std::to_string(i) + ": " + areaLabel(i);
-            if (ImGui::Selectable(lbl.c_str(), screen_ == i)) screen_ = i;
+            if (ImGui::Selectable(lbl.c_str(), screen_ == i)) {
+                screen_ = i;
+                sel.Select(DocKind::Attrib, EditorSelection::Kind::AttribScreen, i);
+            }
         }
         ImGui::EndCombo();
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("(env, neighbors, transition, era gate, roof decoded)");
+    ImGui::TextDisabled("env · neighbors · transition · era · roof");
+    ui::EndToolbarRow();
+    ImGui::Spacing();
+
+    if (sel.doc != DocKind::Attrib || sel.kind == EditorSelection::Kind::None)
+        sel.Select(DocKind::Attrib, EditorSelection::Kind::AttribScreen, screen_);
 
     AttribScreen& s = file_.screens[screen_];
 
     bool outside = s.isOutside();
-    ImGui::Text("Area: %s", areaLabel(screen_).c_str());
-    ImGui::SameLine();
+    std::string area = areaLabel(screen_);
+    ui::PanelHeader(area.c_str(),
+                    outside ? "overland" : envTypeName(s.envType()));
     if (outside)
         ImGui::TextDisabled("[overland +0x15 = 0x%02X]", s.raw[attrib_off::kOutsideLabel]);
     else
         ImGui::TextDisabled("[%s  level %d  complex %04X]", envTypeName(s.envType()), s.level(),
                             s.complexId());
 
-    ImGui::SeparatorText("Identity");
+    ui::SectionBlock("Identity");
     {
         ui::FormGrid grid("attrib_identity");
         if (grid.begin()) {
@@ -97,7 +113,7 @@ void AttribSection::draw(App& app) {
         }
     }
 
-    ImGui::SeparatorText("World adjacency (neighbour screens, +0x05..0x08)");
+    ui::SectionBlock("World adjacency", "neighbour screens +0x05..0x08");
     ImGui::TextDisabled("Slots (0,2) and (1,3) are opposite directions; self = no link.");
     {
         ui::FormTable form("attrib_neighbors");
@@ -126,7 +142,7 @@ void AttribSection::draw(App& app) {
         }
     }
 
-    ImGui::SeparatorText("Entry / Transition / Era");
+    ui::SectionBlock("Entry / Transition / Era");
     ImGui::Text("Entry pos (+0x0E): (%d, %d)", s.entryX(), s.entryY());
     {
         ui::FormGrid grid("attrib_transition");
@@ -173,7 +189,7 @@ void AttribSection::draw(App& app) {
     ImGui::Text("Transition -> screen %d (%s) at (%d, %d)", s.transitionScreen(),
                 areaLabel(s.transitionScreen()).c_str(), s.transitionX(), s.transitionY());
 
-    ImGui::SeparatorText("Flags (+0x1A)");
+    ui::SectionBlock("Flags", "+0x1A");
     static const char* kFlagNames[8] = {
         "bit0 (asm 0xBCCA)", "bit1", "bit2", "bit3 (asm 0xBB98)",
         "bit4 (asm 0xADE8)", "bit5 (asm 0xB006)",
@@ -189,7 +205,7 @@ void AttribSection::draw(App& app) {
         ImGui::PopID();
     });
 
-    ImGui::SeparatorText("Roof bits (16x16, +0x20..0x3F)");
+    ui::SectionBlock("Roof bits", "16x16 +0x20..0x3F");
     if (ImGui::BeginTable("attrib_roof", 16,
                           ImGuiTableFlags_SizingFixedSame | ImGuiTableFlags_NoPadOuterX)) {
         for (int y = 0; y < 16; ++y) {
@@ -212,8 +228,84 @@ void AttribSection::draw(App& app) {
         ImGui::EndTable();
     }
 
-    ImGui::SeparatorText("Raw record");
-    DrawHexView("attrib_hex", s.raw.data(), kAttribRecordSize, screen_ * kAttribRecordSize);
+    ui::SectionBlock("Door", "+0x12 strength · +0x13 trap");
+    {
+        ui::FormGrid grid("attrib_door");
+        if (grid.begin()) {
+            grid.row2(
+                "Bash strength (+0x12)",
+                [&] {
+                    ui::SetFieldShort();
+                    int v = s.raw[attrib_off::kDoorStrength];
+                    if (ImGui::InputInt("##doorstr", &v)) {
+                        s.raw[attrib_off::kDoorStrength] = static_cast<uint8_t>(v & 0xFF);
+                        dirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Materialized to A4-$5608; consumed by the bash handler at ASM 0x9C2A.");
+                },
+                "Unlock trap (+0x13)",
+                [&] {
+                    ui::SetFieldShort();
+                    int v = s.raw[attrib_off::kDoorTrap];
+                    if (ImGui::InputInt("##doortrap", &v)) {
+                        s.raw[attrib_off::kDoorTrap] = static_cast<uint8_t>(v & 0xFF);
+                        dirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Materialized to A4-$5607; consumed by the unlock handler at ASM 0x20D6E.");
+                });
+        }
+    }
+
+    if (ui::BeginHexBlock("Raw record")) {
+        DrawHexView("attrib_hex", s.raw.data(), kAttribRecordSize, screen_ * kAttribRecordSize);
+        ui::EndHexBlock();
+    }
+}
+
+void AttribSection::drawProperties(App& app, EditorSelection& sel) {
+    (void)app;
+    if (!loaded) {
+        ui::EmptyState("Not loaded", "attrib.dat missing from the data folder");
+        return;
+    }
+    if (sel.doc == DocKind::Attrib && sel.index >= 0 && sel.index < kAttribScreens) screen_ = sel.index;
+    const AttribScreen& s = file_.screens[screen_];
+    ui::SectionBlock("Screen");
+    ImGui::Text("%d: %s", screen_, areaLabel(screen_).c_str());
+    ImGui::TextDisabled("%s", s.isOutside() ? "overland" : envTypeName(s.envType()));
+    if (!s.isOutside())
+        ImGui::TextDisabled("level %d · complex %04X", s.level(), s.complexId());
+    ImGui::Text("Entry (%d, %d)", s.entryX(), s.entryY());
+    ImGui::Text("Transition → %d (%s)", s.transitionScreen(),
+                areaLabel(s.transitionScreen()).c_str());
+    ImGui::TextDisabled("Flags 0x%02X", s.raw[attrib_off::kFlags]);
+    if (s.raw[attrib_off::kFlags2] != 0)
+        ImGui::TextDisabled("Flags2 0x%02X", s.raw[attrib_off::kFlags2]);
+    ui::SectionBlock("Door");
+    ui::FormTable form("attrib_prop_door");
+    if (form.begin()) {
+        form.row("Bash strength", [&] {
+            ui::SetFieldShort();
+            int v = s.doorStrength();
+            if (ImGui::InputInt("##pdoorstr", &v)) {
+                file_.screens[screen_].raw[attrib_off::kDoorStrength] = static_cast<uint8_t>(v & 0xFF);
+                dirty = true;
+            }
+        });
+        form.row("Unlock trap", [&] {
+            ui::SetFieldShort();
+            int v = s.doorTrap();
+            if (ImGui::InputInt("##pdoortrap", &v)) {
+                file_.screens[screen_].raw[attrib_off::kDoorTrap] = static_cast<uint8_t>(v & 0xFF);
+                dirty = true;
+            }
+        });
+    }
+    ui::SectionBlock("Era gate");
+    ImGui::Text("Gate %d", s.eraGate());
+    ImGui::TextDisabled("events run when this == current era");
 }
 
 }  // namespace mm2

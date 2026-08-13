@@ -99,12 +99,12 @@ Each cell is one byte, four **2-bit** fields. **No event bit** on page 0.
 
 | bits | field | values |
 |------|-------|--------|
-| 0-1  | North | `0` open, `1` wall, `2` wall+torch, `3` door |
+| 0-1  | North | `0` open, `1` wall, `2` door, `3` wall+torch |
 | 2-3  | East  | same |
 | 4-5  | South | same |
 | 6-7  | West  | same |
 
-Example: `0x08` → E=2 (torch); `0x80` → W=2 (torch); `0xB3` → N=3 and S=3 (doors).
+Example: `0x08` → E=2 (door); `0x80` → W=2 (door); `0xB3` → N=3 and S=3 (torch).
 The 3D hood (`0x2900`) reads **only** these bytes from `A4-$55BA`.
 
 #### Page-1 collision layout (2 bits per side + darkness + event)
@@ -134,7 +134,7 @@ E=950, S=125 cells).
 on the **collision** page (`A4-$54BA`; copied to `A4-$55D6` after hood refresh).
 Verified: every tile-event triplet lands on a collision cell with `0x80` set.
 `event_tile_scanner` @`0x175E2` uses tile id `(y<<4)|x`. **Do not** treat page-0
-visual `0x80` as an event — that byte is W=2 (torch) in the visual encoding.
+visual `0x80` as an event — that byte is W=2 (door) in the visual encoding.
 
 ### Wall-piece primitives (each blits from the wall set `-$7A06`)
 
@@ -370,15 +370,15 @@ Chrome assembly per refresh (`0x52A2` body):
   `'P' Protect`; col `0xD` `Day=` + `-$79DE[era]` (3 cells); col `0x16`
   `Year=` + `-$79CA[era]` (4 cells); col `0x20` `Face=` + key char `-$79B1`.
 - `0x6150` party panel rows `0x13..0x16`, slots two-per-row at cols `1`/`0x14`:
-  `" n) "` + name (text attribute 1 via `-$7C08` when roster condition byte
-  `+$26 != 0`) + `" /"` + HP word `+$5E` (roster **HP max** field; values
-  `1..999` print via `-$7BDE` with trailing-space pad to 3 cells @
-  `0x6266..0x629A`; `>999` prints literal `"+++"` @ `0x62C4` via `pea` @
+  `" n) "` + **win_print(name until NUL)** (11-byte field, **not** space-padded to
+  11 on screen — short names shift `/`+HP left) + `" /"` + HP word `+$5E` (roster
+  **HP max** field; values `1..999` print via `-$7BDE` with trailing-space pad to
+  3 cells @ `0x6266..0x629A`; `>999` prints literal `"+++"` @ `0x62C4` via `pea` @
   `0x625A`). Combat reuses the same rule on the bottom party strip @
   `0x12910` (`cmpi #$3E8` / `bcc` → `"+++"` @ `0x129C8`). **Quick Ref**
   (`0x595C`) and the character sheet (`0x39B4`) print full numeric HP/SP with
   no `+++` cap. SP has no `+++` rule anywhere traced. Empty slots are
-  cell-cleared via `-$7F62`.
+  cell-cleared via `-$7F62` (width `$13` from slot col).
 - Right column cols `0x1C..0x26` rows `1..15`: new game → `0x5E28`
   protection/spell-status panel (h-line row 9, labels `Light`/`Magic`/`Forces`
   rows `0xA..0xC`); otherwise `0x5D54` command reference (string table

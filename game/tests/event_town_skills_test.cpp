@@ -77,6 +77,7 @@ bool runOverlayBuy(mm2::events::EventRuntime &runtime, mm2::GameStateView &gs,
     expect(!runtime.continueInput(gs, world, yes), "skill buy completes", fails);
     expect(mm2::gameplay::rosterHasSkillId(roster.records[0], c.expect_skill_id),
            "skill id at roster+0x50", fails);
+    expect(roster.records[0].gold < 50000u, "skill buy deducted gold via OP_24", fails);
     runtime.bindParty(nullptr, nullptr);
     return true;
 }
@@ -130,23 +131,48 @@ int main(int argc, char **argv)
     runInlineBuy(runtime, gs, world, roster, launch,
                  SkillCase{2, 5, 13, 'N', 10, "haggle"}, fails);
 
-    /* OP_0E overlay selectors (loc-60 reinvoke — hand-coded in EventSkillBuy). */
+    /* OP_0E overlay skill vendors — real loc 62/63 bytecode (not EventSkillBuy). */
     runOverlayBuy(runtime, gs, world, roster, launch,
                   SkillCase{2, 8, 13, 'S', 12, "sextant"}, fails);
     runOverlayBuy(runtime, gs, world, roster, launch,
                   SkillCase{3, 0, 3, 'N', 15, "Sgt. Stephen"}, fails);
     runOverlayBuy(runtime, gs, world, roster, launch,
-                  SkillCase{3, 3, 9, 'S', 8, "Spartacus"}, fails);
+                  SkillCase{3, 3, 9, 'S', 7, "Spartacus"}, fails);
     runOverlayBuy(runtime, gs, world, roster, launch,
                   SkillCase{3, 15, 3, 'N', 1, "ancient secrets"}, fails);
     runOverlayBuy(runtime, gs, world, roster, launch,
                   SkillCase{4, 3, 4, 'E', 5, "diplomacy"}, fails);
+    /* Sandsobar Sly (0,5)/W: class-gated Robber/Ninja — set class before buy. */
+    {
+        setupMember(roster, 0, 50000);
+        roster.records[0].class_id = 5; /* Robber */
+        launch.party_count = 1;
+        launch.roster_slots[0] = 0;
+        runtime.bindParty(&roster, &launch);
+        world.enterScreen(4);
+        gs.setScreenId(4);
+        runtime.enterLocation(4, gs, world);
+        gs.setCoordX(0);
+        gs.setCoordY(5);
+        gs.setFacingKey('W');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "pickpocket: scan fires", fails);
+        expect(runtime.textView().containsText("pickpocket"), "pickpocket: intro text", fails);
+        mm2::platform::KeyState yes{};
+        yes.last_ascii = 'Y';
+        runtime.continueInput(gs, world, yes);
+        yes.last_ascii = '1';
+        expect(!runtime.continueInput(gs, world, yes), "pickpocket completes", fails);
+        expect(mm2::gameplay::rosterHasSkillId(roster.records[0], 14),
+               "pickpocket skill id 14", fails);
+        expect(roster.records[0].gold < 50000u, "pickpocket deducted gold", fails);
+        runtime.bindParty(nullptr, nullptr);
+    }
     runOverlayBuy(runtime, gs, world, roster, launch,
-                  SkillCase{4, 3, 0, 'E', 14, "pickpocket"}, fails);
-    runOverlayBuy(runtime, gs, world, roster, launch,
-                  SkillCase{4, 0, 5, 'W', 6, "Lucky Spade"}, fails);
+                  SkillCase{4, 3, 0, 'E', 6, "Lucky Spade"}, fails);
 
-    /* Atlantium Hero: inline y/n + member select, then OP_0E 0x52 in same script. */
+    /* Atlantium Hero: inline y/n + member select, then OP_0E 0x52 → loc 63 qid 7.
+     * Bytecode ORs skill nibble 0x08 (not FAQ id 7). */
     {
         setupMember(roster, 0, 50000);
         launch.party_count = 1;
@@ -166,8 +192,8 @@ int main(int argc, char **argv)
         runtime.continueInput(gs, world, yes);
         yes.last_ascii = '1';
         expect(!runtime.continueInput(gs, world, yes), "Hero skill completes", fails);
-        expect(mm2::gameplay::rosterHasSkillId(roster.records[0], 7),
-               "Hero skill id 7 at roster+0x50", fails);
+        expect(mm2::gameplay::rosterHasSkillId(roster.records[0], 8),
+               "Hero skill id 8 at roster+0x50", fails);
         runtime.bindParty(nullptr, nullptr);
     }
 

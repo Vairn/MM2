@@ -36,12 +36,14 @@ runtime — it is a packed quest/calendar/combat-state blob. The editor keeps sl
 | `$15` | 1 | Luck (current) | Copied to `$70` on party load |
 | `$16` | 1 | **Thievery %** | Robber 30% / Ninja 10% at creation; +1%/level (FAQ) — see [`32-character-mechanics.md`](32-character-mechanics.md) |
 | `$17`–`$19` | 3 | **Secondary skills** | Skill bytes (Cartographer, Pathfinder, …); sellers in [`33-skills-and-hirelings.md`](33-skills-and-hirelings.md). Often 5/5/5 or 10/10/10 in saves |
-| `$1A`–`$20` | 7 | *Quest / progress flags* | Likely class-quest and world-quest bits; FAQ condition strings (`[PALADINS ONLY]`, `CORAK'S SOUL`, `ADMIT 8 PASS`) — **not ASM-mapped** |
+| `$1A`–`$1F` | 6 | *Quest / progress flags* | Likely class-quest and world-quest bits; FAQ condition strings (`[PALADINS ONLY]`, `CORAK'S SOUL`, `ADMIT 8 PASS`) — **not ASM-mapped** |
+| `$20` | 1 | **Working level** | **ASM-confirmed** mirror of `$71` (Level). Seeded to `1` at character creation (`0x272D6`); mirrored `$20→$71` (not the reverse) by `sync_party_secondary_stats` @ `0x4476`; consumed as the SP multiplier in Rest recompute @ `0x19C9A` (`mulu.w $20(a1),d0`). **Bug/drift:** stock `roster.dat` starters (Gene Eric, Cassandra, …) ship with `$20` stuck at `1` while `$71`=4+; if `0x4476` (or Rest) runs before something re-derives `$20` from `$71`, casters rest to level-1 SP. Remake fix: `gameplay::syncRosterWorkingLevelFields()` copies `$71→$20`/`$72→$23` before any Rest/secondary-stat sync — see `game/src/gameplay/Movement.{h,cpp}` and `game/src/GameSession.cpp::executeRest`/`start`. |
 | `$21` | 1 | **Age** | Starts at 18 |
-| `$22`–`$23` | 2 | *Unknown* (word, LE) | |
+| `$22` | 1 | *Unknown* (low byte of `$22` word) | |
+| `$23` | 1 | **Working spell-level / caster flag** | **ASM-confirmed** mirror of `$72` (Secondary/spell level); high byte of the `$22`/`$23` LE word. Gate check `tst.b $23(a0)` @ `0x19C34` — nonzero ⇒ character is a caster and Rest recomputes SP; mirrored `$23→$72` by `sync_party_secondary_stats` @ `0x4476`. Same creation/drift caveats as `$20` above. |
 | `$24` | 1 | **Armor Class** | Effective AC (temp, modified by equipment) |
 | `$25` | 1 | **Food** | Ration count |
-| `$26` | 1 | **Condition** | 0=Good, 1=Cursed, 2-3=Silenced, 4+=Poisoned, $80+=Dead/Stone/Eradicated |
+| `$26` | 1 | **Condition** | Living = OR bitfield (≤`$7F`): `$01` Cursed, `$02` Silenced, `$04` Diseased, `$08` Poisoned, `$10` Asleep, `$20` Paralyzed, `$40` Unconscious. Fatal whole-byte: `$81` Dead (`0x1EEC8`), `$82` Stoned (`0x1EEDA`), `$FF` Eradicated (`0x1EEEC`); any other ≥`$80` treated as eradicated. |
 | `$27` | 1 | **Endurance** (current) | Copied to `$73` on party load |
 | `$28`–`$2D` | 6 | **Equipped item ids** | 6 contiguous item ids (0 = empty). **Structure-of-Arrays** — see below |
 | `$2E`–`$33` | 6 | **Equipped charges** | per-item charge counter (Blitz3D "plus"); decremented on use @ `$138A6` |
@@ -115,7 +117,15 @@ The reference editor reads the record sequentially into six `equiped[6]`, six
 blob (same size as the character section — stored in roster slots 48–63 in the
 editor). Reload path @ **`0x86F6`** re-parses when the session timer fires.
 Tail byte indices used by the editor mirror the memcpy order in that routine; see
-`editor/src/core/RosterGlobalTail.h`.
+`editor/src/core/RosterGlobalTail.h`. C codec accessors:
+`EXTRACTED/decomp/mm2_roster_codec.h` (`MM2_ROSTER_TAIL_*`,
+`mm2_roster_tail_u8/u16`). **Party selection persists here**: 8×u16 roster
+indices @ tail `+$028` (→ `-$796A`, `0xFFFF` = empty; stream loop @ `0x8302`)
+then u16 party size @ `+$038` (→ `-$795A` @ `0x836A`); then after era/subday
+(`+$03A`/`+$03C`) three words @ `0x83D0..0x8414`: OP0E FD ctr (`+$03E` →
+`-$7972`), **battles won** (`+$040` → `-$7970`, addq @ `0x1215A`), **battles
+lost** (`+$042` → `-$796E`, addq @ `0x11664`); the event/quest bank
+(hireling A..X availability) @ `+$7CE` (→ `-$798B`, write @ `0x84A2`).
 
 ### Direct global bytes (also event-script targets)
 
@@ -126,6 +136,9 @@ Tail byte indices used by the editor mirror the memcpy order in that routine; se
 | `-$79B6` | `era` | Timeline index 0..9 |
 | `-$79B5` | `era_low` | Low byte of era word; **g=0x84** for event gating |
 | `-$79B4` | `time_subday` | 256 ticks = 1 day |
+| `-$7972` | `op0e_fd_ctr` | word; addq @ `0x14112` |
+| `-$7970` | **battles won** | word; victory `0x1215A`; endgame print @ `0x1536A` |
+| `-$796E` | **battles lost** | word; flee/wipe `0x11664`; endgame print @ `0x1538A` |
 | `-$79AB` | `light_factor` | Light / Lasting Light; darkness drain |
 | `-$79AA` | `endgame_score_a` | Level+10 on class-quest finish |
 | `-$79A9` | `endgame_score_b` | Level+20 on class-quest finish |
@@ -143,7 +156,7 @@ Tail byte indices used by the editor mirror the memcpy order in that routine; se
 | `-$798E` | Dawn's Mist / resort gate | **g=0x3C** |
 | `-$798D` | `period_flag_b` | **g=0x3D** — calendar period flag B (day 60/120/180 reset), **not** a dungeon gate |
 | `-$798C` | `period_flag_a` | **g=0x3E** — calendar period flag A (day 60/120/180 reset) |
-| `-$798B` + n | event bank | **g=0x00..0x17** — 24-byte general quest/event bank |
+| `-$798B` + n | event bank | **g=0x00..0x17** — 24-byte general quest/event bank. Doubles as **hireling A..X availability**: the roster/party UI gates hireling-page entries (page offset `$18`) on `bank[letter] != 0` (`tst.b (-$798B,d0)` @ `0x586`, `0x7B6`, `0xB68`, `0xD1C`, `0x292B2`). Persisted in the tail @ `+$7CE` |
 | `-$7995` + n | second gate bank | **g=0x80..0x83** (4 bytes) |
 | `-$796C` | move counter | |
 | `-$796B` | encounter mode | |
@@ -233,6 +246,17 @@ spell-effect step timers (decrement one-per-step; a quest counter would not).
   $E (race), $F (class), $71 (level), $5E (HP max), $74 (HP current).
 - **Class branch** (`$7B36`): Checks `$F == 2` (Archer) or `$F == 4` (Sorcerer) for
   INT-based spell point calculation; else PER-based (Paladin/Cleric).
+- **Rest SP recompute** (`$19C30`–`$19CA0`): `tst.b $23(a0)` gates on working
+  spell-level; class branch as above picks INT (`$11`) or PER (`$12`); bonus from
+  `jsr -$7F56(a4)` (leaf `$4442`, table `A4-$7486`); `(bonus+3) * $20(a1)` →
+  `$5A` (SP current) then copied to `$58` (SP max). See §"Working level" fields above.
+- **Secondary-stat sync** (`sync_party_secondary_stats` @ `$4476`): mirrors
+  `$10→$6B`, `$11→$6C`, `$12→$6D`, `$13→$6E`, `$14→$6F`, and — the fields that
+  matter for Rest — **`$20→$71`** (working level → canonical level) and
+  **`$23→$72`** (working spell-level → canonical spell-level). Direction is
+  working-to-canonical, so a stale `$20`/`$23` from disk can clobber an
+  otherwise-correct `$71`/`$72` if this runs before the working copies are
+  refreshed.
 - **Party setup** (`$520E`–`$528C`): Copies 8 roster indices from A4-$8696 → A4-$A1A2,
   then iterates characters copying `$15`→`$70` and `$27`→`$73`.
 - **Roster load** (`$3290`): `Read` **$1860** bytes into A4-$2A3E; per-record word
@@ -249,7 +273,9 @@ Examples to trace in `event.dat` / `exec_selector` conditions:
 
 - Paladin-only squares, Corak soul token, eight-passenger ferry, Nordon goblet state
 - Byte **`$79`** (class-quest / guild mask) is **ASM-confirmed** for mage-guild gate;
-  bytes **`$1A`–`$20`** remain candidates for per-quest progress
+  bytes **`$1A`–`$1F`** remain candidates for per-quest progress. Byte **`$20`**
+  is **ASM-confirmed as "working level"** (see Record Layout above) — it is
+  **not** a quest flag.
 
 See [`06-event-dat-format.md`](06-event-dat-format.md) § FAQ event validation.
 

@@ -16,6 +16,7 @@ from attrib_codec import AttribRecord  # noqa: E402
 from decode_event import (  # noqa: E402
     read_header,
     decode_location,
+    decode_strings,
     split_script_segments,
     parse_segment_stream_nodes,
     decompile_op,
@@ -83,34 +84,44 @@ def string_looks_like_bytecode(seg: bytes) -> bool:
     return False
 
 
-def location_string_raw(blob: bytes, str_table_offset: int, idx: int) -> bytes | None:
-    """FF-delimited string-bank record @ string_table_offset (eventVmLocationStringRaw)."""
-    pos = str_table_offset
-    cur = 0
+def overlay_string_anchor(blob: bytes) -> int:
+    """LE u16 at work_buf[0..1] — ASM queued dispatch @ 0x176C2 rebuilds this."""
+    if len(blob) < 2:
+        return 0
+    return int(blob[0]) | (int(blob[1]) << 8)
+
+
+def pool_seek_segments(blob: bytes, start: int = 2) -> list[bytes]:
+    """FF-delimited pool from parse_pos (ASM pool_seek @ 0x17262).
+
+    Default-range overlays memcpy the whole location raw into work_buf, then
+    pool_seek from offset 2 with QUEUED_EVENT_ID. Do NOT index the codec string
+    table — loc 60 embeds bytecode in early pool slots and prose after the LE
+    string anchor (Corak/Nordon/Nordonna/Feldecarb).
+    """
+    segs: list[bytes] = []
+    pos = start
     while pos < len(blob):
-        start = pos
+        seg_start = pos
         while pos < len(blob) and blob[pos] != 0xFF:
             pos += 1
-        if cur == idx:
-            return blob[start:pos]
-        cur += 1
+        segs.append(blob[seg_start:pos])
+        if pos >= len(blob):
+            break
         pos += 1
-    return None
+    return segs
 
 
-def decode_overlay_slot(blob: bytes, loc: dict, index: int, items, loc_id: int) -> dict | None:
+def decode_overlay_slot(
+    blob: bytes, strings: list[str], index: int, items, loc_id: int
+) -> dict | None:
     """Decode one default-range overlay slot for JS runDefaultRangeOverlay."""
-    script_len = loc.get("script_length", 0)
-    if script_len > 0:
-        script = blob[loc["script_offset"] : loc["string_table_offset"]]
-        segments = split_script_segments(script)
-        if index < 0 or index >= len(segments):
-            return None
-        seg = segments[index]
-    else:
-        seg = location_string_raw(blob, loc["string_table_offset"], index)
-        if seg is None:
-            return None
+    segments = pool_seek_segments(blob, 2)
+    if index < 0 or index >= len(segments):
+        return None
+    seg = segments[index]
+    if not seg:
+        return None
 
     if looks_like_text_record(seg):
         text = seg.decode("ascii", errors="replace").replace("@", "\n")
@@ -122,7 +133,7 @@ def decode_overlay_slot(blob: bytes, loc: dict, index: int, items, loc_id: int) 
         for node in parse_segment_stream_nodes(seg):
             op = int(node["op"])
             args = [int(x) for x in node["args"]]
-            line = decompile_op(op, args, loc["strings"], items, loc_id)
+            line = decompile_op(op, args, strings, items, loc_id)
             pseudo.append(line)
             nodes.append({"op": op, "args": args, "pseudo": line})
         return {"kind": "bytecode", "nodes": nodes, "pseudo": pseudo}
@@ -145,15 +156,18 @@ def build_overlays_payload(event_data: bytes, event_header: list, items) -> dict
         off, length = event_header[cat]
         blob = event_data[off : off + length]
         loc = decode_location(blob, cat)
-        strings = loc["strings"]
+        # Prefer ASM LE string anchor over codec string_table_offset — the latter
+        # can mis-parse when 00 00 00 appears inside early pool bytecode (loc 60).
+        anchor = overlay_string_anchor(blob)
+        strings = (
+            decode_strings(blob, anchor)
+            if anchor < len(blob)
+            else loc["strings"]
+        )
+        segments = pool_seek_segments(blob, 2)
         slots: dict = {}
-        # Probe slots 0..max(strings, script segments)-1
-        max_slot = len(strings)
-        if loc.get("script_length", 0) > 0:
-            script = blob[loc["script_offset"] : loc["string_table_offset"]]
-            max_slot = max(max_slot, len(split_script_segments(script)))
-        for idx in range(max_slot):
-            slot = decode_overlay_slot(blob, loc, idx, items, cat)
+        for idx in range(len(segments)):
+            slot = decode_overlay_slot(blob, strings, idx, items, cat)
             if slot:
                 slots[str(idx)] = slot
         overlays[str(cat)] = {
@@ -191,6 +205,38 @@ def load_item_gold(data_dir: Path) -> list[int]:
                 rec = raw[i * rec_size : (i + 1) * rec_size]
                 gold.append(decode_record(rec).gold)
             return gold
+    return []
+
+
+def load_item_damage(data_dir: Path) -> list[int]:
+    """items.dat damage byte — combat weapon die rebuild @ 0xF6E0."""
+    from decode_items import decode_record
+
+    for candidate in (data_dir / "items.dat", ROOT / "items.dat", ROOT / "EXTRACTED" / "items.dat"):
+        if candidate.is_file():
+            raw = candidate.read_bytes()
+            rec_size = 0x14
+            out = []
+            for i in range(len(raw) // rec_size):
+                rec = raw[i * rec_size : (i + 1) * rec_size]
+                out.append(decode_record(rec).damage)
+            return out
+    return []
+
+
+def load_item_effect(data_dir: Path) -> list[int]:
+    """items.dat effect_byte — CombatSession::applyItemUse charge→spell/stat path."""
+    from decode_items import decode_record
+
+    for candidate in (data_dir / "items.dat", ROOT / "items.dat", ROOT / "EXTRACTED" / "items.dat"):
+        if candidate.is_file():
+            raw = candidate.read_bytes()
+            rec_size = 0x14
+            out = []
+            for i in range(len(raw) // rec_size):
+                rec = raw[i * rec_size : (i + 1) * rec_size]
+                out.append(decode_record(rec).effect_byte)
+            return out
     return []
 
 
@@ -306,6 +352,8 @@ def collect_sprites(data_dir: Path) -> tuple[dict, dict[str, str]]:
         "monsters": load_monster_records(data_dir),
         "items": try_load_default_items(),
         "itemsGold": load_item_gold(data_dir),
+        "itemsDamage": load_item_damage(data_dir),
+        "itemsEffect": load_item_effect(data_dir),
         "defaultParty": load_default_party(data_dir),
         "terrainLookup": load_terrain_lookup(),
         "cartoTile": list(K_CARTO_TILE),
@@ -713,9 +761,12 @@ def build_maps_payload(attrib: list[bytes], screens: list[tuple[bytes, bytes]], 
                     "maxMonsters": a[0x0B],
                     "minMonsters": a[0x0C],
                     "retreat": a[0x0D],
+                    "bribeDemand": a[0x11],  # attrib+0x11 → A4-$5609 / bribe gate
                 },
                 "doorStrength": a[0x12],
                 "doorTrap": a[0x13],
+                "eraGate": a[0x0F],  # attrib+0x0F — scanner gate vs A4-$79B5
+                "flags1A": a[0x1A],  # attrib flags → A4-$5600; bit7 = map-wide dark
                 "sector": a[0x15],
                 # attrib +0x20..+0x3F: 256 roof bits → sky.32 frame 1 (ceiling) vs 0 (open)
                 "roof": list(a[0x20:0x40]),
@@ -775,9 +826,12 @@ def export_map_walker(
         overlays = build_overlays_payload(event_data, event_header, items)
     write_embedded_bundle(out_dir, maps, manifest, sprites, overlays)
 
-    if split:
+    if (split):
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "maps.json").write_text(json.dumps(maps, separators=(",", ":")), encoding="utf-8")
+        (out_dir / "overlays.json").write_text(
+            json.dumps(overlays, separators=(",", ":")), encoding="utf-8"
+        )
         sprite_root = out_dir / "sprites"
         for cache_key, data_url in sprites.items():
             key, fi = cache_key.rsplit(":", 1)
@@ -795,7 +849,7 @@ def export_map_walker(
         (out_dir / "sprites.json").write_text(
             json.dumps(split_manifest, separators=(",", ":")), encoding="utf-8"
         )
-        print(f"  split: maps.json + sprites.json + {len(sprites)} PNGs")
+        print(f"  split: maps.json + overlays.json + sprites.json + {len(sprites)} PNGs")
 
     if not skip_pc:
         export_pc_walker_gfx(out_dir, data, pc_gog)

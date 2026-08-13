@@ -77,7 +77,7 @@
 
         <section class="panel partyPanel">
           <h2>Party (roster.dat slots 0–5)</h2>
-          <p class="hint">Town services: pick A/B/C then member 1–6. Gold is per-character (record+$66).</p>
+          <p class="hint">Town shops: intro Y/N → inverse title + Gold= + G/# chrome; digits 1–8 switch the active buyer (no separate pick screen). Gold is per-character (record+$66).</p>
           <div class="partyStateWrap">
             <pre id="partyState"></pre>
           </div>
@@ -115,7 +115,7 @@
             <li><strong>S</strong> / <strong>↓</strong> — step backward</li>
             <li><strong>A</strong> / <strong>←</strong> — turn left</li>
             <li><strong>D</strong> / <strong>→</strong> — turn right</li>
-            <li>Town events: inn rest, tavern meals, mage guild spells, guild enroll (0x0D), portals (0x64)</li>
+            <li>Town events: inn rest, tavern meals, mage guild spells, guild enroll (0x0D), circus (0x64)</li>
             <li><strong>Q</strong> — Quick Ref (party roster summary)</li>
             <li><strong>1</strong>–<strong>6</strong> — view character sheet</li>
             <li><strong>Esc</strong> — close Quick Ref / character sheet</li>
@@ -126,6 +126,9 @@
       </div>
     </main>
   </div>
-  <script type="module" src="walker.js"></script>
+  <script type="module">
+    import { BUILD_ID } from "./version.js";
+    await import(`./walker.js?v=${BUILD_ID}`);
+  </script>
 </body>
 </html>

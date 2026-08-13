@@ -6,6 +6,8 @@
 #include "mm2/gfx/PartyStatusFormat.h"
 #include "mm2/gfx/mm2_font8x8.h"
 
+#include "mm2_roster_codec.h"
+
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
 #endif
@@ -32,7 +34,12 @@ void fillCellRect(ScreenCompositor &c, int col, int row, int width_cells, int he
     if (width_cells <= 0 || height_cells <= 0) {
         return;
     }
+#if MM2_HOST_AMIGA
+    /* Pen 0 = black bitplane clear (0x42DC). Avoid RGB→pen lookup on every cell wipe. */
+    c.fillRectPen(col * 8, row * 8, width_cells * 8, height_cells * 8, 0);
+#else
     c.fillRect(col * 8, row * 8, width_cells * 8, height_cells * 8, 0, 0, 0);
+#endif
 }
 
 namespace {
@@ -100,6 +107,24 @@ void textAt(ScreenCompositor &c, int col, int row, const char *text, uint8_t r =
         x += 8;
     }
 #endif
+}
+
+/** -$7C08(1) → SetDrMd 5 (JAM2+INVERSVID): A-pen fills the cell, glyph bits in black. */
+void textAtInverse(ScreenCompositor &c, int col, int row, const char *text)
+{
+    if (!text) {
+        return;
+    }
+    int x = col * 8;
+    const int y = row * 8;
+    for (const char *p = text; *p; ++p) {
+        const unsigned uch = static_cast<unsigned char>(*p);
+        c.fillRect(x, y, 8, 8, 255, 255, 255, 255);
+        if (uch < MM2_FONT8X8_GLYPHS) {
+            c.drawGlyph(x, y, static_cast<uint8_t>(uch), 0, 0, 0);
+        }
+        x += 8;
+    }
 }
 
 void glyphTextAt(ScreenCompositor &c, int col, int row, const char *text)
@@ -173,9 +198,11 @@ void playScreenInteriorFills(ScreenCompositor &c)
 
 void drawPlayModalBackdrop(ScreenCompositor &c)
 {
+    /* Quick Ref $595C / sheet $398C: full black, then -$7F7A outer frame @ 0x422A
+     * (cols 0..39, rows 0..23). Not console_box (-$7F62 / glyphs $0E..$15). */
     c.fillRect(0, 0, kScreenW, kScreenH, 0, 0, 0);
-    c.drawConsoleBox(kPlayOverlayBorderRow, kPlayOverlayBorderCol, kPlayOverlayBorderW,
-                     kPlayOverlayBorderH, kBorderR, kBorderG, kBorderB);
+    outerFrame(c);
+    /* clear_rect_preset(3) @ $5312: interior (1,1)-(38,22) — keep frame cells. */
     fillCellRect(c, kPlayOverlayBorderCol + 1, kPlayOverlayBorderRow + 1, kPlayOverlayBorderW - 2,
                  kPlayOverlayBorderH - 2);
 }
@@ -199,6 +226,11 @@ void drawPlayScreenChromeStatic(ScreenCompositor &c)
 void drawPlayScreenChrome(ScreenCompositor &c)
 {
     drawPlayScreenChromeStatic(c);
+}
+
+void drawPlayOuterFrame(ScreenCompositor &c)
+{
+    outerFrame(c);
 }
 
 void drawPlayViewportDivider(ScreenCompositor &c)
@@ -242,14 +274,16 @@ void drawPlayStatusBar(ScreenCompositor &c, int day, int year, char facing_key, 
     textAt(c, 1, row, new_game ? "'O' Options" : "'P' Protect");
 
     char buf[16];
-    /* col 13: "Day=" + day[era] (-$79DE), width 3 (0x630C..0x6332). */
+    /* col 13: "Day=" + print_number(day, width 3, pad ' ') + putchar ' '
+     * (0x630C..0x633C). -$7BDE left-pads; the extra space is after the field. */
     textAt(c, 0x0D, row, "Day=");
-    std::snprintf(buf, sizeof(buf), "%d", day);
+    formatPrintNumber(static_cast<uint32_t>(day < 0 ? 0 : day), buf, sizeof(buf), 3, ' ');
     textAt(c, 0x0D + 4, row, buf);
+    textAt(c, 0x0D + 4 + 3, row, " ");
 
-    /* col 22: "Year=" + year[era] (-$79CA), width 4 (0x634C..0x6372). */
+    /* col 22: "Year=" + print_number(year, width 4, pad ' ') (0x634C..0x6372). */
     textAt(c, 0x16, row, "Year=");
-    std::snprintf(buf, sizeof(buf), "%d", year);
+    formatPrintNumber(static_cast<uint32_t>(year < 0 ? 0 : year), buf, sizeof(buf), 4, ' ');
     textAt(c, 0x16 + 5, row, buf);
 
     /* col 32: "Face=" + movement key char -$79B1 (0x6382..0x6398). */
@@ -284,27 +318,40 @@ void drawPlayPartyPanel(ScreenCompositor &c, const PlayPartySlot slots[8])
         char line[48];
         formatPartyStatusLine(line, sizeof(line), i, s.name, static_cast<uint16_t>(s.hp), prefix_style);
 
-        constexpr int kPrefixLen = 4; /* " N) " @ 0x6150 */
+        /* 0x6150 / 0x12848: putchar prefix (` n)` or check+digit+`)`), then
+         * -$7C08(1) when +$26 != 0 → SetDrMd 5 (JAM2+INVERSVID @ 0x221EC).
+         * Inverse covers the spaces around the name; '/' is after attr clear. */
+        constexpr int kPrefixLen = 3; /* " n)" / "\x17n)" — space after ')' is inverted */
+        const char *after_prefix = line + kPrefixLen;
+        const char *slash = std::strstr(after_prefix, " /");
         char prefix[kPrefixLen + 1];
-        char name_field[kPartyNameFieldWidth + 1];
+        char name_field[MM2_ROSTER_NAME_SIZE + 4];
         char tail[16];
         std::memcpy(prefix, line, kPrefixLen);
         prefix[kPrefixLen] = '\0';
-        std::memcpy(name_field, line + kPrefixLen, kPartyNameFieldWidth);
-        name_field[kPartyNameFieldWidth] = '\0';
-        std::snprintf(tail, sizeof(tail), "%s", line + kPrefixLen + kPartyNameFieldWidth);
+        if (slash) {
+            const size_t name_len = static_cast<size_t>(slash - after_prefix);
+            const size_t copy_n =
+                name_len < sizeof(name_field) - 2 ? name_len : sizeof(name_field) - 2;
+            std::memcpy(name_field, after_prefix, copy_n);
+            name_field[copy_n] = ' ';
+            name_field[copy_n + 1] = '\0';
+            std::snprintf(tail, sizeof(tail), "%s", slash + 1); /* skip the space; inverse ate it */
+        } else {
+            name_field[0] = '\0';
+            std::snprintf(tail, sizeof(tail), "%s", after_prefix);
+        }
 
         textAt(c, col, row, prefix);
 
-        /* Text attribute 1 (-$7C08 @ 0x623A) when condition byte +$26 != 0.
-         * GAP: exact palette untraced (0x220BE); rendered as red text. */
+        const int name_col = col + kPrefixLen;
         if (s.bad_condition) {
-            textAt(c, col + kPrefixLen, row, name_field, 255, 80, 80);
+            textAtInverse(c, name_col, row, name_field);
         } else {
-            textAt(c, col + kPrefixLen, row, name_field);
+            textAt(c, name_col, row, name_field);
         }
 
-        textAt(c, col + kPrefixLen + kPartyNameFieldWidth, row, tail);
+        textAt(c, name_col + static_cast<int>(std::strlen(name_field)), row, tail);
     }
 }
 
@@ -313,19 +360,36 @@ void drawPlayRightColumn(ScreenCompositor &c, PlayRightPanel panel, const PlayPr
     if (panel == PlayRightPanel::Protect) {
         /* Protection panel @ 0x5E28 (via -$7EAE): clear (28,1)-(38,15),
          * h-line row 9 cols 27..39, labels col 28 rows 10..12. */
+        fillCellRect(c, 0x1C, 1, 11, 15);
         hLine(c, 0x1B, 0x27, 0x09);
         textAt(c, 0x1C, 0x0A, "Light     )");
         textAt(c, 0x1C, 0x0B, "Magic     %");
         textAt(c, 0x1C, 0x0C, "Forces    %");
 
         if (protect) {
+            /* 0x5EB8..0x5F86: start col $24 (Light) / $25 (Magic/Forces), then
+             * col-- if value>=10 and again if >=100. Light putchar '(' first
+             * (0x5EE4), then -$7BDE(value, width 1, pad space). */
+            const auto valueCol = [](int base, unsigned v) {
+                int col = base;
+                if (v >= 10u) {
+                    --col;
+                }
+                if (v >= 100u) {
+                    --col;
+                }
+                return col;
+            };
             char buf[8];
-            std::snprintf(buf, sizeof(buf), "%u", protect->light);
-            textAt(c, 0x25, 0x0A, buf);
-            std::snprintf(buf, sizeof(buf), "%u", protect->magic);
-            textAt(c, 0x25, 0x0B, buf);
-            std::snprintf(buf, sizeof(buf), "%u", protect->forces);
-            textAt(c, 0x25, 0x0C, buf);
+            const int light_col = valueCol(0x24, protect->light);
+            textAt(c, light_col, 0x0A, "(");
+            formatPrintNumber(protect->light, buf, sizeof(buf), 1, ' ');
+            textAt(c, light_col + 1, 0x0A, buf);
+
+            formatPrintNumber(protect->magic, buf, sizeof(buf), 1, ' ');
+            textAt(c, valueCol(0x25, protect->magic), 0x0B, buf);
+            formatPrintNumber(protect->forces, buf, sizeof(buf), 1, ' ');
+            textAt(c, valueCol(0x25, protect->forces), 0x0C, buf);
 
             int row = 0x0D;
             if (protect->levitate) {
@@ -343,10 +407,8 @@ void drawPlayRightColumn(ScreenCompositor &c, PlayRightPanel panel, const PlayPr
         return;
     }
 
-    /* Command reference @ 0x5D54: strings from the pointer table at
-     * A4-$741A printed at col 0x1C rows 1..15 (0x5DBA..0x5DF0). Control
-     * chars 0x18/0x19/0x1A/0x1B are the font arrow glyphs and 0x05 the
-     * horizontal-rule glyph. */
+    /* Command reference @ 0x5D54: clear right column then print A4-$741A strings. */
+    fillCellRect(c, 0x1C, 1, 11, 15);
     static const char *kCommandRef[15] = {
         "  OPTIONS  ",
         "\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05",

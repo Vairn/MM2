@@ -47,7 +47,14 @@ python wiki/scripts/publish-github-wiki.py --dry-run
 **Actions → Sync GitHub Wiki → Run workflow**
 
 - Default: docs-only (`skip_gallery=true`) — works without game binaries in CI.
-- For a full gallery sync, run `export-github-wiki.py` locally (with assets) then `publish-github-wiki.py`.
+  `publish-github-wiki.py` **preserves** existing Amiga gallery pages/images on the live
+  wiki so a docs-only sync cannot wipe Monster-Sprites / Monsters / etc.
+- For a full gallery sync (or to restore a wiped gallery), run locally with game assets:
+
+```powershell
+python wiki/scripts/export-github-wiki.py
+python wiki/scripts/publish-github-wiki.py --no-export
+```
 
 Output is written to `wiki/gh-wiki/` (gitignored) and pushed to the separate **`MM2.wiki`** git repository that backs the GitHub Wiki UI.
 

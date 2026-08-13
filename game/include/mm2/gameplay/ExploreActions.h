@@ -30,9 +30,9 @@ enum class ObstructionMsg : uint8_t {
 const char *obstructionMessage(ObstructionMsg msg);
 
 /* rng(min,max) @ 0x22BC6 (thunk -$7BB4): returns a value in [min,max] inclusive
- * (min + raw*range/0x8000, range=max-min+1). The raw entropy source 0x24048 is
- * a seeded Amiga PRNG whose exact sequence the port does not replicate yet; the
- * (min,max)-inclusive contract IS faithful. Deterministic seed for tests. */
+ * (min + raw*span/0x8000, span=max-min+1). Entropy is 0x24048: state at
+ * A4-$60E2 updated as state = state * 0x41C64E6D + 0x3039, then (state>>16)&0x7FFF.
+ * Deterministic seed for tests; GameSession reseeds on play start. */
 class Rng {
 public:
     Rng() : state_(0x1234ABCDu) {}
@@ -41,8 +41,13 @@ public:
     /* Inclusive [lo,hi]; matches 0x22BC6 (hi<=lo returns lo). */
     int range(int lo, int hi);
 
+    /** Replace PRNG state (Amiga 0x2407C seed write to A4-$60E2). */
+    void reseed(uint32_t seed) { state_ = seed ? seed : 1u; }
+
+    uint32_t state() const { return state_; }
+
 private:
-    uint16_t raw15();  /* 0..0x7FFF, the 0x24048 analog return range */
+    uint16_t raw15();  /* 0..0x7FFF from 0x24048 */
     uint32_t state_;
 };
 

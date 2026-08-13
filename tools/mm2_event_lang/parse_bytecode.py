@@ -23,6 +23,7 @@ def classify_record_kind(loc: dict) -> RecordKind:
         "string_bank": RecordKind.STRING_BANK,
         "mixed_pool": RecordKind.MIXED_POOL,
         "castle_blob": RecordKind.CASTLE_BLOB,
+        "overlay_bank": RecordKind.OVERLAY_BANK,
     }
     return mapping.get(kind, RecordKind.UNKNOWN)
 

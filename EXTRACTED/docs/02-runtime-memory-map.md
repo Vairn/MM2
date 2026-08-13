@@ -10,7 +10,7 @@
 - `A4-$861A`: previous screen/mode id
 - `A4-$8610`, `A4-$860F`: map/player coordinates
 - `A4-$864F`: last input key
-- `A4-$864E`: new-game flag
+- `A4-$864E`: right-panel mode (`0`=OPTIONS, `1`=PROTECT, `2`=combat) — **not** a new-game/load flag; see [`14-game-state-struct.md`](14-game-state-struct.md)
 - `A4-$8617`: first-time/modal control flag
 - `A4-$861B`: busy/modal status
 - `A4-$86B0`: exit request (ESC path)
@@ -23,7 +23,7 @@
 - `A4-$79B6`: current era/timeline index (0..9)
 - `A4-$79DE[era]`: day-of-year counter (1..180), 10-word array
 - `A4-$79CA[era]`: year counter (capped at 999 → year 1000), 10-word array
-- `A4-$79B1`: month/sign byte for date display
+- `A4-$79B1`: **`last_move_key`** — last movement/facing key (`'N'/'S'/'E'/'W'`), **not** a month/sign display byte (see the correction note in [`14-game-state-struct.md`](14-game-state-struct.md) §Calendar)
 
 ## Engine Thunks (`JSR -$xxxx(A4)`)
 

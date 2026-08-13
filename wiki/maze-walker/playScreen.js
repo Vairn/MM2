@@ -57,7 +57,7 @@ function consoleBox(ctx, col, row, w, h) {
   }
 }
 
-export const PARTY_NAME_WIDTH = 11;
+export const PARTY_NAME_MAX = 11;
 const PARTY_PREFIX_LEN = 4; /* " N) " @ 0x6150 */
 const PARTY_SLOT_ROW_BASE = 0x13;
 const PARTY_SLOT_COL_LEFT = 0x01;
@@ -67,11 +67,15 @@ const PARTY_SLOT_CLEAR_WIDTH = 0x13;
 /** @returns {string} format_party_status_line @ PartyStatusFormat.cpp / 0x6150 */
 export function formatPartyStatusLine(slotIndex, name, hp) {
   const slotDigit = slotIndex >= 0 && slotIndex < 8 ? slotIndex + 1 : 1;
-  const nameField = (name ?? "").slice(0, PARTY_NAME_WIDTH).padEnd(PARTY_NAME_WIDTH, " ");
+  /* win_print(name) until NUL — no 11-pad; '/' and HP shift with name length. */
+  const nameField = (name ?? "").slice(0, PARTY_NAME_MAX);
   /* 0x6266..0x629A: left-aligned 3-cell field (trailing spaces), not padStart. */
   const hpField = hp > 999 ? "+++" : String(hp).padEnd(3, " ");
   return ` ${slotDigit}) ${nameField} /${hpField}`;
 }
+
+/** @deprecated use PARTY_NAME_MAX — kept for callers that still import the old name */
+export const PARTY_NAME_WIDTH = PARTY_NAME_MAX;
 
 /** @param {object} session */
 export function buildPlayPartySlots(session) {
@@ -179,8 +183,9 @@ export function drawPlayPartyPanel(ctx, slots) {
 
     const line = formatPartyStatusLine(i, s.name, s.hp);
     const prefix = line.slice(0, PARTY_PREFIX_LEN);
-    const nameField = line.slice(PARTY_PREFIX_LEN, PARTY_PREFIX_LEN + PARTY_NAME_WIDTH);
-    const tail = line.slice(PARTY_PREFIX_LEN + PARTY_NAME_WIDTH);
+    const slash = line.indexOf(" /", PARTY_PREFIX_LEN);
+    const nameField = slash >= 0 ? line.slice(PARTY_PREFIX_LEN, slash) : line.slice(PARTY_PREFIX_LEN);
+    const tail = slash >= 0 ? line.slice(slash) : "";
 
     drawCellText(ctx, col, row, prefix);
     if (s.badCondition) {
@@ -188,7 +193,7 @@ export function drawPlayPartyPanel(ctx, slots) {
     } else {
       drawCellText(ctx, col + PARTY_PREFIX_LEN, row, nameField);
     }
-    drawCellText(ctx, col + PARTY_PREFIX_LEN + PARTY_NAME_WIDTH, row, tail);
+    drawCellText(ctx, col + PARTY_PREFIX_LEN + nameField.length, row, tail);
   }
 }
 

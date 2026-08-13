@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <initializer_list>
 #if MM2_HOST_AMIGA
 #include <mini_std/stdio.h>
 #else
@@ -23,6 +24,8 @@ extern "C" {
 
 extern "C" void *mm2_malloc(size_t size);
 extern "C" void mm2_free(void *ptr);
+extern "C" void *mm2_realloc(void *ptr, size_t size);
+extern "C" void *mm2_realloc(void *ptr, size_t size);
 
 inline void *operator new(size_t, void *ptr) noexcept { return ptr; }
 inline void operator delete(void *, void *) noexcept {}
@@ -209,6 +212,34 @@ inline char *strncat(char *dest, const char *src, size_t n)
     return dest;
 }
 
+/* mini_std string.h has no strstr. */
+inline const char *strstr(const char *haystack, const char *needle)
+{
+    if (!haystack || !needle) {
+        return nullptr;
+    }
+    if (needle[0] == '\0') {
+        return haystack;
+    }
+    for (const char *h = haystack; *h != '\0'; ++h) {
+        const char *a = h;
+        const char *b = needle;
+        while (*a != '\0' && *b != '\0' && *a == *b) {
+            ++a;
+            ++b;
+        }
+        if (*b == '\0') {
+            return h;
+        }
+    }
+    return nullptr;
+}
+
+inline char *strstr(char *haystack, const char *needle)
+{
+    return const_cast<char *>(strstr(static_cast<const char *>(haystack), needle));
+}
+
 template <typename T, size_t N>
 constexpr size_t size(const T (&)[N])
 {
@@ -253,28 +284,51 @@ using mm2_freestanding::min;
 using mm2_freestanding::size;
 using mm2_freestanding::strncat;
 using mm2_freestanding::strncmp;
+using mm2_freestanding::strstr;
 using mm2_freestanding::unique_ptr;
 using mm2_freestanding::vector;
 using mm2_freestanding::make_unique;
 
+using ::FILE;
 using ::fclose;
 using ::feof;
+using ::fflush;
+using ::fopen;
 using ::fread;
 using ::fseek;
 using ::ftell;
 using ::fwrite;
-using ::fopen;
 using ::memcpy;
 using ::memmove;
+using ::memcmp;
 using ::memset;
+using ::printf;
 using ::size_t;
 using ::snprintf;
-using ::strcmp;
+using ::sprintf;
+using ::strcat;
 using ::strchr;
-using ::strncpy;
+using ::strcmp;
+using ::strcpy;
 using ::strlen;
+using ::strncpy;
+using ::strrchr;
+using ::strtoul;
+using ::vsnprintf;
+
+inline void *malloc(size_t n) { return mm2_malloc(n); }
+inline void free(void *p) { mm2_free(p); }
+inline void *realloc(void *p, size_t n) { return mm2_realloc(p, n); }
 
 inline int toupper(int c) { return mm2_freestanding::toupper_ascii(static_cast<unsigned char>(c)); }
+inline int tolower(int c)
+{
+    const unsigned char u = static_cast<unsigned char>(c);
+    if (u >= 'A' && u <= 'Z') {
+        return static_cast<int>(u - static_cast<unsigned char>('A') + static_cast<unsigned char>('a'));
+    }
+    return static_cast<int>(u);
+}
 
 }  // namespace std
 

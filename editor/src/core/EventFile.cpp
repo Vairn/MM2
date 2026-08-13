@@ -4,6 +4,7 @@
 
 #include "core/EventOps.h"
 #include "core/PcDatLzw.h"
+#include "eventlang/Encode.h"
 
 namespace mm2 {
 
@@ -182,6 +183,15 @@ void EventFile::decode() {
         uint16_t length = readU16BE(&raw[i * 6 + 4]);
         locations.push_back(decodeLocation(raw, i, off, length));
     }
+}
+
+bool EventFile::replaceLocationRecord(int locId, const std::vector<uint8_t>& newRecord) {
+    if (locId < 0 || locId >= kEventLocationCount) return false;
+    auto patched = eventlang::patchLocationInEventDat(raw.data(), raw.size(), locId, newRecord);
+    if (patched.empty()) return false;
+    raw = std::move(patched);
+    decode();
+    return true;
 }
 
 }  // namespace mm2

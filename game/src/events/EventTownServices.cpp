@@ -1,13 +1,17 @@
 #include "mm2/events/EventTownServices.h"
 
 #include "mm2/events/EventCombatEncounter.h"
-#include "mm2/events/EventSkillBuy.h"
 #include "mm2/events/EventVmHelpers.h"
 #include "mm2/events/TownServiceMenu.h"
-#include "mm2/gameplay/RosterSkills.h"
+#include "mm2/events/TownServiceTransactions.h"
 
 #include "mm2/CppStdCompat.h"
+#include "mm2/DataPath.h"
+#include "mm2/runtime/PathScratch.h"
+#include "mm2_items_codec.h"
 #include "mm2_town_tables.h"
+
+#include <cstdio>
 
 namespace mm2::events {
 
@@ -32,6 +36,15 @@ namespace mm2::events {
  * ------------------------------------------------------------------------- */
 
 namespace {
+
+/* Intra-map portal XY tables @ A4-$70D0/-$70C6/-$70BC/-$70B2 (data 0xF2E). */
+static const uint8_t kPortalSrcX[10] = {1, 1, 4, 4, 7, 7, 5, 10, 13, 13};
+static const uint8_t kPortalSrcY[10] = {13, 2, 5, 10, 2, 13, 10, 10, 2, 13};
+static const uint8_t kPortalDstX[10] = {1, 1, 4, 4, 7, 7, 10, 10, 13, 13};
+static const uint8_t kPortalDstY[10] = {14, 1, 4, 11, 1, 14, 4, 11, 1, 14};
+/* Found-item ranges @ -$70A8 / -$70A5 for selectors 0x81..0x83. */
+static const uint8_t kFoundItemSpan[3] = {13, 6, 7};
+static const uint8_t kFoundItemBase[3] = {66, 92, 127};
 
 const char *tavernIntro(int location_id)
 {
@@ -106,6 +119,38 @@ const char *mageGuildIntro(int location_id)
         "Sorcerers sort phials of sands on\n"
         "the shelves.  A man barks, \"Spells\n"
         "(y/n)?\"",
+    };
+    if (location_id >= 0 && location_id < 5) {
+        return kIntro[location_id];
+    }
+    return kIntro[0];
+}
+
+/* Training-hall greets @ 0x1FDA8.. (A4-$65DE pointer table, 4 lines/town).
+ * Printed at rows 19..22 then OP_0A y/n (@ -$7D46 → 0x15D9A) before the menu. */
+const char *trainingIntro(int location_id)
+{
+    static const char *kIntro[5] = {
+        "A page rolls rusty armor in a barrel\n"
+        "of sand in order to clean it as burly\n"
+        "squires practice fighting with wooden\n"
+        "sticks.  Care to train (y/n)?",
+        "Banners flutter loudly in the damp sea\n"
+        "air while knights and gladiators test\n"
+        "their fighting skills.  A muscular man\n"
+        "offers training.  Join (y/n)?",
+        "The sound of clashing swords\n"
+        "permeates the chilly air.  A burly\n"
+        "warrior asks if you would care to\n"
+        "enlist for training (y/n?",
+        "Covered in sweat from the heat and a\n"
+        "tough workout, Phrand, the master\n"
+        "trainer approaches and asks, \"Do you\n"
+        "desire some rigorous training (y/n?\"",
+        "As youths struggle and train in the\n"
+        "distance, a man garbed in a loose\n"
+        "robe tied with a swordbelt fluidly\n"
+        "walks to you.  \"Care to train (y/n?\"",
     };
     if (location_id >= 0 && location_id < 5) {
         return kIntro[location_id];
@@ -244,6 +289,19 @@ bool runBoundMenu(EventRuntime &rt, GameStateView &gs, Mm2RosterFile *roster,
         townSvcRunMageGuild(*ui, ctx);
         break;
     case MenuKind::Tavern:
+        /* 0x1D208: bank-1 tip/rumor fill before menu. */
+        if (rt.dataDir() && gs.a4()) {
+            char *path = mm2_path_scratch_a();
+            if (mm2::joinDataPath(path, MM2_PATH_SCRATCH_CAP, rt.dataDir(), "str.dat")) {
+                FILE *fp = std::fopen(path, "rb");
+                if (fp) {
+                    uint8_t buf[kStrDatSize];
+                    const size_t n = std::fread(buf, 1, sizeof(buf), fp);
+                    std::fclose(fp);
+                    eventVmFillTavernStrTables(gs.a4(), buf, n);
+                }
+            }
+        }
         townSvcRunTavern(*ui, ctx);
         break;
     }
@@ -276,6 +334,8 @@ bool eventTownServiceRunBoundMenu(EventRuntime &rt, GameStateView &gs,
         return runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::Temple);
     case EventRuntime::PendingTownMenu::Smith:
         return runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::Smith);
+    case EventRuntime::PendingTownMenu::Training:
+        return runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::Training);
     default:
         return false;
     }
@@ -291,53 +351,38 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
 
     switch (sel) {
     case 0x01:
-        /* Inn — handler @ 0x160C2 case 1 → 0x1A132 (doc 28). Per-town exe
-         * innkeeper greet + registry y/n (0x19D00..0x1A200, doc 29). On Y the
-         * engine @ 0x1A1B2 writes roster+$0B home town for party members,
-         * saves roster (-$7FE0 @ 0x1A1FC), then returns to party choose (Goto
-         * Town). Rest/day-advance submenu is deferred. */
+        /* Inn @ 0x1A132: Stay/sign-in Y/N → registry @ 0x1A1B2 + roster save +
+         * Goto Town (0x1A1F8). World Rest is R @ 0x19E20 — not an inn submenu.
+         * 0x160E4: -$7946 = 1; 0x1A136: -$7950 = 6. */
+        mm2_gs_set_u16(gs.a4(), MM2_GS_OP0E_SUBMODE, 1);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 6);
         showServiceIntro(gs, text, wait, innIntro(location_id));
         rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Inn);
         break;
     case 0x02:
-        /* Training Hall — handler @ 0x160C2 case 2 (doc 28 §9). The hall LEVELS the
-         * chosen character UP from experience (record+0x62) when they meet the next
-         * level's XP threshold on their class curve (TWO curves: Group A/B, doc 32)
-         * and can pay the fee (level×index×50). It does NOT raise a stat — the prior
-         * port's stat-add (0x1C898) was the wrong handler/semantics. When a UI
-         * backend is bound, the faithful XP→level-up menu runs (TownServiceMenu →
-         * townSvcTrainLevelUp). DEFERRED: the exact per-level HP RANDOM roll
-         * (0x9BCA) is modelled by the doc-32 average; calendar mode @ 0x9B48. No
-         * NPC intro string -> the OP_0B sign title fallback when no backend. */
-        if (runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::Training)) {
-            break;
+        /* Training Hall — -$7CD4 → 0x20988 (doc 28 §9). Entry paints 4 greet
+         * lines from A4-$65DE then OP_0A y/n (@ -$7D46); Yes gates on A4-$7951
+         * into the trainee prompt (XP level-up, fee level×index×50). Not the
+         * 0x1C898 stat shrine. */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 6); /* ori.b #$6 @ 0x2099C */
+        showServiceIntro(gs, text, wait, trainingIntro(location_id));
+        if (canRunBoundMenu(rt, roster, launch, items, MenuKind::Training)) {
+            rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Training);
         }
-        showServiceTitle(text, wait, title);
         break;
     case 0x03:
-        /* Pub / food / drinks / rumors. ENGINE-GATED (doc 28 §3.1/§7, doc 34 §5/§6).
-         * Handler @ 0x160C2 case 3 -> jsr $1d208 (pub init: populates 5-town ×
-         * 4-category handler tables at A4-$59EE/$599E/$5986/$594E/$58AE/$57F6).
-         * Food submenus: selector 0xC9 -> jsr $19ab4 (feeding-frenzy / roster +$78).
-         * Drink submenus: selector 0xCA -> jsr $19ac4 (stat bonus, RNG sick roll).
-         * Costs via 0x18EC0/0x18F78 (RNG-gated); stat-bonus effect 0x19B28; rumor
-         * walk 0x97FC; food satiation write 0x019030. These per-character effects
-         * are not yet traced; when a UI backend is bound, the faithful A-E top menu
-         * runs (TownServiceMenu → townSvcRunTavern) after the str.dat NPC intro
-         * y/n. Without a backend, fall back to the intro + defer. */
+        /* Pub @ 0x1D208 / jump 0x1D650: A frenzy 0x1CA2E, B stat-boost 0x1CAC4
+         * (A4-$6738), C specialties 0x1CD2E (A4-$6760 + sick-or-0x1C8D4 → +$76);
+         * D tip; E rumors. Encode 0x18EC0/+78 is selector 0xC9 — not C.
+         * Drinks = selector 0xCA → 0x18F78 / 0x019030 (not key B). */
         showServiceIntro(gs, text, wait, tavernIntro(location_id));
         if (canRunBoundMenu(rt, roster, launch, items, MenuKind::Tavern)) {
             rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Tavern);
         }
         break;
     case 0x04:
-        /* Temple — handler @ 0x160C2 case 4 (doc 28 §5). DEFERRED: A) Restore Cond
-         * B) Restore Algn C) Donations D–F) cleric spell purchase (str.dat
-         * 362–367). Healing charges eventVmHealingCostPerChar() per selected
-         * character (FAQ level×index×10, ×10 dead / ×100 eradicated) inside this
-         * engine. Faithful priest intro + y/n; when a town-service UI backend is
-         * bound, the per-character heal / restore-condition / donation menu runs
-         * after the intro y/n (TownServiceMenu). Without a backend, defer. */
+        /* Temple — handler @ 0x160C2 case 4: A Restore Cond, B Restore Algn,
+         * C Donations, D–F cleric spell buy. Bound UI → TownServiceMenu. */
         showServiceIntro(gs, text, wait, templeIntro(location_id));
         if (canRunBoundMenu(rt, roster, launch, items, MenuKind::Temple)) {
             rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Temple);
@@ -366,20 +411,16 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
             rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Smith);
         }
         break;
-    case 0x07:
-        /* General store (0x07 -> thunk -$7DB8 -> 0xA62C, byte-verified, doc 28
-         * §4.2). Middlegate m11 and Vulcania k6 only. ENGINE-GATED: -$7DB8 is
-         * its OWN fixed handler, DISTINCT from both the Arena Games engine
-         * (0x9D76, reached only via explicit selector 0x08's thunk -$7DBE)
-         * and the default-range dispatch (-$7DFA -> 0x92F2 event_dat_loader).
-         * The store buy loop 0xA62C uses a hard `record+$66 >= 100 gp`
-         * gate (0xA75E) — NOT the items.dat-gold + 0x1C9C0 path — and dispatches
-         * the purchase effect through the 0xA3AE jump table (keyed on roster +$50
-         * nibbles); the item pools live in A4-$7136/-$713C. Reproducing this
-         * faithfully requires porting the -$7DB8 shell, so it is deferred
-         * (no NPC intro string -> show the OP_0B sign title). */
-        showServiceTitle(text, wait, title);
+    case 0x07: {
+        /* General store -$7DB8 → 0xA62C: Y/N → member → 100gp + skill conversion. */
+        static const char *kStoreIntro =
+            "A greedy gnome offers to convert your\n"
+            "secondary skills for 100 gold.\n"
+            "Buy (y/n)?";
+        showServiceIntro(gs, text, wait, kStoreIntro);
+        rt.setPendingGeneralStore();
         break;
+    }
     case 0x08: {
         /* Arena Games ticket engine (0x08 -> thunk -$7DBE -> 0x9D76). CORRECTED
          * 2026-07: byte-verified against EXTRACTED/ghidra/mm2_data_00.bin (the
@@ -434,108 +475,177 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         eventRunFixedEncounter(gs, text, wait, block, 12, false, rt.combat(), &world);
         break;
     }
-    case 0x0A:
-        /* Nordon goblet quest — handler A4 thunk -$7DAC -> 0xD634 (decoder
-         * name goblet_quest). Middlegate event 30 @ (10,2)/W: OP_0B sign 0x14
-         * (Nordon portrait) + this selector. Real intro transcribed from
-         * event.dat shared string bank (decoder location 60, str[9]):
-         * "The humble wizard Nordon asks, \"Will you do me a service (y/n)?\""
-         * NOT Feldecarb Fountain — that is selector 0x0E @ (15,15) (event 17).
-         * KNOWN GAP: quest-state branches (accept, return goblet, visit
-         * Nordonna) and rewards are engine-driven inside 0xD634; deferred. */
-        showServiceIntro(gs, text, wait,
-                          "The humble wizard Nordon asks, \"Will\n"
-                          "you do me a service (y/n)?\"");
+    case 0x64: {
+        /* Circus -$7D9A → 0xDF04 (loc 10 day-gated). Y/N → attr pick → win/lose. */
+        static const char *kCircusIntro =
+            "Cheerfully striped tents. Game booths\n"
+            "line the circus grounds. Play (y/n)?";
+        showServiceIntro(gs, text, wait, kCircusIntro);
+        rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Circus);
         break;
-    case 0x0D:
-        /* Enroll in mage guild — handler A4 thunk -$7DA0 (doc 28 §6.2). Real
-         * prompt from event.dat shared string bank loc 60 str[21]. On y the
-         * engine deducts 20 gp, ORs record+0x79 with the per-town mask
-         * (A4-$66A9, same gate as 0x1E410 / Sandsobar apply_party_masked 0x74),
-         * and writes record+0x0B <- map+1 @ 0x1A1CE. Other towns use bespoke
-         * event.dat scripts for enrollment; Middlegate uses this selector. */
-        showServiceIntro(gs, text, wait,
-                          "A sleepy conjurer yawns, \"My\n"
-                          "friends, for only 20 gold I can\n"
-                          "enroll you in the local mage guild.\"\n"
-                          "Buy in (y/n)?");
-        rt.setPendingTownMenu(EventRuntime::PendingTownMenu::GuildEnroll);
+    }
+    case 0x7E:
+        /* Free teleport UI -$7DB2 → 0xD576: hex X/Y → set coords + latch. */
+        rt.armFreeTeleportUi();
         break;
-    case 0x10:
-        /* Brain detox @ Middlegate (event 16, tile (1,8)/W): OP_0E default-range
-         * selector 0x10 -> 0x15EDC bins to category 0x3C (event.dat loc 60) with
-         * adjusted index 8 (ASM @ 0x160A2 writes A4-$5D46). The loc-60 overlay
-         * bytecode for slot 8 is not yet decoded; service copy is FAQ §8-3 only.
-         * Effect: y/n, member select, 100 gp from selected char, clear roster+0x50
-         * skill pack (selector 0x6D / 0x17EA6). */
-        if (location_id == 0) {
-            showServiceIntro(gs, text, wait,
-                              "The surgically garbed Cerebral\n"
-                              "Detoxification Specialist will\n"
-                              "cleanse a party member of all\n"
-                              "secondary skills for 100 gold.\n"
-                              "Pay (y/n)?");
-            rt.setPendingTownMenu(EventRuntime::PendingTownMenu::BrainDetox);
+    case 0x7F: {
+        /* Combat seed -$7DAC → 0xD634: type = (rng(1,16)-1)+(Y<<4); fill party. */
+        uint8_t block[12] = {0};
+        const int roll = rng ? rng->range(1, 16) : 1;
+        const uint8_t mon = static_cast<uint8_t>((roll - 1) + (static_cast<unsigned>(gs.coordY()) << 4));
+        const int party_count = launch ? launch->party_count : 0;
+        for (int i = 0; i < party_count && i < MM2_PARTY_LAUNCH_SLOTS && i < 10; ++i) {
+            block[i] = mon;
+        }
+        mm2_gs_set_u8(gs.a4(), -0x77BE, 0);
+        eventRunFixedEncounter(gs, text, wait, block, 12, false, rt.combat(), &world);
+        break;
+    }
+    case 0x80: {
+        /* Intra-map portal -$7DA6 → 0xD6A4: match XY tables → dest + slide trap. */
+        int hit = -1;
+        const uint8_t cx = gs.coordX();
+        const uint8_t cy = gs.coordY();
+        for (int i = 0; i < 10; ++i) {
+            if (kPortalSrcX[i] == cx && kPortalSrcY[i] == cy) {
+                hit = i;
+                break;
+            }
+        }
+        if (hit < 0) {
             break;
         }
-        showServiceTitle(text, wait, title);
+        eventVmClearTileEventFlag(gs.a4(), world, static_cast<int>(cy), static_cast<int>(cx));
+        gs.setCoordX(kPortalDstX[hit]);
+        gs.setCoordY(kPortalDstY[hit]);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
+                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 5));
+        text.showOp02("Magical slide trap!", 19);
+        text.showSpacePrompt();
+        wait = EventVmWait::Space;
+        rt.armSlideTrapHalve();
         break;
-    case 0x11:
-        if (location_id == 0) {
-            /* Poorman's Portal @ (0,5): OP_0E 0x11 → Sandsobar for 10 gp (FAQ §4-1,
-             * doc 34 §3). Self-contained fixed-cost transaction (cost + y/n +
-             * deduct + travel) — faithfully implemented via the pending-portal
-             * path, not the deferred shop engine. */
-            rt.setPendingPortal({10u, 4u, 0x61u});
-            text.showOp02(
-                "A uniformed brownie stands before a shimmering energy field offering "
-                "instantaneous travel to Sandsobar for 10 gold. Travel (y/n)?",
-                19);
+    }
+    case 0x81:
+    case 0x82:
+    case 0x83: {
+        /* Found-item -$7DA0 → 0xD89C(arg 0/1/2). */
+        const int arg = static_cast<int>(sel - 0x81);
+        const int span = kFoundItemSpan[arg];
+        const int base = kFoundItemBase[arg];
+        const int roll = rng ? rng->range(1, span) : 1;
+        const uint8_t item_id = static_cast<uint8_t>(roll + base - 1);
+        char iname[40];
+        iname[0] = '\0';
+        if (items) {
+            const Mm2ItemRecord *irec = mm2_items_lookup(items, item_id);
+            if (irec) {
+                mm2_item_name_to_cstr(irec, iname, sizeof(iname));
+            }
+        }
+        if (!iname[0]) {
+            std::snprintf(iname, sizeof(iname), "item #%u", static_cast<unsigned>(item_id));
+        }
+        if (eventVmPartyGiveItem(gs.a4(), roster, launch, item_id, 0, 0)) {
+            eventVmClearTileEventFlag(gs.a4(), world, static_cast<int>(gs.coordY()),
+                                      static_cast<int>(gs.coordX()));
             mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
                           static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
-            wait = EventVmWait::YesNo;
+            std::snprintf(buf, sizeof(buf), "You have found a %s", iname);
+            showServiceTitle(text, wait, buf);
+        }
+        break;
+    }
+    case 0xC9:
+    case 0xCA: {
+        /* 0x19AB4/0x19AC4 → 0x1980A: 0x193AC reward+apply, 0x1961E busy gate,
+         * else Y/N + A–D (encode 0x19030 / lord arm 0x191A6). */
+        const bool drink = (sel == 0xCA);
+        const TownSvcQuestCompleteResult done =
+            townSvcQuestCompleteReward(roster, launch, drink, items);
+        if (done.activity > 0) {
+            char msg[192];
+            if (done.members_rewarded > 0) {
+                std::snprintf(msg, sizeof(msg),
+                              "You have done everyone a great service\n"
+                              "and you shall be rewarded.\n"
+                              "  %u experience points!",
+                              static_cast<unsigned>(done.xp_each));
+            } else {
+                std::snprintf(msg, sizeof(msg), "Quest progress applied.");
+            }
+            showServiceTitle(text, wait, msg);
             break;
         }
-        /* Non-Middlegate 0x11 falls in the default-range bin (category 0x3D, doc
-         * 07 §OP_0E): shop/service via 0x15EDC → -$7DFA. Deferred. */
-        showServiceTitle(text, wait, title);
+        if (townSvcQuestBusy(roster, launch, drink)) {
+            showServiceTitle(text, wait,
+                             drink ? "Your party has already been quested\nto seek out the foe."
+                                   : "Your party has already been quested\nto seek out the item.");
+            break;
+        }
+        rt.armQuestEncodeUi(drink);
+        wait = rt.waitKind();
+        (void)gs;
+        (void)world;
+        (void)location_id;
+        (void)title;
+        (void)rng;
         break;
-    case 0x64:
-        /* Portal / travel — handler A4 thunk -$7D9A (doc 07 §OP_0E). KNOWN GAP:
-         * the inter-town portal table (doc 34 §3) is engine-driven; deferred. */
-        showServiceTitle(text, wait, title);
+    }
+    case 0xFD: {
+        /* 0x161B2: jsr 0x1493C (bank-3 fill via -$7DE8/$7DE2), then SCRIPT_ABORT:
+         *   ==2: -$79AC→-$79F2, -$7946=1, jsr 0x1A1F8 Goto Town
+         *   ==3: jsr -$7ED2 → 0x5376 → 0x14106 (addq -$7972, town restore, Goto Town)
+         *   else: SCRIPT_ABORT=1
+         * Print/fight/name-entry @ 0x1493C hosted: PTR0 → fight ($83) → 0x14EA4
+         * endgame.32 + WAFE entry → remaining ptr pages. */
+        if (rt.dataDir()) {
+            char *path = mm2_path_scratch_a();
+            if (mm2::joinDataPath(path, MM2_PATH_SCRATCH_CAP, rt.dataDir(), "str.dat")) {
+                FILE *fp = std::fopen(path, "rb");
+                if (fp) {
+                    uint8_t buf[kStrDatSize];
+                    const size_t n = std::fread(buf, 1, sizeof(buf), fp);
+                    std::fclose(fp);
+                    eventVmFillOp0eFdStrTables(gs.a4(), buf, n);
+                }
+            }
+        }
+        rt.armOp0eFdPrintChrome();
+        const uint8_t abort = mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT);
+        if (abort == 2) {
+            /* Endgame success already printed PTR tables; Goto Town only. */
+            (void)rt.takePendingOp0eFdPrintChrome();
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SCREEN_MODE_ID,
+                          mm2_gs_u8(gs.a4(), MM2_GS_SAVED_TOWN_ID));
+            gs.setScreenId(mm2_gs_u8(gs.a4(), MM2_GS_SAVED_TOWN_ID));
+            mm2_gs_set_u16(gs.a4(), MM2_GS_OP0E_SUBMODE, 1);
+            rt.armInnGotoTown();
+        } else if (abort == 3) {
+            /* 0x14106: addq -$7972; Death Strikes panel; -$79AC→-$79F2; 0x1A1F8.
+             * Skip PTR print pages — endgame already consumed them before abort=3. */
+            (void)rt.takePendingOp0eFdPrintChrome();
+            const uint16_t ctr = mm2_gs_u16(gs.a4(), MM2_GS_OP0E_FD_CTR);
+            mm2_gs_set_u16(gs.a4(), MM2_GS_OP0E_FD_CTR,
+                           static_cast<uint16_t>(ctr < 0xFFFFu ? ctr + 1u : 0xFFFFu));
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SCREEN_MODE_ID,
+                          mm2_gs_u8(gs.a4(), MM2_GS_SAVED_TOWN_ID));
+            gs.setScreenId(mm2_gs_u8(gs.a4(), MM2_GS_SAVED_TOWN_ID));
+            rt.armDeathStrikes();
+        } else {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+        }
         break;
+    }
     default:
-        if (const SkillBuyOffer *offer = skillBuyOfferForExecSelector(sel)) {
-            if (offer->member_already_selected) {
-                (void)eventApplySkillBuy(gs, roster, launch, text, wait, offer->skill_id,
-                                         offer->gold_cost);
-                break;
-            }
-            if (eventStartSkillBuyOverlay(text, wait, *offer)) {
-                rt.setPendingSkillBuy(offer->skill_id, offer->gold_cost);
-                mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                              static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
-                break;
-            }
-        }
-        if (sel == 0x0E) {
-            /* Feldecarb Fountain farthing-flick @ Middlegate (15,15) event 17:
-             * OP_0E selector 0x0E (default-range category 0x3C). Real prompt
-             * from event.dat string bank loc 60 str[23]. KNOWN GAP: farthing
-             * check + castle-key reward (str[24]/str[25]) inside engine path
-             * -$7DFA / 0xD634 family — deferred. */
-            showServiceIntro(gs, text, wait,
-                              "Fanciful Feldecarb Fountain flows\n"
-                              "full as fluttering faeries frolic\n"
-                              "fastidiously.  Flick a farthing (y/n)?");
-            break;
-        }
+        /* Selectors 0x09–0x10 / 0x11–… (incl. Nordon 0x0A, Nordonna 0x0B,
+         * enroll 0x0D, Feldecarb 0x0E, locksmith 0x10, Poorman's Portal 0x11)
+         * are ASM default-range → 0x15EDC → loc overlay VM. No FAQ stubs. */
+        /* Skill vendors (0x38 / 0x3E.. / 0x4D.. / 0x52) are default-range
+         * overlay bytecode (OP_24 gold + OP_18 skill nibble) — do NOT intercept
+         * with EventSkillBuy FAQ tables; that skipped OP_24 and never deducted. */
         if (eventVmIsTownServiceSelector(sel)) {
-            /* Default-range dispatch (0x15EDC → -$7DFA event_dat_loader, then
-             * queued slot @ A4-$5D46). Loc 61 (cat 0x3D) embeds OP_12 fights in
-             * str[22..25] for Middlegate combat tiles (selectors 0x26..0x29).
-             * Text-only overlay slots still fall back to the OP_0B sign title. */
             const Mm2ExecSelectorBin bin = eventVmBinExecSelector(sel);
             if (bin.matched && rt.runDefaultRangeOverlay(gs, world, bin.category, bin.index)) {
                 break;
@@ -550,92 +660,6 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         }
         break;
     }
-}
-
-namespace {
-
-constexpr uint32_t kGuildEnrollCost = 20u;
-
-}  // namespace
-
-bool eventApplyGuildEnroll(GameStateView &gs, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
-                           EventTextView &text, EventVmWait &wait, int map_id)
-{
-    if (map_id < 0 || map_id >= MM2_TOWN_COUNT) {
-        return false;
-    }
-    const uint8_t member_mask = mm2_mage_guild_member_mask(map_id);
-    if (member_mask == 0) {
-        return false;
-    }
-
-    const uint32_t have = eventVmPartyGoldTotal(gs.a4(), roster, launch);
-    if (have < kGuildEnrollCost) {
-        text.showOp02("Not enough gold!", 19);
-        text.showSpacePrompt();
-        wait = EventVmWait::Space;
-        return false;
-    }
-
-    eventVmDeductPartyGold(gs.a4(), roster, launch, kGuildEnrollCost);
-
-    if (roster && launch) {
-        for (int i = 0; i < launch->party_count; ++i) {
-            const int idx = launch->roster_slots[i];
-            if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
-                continue;
-            }
-            roster->records[idx].class_quest_guild_mask =
-                static_cast<uint8_t>(roster->records[idx].class_quest_guild_mask | member_mask);
-        }
-    }
-
-    eventInnApplyRegistry(roster, launch, map_id);
-    return true;
-}
-
-namespace {
-
-constexpr uint32_t kBrainDetoxCost = 100u;
-
-Mm2RosterRecord *selectedRosterMember(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
-                                      const uint8_t *a4)
-{
-    if (!roster || !launch || !a4) {
-        return nullptr;
-    }
-    const int slot = eventVmSelectedPartySlot(a4);
-    if (slot < 0 || slot >= launch->party_count || slot >= MM2_PARTY_LAUNCH_SLOTS) {
-        return nullptr;
-    }
-    const int idx = launch->roster_slots[slot];
-    if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
-        return nullptr;
-    }
-    return &roster->records[idx];
-}
-
-}  // namespace
-
-bool eventApplyBrainDetox(GameStateView &gs, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
-                          EventTextView &text, EventVmWait &wait)
-{
-    Mm2RosterRecord *rec = selectedRosterMember(roster, launch, gs.a4());
-    if (!rec) {
-        return false;
-    }
-
-    if (rec->gold < kBrainDetoxCost) {
-        text.showOp02("Not enough gold!", 19);
-        text.showSpacePrompt();
-        wait = EventVmWait::Space;
-        return false;
-    }
-
-    /* Per-character gold @ record+0x66 (ASM gold_check_and_deduct @ 0x1C9C0). */
-    rec->gold -= kBrainDetoxCost;
-    gameplay::rosterClearAllSkills(*rec);
-    return true;
 }
 
 void eventInnApplyRegistry(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, int map_id)

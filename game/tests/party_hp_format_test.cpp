@@ -37,24 +37,38 @@ int main()
     ok &= expect("hp 1234", buf, "+++");
 
     formatPartyStatusLine(buf, sizeof(buf), 0, "Crag Hack", 42, PartyStatusPrefix::Exploration);
-    ok &= expect("explore line", buf, " 1) Crag Hack   /42 ");
+    ok &= expect("explore line", buf, " 1) Crag Hack /42 ");
 
     formatPartyStatusLine(buf, sizeof(buf), 0, "Crag Hack", 1000, PartyStatusPrefix::Exploration);
-    ok &= expect("explore overflow", buf, " 1) Crag Hack   /+++");
+    ok &= expect("explore overflow", buf, " 1) Crag Hack /+++");
 
     /* Combat front-rank prefix is glyph 0x17 (check), not ASCII '~'. */
     formatPartyStatusLine(buf, sizeof(buf), 0, "Crag Hack", 1000, PartyStatusPrefix::CombatFrontRank);
     {
         char want[32];
-        std::snprintf(want, sizeof(want), "%c1) Crag Hack   /+++", static_cast<char>(0x17));
+        std::snprintf(want, sizeof(want), "%c1) Crag Hack /+++", static_cast<char>(0x17));
         ok &= expect("combat overflow", buf, want);
     }
 
     formatPartyStatusLine(buf, sizeof(buf), 0, "Al", 5, PartyStatusPrefix::Exploration);
-    ok &= expect("short name align", buf, " 1) Al          /5  ");
+    ok &= expect("short name no pad", buf, " 1) Al /5  ");
 
     formatPartyStatusLine(buf, sizeof(buf), 4, "Cassandra", 7, PartyStatusPrefix::Exploration);
-    ok &= expect("ones column align", buf, " 5) Cassandra   /7  ");
+    ok &= expect("ones column after name", buf, " 5) Cassandra /7  ");
+
+    formatPartyStatusLine(buf, sizeof(buf), 0, "Vairn", 120, PartyStatusPrefix::Exploration);
+    ok &= expect("vairn shifts hp left", buf, " 1) Vairn /120");
+
+    mm2::gfx::formatPrintNumber(1, buf, sizeof(buf), 3, ' ');
+    ok &= expect("print_number day 1", buf, "  1");
+    mm2::gfx::formatPrintNumber(900, buf, sizeof(buf), 4, ' ');
+    ok &= expect("print_number year 900", buf, " 900");
+    mm2::gfx::formatPrintNumber(0, buf, sizeof(buf), 1, ' ');
+    ok &= expect("print_number light 0", buf, "0");
+    mm2::gfx::formatPrintNumber(10, buf, sizeof(buf), 1, ' ');
+    ok &= expect("print_number width min", buf, "10");
+    mm2::gfx::formatPrintNumber(100, buf, sizeof(buf), 1, ' ');
+    ok &= expect("print_number 100", buf, "100");
 
     mm2::gfx::formatSlashStatCurrent(0, buf, sizeof(buf), 5);
     ok &= expect("slash field zero", buf, "    0");

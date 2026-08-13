@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "mm2_roster_codec.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -20,9 +22,12 @@ extern "C" {
  * Confirmed ASM sources (EXTRACTED/mm2.capstone.annotated.asm):
  *   - A4-$6720  training stat add per map  @ training_stat_apply 0x1C898
  *   - A4-$671A  training stat cap per map  @ 0x1C8A8 (cmp before write)
- *   - A4-$6742  temple donation gold (BE u16) @ 0x1CA3A / display 0x1D556
- *   - A4-$66B1  temple donation quest bit    @ doc 28 §5.2 (OR into A4-$799E)
+ *   - A4-$6714  temple cost scale (BE u16) @ 0x1DC26 / 0x1DD2A / 0x1DC84
+ *               donate = scale*100; heal/align multiply by scale (and level)
+ *   - A4-$6742  tavern feeding-frenzy gold (BE u16) @ 0x1CA3A (NOT temple donate)
+ *   - A4-$66B1  temple donation quest bit    @ 0x1D7B8 (OR into A4-$799E)
  *   - training "town index" multiplier (FAQ §3-6, doc 34 §13): map->[1,5,2,4,2]
+ *     (Vulcania training=4 but temple scale A4-$6714=3 — do not conflate)
  *
  * Stat-id -> roster record byte offset, from the jump table @ 0x1C86C feeding
  * 0x1C898 (caller passes char ptr in $a(a5), map index in $8(a5)):
@@ -46,10 +51,11 @@ typedef enum Mm2TownId {
 } Mm2TownId;
 
 typedef struct Mm2TownCommerce {
-    uint8_t training_town_index; /* FAQ §3-6 cost multiplier (NOT the map index) */
+    uint8_t training_town_index; /* FAQ §3-6 training fee multiplier (NOT the map index) */
     uint8_t stat_train_add;      /* A4-$6720[map]: amount added to trained stat */
     uint8_t stat_train_cap;      /* A4-$671A[map]: max value the trained stat may reach */
-    uint16_t donation_gold;      /* A4-$6742[map]: temple donation cost (gp) */
+    uint8_t temple_cost_index;   /* A4-$6714[map]: temple heal/align/donate scale */
+    uint16_t feeding_frenzy_gold; /* A4-$6742[map]: tavern A feeding-frenzy debit */
     uint8_t donation_quest_bit;  /* A4-$66B1[map]: OR'd into A4-$799E on donation */
 } Mm2TownCommerce;
 
@@ -64,10 +70,11 @@ int mm2_town_commerce(int map_id, Mm2TownCommerce *out);
  * or -1 if out of range. */
 int mm2_town_stat_field_offset(int stat_id);
 
-/* Cost formulas (FAQ §3-6, doc 34 §13.2). town_index is the *training* index
- * (mm2_town_commerce().training_town_index), not the raw map id. */
+/* Cost formulas. Training uses FAQ training_town_index; temple heal uses
+ * A4-$6714 (temple_cost_index) — Vulcania differs (4 vs 3). */
 uint32_t mm2_town_training_cost(int level, int town_index); /* level*index*50 */
-uint32_t mm2_town_healing_cost(int level, int town_index);  /* level*index*10 */
+uint32_t mm2_town_healing_cost(int level, int temple_cost_index); /* level*index*10 (healthy) */
+uint32_t mm2_town_temple_donate_cost(int map_id); /* A4-$6714[map]*100 @ 0x1DC1A */
 
 /* ------------------------------------------------------------------------- *
  * Training-hall LEVEL progression (OP_0E 0x04, handler -$7D16). The Training
@@ -96,15 +103,31 @@ uint32_t mm2_class_xp_for_level(uint8_t class_id, int level);
  * "Attribute -> bonuses per level"). The original adds a per-level RANDOM roll
  * (HP path @ 0x9BCA); the exact RNG is a documented gap, so the remake applies
  * the documented average (class base HP + END bonus; caster SP = stat bonus+3).
- *   mm2_class_hp_per_level: base HP/level at END 11-12 (no bonus).
- *   mm2_attr_bonus: the shared HP(END)/AC(SPD)/SP(INT|PER)-3 bonus column.
+ *   mm2_class_hp_per_level: A4-$64DA class base (training 0x2039C).
+ *   mm2_train_hp_gain: full Training Hall HP leaf @ 0x20390.
+ *   mm2_attr_bonus: FAQ/doc-32 column (not the -$7F56 table walk).
  *   mm2_class_caster_stat: 0 none, 1 INT (Sorcerer/Archer), 2 PER (Cleric/Paladin).
  *   mm2_class_spell_level_for: spell level reachable at `char_level`
  *     (pure casters 2X-1; fighter-mages 2X+5, natural cap 7). */
 int mm2_class_hp_per_level(uint8_t class_id);
+/* Training Hall HP gain @ 0x20390: ($64DA[class]*$64EE[map])/$64E4[map]
+ * (+1 if rem!=0 and class not Cleric/Robber/Ninja) + -$7F56(+$27). */
+int mm2_train_hp_gain(uint8_t class_id, int map_id, uint8_t endurance_current);
 int mm2_attr_bonus(int attribute_value);
 int mm2_class_caster_stat(uint8_t class_id);
 int mm2_class_spell_level_for(uint8_t class_id, int char_level);
+
+/* Training Hall spell leaf @ 0x20064 (called from level-up @ 0x204AC when class
+ * is Cleric/Sorcerer/Archer/Paladin). Recomputes spell level from +$20/+class,
+ * grants up to 4 auto-spells from A4-$64A2 (cleric/paladin) or A4-$64C2
+ * (sorcerer/archer), and sets SP current/max = (-$7F56(INT|PER)+3)*new_sl.
+ * Returns 1 when spell level increased (UI prints "and new spells"). */
+int mm2_train_spell_on_levelup(Mm2RosterRecord *rec);
+
+/* OR $64A2/$64C2 auto-spells for SL 1..rec->spell_level into the book. Recovery
+ * for saves where +$20 drift skipped intermediate SL rows (ASM writes only the
+ * newest row because +$20 increments every visit). Idempotent. */
+void mm2_train_backfill_auto_spells(Mm2RosterRecord *rec);
 
 /* ------------------------------------------------------------------------- *
  * Blacksmith static inventories (OP_0E 0x06, handler 0x1C54A; inventory
@@ -161,8 +184,7 @@ uint32_t mm2_smith_price(uint32_t base_gold, uint8_t meta);
 uint32_t mm2_smith_sell_price(uint32_t buy_style_price);
 
 /* Identify fee (0x1BF16 category 6 @ 0x1BF48): flags & 0x3F == 0 -> 10 gp; else
- * rng(1, meta*100). The port uses the deterministic midpoint until shop RNG is
- * wired through TownServiceContext. */
+ * meta*100 via mul -$7B54 (0x24C74). Not shop RNG. */
 uint32_t mm2_smith_identify_cost(uint8_t backpack_flags);
 
 /* ------------------------------------------------------------------------- *

@@ -1,5 +1,8 @@
 # MM2 audio call paths: title + death + shared backend
 
+> **SUPERSEDED (2026-07-10).** Title “song id `0x12D`” was a blit Y coordinate.
+> See [`58-amiga-audio-in-exe.md`](58-amiga-audio-in-exe.md).
+
 ## Scope and evidence policy
 
 This document merges the currently useful paths for MOD-targeted extraction:

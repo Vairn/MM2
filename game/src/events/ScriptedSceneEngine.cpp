@@ -23,8 +23,10 @@ constexpr int kGhostAnmDisk = 51;
 const ScriptedSceneEngine::SceneSpec *ScriptedSceneEngine::specFor(ScriptedSceneId id)
 {
     static const SceneSpec kSpecs[] = {
-        /* Ghost: monsters.dat #170 Ghost picture=51 -> 51.anm (combat sprite reused). */
-        {ScriptedSceneId::CorakIntro, ScriptedSceneType::ViewportSpriteOverlay, 60, 8, true, 0, 0},
+        /* Ghost: monsters.dat #170 Ghost picture=51 -> 51.anm (combat sprite reused).
+         * Loc 60 overlay bank: 0xFF-walk index 1 = Corak monologue (event 18 /
+         * OP_0E 0x09 → pool_seek id 1). Index 8 is Nordon's "Such a pity…" NO line. */
+        {ScriptedSceneId::CorakIntro, ScriptedSceneType::ViewportSpriteOverlay, 60, 1, true, 0, 0},
         /* Loc 11 evt 04 @ (4,7): OP_0B str[14] + OP_03 str[5]; sprite = monster #131 -> 21.anm. */
         {ScriptedSceneId::PegasusC2, ScriptedSceneType::ViewportSpriteOverlay, 11, 5, true, 1, 0},
     };

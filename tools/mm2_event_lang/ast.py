@@ -12,6 +12,7 @@ class RecordKind(str, Enum):
     STRING_BANK = "string_bank"
     MIXED_POOL = "mixed_pool"
     CASTLE_BLOB = "castle_blob"
+    OVERLAY_BANK = "overlay_bank"
     UNKNOWN = "unknown"
 
 

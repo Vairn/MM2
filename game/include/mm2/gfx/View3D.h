@@ -58,7 +58,7 @@ struct View3DBlit {
     int y = 0;
     int latX = 0;
     int latRow = 0;
-    uint8_t code = 0;  // map.dat page-0 nibble: 1 wall, 2 torch, 3 door
+    uint8_t code = 0;  // map.dat page-0 nibble: 1 wall, 2 door, 3 torch
 };
 
 struct View3DTorchBlit {
@@ -73,7 +73,7 @@ bool view3dTorchBlitFor(const View3DBlit &wb, int phase, View3DTorchBlit *out);
 struct View3DScene {
     std::array<View3DBlit, 20> blits{};
     int num_blits = 0;
-    /** Field 2 only — populated at paint time (ASM -$4F62/-$4F76/-$4F8A). */
+    /** Field 3 only — populated at paint time (ASM -$4F62/-$4F76/-$4F8A). */
     std::array<View3DBlit, 12> torch_blits{};
     int num_torch_blits = 0;
     std::array<uint8_t, 13> hood{};

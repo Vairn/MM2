@@ -33,8 +33,9 @@ bool MapWorld::enterScreen(int screen_id)
     if (!loaded_ || screen_id < 0 || screen_id >= MM2_MAP_SCREEN_COUNT) {
         return false;
     }
-    /* 0x923E: A4-$79F2 * 64 -> copy record to A4-$561A. Here the record is
-     * referenced in place; callers mirror the id into the gamestate. */
+    /* 0x923E: A4-$79F2 * 64 -> copy record to A4-$561A. Callers that own a
+     * GameStateView must also call gameplay::materializeScreenAttrib so
+     * -$560C (entry_coord) / -$5600 (flags) are live in the GS image. */
     screen_ = screen_id;
     return true;
 }

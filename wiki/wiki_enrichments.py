@@ -51,6 +51,7 @@ SECTIONS: dict[str, str] = {
     "Combat-System": "Combat",
     "Encounter-Tables": "Combat",
     "Spell-Cast-ASM": "Combat",
+    "Amiga-Audio-In-Exe": "Audio",
     "Audio-Sounds-Music": "Audio",
     "MM2-Music-Format": "Audio",
     "Audio-Title-Death-Paths": "Audio",
@@ -104,7 +105,9 @@ RELATED: dict[str, list[tuple[str, str]]] = {
     "Title-Screen-Assets": [
         ("Title-Screen-Animation", "Overlay coords and peekers"),
         ("Copy-Protection", "Logo fade A4-$6476 table"),
-        ("Audio-Title-Death-Paths", "Title music 0x12D"),
+        ("Amiga-Audio-In-Exe", "Title theme DATA stream"),
+        ("Audio-Sounds-Music", "Sounds / Walk Beep toggles"),
+        ("Title-Screen-Animation", "Attract loop"),
     ],
     "Character-UI-View-Create": [
         ("Title-Screen-Animation", "Title menu flow"),
@@ -173,8 +176,15 @@ RELATED: dict[str, list[tuple[str, str]]] = {
         ("3D-View-Graphics", "Gallery composites"),
         ("Map-Walker", "Walk every screen"),
     ],
+    "Amiga-Audio-In-Exe": [
+        ("Audio-Sounds-Music", "Controls menu toggles"),
+        ("Event-Script-Opcodes", "OP_0D → play_sound_seq"),
+        ("Game-Remake", "mm2::audio / AudioSDL"),
+        ("RE-Tools", "export_mm2_amiga_sfx.py"),
+    ],
     "Audio-Sounds-Music": [
-        ("Main-Loop-and-Map", "World simulation"),
+        ("Amiga-Audio-In-Exe", "Paula / DATA / remake — start here"),
+        ("Exploration-Input-and-Options", "Controls panel entry"),
         ("RE-Tools", "Audio export scripts"),
     ],
     "Startup-and-Init": [
@@ -347,14 +357,22 @@ MERMAID: dict[str, str] = {
   persp --> sky["sky / ceiling backdrop"]
   persp --> cells["wall-cell builder 0x2900"]
   cells --> paint["paint walls back-to-front"]""",
+    "Amiga-Audio-In-Exe": """flowchart TD
+  data["DATA hunk sequences<br/>0xD22 + title 0x1D79"] --> seq["play_sound_seq 0x6FB8<br/>thunk -$7E42"]
+  data --> title["overlay 0x283FC<br/>title theme"]
+  seq --> tone["play_tone_env 0x77AA"]
+  title --> tone
+  tone --> paula["audio.device / Paula"]
+  gate{"Sounds -$79B0<br/>Walk Beep -$79AF"} --> seq
+  remake["mm2::audio AudioSDL<br/>EXTRACTED/audio/*.wav"] -.plays.-> seq
+  remake -.plays.-> title""",
     "Audio-Sounds-Music": """flowchart TD
-  step["Party step / UI pump"] --> beep{"Walk Beep<br/>flag -$79AF?"}
-  beep -- on --> thunk["JSR -$7FD4(A4)<br/>sound dispatch"]
-  beep -- off --> silent["(no click)"]
-  snd{"Sounds master<br/>flag -$79B0?"} --> thunk
-  thunk --> dev["audio.device<br/>9 named channels"]
-  ctrl["Controls menu keys 1-4"] -.toggles.-> snd
-  ctrl -.toggles.-> beep""",
+  ctrl["Controls menu keys 1-4"] --> snd["Sounds -$79B0"]
+  ctrl --> beep["Walk Beep -$79AF"]
+  beep --> step["step/turn -$7E42(0)"]
+  snd --> sfx["-$7E42 ids 1..9"]
+  step --> doc58["see Amiga-Audio-In-Exe"]
+  sfx --> doc58""",
     "Town-Services": """flowchart TD
   tile["Tile trigger<br/>collision 0x80"] --> scan["Scanner 0x1754A"]
   scan --> vm["Script VM 0x172CA"]
@@ -409,6 +427,7 @@ TOC_PAGES = {
     "Scripted-Scene-Graphics",
     "Full-Analysis",
     "Runtime-Memory-Map",
+    "Amiga-Audio-In-Exe",
     "Audio-Sounds-Music",
     "Spell-Sources",
     "Event-to-String-Path",

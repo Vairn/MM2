@@ -16,15 +16,19 @@ export const ObstructionMsg = {
   Success: "Success!",
 };
 
-/** rng(min,max) @ 0x22BC6 — deterministic LCG matching game/src/gameplay/ExploreActions.cpp */
+/** rng(min,max) @ 0x22BC6 — Amiga LCG 0x24048 (state*0x41C64E6D+0x3039) matching ExploreActions.cpp */
 export class ExploreRng {
   constructor(seed = 0x1234abcd) {
     this.state = seed ? seed >>> 0 : 1;
   }
 
+  reseed(seed) {
+    this.state = seed ? seed >>> 0 : 1;
+  }
+
   raw15() {
-    this.state = (Math.imul(this.state, 1664525) + 1013904223) >>> 0;
-    return (this.state >>> 17) & 0x7fff;
+    this.state = (Math.imul(this.state, 0x41c64e6d) + 0x3039) >>> 0;
+    return (this.state >>> 16) & 0x7fff;
   }
 
   range(lo, hi) {

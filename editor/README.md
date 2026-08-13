@@ -1,98 +1,84 @@
 # MM2ED — Might & Magic II (Amiga) Data Editor
 
-A Dear ImGui + GLFW + OpenGL3 editor for the reverse-engineered MM2 `.dat`
-data files. Structured so that **each data type has its own self-contained
-section** (modeled on the GRACE and LorED editors), with a clean split between
-the data layer (`core/`) and the UI layer (`sections/`).
+Dear ImGui + GLFW + OpenGL3 editor for reverse-engineered MM2 `.dat` files.
+Shell layout follows the GRACE editor: **Project Tree → Workspace tabs → Properties**,
+with codecs in `core/` and UI in `sections/`.
 
 ## Build
 
-Dependencies (Dear ImGui *docking* branch, GLFW 3.4, portable-file-dialogs)
-are fetched automatically by CMake `FetchContent` — no vendoring required.
-
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-./build/MM2ED        # MM2ED.exe on Windows
+cmake -S editor -B editor/build -G Ninja
+cmake --build editor/build
+./editor/build/MM2ED        # MM2ED.exe on Windows
 ```
 
-Requires a C++17 compiler, CMake >= 3.16, and internet access on first
-configure (to clone deps into `build/_deps`).
+Dependencies (Dear ImGui *docking* branch, GLFW 3.4, portable-file-dialogs,
+ImGuiColorTextEdit) are fetched by CMake `FetchContent`.
 
 ## Usage
 
-1. **File > Open Data Folder...** and pick the directory containing the MM2
-   `.dat` files (e.g. the workspace root, or `MM2BOOT/`).
-2. Pick a data type in the **Data Files** panel on the left.
-3. Edit in the **Editor** panel. `*` = unsaved changes, `x` = file not found.
-4. **Ctrl+S** saves the active file; **File > Save All** writes every loaded file.
+1. **File → Open Data Folder…** (folder with `items.dat` / `map.dat` / …), or pass the
+   folder on the CLI: `MM2ED path/to/data`.
+2. Open documents from the **Project Tree** (Game data / World / Graphics).
+3. Edit in **Workspace** tabs; field inspectors live in **Properties**.
+4. **Ctrl+S** saves the active document; **File → Save All** writes every dirty file.
+5. Recent folders are remembered in `mm2ed.ini` beside the exe.
+
+Marks: `*` unsaved, `o` missing, `·` open in a tab.
+
+**Events:** edit `.mm2evt` text → **Compile** (writes location into memory) → **Save**
+(writes `event.dat` to disk). Status bar shows script vs file dirty. Switching
+location / overlay with an unsaved buffer prompts to confirm.
+
+**Run:** set env `MM2ED_RUN` to a host/exe; **Run → Launch** or **F5** starts it with
+the current data folder as argument / working directory.
+
+## App layout
+
+| Dock | Role |
+|------|------|
+| Project Tree | Grouped browse; opens Workspace tabs |
+| Workspace | Tabbed open documents + kind-specific tools |
+| Properties | Selection-driven inspector |
+| Status bar | Path, dirty counts, last action |
 
 ## Project layout
 
 ```
 editor/
-  CMakeLists.txt          FetchContent deps + glob of src/
+  CMakeLists.txt
   src/
     main.cpp              GLFW/OpenGL3 init + main loop
     app/
-      App.{h,cpp}         Dockspace, menu, section registry, save/load, cross-refs
-      AppState.h          Shared cross-panel state (data dir, status line)
-      Section.h           Abstract base: title/fileName/load/save/draw
-    core/                 Data layer (no ImGui) — one model per .dat file
-      ByteIO.{h,cpp}      Endian read/write helpers + file IO
-      ItemsFile.{h,cpp}   items.dat   (256 * 20)  — fully decoded
-      MonstersFile.{h,cpp}monsters.dat(256 * 26)  — geometry + partial fields
-      RosterFile.{h,cpp}  roster.dat / ROSTER.DAT  (8320 Amiga or 8292 PC)
-      MapFile.{h,cpp}     map.dat     (60 * 512)  — visual + collision pages
-      AttribFile.{h,cpp}  attrib.dat  (60 * 64)   — partial (env + roof bits)
-      StrFile.{h,cpp}     str.dat     (text pool) — (byte+0x1C)&0xFF transform
-      RawFile.h           generic byte container (spells/event)
-      AreaNames.h         60 map/area names + env-type decode (from b3dmm2)
-      Gfx.{h,cpp}         planar image-chunk decoder for .32 and .anm
-    sections/             UI layer — one editor per data type
-      ItemsSection, MonstersSection, RosterSection, MapSection,
-      AttribSection, StrSection, RawSection (spells.dat, event.dat),
-      GfxSection (.32 tilesets and .anm animations)
-    widgets/
-      HexView.{h,cpp}     shared scrollable hex+ASCII dump
-      Texture.{h,cpp}     RGBA -> OpenGL texture helper for previews
-  tests/
-    gfx_dump.cpp          offline gfx-decoder validator (not in CMake build)
+      App.{h,cpp}         Dock shell, menus, tabs, prefs
+      DocKind.h           Document kinds
+      EditorSelection.h   Cross-panel selection
+      EditorPrefs.*       Recent folders (mm2ed.ini)
+      Section.h           Section base (workspace + properties)
+      AppState.h          Shared dirs + status
+    core/                 Data codecs (no ImGui)
+    sections/             Per-document UI
+    widgets/              HexView, Mm2EvtEditor, UiLayout, UiTheme
+    eventlang/            .mm2evt AST / decompile / DSL / encode
+  tools/mm2evt_dump.cpp   CLI dump / roundtrip
 ```
 
-## Graphics (.32 / .anm)
+## Adding a document kind
 
-Both formats share a planar image-chunk codec (5 Amiga bitplanes, 32-color
-`0x0RGB` palette, nibble-RLE pixel stream). `.32` tilesets begin the chunk at
-offset 0; `.anm` animations carry a "TV" prelude and the chunk is located via
-an `FF 00` marker. The **Graphics (.32)** and **Animations (.anm)** sections
-scan the data folder, decode the selected file, and preview frames (single +
-contact sheet), the palette, and per-frame metadata. Decoding is verified
-against real wall/UI `.32` sheets via `tests/gfx_dump.cpp`. Note: `globe.32` and
-`disk.32` use the `.32` extension in the resource table but are XOR data blobs
-(copy-protection strings / other), not planar image chunks. `.anm` files use TV-prelude
-**composition** (frame 0 = base, N>0 = patch at prelude[N-1]; see
-`EXTRACTED/docs/07-anm-tv-format.md`). The Animations section shows **composed**
-runtime frames (what the game blits), a **Raw patches** tab for decoded bitmaps,
-and sequence-driven playback. Shared API: `core/Gfx.h` → `gfxAnmCompositeFrame()`.
+1. Add `core/XxxFile.{h,cpp}` with load/save/decode/encode.
+2. Add `sections/XxxSection` implementing `docKind`, `drawWorkspace`, `drawProperties`.
+3. Register in `App::registerSections()` and extend `DocKind` / `DocKindGroup`.
 
-## Adding a new section
+## Decode status
 
-1. Add a `core/XxxFile.{h,cpp}` model with `decode`/`encode`/`load`/`save`.
-2. Add a `sections/XxxSection.{h,cpp}` subclass of `Section`.
-3. `#include` it and `sections_.push_back(std::make_unique<XxxSection>())` in
-   `App::registerSections()`.
-4. Reconfigure (the CMake glob picks up new files automatically).
-
-## Decode status (see EXTRACTED/docs and b3dmm2)
-
-| File         | Status                          | Editor |
-|--------------|---------------------------------|--------|
-| items.dat    | fully decoded                   | full field editor |
-| roster.dat   | layout confirmed (some unknown) | stats/equipment/spells tabs |
-| str.dat      | encoding decoded                | text editor |
-| monsters.dat | 26-byte records; fields partial | name + named/raw fields |
-| map.dat      | 512 B/screen confirmed          | tile + collision grids |
-| attrib.dat   | partial (env + roof)            | known fields + roof grid + hex |
-| spells.dat   | fully decoded                   | cast/SP/gem/outdoor + reference text |
-| event.dat    | container + VM decoded          | imnodes graph editor (triggers/scripts/strings) |
+| File | Status | Editor |
+|------|--------|--------|
+| items.dat | fully decoded | list + Properties fields |
+| spells.dat | fully decoded | list + Properties fields |
+| roster.dat | layout confirmed | list + character tabs |
+| str.dat | encoding decoded | line table + Properties |
+| monsters.dat | fully decoded | list + full ability panel + sprite preview |
+| map.dat | confirmed | Tiles / Window / 3D + Properties |
+| attrib.dat | fields confirmed | screen editor (env/neighbors/transition/era/door/flags/roof) + Properties |
+| event.dat | VM + DSL | Outline / Script / Graph / Wizard + inspector |
+| .32 / .anm / PC gfx | view-only | preview (read-only) |

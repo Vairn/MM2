@@ -1,5 +1,7 @@
 #include "mm2_town_tables.h"
 
+#include <stddef.h>
+
 /*
  * Per-town commerce constants (map id 0..4). Values cross-checked against
  * EXTRACTED/docs/28-town-services.md §13.1 and the 68k disassembly:
@@ -7,16 +9,17 @@
  *   training index  [1, 5, 2, 4, 2]   FAQ §3-6 (doc 34 §13.2) -- NOT map order
  *   stat add        [5, 20, 10, 10, 3] A4-$6720 (training_stat_apply 0x1C898)
  *   stat cap        [100,100,100,100,50] A4-$671A (cmp @ 0x1C8A8)
- *   donation gold   [20, 250, 40, 120, 40] A4-$6742 (debit 0x1CA3A, show 0x1D556)
- *   donation bit    [1, 2, 4, 8, 16]   A4-$66B1 (OR into A4-$799E, doc 28 §5.2)
+ *   temple scale    [1, 5, 2, 3, 2]   A4-$6714 (heal/align/donate @ 0x1DC1A+)
+ *   feeding frenzy  [20, 250, 40, 120, 40] A4-$6742 (debit 0x1CA3A)
+ *   donation bit    [1, 2, 4, 8, 16]   A4-$66B1 (OR into A4-$799E @ 0x1D7B8)
  */
 static const Mm2TownCommerce kTowns[MM2_TOWN_COUNT] = {
-    /* idx, add, cap, donation, bit */
-    {1, 5, 100, 20, 0x01},   /* 0 Middlegate */
-    {5, 20, 100, 250, 0x02}, /* 1 Atlantium  */
-    {2, 10, 100, 40, 0x04},  /* 2 Tundara    */
-    {4, 10, 100, 120, 0x08}, /* 3 Vulcania   */
-    {2, 3, 50, 40, 0x10},    /* 4 Sandsobar  */
+    /* train, add, cap, temple, frenzy, bit */
+    {1, 5, 100, 1, 20, 0x01},   /* 0 Middlegate */
+    {5, 20, 100, 5, 250, 0x02}, /* 1 Atlantium  */
+    {2, 10, 100, 2, 40, 0x04},  /* 2 Tundara    */
+    {4, 10, 100, 3, 120, 0x08}, /* 3 Vulcania   */
+    {2, 3, 50, 2, 40, 0x10},    /* 4 Sandsobar  */
 };
 
 /* Stat id 0..6 -> roster record byte offset, jump table @ 0x1C86C / 0x1C898. */
@@ -55,12 +58,21 @@ uint32_t mm2_town_training_cost(int level, int town_index)
     return (uint32_t)level * (uint32_t)town_index * 50u;
 }
 
-uint32_t mm2_town_healing_cost(int level, int town_index)
+uint32_t mm2_town_healing_cost(int level, int temple_cost_index)
 {
-    if (level < 0 || town_index < 0) {
+    if (level < 0 || temple_cost_index < 0) {
         return 0;
     }
-    return (uint32_t)level * (uint32_t)town_index * 10u;
+    return (uint32_t)level * (uint32_t)temple_cost_index * 10u;
+}
+
+uint32_t mm2_town_temple_donate_cost(int map_id)
+{
+    Mm2TownCommerce town;
+    if (!mm2_town_commerce(map_id, &town)) {
+        return 0;
+    }
+    return (uint32_t)town.temple_cost_index * 100u;
 }
 
 /* ------------------------------------------------------------------------- *
@@ -147,7 +159,7 @@ uint32_t mm2_class_xp_for_level(uint8_t class_id, int level)
                         : kXpGroupB[level - MM2_XP_FIRST_LEVEL];
 }
 
-/* HP per level at END 11-12 (doc 32), indexed by class id 0..7. */
+/* A4-$64DA BE u16[8] — class HP base @ training 0x2039C (data hunk). */
 static const uint8_t kClassHpPerLevel[8] = {
     12, /* 0 Knight    */
     10, /* 1 Paladin   */
@@ -155,13 +167,63 @@ static const uint8_t kClassHpPerLevel[8] = {
     8,  /* 3 Cleric    */
     6,  /* 4 Sorcerer  */
     8,  /* 5 Robber    */
-    10, /* 6 Ninja     */
+    8,  /* 6 Ninja     — data hunk 0x64DA; FAQ/doc-32 listed 10 (wrong) */
     15, /* 7 Barbarian */
 };
+
+/* A4-$64EE BE u16[5] — per-map HP mul @ 0x203A8. */
+static const uint16_t kTrainHpMul[5] = {1, 5, 2, 3, 2};
+/* A4-$64E4 BE u16[5] — per-map HP div @ 0x203C0. */
+static const uint16_t kTrainHpDiv[5] = {2, 5, 3, 4, 3};
 
 int mm2_class_hp_per_level(uint8_t class_id)
 {
     return (class_id < 8) ? (int)kClassHpPerLevel[class_id] : 0;
+}
+
+int mm2_train_hp_gain(uint8_t class_id, int map_id, uint8_t endurance_current)
+{
+    /* Training Hall HP leaf @ 0x20390..0x20454:
+     *   base = ($64DA[class] * $64EE[map]) / $64E4[map]
+     *   rem  = same product % div; if rem!=0 and class∉{3,5,6} → base++
+     *   end  = -$7F56(+$27); if end>=$F0 → 0
+     *   gain = base + end
+     */
+    if (class_id >= 8 || map_id < 0 || map_id >= 5) {
+        return 0;
+    }
+    const uint16_t cls = (uint16_t)kClassHpPerLevel[class_id];
+    const uint16_t mul = kTrainHpMul[map_id];
+    const uint16_t div = kTrainHpDiv[map_id];
+    if (div == 0) {
+        return 0;
+    }
+    const uint32_t prod = (uint32_t)cls * (uint32_t)mul;
+    uint16_t base = (uint16_t)(prod / (uint32_t)div);
+    const uint16_t rem = (uint16_t)(prod % (uint32_t)div);
+    /* 0x203FA: Cleric/Robber/Ninja skip the rem→+1 bump. */
+    if (rem != 0 && class_id != 3 && class_id != 5 && class_id != 6) {
+        base = (uint16_t)(base + 1);
+    }
+    /* 0x2042E: -$7F56(+$27) — same table walk as Rest SP @ 0x4442. */
+    uint8_t end_b = 0;
+    {
+        static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
+                                          60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
+        uint8_t bonus = 0xFD; /* −3 */
+        size_t i;
+        for (i = 0; i < sizeof(kThresh); ++i) {
+            if (endurance_current <= kThresh[i]) {
+                break;
+            }
+            ++bonus;
+        }
+        end_b = bonus;
+    }
+    if (end_b >= 0xF0) { /* 0x20444 */
+        end_b = 0;
+    }
+    return (int)base + (int)end_b;
 }
 
 int mm2_attr_bonus(int v)
@@ -223,6 +285,164 @@ int mm2_class_spell_level_for(uint8_t class_id, int char_level)
     default:
         return 0;
     }
+}
+
+/* A4-$64C2 — sorcerer/archer auto-spells per new spell level (4 slots, 0x80=pad).
+ * Rows 9–10 are the bytes that follow in the data hunk (overlap into $64A2). */
+static const uint8_t kTrainAutoSorc[10][4] = {
+    {0x01, 0x03, 0x04, 0x05}, {0x08, 0x0a, 0x0b, 0x80}, {0x0f, 0x10, 0x12, 0x80},
+    {0x17, 0x18, 0x19, 0x80}, {0x1d, 0x1e, 0x80, 0x80}, {0x20, 0x22, 0x80, 0x80},
+    {0x26, 0x27, 0x80, 0x80}, {0x28, 0x2b, 0x80, 0x80}, {0x32, 0x33, 0x34, 0x36},
+    {0x37, 0x3a, 0x3c, 0x80},
+};
+
+/* A4-$64A2 — cleric/paladin auto-spells (stored as flat+0x30; 0x20064 subi #0x30). */
+static const uint8_t kTrainAutoCleric[10][4] = {
+    {0x32, 0x33, 0x34, 0x36}, {0x37, 0x3a, 0x3c, 0x80}, {0x3f, 0x40, 0x41, 0x80},
+    {0x44, 0x46, 0x48, 0x80}, {0x4b, 0x4d, 0x80, 0x80}, {0x50, 0x51, 0x80, 0x80},
+    {0x56, 0x57, 0x80, 0x80}, {0x5b, 0x80, 0x80, 0x80}, {0x00, 0x02, 0x0d, 0xc0},
+    {0x00, 0x02, 0x0d, 0xd2},
+};
+
+/* -$7F56 / 0x4442 threshold walk (same as Rest SP / training END bonus). */
+static uint8_t mm2_stat_bonus_7f56(uint8_t attr)
+{
+    static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
+                                      60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
+    uint8_t bonus = 0xFD; /* −3 */
+    size_t i;
+    for (i = 0; i < sizeof(kThresh); ++i) {
+        if (attr <= kThresh[i]) {
+            break;
+        }
+        ++bonus;
+    }
+    return bonus;
+}
+
+static void mm2_train_or_auto_spell(Mm2RosterRecord *rec, uint8_t raw)
+{
+    int flat;
+    int byte_index;
+    if (raw == 0x80) {
+        return;
+    }
+    if (raw > 0x2F) {
+        flat = (int)raw - 0x30;
+    } else {
+        flat = (int)raw;
+    }
+    /* Spell book is 48 bits at +$51..+$56; ignore out-of-range flats. */
+    if (flat < 0 || flat >= 48) {
+        return;
+    }
+    byte_index = 5 + (flat >> 3); /* $51 - $4C */
+    rec->spells[byte_index] =
+        (uint8_t)(rec->spells[byte_index] | (uint8_t)(1u << (flat & 7)));
+}
+
+static void mm2_train_grant_auto_spell_row(Mm2RosterRecord *rec, int sl, uint8_t class_id)
+{
+    const uint8_t(*table)[4];
+    int slot;
+    if (!rec || sl < 1 || sl > 10) {
+        return;
+    }
+    table = (class_id == 3 || class_id == 1) ? kTrainAutoCleric : kTrainAutoSorc;
+    for (slot = 0; slot < 4; ++slot) { /* 0x2011A..0x201BE */
+        mm2_train_or_auto_spell(rec, table[sl - 1][slot]);
+    }
+}
+
+void mm2_train_backfill_auto_spells(Mm2RosterRecord *rec)
+{
+    uint8_t class_id;
+    int sl;
+    int max_sl;
+    if (!rec) {
+        return;
+    }
+    class_id = rec->class_id;
+    if (class_id != 1 && class_id != 2 && class_id != 3 && class_id != 4) {
+        return;
+    }
+    max_sl = (int)rec->spell_level;
+    if (max_sl > 10) {
+        max_sl = 10;
+    }
+    for (sl = 1; sl <= max_sl; ++sl) {
+        mm2_train_grant_auto_spell_row(rec, sl, class_id);
+    }
+}
+
+int mm2_train_spell_on_levelup(Mm2RosterRecord *rec)
+{
+    int level;
+    int new_sl;
+    int sl;
+    uint8_t old_sl;
+    uint8_t class_id;
+    uint8_t bonus;
+    int sp;
+
+    if (!rec) {
+        return 0;
+    }
+
+    /* 0x2007A..0x200B6: level from +$20 / +$71 (caller already incremented both). */
+    level = (int)rec->level;
+    old_sl = rec->spell_level;
+    class_id = rec->class_id;
+    /* Pure casters keep level; fighter-mages subq #6 @ 0x200A8. */
+    if (class_id != 3 && class_id != 4) {
+        level -= 6;
+    }
+    level += 1; /* 0x200AC */
+    if (level > 0) {
+        level >>= 1; /* 0x200B6 asr */
+    }
+    if (level < 1 || level > 10) { /* 0x200BA..0x200C8 */
+        return 0;
+    }
+    new_sl = level;
+    if (new_sl <= (int)old_sl) { /* 0x200D0 */
+        return 0;
+    }
+    /* Archer/Paladin natural cap 7 @ 0x200EE. */
+    if ((class_id == 2 || class_id == 1) && new_sl > 7) {
+        new_sl = 7;
+    }
+    if (new_sl <= (int)old_sl) {
+        return 0;
+    }
+
+    rec->spell_level = (uint8_t)new_sl;
+    /* Sync +$23 (high byte of unknown_22 LE) and keep +$72 via spell_level. */
+    rec->unknown_22 = (uint16_t)((rec->unknown_22 & 0x00FFu) | ((uint16_t)new_sl << 8));
+
+    /* ASM ORs only table[new_sl-1] (one visit, +$20 steps by 1). When +$20
+     * drift skips SL increases, a later train can jump SL by 2+ — grant every
+     * skipped $64A2/$64C2 row so SL2 autos are not lost. */
+    for (sl = (int)old_sl + 1; sl <= new_sl; ++sl) {
+        mm2_train_grant_auto_spell_row(rec, sl, class_id);
+    }
+
+    /* SP @ 0x201C2..0x20228: (-$7F56(INT|PER)+3) * new_sl → +$58/+ $5A. */
+    if (class_id == 2 || class_id == 4) {
+        bonus = mm2_stat_bonus_7f56(rec->intelligence_current);
+    } else {
+        bonus = mm2_stat_bonus_7f56(rec->personality_current);
+    }
+    if (bonus >= 0xF2) { /* 0x20206 */
+        bonus = 0;
+    }
+    sp = ((int)bonus + 3) * new_sl;
+    if (sp < 0) {
+        sp = 0;
+    }
+    rec->sp_max = (uint16_t)sp;
+    rec->sp_current = (uint16_t)sp;
+    return 1;
 }
 
 /* Blacksmith static item-id tables [category][map][slot], decoded byte-exact from
@@ -368,8 +588,9 @@ uint32_t mm2_smith_identify_cost(uint8_t backpack_flags)
     if (meta == 0) {
         return 10u;
     }
-    /* Midpoint of rng(1, meta*100) @ 0x1BF60 — deterministic until shop RNG wired. */
-    return (1u + (uint32_t)meta * 100u) / 2u;
+    /* 0x1BF48: meta==0 → 10; else d0=meta, d1=$64, jsr -$7B54 (mul @ 0x24C74)
+     * → cost = meta*100. Not RNG (-$7BB4). */
+    return (uint32_t)meta * 100u;
 }
 
 /* Mage guild sorcerer spells [map][slot] = {spell_index 0..47, gold}. Decoded

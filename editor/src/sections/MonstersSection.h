@@ -7,44 +7,43 @@
 #include "core/Gfx.h"
 #include "core/MonstersFile.h"
 #include "core/PcGfx.h"
+#include "widgets/UiLayout.h"
 
 namespace mm2 {
 
-// Sprite source for the preview pane: Amiga NN.anm (default), or the GOG PC
-// CGA/EGA combat atlas (MONSTERS.4 / MONSTERS.16), keyed by the same picture id.
 enum class PcSpriteMode { Amiga, Cga, Ega };
 
 class MonstersSection : public Section {
 public:
     ~MonstersSection() override;
 
-    const char* title() const override { return "Monsters"; }
+    DocKind docKind() const override { return DocKind::Monsters; }
     const char* fileName() const override { return "monsters.dat"; }
     bool load(const std::string& dataDir) override;
     bool save(const std::string& dataDir) override;
-    void draw(App& app) override;
+    void drawWorkspace(App& app, EditorSelection& sel) override;
+    void drawProperties(App& app, EditorSelection& sel) override;
+    void focusIndex(int index) override { selected_ = index; }
+
+    const MonstersFile& file() const { return file_; }
 
 private:
-    // Decode the NN.anm sprite for a picture byte and upload its frames as
-    // textures. NN = picture & 0x7F (the 0x80 bit is a separate flag).
     void loadSprite(uint8_t picture);
     void releaseTextures();
     void buildSpriteComposedTextures();
-
-    // PC (CGA/EGA) preview: syncs the shared PC assets folder, lazily loads
-    // the matching MONSTERS.4/.16 atlas, and decodes the picture for `picture`.
     void syncPcSprite(App& app, uint8_t picture);
     void releasePcTextures();
     void buildPcComposedTextures();
+    void drawMonsterDetail(App& app);
 
     MonstersFile file_;
     int selected_ = 0;
+    ui::MasterDetail layout_;
 
     std::string dir_;
 
-    // Cached sprite for the currently shown picture byte.
-    int spritePic_ = -1;     // picture byte currently decoded (-1 = none)
-    int spriteFrame_ = 0;    // selected animation frame
+    int spritePic_ = -1;
+    int spriteFrame_ = 0;
     float spriteZoom_ = 2.0f;
     bool spritePlaying_ = true;
     bool spriteLoop_ = true;
@@ -64,16 +63,15 @@ private:
     int spriteCanvasMinY_ = 0;
     GfxAnmCanvas spriteAnmCanvas_{};
 
-    // --- PC (CGA/EGA) preview state ---
     PcSpriteMode pcMode_ = PcSpriteMode::Amiga;
     std::string pcDir_;
     PcMonstersAtlas pcAtlasCga_;
     PcMonstersAtlas pcAtlasEga_;
-    bool pcAtlasCgaLoaded_ = false;  // load attempted (may still have failed)
+    bool pcAtlasCgaLoaded_ = false;
     bool pcAtlasEgaLoaded_ = false;
-    int pcCgaPalette_ = 1;  // 0 = green/red/brown, 1 = cyan/magenta/white (MM2 default)
+    int pcCgaPalette_ = 1;
 
-    int pcPicId_ = -1;               // picture id currently decoded into pcPic_
+    int pcPicId_ = -1;
     PcSpriteMode pcPicVariant_ = PcSpriteMode::Amiga;
     std::optional<PcMonsterPicture> pcPic_;
     std::vector<unsigned int> pcComposedTextures_;

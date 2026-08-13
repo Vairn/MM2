@@ -28,37 +28,61 @@ size_t formatPartyStatusLine(char *out, size_t cap, int slot_index, const char *
         return 0;
     }
 
-    char hp_field[8];
-    if (hp > 999) {
-        hp_field[0] = '\0';
-    } else {
-        formatPartyHpField(hp, hp_field, sizeof(hp_field));
-    }
-
-    char name_field[kPartyNameFieldWidth + 1];
-    std::snprintf(name_field, sizeof(name_field), "%-*.*s", kPartyNameFieldWidth, kPartyNameFieldWidth,
-                  name ? name : "");
-
+    /* 0x6150: putchar ' ', digit, ')'; space; win_print(name) until NUL (no 11-pad);
+     * putchar ' ', '/'; then HP digits + trailing spaces to 3 cells.
+     * Short names shift '/' and HP left — matching retail, not a fixed HP column. */
+    const char *nm = name ? name : "";
     const int slot_digit = (slot_index >= 0 && slot_index < 8) ? slot_index + 1 : 1;
 
-    if (prefix_style == PartyStatusPrefix::CombatFrontRank || prefix_style == PartyStatusPrefix::CombatBackRank) {
-        /* combat_message_helper @ 0x12848: glyph 0x17 or space, then left-aligned
-         * HP digits padded with trailing spaces to 3 cells (0x1291E..0x12956). */
+    char hp_field[8];
+    formatPartyHpField(hp, hp_field, sizeof(hp_field));
+
+    if (prefix_style == PartyStatusPrefix::CombatFrontRank ||
+        prefix_style == PartyStatusPrefix::CombatBackRank) {
+        /* combat_message_helper @ 0x12848: glyph 0x17 or space, then same name/HP. */
         const char prefix =
             prefix_style == PartyStatusPrefix::CombatFrontRank ? static_cast<char>(0x17) : ' ';
         if (hp > 999) {
-            std::snprintf(out, cap, "%c%d) %-*s /+++", prefix, slot_digit, kPartyNameFieldWidth, name_field);
+            std::snprintf(out, cap, "%c%d) %s /+++", prefix, slot_digit, nm);
         } else {
-            std::snprintf(out, cap, "%c%d) %-*s /%-3u", prefix, slot_digit, kPartyNameFieldWidth, name_field,
-                          static_cast<unsigned>(hp));
+            std::snprintf(out, cap, "%c%d) %s /%s", prefix, slot_digit, nm, hp_field);
         }
     } else if (hp > 999) {
-        std::snprintf(out, cap, " %d) %-*s /+++", slot_digit, kPartyNameFieldWidth, name_field);
+        std::snprintf(out, cap, " %d) %s /+++", slot_digit, nm);
     } else {
-        std::snprintf(out, cap, " %d) %-*s /%s", slot_digit, kPartyNameFieldWidth, name_field, hp_field);
+        std::snprintf(out, cap, " %d) %s /%s", slot_digit, nm, hp_field);
     }
 
     return std::strlen(out);
+}
+
+void formatPrintNumber(uint32_t value, char *out, size_t cap, int width, char pad)
+{
+    if (!out || cap == 0) {
+        return;
+    }
+    if (width < 1) {
+        width = 1;
+    } else if (width > 24) {
+        width = 24;
+    }
+
+    char digits[16];
+    std::snprintf(digits, sizeof(digits), "%u", value);
+    const int n = static_cast<int>(std::strlen(digits));
+    int pad_n = width - n;
+    if (pad_n < 0) {
+        pad_n = 0;
+    }
+
+    if (static_cast<size_t>(pad_n) + static_cast<size_t>(n) + 1u > cap) {
+        out[0] = '\0';
+        return;
+    }
+    for (int i = 0; i < pad_n; ++i) {
+        out[i] = pad;
+    }
+    std::memcpy(out + pad_n, digits, static_cast<size_t>(n) + 1u);
 }
 
 void formatSlashStatCurrent(uint16_t value, char *out, size_t cap, int field_width)

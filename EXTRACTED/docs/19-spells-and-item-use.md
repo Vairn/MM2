@@ -166,9 +166,11 @@ Two of the few spell effects already wired into the event VM are the overhead
 - **Fountain of Clairvoyance** (Middlegate event 42) writes both timers to `50`
   via `store_var8`/`OP_1A` (groups `0x2B`/`0x2C`) — see
   [`06-roster-format.md`](06-roster-format.md).
-- **Port TODO:** `mm2_gamestate.h` still names these `MM2_GS_CLASS_QUEST_CNT` /
-  `MM2_GS_QUEST_COUNTER_B` (correct offsets, stale names). Rename + implement the
-  decrement/overhead render when the spell-effect system is built.
+- **Renamed (2026-07):** `mm2_gamestate.h` now defines these as
+  `MM2_GS_EAGLE_EYE_TIMER` (`-0x79A0`) / `MM2_GS_WIZARD_EYE_TIMER` (`-0x799F`);
+  the old `MM2_GS_CLASS_QUEST_CNT` / `MM2_GS_QUEST_COUNTER_B` names remain only
+  as aliases for existing OP_1A / fountain callers. Remaining TODO: implement
+  the decrement/overhead render when the spell-effect system is built.
 
 ## Tools / code
 

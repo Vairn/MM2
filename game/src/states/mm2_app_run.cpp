@@ -3,13 +3,15 @@
 #include "mm2/states/mm2_app_context.h"
 #include "mm2/states/mm2_states.h"
 #include "mm2/ui/CharacterUiKind.h"
+#include "mm2/ui/PlayHudKind.h"
 
-int mm2_app_run(const char *data_dir, int ui_kind)
+int mm2_app_run(const char *data_dir, int ui_kind, int play_hud_kind)
 {
     const auto kind = static_cast<mm2::ui::CharacterUiKind>(ui_kind);
+    const auto play_kind = static_cast<mm2::ui::PlayHudKind>(play_hud_kind);
     mm2::AppHost *const host = &mm2::AppHost::createInStorage(mm2_app_host_storage);
 
-    if (!host->start(data_dir, kind)) {
+    if (!host->start(data_dir, kind, play_kind)) {
         return 1;
     }
 

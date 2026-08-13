@@ -45,6 +45,10 @@ public:
     void tick(const platform::KeyState &keys);
     void render(gfx::ScreenCompositor &compositor);
 
+    /** SDL-only: convert the level-sampled SPACE into an edge (one per press) so
+     * the character chooser does not flip pages uncontrollably while held. */
+    void paceMenuSpace(platform::KeyState &keys);
+
     /** Amiga: true when the off-screen cache needs a rebuild (present still runs every frame). */
     bool needsRedraw() const;
     void ackRedraw();
@@ -67,6 +71,10 @@ private:
     bool quit_requested_ = false;
     bool party_launch_ready_ = false;
     Mm2PartyLaunch party_launch_{};
+    /* The SDL backend level-samples SPACE (held across slow frames for continue
+     * prompts). Latch it here so the character chooser gets one page-toggle per
+     * actual press, matching the Amiga backend's keyUse edge semantics. */
+    bool space_held_ = false;
 };
 
 }  // namespace mm2::ui

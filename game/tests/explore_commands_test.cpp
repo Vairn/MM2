@@ -99,6 +99,30 @@ int main()
         expect(in_bounds, "rng range stays within [min,max]", fails);
     }
 
+    /* ---- Amiga entropy 0x24048: state = state*0x41C64E6D + 0x3039 -------- */
+    {
+        Rng a(1);
+        /* First step from seed 1: 1*0x41C64E6D+0x3039 = 0x41C67EA6;
+         * raw15 = (>>16)&0x7FFF = 0x41C6. */
+        expect(a.range(0, 0x7FFF) == 0x41C6, "amiga LCG first raw15 from seed 1", fails);
+
+        Rng b(1);
+        Rng c(2);
+        bool differ = false;
+        for (int i = 0; i < 32; ++i) {
+            if (b.range(1, 100) != c.range(1, 100)) {
+                differ = true;
+                break;
+            }
+        }
+        expect(differ, "different seeds diverge within 32 rolls", fails);
+
+        Rng d(0xDEADBEEFu);
+        d.reseed(1);
+        Rng e(1);
+        expect(d.range(1, 1000) == e.range(1, 1000), "reseed(1) matches Rng(1)", fails);
+    }
+
     /* ---- Rest clock advance: +0x55 sub-day, with rollover (0x19CEC) ----- */
     {
         static uint8_t gs_image[static_cast<size_t>(MM2_A4_ANCHOR) + 0x8000u]{};
@@ -117,6 +141,52 @@ int main()
         advanceTimeTick(gs, 0x55);
         expect(mm2_gs_u16(a4, MM2_GS_TIME_SUBDAY) == 0x15, "rest subday rolls 0xC0+0x55 -> 0x15", fails);
         expect(gs.day() == static_cast<uint16_t>(day0 + 1), "rest day-advance crosses midnight", fails);
+    }
+
+    /* ---- Rest SP recompute @ 0x19C30 (INT/PER × working level) ------------ */
+    {
+        Mm2RosterRecord cass{};
+        cass.class_id = 4; /* Sorcerer */
+        cass.level = 4;
+        cass.spell_level = 2;
+        cass.intelligence_current = 21; /* tier → bonus 4 → SP/level 7 */
+        cass.personality_current = 7;
+        cass.unknown_1a_20[6] = 1; /* stock roster drift: +$20 stuck at 1 */
+        cass.unknown_22 = static_cast<uint16_t>(2u << 8);
+        cass.sp_max = 7;
+        cass.sp_current = 7;
+
+        recomputeRestSpellPoints(cass);
+        expect(cass.sp_max == 7 && cass.sp_current == 7,
+               "without sync, stale +$20=1 keeps stock Cassandra at SP 7", fails);
+
+        syncRosterWorkingLevelFields(cass);
+        expect(cass.unknown_1a_20[6] == 4, "sync copies +$71 level into +$20", fails);
+        recomputeRestSpellPoints(cass);
+        expect(cass.sp_max == 28 && cass.sp_current == 28,
+               "Cassandra L4 INT21 Rest SP = (4+3)*4 = 28", fails);
+
+        Mm2RosterRecord gene{};
+        gene.class_id = 3; /* Cleric */
+        gene.level = 4;
+        gene.spell_level = 2;
+        gene.personality_current = 20; /* same 7 SP/level tier */
+        gene.intelligence_current = 10;
+        gene.sp_max = 7;
+        gene.sp_current = 7;
+        syncRosterWorkingLevelFields(gene);
+        recomputeRestSpellPoints(gene);
+        expect(gene.sp_max == 28 && gene.sp_current == 28,
+               "Gene Eric L4 PER20 Rest SP = (4+3)*4 = 28", fails);
+
+        Mm2RosterRecord knight{};
+        knight.class_id = 0;
+        knight.level = 4;
+        knight.spell_level = 0;
+        knight.sp_max = 0;
+        syncRosterWorkingLevelFields(knight);
+        recomputeRestSpellPoints(knight);
+        expect(knight.sp_max == 0, "non-caster (+$23==0) Rest leaves SP alone", fails);
     }
 
     if (fails == 0) {

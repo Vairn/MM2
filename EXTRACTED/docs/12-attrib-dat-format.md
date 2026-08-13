@@ -36,7 +36,10 @@ environment, world-adjacency, and roof data for each of the 60 map screens.
 | `0x0E` | 1 | `entry_coord` / in-map safe square | **asm-confirmed** | Packed `(Y<<4)|X` party position. Unpacked at `0x123A`: hi nibble → `-$79F0` (row/Y), lo nibble → `-$79F1` (col/X). This is the screen's spawn point; very likely also the "safe square" the party is moved to on combat *run* / in-map recall. |
 | `0x0F` | 1 | `era_gate` | **asm-confirmed** | Compared against the current era index (`-$79B5`, low byte of `-$79B6`) in the **event interpreter** at `0x172BC`; mismatch skips the screen's event record. Usually `0x09`. See `13-time-era-calendar.md`. |
 | `0x10` | 1 | pad | confirmed-zero | `0x00` in every record. |
-| `0x11`..`0x14` | 4 | sublayout params | observed | Read/compared during screen setup (`0x12F58`, `0x9C2A`, `0x20D6E`, `0x1A8B4`). `0x12`/`0x13` look like a second coordinate pair. |
+| `0x11` | 1 | sublayout param | observed | Read/compared during screen setup (`0x12F58`). |
+| `0x12` | 1 | `door_strength` | **asm-confirmed** | Materialized to `A4-$5608`; consumed by the **bash** handler @ `0x9C2A`. See `MM2_ATTRIB_OFF_DOOR_STRENGTH` / `mm2_attrib_door_strength()` in `mm2_attrib_codec.h`. |
+| `0x13` | 1 | `door_trap` | **asm-confirmed** | Materialized to `A4-$5607`; consumed by the **unlock** handler @ `0x20D6E`. Not a second coordinate pair — was mislabeled "sublayout params" in older notes. See `MM2_ATTRIB_OFF_DOOR_TRAP` / `mm2_attrib_door_trap_byte()`. |
+| `0x14` | 1 | sublayout param | observed | Read/compared during screen setup (`0x1A8B4`). |
 | `0x15` | 1 | label / transition hi | strong | Outside: legacy "Outside Area: XX" label byte. Interior: high byte of the town↔cavern `complex_id`. |
 | `0x16` | 1 | `recall_coord` | **asm-confirmed** | Packed `(Y<<4)|X` destination position. Unpacked at `0xB2DC` → `-$79F0`/`-$79F1`, paired with `0x18`. (Forms the low byte of `complex_id` for interiors.) |
 | `0x17` | 1 | `level/floor` (interior) | strong | `0x01` for town/upper level, `0x02` for its cavern; higher for deeper castle floors. `0x00` outside. |

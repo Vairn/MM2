@@ -178,8 +178,9 @@ static inline void mm2_map_facing_delta(char facing_key, int8_t *dx, int8_t *dy)
  * Interior passability first gate @ 0x9424: current collision cell
  * (A4-$55D6) AND facing bundle (A4-$55D8) AND #$55 (wall bits only).
  * Darkness high bits do not block; they drain light @ 0x69DC after a step.
- * Returns 0 if passable (-1 in original), 1 if blocked.
- * GAP: full 0x9424 path (doors, swim, barriers) not traced yet.
+ * Returns 0 if passable (-1 in original), 1 if wall bits set (caller must
+ * then run the outdoor skill/water override or indoor visual-field message —
+ * see gameplay::step / 0x9424).
  */
 static inline int mm2_map_passability_blocked(uint8_t collision_cell, char facing_key)
 {
@@ -188,14 +189,33 @@ static inline int mm2_map_passability_blocked(uint8_t collision_cell, char facin
     return walls != 0;
 }
 
-/* Page-1 wall low bit for the facing direction (unlock/bash lock clear @ 0x4B06). */
+/* Outdoor terrain class @ 0x9524 (A4-$720A, data-hunk low-32 of the 256 table):
+ * visual tid & 0x1F → class. 1=mountain, 3=forest, 4=water. */
+static inline uint8_t mm2_map_outdoor_terrain_class(uint8_t visual_cell)
+{
+    static const uint8_t kClass[32] = {
+        0, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0,
+    };
+    return kClass[visual_cell & 0x1F];
+}
+
+/* Page-1 wall low bit for the facing direction (unlock/bash lock @ 0x4B06).
+ *
+ * The original rotates the party facing into a FILE SLOT via the -$55D8 bundle
+ * mask (set @ 0x5642..0x568A: N=0xC0 E=0x30 S=0x0C W=0x03) — and bash @ 0x9B88
+ * and clear_lock @ 0x4B06 AND the collision byte against that SAME bundle, then
+ * wall-only 0x55. So facing "N" actually reads the file's WEST slot (0x40),
+ * not the N wall bit (0x01); this is the same rotation mm2_map_facing_shift
+ * (N=6 -> bits 6-7 = W) applies to the visual page. Keep this in lock-step with
+ * mm2_map_facing_mask_hi & 0x55. */
 static inline uint8_t mm2_map_facing_wall_bit(char facing_key)
 {
     switch (facing_key) {
-    case 'N': return MM2_MAP_COLL_N_WALL;
-    case 'E': return MM2_MAP_COLL_E_WALL;
-    case 'S': return MM2_MAP_COLL_S_WALL;
-    case 'W': return MM2_MAP_COLL_W_WALL;
+    case 'N': return MM2_MAP_COLL_W_WALL; /* bundle 0xC0 & 0x55 -> bit6 (file W) */
+    case 'E': return MM2_MAP_COLL_S_WALL; /* bundle 0x30 & 0x55 -> bit4 (file S) */
+    case 'S': return MM2_MAP_COLL_E_WALL; /* bundle 0x0C & 0x55 -> bit2 (file E) */
+    case 'W': return MM2_MAP_COLL_N_WALL; /* bundle 0x03 & 0x55 -> bit0 (file N) */
     default: return 0;
     }
 }

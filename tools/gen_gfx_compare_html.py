@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_GOG = Path(r"C:\Program Files (x86)\GOG Galaxy\Games\Might and Magic 2")
 DEFAULT_OUT = ROOT / "EXTRACTED" / "pc_gfx" / "compare"
-COMPARE_CACHE_VERSION = 5
+COMPARE_CACHE_VERSION = 6
 
 SNES_MONSTER_SPRITE_DIRS = [
     ROOT / "EXTRACTED" / "SNES" / "gfx" / "export" / "monsters" / "sprites",
@@ -29,6 +29,16 @@ SNES_MONSTER_SPRITE_DIRS = [
     ROOT / "EXTRACTED" / "snes" / "gfx" / "export" / "monsters" / "sprites",
     ROOT / "EXTRACTED" / "snes" / "gfx" / "monsters_assembled",
 ]
+
+MAC_RSRC = ROOT / "EXTRACTED" / "MAC" / "Might_and_Magic_II_0" / "extracted_rsrc"
+MAC_COLOR_LZPP = MAC_RSRC / "Color" / "images" / "lzpp"
+MAC_COLOR_FRAMES = MAC_COLOR_LZPP / "frames"
+MAC_BW_PPT_FRAMES = (
+    MAC_RSRC / "Data" / "images" / "ppt" / "frames",
+    MAC_RSRC / "BW" / "images" / "ppt" / "frames",
+    MAC_RSRC / "BW_ART" / "frames",
+)
+MAC_BW_VIEW_ENV = MAC_RSRC / "BW_ART" / "view_env"
 
 sys.path.insert(0, str(ROOT / "tools"))
 
@@ -246,6 +256,39 @@ def export_snes_monster_thumb(picture_id: int, out: Path) -> bool:
     return True
 
 
+def _mac_color_frame0(picture_id: int) -> Path | None:
+    """Resolve Color LZpp frame 0 path for picture id."""
+    if not MAC_COLOR_FRAMES.is_dir():
+        return None
+    matches = sorted(MAC_COLOR_FRAMES.glob(f"{picture_id}_*_00.png"))
+    if not matches:
+        matches = sorted(MAC_COLOR_FRAMES.glob(f"{picture_id}_00.png"))
+    return matches[0] if matches else None
+
+
+def _mac_bw_frame0(picture_id: int) -> Path | None:
+    for frames_dir in MAC_BW_PPT_FRAMES:
+        if not frames_dir.is_dir():
+            continue
+        p = frames_dir / f"{picture_id}_00.png"
+        if p.is_file():
+            return p
+    for pack in ("Data", "BW"):
+        p = MAC_RSRC / pack / "images" / "ppt" / f"{picture_id}_frame0.png"
+        if p.is_file():
+            return p
+    return None
+
+
+def export_mac_monster_thumb(src: Path | None, out: Path) -> bool:
+    if src is None or not src.is_file() or Image is None:
+        return False
+    im = Image.open(src).convert("RGBA")
+    im = crop_rgba_content(im)
+    pil_save(flatten_rgba(pad_rgba(im)), out, scale=MONSTER_SCALE)
+    return True
+
+
 def export_anm_thumb(anm_path: Path, out: Path) -> bool:
     if not anm_path.is_file() or Image is None:
         return False
@@ -434,7 +477,9 @@ def build_html(
           <td class="thumb">{cell_img(r.get("ega_img"), f"EGA {r['slot']:02d}")}</td>
           <td class="thumb">{cell_img(r.get("anm_img"), f"ANM {r['slot']:02d}")}</td>
           <td class="thumb">{cell_img(r.get("snes_img"), f"SNES {r['slot']:02d}")}</td>
-          <td class="meta">{html.escape(r["anm_note"])}<br>{html.escape(r.get("snes_note", ""))}</td>
+          <td class="thumb">{cell_img(r.get("mac_color_img"), f"Mac Color {r['slot']:02d}")}</td>
+          <td class="thumb">{cell_img(r.get("mac_bw_img"), f"Mac BW {r['slot']:02d}")}</td>
+          <td class="meta">{html.escape(r["anm_note"])}<br>{html.escape(r.get("snes_note", ""))}<br>MacC {html.escape(r.get("mac_color_note", ""))} · MacBW {html.escape(r.get("mac_bw_note", ""))}</td>
         </tr>"""
 
     nav_links = '<a href="#monsters">Monsters 01–74</a>'
@@ -528,10 +573,14 @@ def build_html(
     <p>
       Numbered slots side-by-side: <strong>Amiga</strong> (planar <code>.32</code> / combat <code>.anm</code>)
       vs <strong>PC CGA</strong> (<code>.4</code>) vs <strong>PC EGA</strong> (<code>.16</code>)
-      vs <strong>SNES</strong> (table <code>$14:8060</code>).
+      vs <strong>SNES</strong> (table <code>$14:8060</code>)
+      vs <strong>Mac Color</strong> (LZpp) vs <strong>Mac B&amp;W</strong> (¶PPT / <code>%B6PPT</code>).
       Monster picture id <strong>N</strong> uses header entry <code>N−1</code> in <code>MONSTERS.*</code>
       and SNES sprite <code>monster_&#123;N−1&#125;.png</code>.
       Wall sheets share the same stem (<code>TOWN</code> ↔ <code>town.32</code>); frame counts may differ by port.
+      Mac thumbs are frame&nbsp;0; full cel strips live under
+      <code>EXTRACTED/MAC/.../atlases/{{color,bw}}_monsters/</code>.
+      BW view-env CBMP pieces are separate (<code>BW_ART/view_env/</code>).
     </p>
   </header>
   <nav class="toc">{nav_links}</nav>
@@ -547,6 +596,7 @@ def build_html(
         Orange: named monster uses this id but no PC thumb decodes.
         <code>NN.anm</code> is Amiga combat art (same index when ported).
         SNES CHR is assembled from table <code>$14:8060</code> (index <code>N−1</code>).
+        Mac Color = LZpp frame&nbsp;0; Mac B&amp;W = Data/BW ¶PPT frame&nbsp;0 (Sqnc/FRMS ground truth for cel counts).
       </p>
       <table>
         <thead>
@@ -560,6 +610,8 @@ def build_html(
             <th>thumb</th>
             <th>Amiga .anm</th>
             <th>SNES</th>
+            <th>Mac Color</th>
+            <th>Mac BW</th>
             <th>notes</th>
           </tr>
         </thead>
@@ -591,7 +643,8 @@ def build_markdown(
         "# Platform graphics index",
         "",
         "Every **numbered slot** for combat monsters and wall/sprite sheets —",
-        "**Amiga** (`.32` / `.anm`) vs **PC CGA** (`.4`) vs **PC EGA** (`.16`) vs **SNES**.",
+        "**Amiga** (`.32` / `.anm`) vs **PC CGA** (`.4`) vs **PC EGA** (`.16`) vs **SNES**",
+        "vs **Mac Color** (LZpp) vs **Mac B&W** (¶PPT).",
         "",
     ]
     if embed_iframe:
@@ -599,6 +652,10 @@ def build_markdown(
             "Format reference: [PC DOS graphics formats](/docs/reverse-engineering/54-pc-dos-graphics-formats)",
             " · [ANM/TV format](/docs/reverse-engineering/07-anm-tv-format)",
             " · [Monster variants by name](/docs/gallery/monster-variants).",
+            "",
+            "Mac thumbs are **frame 0**; full cel atlases:",
+            "`EXTRACTED/MAC/Might_and_Magic_II_0/extracted_rsrc/atlases/color_monsters/` and",
+            "`…/bw_monsters/`. BW view-env CBMP: `…/BW_ART/view_env/`.",
             "",
             f'<iframe src="{html_path}{bust}" class="platform-compare-frame" title="Platform graphics compare"></iframe>',
             "",
@@ -645,14 +702,14 @@ def build_github_wiki_pages(
     hub: list[str] = [
         "# Platform graphics index",
         "",
-        "Numbered slots side-by-side: **Amiga** (`.32` / `.anm`) vs **PC CGA** (`.4`) vs **PC EGA** (`.16`) vs **SNES**.",
+        "Numbered slots side-by-side: **Amiga** (`.32` / `.anm`) vs **PC CGA** (`.4`) vs **PC EGA** (`.16`) vs **SNES** vs **Mac Color** (LZpp) vs **Mac B&W** (¶PPT).",
         "",
         "Format: [PC DOS graphics](PC-DOS-Graphics-Formats) · [ANM/TV](ANM-TV-Format) · "
         "[SNES graphics](SNES-Graphics) · [Monster variants by name](Monster-Variants).",
         "",
         "## Combat monsters",
         "",
-        "[Picture ids 01–74](Platform-Monsters-01-74) — header slot index with CGA / EGA / `.anm` / SNES thumbs.",
+        "[Picture ids 01–74](Platform-Monsters-01-74) — CGA / EGA / `.anm` / SNES / Mac Color / Mac BW thumbs.",
         "",
         "## Wall / sprite sheets",
         "",
@@ -675,16 +732,18 @@ def build_github_wiki_pages(
         "",
         "Row **N** = `monsters.dat` picture byte `& 0x7F`. Header entry **`N−1`** in `MONSTERS.*`.",
         "SNES table `$14:8060` index **`N−1`** → `monster_XX.png` (validated vs Amiga thumbs).",
+        "Mac Color = LZpp frame 0; Mac B&W = ¶PPT frame 0 (Data/BW).",
         "",
-        "| Pic | monsters.dat | CGA | EGA | Amiga | SNES |",
-        "|----:|--------------|-----|-----|-------|------|",
+        "| Pic | monsters.dat | CGA | EGA | Amiga | SNES | Mac Color | Mac BW |",
+        "|----:|--------------|-----|-----|-------|------|-----------|--------|",
     ]
     for r in monster_rows:
         names = r["monsters"].replace("|", "\\|")
         mon.append(
             f"| {r['slot']:02d} | {names} | "
             f"{img_cell(r.get('cga_img'))} | {img_cell(r.get('ega_img'))} | "
-            f"{img_cell(r.get('anm_img'))} | {img_cell(r.get('snes_img'))} |"
+            f"{img_cell(r.get('anm_img'))} | {img_cell(r.get('snes_img'))} | "
+            f"{img_cell(r.get('mac_color_img'))} | {img_cell(r.get('mac_bw_img'))} |"
         )
     (wiki_dir / "Platform-Monsters-01-74.md").write_text("\n".join(mon) + "\n", encoding="utf-8")
     pages.append("Platform-Monsters-01-74")
@@ -733,6 +792,8 @@ def export_monster_rows(
             "ega_note": "",
             "anm_note": "",
             "snes_note": "",
+            "mac_color_note": "",
+            "mac_bw_note": "",
         }
 
         cga_img = assets / "monsters" / "cga" / f"{slot:02d}.png"
@@ -767,6 +828,22 @@ def export_monster_rows(
             row["snes_note"] = f"idx {slot - 1:02d}"
         else:
             row["snes_note"] = "no sprite"
+
+        mac_c_img = assets / "monsters" / "mac_color" / f"{slot:02d}.png"
+        mac_c_src = _mac_color_frame0(slot)
+        if export_mac_monster_thumb(mac_c_src, mac_c_img):
+            row["mac_color_img"] = mac_c_img
+            row["mac_color_note"] = "LZpp"
+        else:
+            row["mac_color_note"] = "—"
+
+        mac_bw_img = assets / "monsters" / "mac_bw" / f"{slot:02d}.png"
+        mac_bw_src = _mac_bw_frame0(slot)
+        if export_mac_monster_thumb(mac_bw_src, mac_bw_img):
+            row["mac_bw_img"] = mac_bw_img
+            row["mac_bw_note"] = "¶PPT"
+        else:
+            row["mac_bw_note"] = "—"
 
         rows.append(row)
     return rows
@@ -903,9 +980,14 @@ def main(argv: list[str] | None = None) -> int:
     ega_n = sum(1 for r in monster_rows if r.get("ega_img"))
     anm_n = sum(1 for r in monster_rows if r.get("anm_img"))
     snes_n = sum(1 for r in monster_rows if r.get("snes_img"))
+    mac_c_n = sum(1 for r in monster_rows if r.get("mac_color_img"))
+    mac_bw_n = sum(1 for r in monster_rows if r.get("mac_bw_img"))
     wall_frames = sum(len(s["rows"]) for s in wall_sections)
     print(f"Wrote {html_path}")
-    print(f"  monsters: CGA {cga_n}/74 · EGA {ega_n}/74 · .anm {anm_n}/74 · SNES {snes_n}/74")
+    print(
+        f"  monsters: CGA {cga_n}/74 · EGA {ega_n}/74 · .anm {anm_n}/74 · "
+        f"SNES {snes_n}/74 · MacC {mac_c_n}/74 · MacBW {mac_bw_n}/74"
+    )
     print(f"  wall sheets: {len(wall_sections)} stems · {wall_frames} frame rows")
     if args.markdown:
         print(f"Wrote {args.markdown}")

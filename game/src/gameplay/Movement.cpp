@@ -1,7 +1,13 @@
 #include "mm2/gameplay/Movement.h"
 
 #include "mm2/events/EventVmHelpers.h"
+#include "mm2/platform/Audio.h"
+#include "mm2_attrib_codec.h"
 #include "mm2_map_codec.h"
+#include "mm2_party_launch.h"
+#include "mm2_roster_codec.h"
+
+#include <cstddef>
 
 namespace mm2::gameplay {
 
@@ -52,9 +58,106 @@ uint8_t collisionAt(const world::MapWorld &world, int x, int y)
     return world.collisionAt(x, y);
 }
 
-bool passabilityBlocked(const world::MapWorld &world, int x, int y, char facing_key)
+/* Outdoor visual sample with neighbour wrap (hood row0 layout @ 0x190C). */
+uint8_t visualAtWrapped(const world::MapWorld &world, int x, int y)
 {
-    return mm2_map_passability_blocked(collisionAt(world, x, y), facing_key) != 0;
+    int screen = world.currentScreen();
+    int lx = x;
+    int ly = y;
+    if (lx < 0) {
+        const int n = world.neighborScreen(3);
+        if (n < 0) {
+            return 0;
+        }
+        screen = n;
+        lx += MM2_MAP_GRID_DIM;
+    } else if (lx >= MM2_MAP_GRID_DIM) {
+        const int n = world.neighborScreen(1);
+        if (n < 0) {
+            return 0;
+        }
+        screen = n;
+        lx -= MM2_MAP_GRID_DIM;
+    }
+    if (ly < 0) {
+        const int n = world.neighborScreen(2);
+        if (n < 0) {
+            return 0;
+        }
+        screen = n;
+        ly += MM2_MAP_GRID_DIM;
+    } else if (ly >= MM2_MAP_GRID_DIM) {
+        const int n = world.neighborScreen(0);
+        if (n < 0) {
+            return 0;
+        }
+        screen = n;
+        ly -= MM2_MAP_GRID_DIM;
+    }
+    if (lx < 0 || ly < 0 || lx >= MM2_MAP_GRID_DIM || ly >= MM2_MAP_GRID_DIM) {
+        return 0;
+    }
+    return world.mapFile().screens[screen].visual[static_cast<size_t>((ly << 4) | lx)];
+}
+
+/* Full passability @ 0x9424. Returns ObstructionMsg::None when passable (−1). */
+ObstructionMsg passabilityObstruction(const world::MapWorld &world, GameStateView &gs, int x, int y,
+                                      char facing_key, Mm2RosterFile *roster,
+                                      const Mm2PartyLaunch *launch)
+{
+    const uint8_t coll = collisionAt(world, x, y);
+    if (mm2_map_passability_blocked(coll, facing_key) == 0) {
+        return ObstructionMsg::None;
+    }
+
+    /* Indoor (−$79E2==0): visual 2-bit field → obstruction index; torch(3)→Solid(1). */
+    if (!world.isOutdoor()) {
+        const uint8_t vis = world.visualPage()[static_cast<size_t>((y << 4) | (x & 0x0F))];
+        int field = (vis >> mm2_map_facing_shift(facing_key)) & 3;
+        if (field == 3) {
+            field = 1;
+        }
+        return static_cast<ObstructionMsg>(field);
+    }
+
+    /* Outdoor: wall bits gate a terrain-class override @ 0x9480..0x9518.
+     * Hood row0 indices 1 then 0 = one step forward, then current visual.
+     * Class 1 → Mountaineering (0x0B) count≥2; class 3 → Pathfinder (0x0D);
+     * class 4 + runtime env $0A → Walk on Water (−$79A7) or "Can't swim!". */
+    ObstructionMsg result = ObstructionMsg::None;
+    const uint8_t runtime_env = mm2_attrib_runtime_env_id(&world.attrib());
+    const bool walk_water = gs.walkWaterFlag() != 0;
+
+    int8_t dx = 0;
+    int8_t dy = 0;
+    mm2_map_facing_delta(facing_key, &dx, &dy);
+
+    for (int idx = 1; idx >= 0; --idx) {
+        const int vx = (idx == 1) ? (x + dx) : x;
+        const int vy = (idx == 1) ? (y + dy) : y;
+        const uint8_t terr = mm2_map_outdoor_terrain_class(visualAtWrapped(world, vx, vy));
+
+        bool handled = false;
+        if (terr == 1 || terr == 3) {
+            const uint8_t skill_id = (terr == 1) ? 0x0Bu : 0x0Du;
+            const int count =
+                events::eventVmCountPartyNibbleMatches(gs.a4(), roster, launch, skill_id);
+            handled = true;
+            if (count < 2) {
+                result = ObstructionMsg::Impassable;
+            }
+        } else if (terr == 4 && runtime_env == 0x0A) {
+            handled = true;
+            if (!walk_water) {
+                result = ObstructionMsg::CantSwim;
+            }
+        }
+
+        if (handled) {
+            break;
+        }
+    }
+    return result;
 }
 
 /* world_edge_resolve @ 0x1D0A — neighbour byte from materialized attrib 0x05..0x08. */
@@ -102,11 +205,32 @@ bool resolveScreenEdge(world::MapWorld &world, GameStateView &gs, int *x, int *y
     return true;
 }
 
+/* Party aging @ 0x6988 (called from day rollover @ 0x6A3E):
+ * for each party slot: ++record+$22; if >= $B5 → ++$21 and $22=1. */
+void agePartyOnDayRollover(Mm2RosterFile *roster, const Mm2PartyLaunch *launch)
+{
+    if (!roster || !launch) {
+        return;
+    }
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch->roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        auto *raw = reinterpret_cast<uint8_t *>(&roster->records[idx]);
+        raw[0x22] = static_cast<uint8_t>(raw[0x22] + 1);
+        if (raw[0x22] >= 0xB5) {
+            raw[0x21] = static_cast<uint8_t>(raw[0x21] + 1);
+            raw[0x22] = 1;
+        }
+    }
+}
+
 /* Day rollover @ 0x6A06: once subday reaches one full day (0x100), advance the
  * per-era calendar and fold subday back into [0,0x100). Shared by the per-step
  * tick (n=1) and the multi-tick advance (Rest n=0x55). Arithmetic mirrors the
  * ASM exactly. */
-void applyDayRollover(GameStateView &gs)
+void applyDayRollover(GameStateView &gs, Mm2RosterFile *roster, const Mm2PartyLaunch *launch)
 {
     uint8_t *a4 = gs.a4();
     uint16_t subday = mm2_gs_u16(a4, MM2_GS_TIME_SUBDAY);
@@ -132,9 +256,8 @@ void applyDayRollover(GameStateView &gs)
     subday = static_cast<uint16_t>(subday % 0x100);
     mm2_gs_set_u16(a4, MM2_GS_TIME_SUBDAY, subday);
 
-    /* DEFER: per-party-member aging @ 0x6988 (jsr $6988): increments each
-     * roster member's age-day byte (record +$22), rolling to ++age-year
-     * (+$21) at >=0xB5. Needs roster-record access (owned elsewhere). */
+    /* 0x6A3E: jsr 0x6988 — age every party member. */
+    agePartyOnDayRollover(roster, launch);
 
     /* 006a42/4a/52: period-flag clears at day 60 / 120 / 180. */
     if (day == 60 || day == 120 || day == 180) {
@@ -158,7 +281,8 @@ void applyDayRollover(GameStateView &gs)
 
 }  // namespace
 
-void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest)
+void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest, Mm2RosterFile *roster,
+                       const Mm2PartyLaunch *launch)
 {
     /* time_tick @ 0x69DC(n=1): subday += n; dark tile drains light when -$79AB > 0. */
     uint16_t subday = mm2_gs_u16(gs.a4(), MM2_GS_TIME_SUBDAY);
@@ -174,10 +298,11 @@ void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest)
         }
     }
 
-    applyDayRollover(gs);
+    applyDayRollover(gs, roster, launch);
 }
 
-void advanceTimeTick(GameStateView &gs, uint16_t n)
+void advanceTimeTick(GameStateView &gs, uint16_t n, Mm2RosterFile *roster,
+                     const Mm2PartyLaunch *launch)
 {
     /* time_tick @ 0x69DC(n!=1): subday += n then day rollover. The light-drain
      * (0069e8) and date-redraw (006abe) branches are gated on n==1, so a Rest
@@ -185,7 +310,111 @@ void advanceTimeTick(GameStateView &gs, uint16_t n)
     uint16_t subday = mm2_gs_u16(gs.a4(), MM2_GS_TIME_SUBDAY);
     subday = static_cast<uint16_t>(subday + n);
     mm2_gs_set_u16(gs.a4(), MM2_GS_TIME_SUBDAY, subday);
-    applyDayRollover(gs);
+    applyDayRollover(gs, roster, launch);
+}
+
+void materializeScreenAttrib(GameStateView &gs, const world::MapWorld &world)
+{
+    /* 0x923E: copy attrib.dat[screen]*64 → A4-$561A. */
+    if (!gs.valid() || !world.loaded()) {
+        return;
+    }
+    const Mm2AttribRecord &rec = world.attrib();
+    uint8_t *a4 = gs.a4();
+    for (int i = 0; i < MM2_ATTRIB_RECORD_SIZE; ++i) {
+        mm2_gs_set_u8(a4, MM2_GS_ATTRIB_BUF + i, rec.raw[i]);
+    }
+}
+
+bool applyEntryCoordIfSentinel(GameStateView &gs)
+{
+    /* 0x1C64: cmpi.w #$FF, x_arg; beq → unpack -$560C. */
+    if (!gs.valid()) {
+        return false;
+    }
+    if (gs.coordX() != 0xFF && gs.coordY() != 0xFF) {
+        return false;
+    }
+    const uint8_t packed = mm2_gs_u8(gs.a4(), MM2_GS_ENTRY_COORD);
+    gs.setCoordX(static_cast<uint8_t>(packed & 0x0F));
+    gs.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
+    return true;
+}
+
+void syncCurrentCellFlags(GameStateView &gs, const world::MapWorld &world)
+{
+    /* 0x1B1C: collision[(y<<4)|x] → -$55D6 (current-cell byte). */
+    if (!gs.valid() || !world.loaded()) {
+        return;
+    }
+    const uint8_t cell = world.collisionAt(static_cast<int>(gs.coordX()), static_cast<int>(gs.coordY()));
+    mm2_gs_set_u8(gs.a4(), MM2_GS_TILE_RT_FLAGS, cell);
+}
+
+void sessionInteractionGate(GameStateView &gs)
+{
+    /* Darkness leaf of session_interaction_gate @ 0x53C0..0x53E8. */
+    if (!gs.valid()) {
+        return;
+    }
+    uint8_t *a4 = gs.a4();
+    mm2_gs_set_u8(a4, MM2_GS_CANT_SEE_FLAG, 0); /* 0x53C0 */
+    if (mm2_gs_u8(a4, MM2_GS_LIGHT_FACTOR) != 0) { /* 0x53C4: light suppresses */
+        return;
+    }
+    /* 0x53CA: -$5600 (attrib flags 0x1A) >= $80 → can't-see. */
+    if (mm2_gs_u8(a4, MM2_GS_ATTRIB_FLAGS) >= 0x80) {
+        mm2_gs_set_u8(a4, MM2_GS_CANT_SEE_FLAG, 1); /* 0x53D6 */
+        return;
+    }
+    /* 0x53DC: btst #5,-$55D6 (S-dark on current collision cell). */
+    if ((mm2_gs_u8(a4, MM2_GS_TILE_RT_FLAGS) & 0x20) != 0) {
+        mm2_gs_set_u8(a4, MM2_GS_CANT_SEE_FLAG, 1); /* 0x53E4 */
+    }
+}
+
+uint8_t restSpellBonusFactor(uint8_t attr)
+{
+    /* 0x4442: walk A4-$7486 thresholds; start bonus=$FD (−3 signed), addq per miss.
+     * Return value is the unsigned byte used at 0x19C74 before addq #3. */
+    static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
+                                      60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
+    uint8_t bonus = 0xFD; /* −3 */
+    for (size_t i = 0; i < sizeof(kThresh); ++i) {
+        if (attr <= kThresh[i]) {
+            break;
+        }
+        ++bonus;
+    }
+    return bonus;
+}
+
+void syncRosterWorkingLevelFields(Mm2RosterRecord &rec)
+{
+    rec.unknown_1a_20[6] = rec.level; /* +$20 ← +$71 */
+    rec.unknown_22 = static_cast<uint16_t>((rec.unknown_22 & 0x00FFu) |
+                                           (static_cast<uint16_t>(rec.spell_level) << 8)); /* +$23 ← +$72 */
+}
+
+void recomputeRestSpellPoints(Mm2RosterRecord &rec)
+{
+    /* 0x19C30: if +$23==0 → skip; else INT for Sorc/Archer, PER otherwise. */
+    const uint8_t caster_flag = static_cast<uint8_t>((rec.unknown_22 >> 8) & 0xFF); /* +$23 */
+    if (caster_flag == 0) {
+        return;
+    }
+    uint8_t attr = rec.personality_current; /* +$12 */
+    if (rec.class_id == 4 || rec.class_id == 2) {
+        attr = rec.intelligence_current; /* +$11 */
+    }
+    uint8_t bonus = restSpellBonusFactor(attr);
+    if (bonus >= 0xF2) {
+        bonus = 0;
+    }
+    const uint8_t mul = rec.unknown_1a_20[6]; /* +$20 */
+    const uint16_t sp = static_cast<uint16_t>((static_cast<uint16_t>(bonus) + 3u) * mul);
+    rec.sp_current = sp;
+    rec.sp_max = sp; /* 0x19CD2 */
 }
 
 MoveResult turn(world::MapWorld &world, GameStateView &gs, bool right_cw)
@@ -199,12 +428,15 @@ MoveResult turn(world::MapWorld &world, GameStateView &gs, bool right_cw)
     const char next = turnFacing(gs.facingKey(), right_cw);
     gs.setFacingKey(next);
     latchEventOnTurn(gs);
+    /* movement_turn @ 0x5838: JSR -$7E42(A4) with id 0 (walk beep). */
+    audio::playSoundSeq(0, gs.soundsEnabled(), gs.walkBeepEnabled());
     r.acted = true;
     r.turned = true;
     return r;
 }
 
-MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward)
+MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward, Mm2RosterFile *roster,
+                const Mm2PartyLaunch *launch)
 {
     MoveResult r{};
     if (!gs.valid()) {
@@ -220,8 +452,11 @@ MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward)
     const int sx = static_cast<int>(gs.coordX());
     const int sy = static_cast<int>(gs.coordY());
 
-    if (passabilityBlocked(world, sx, sy, step_facing)) {
+    const ObstructionMsg obstruct =
+        passabilityObstruction(world, gs, sx, sy, step_facing, roster, launch);
+    if (obstruct != ObstructionMsg::None) {
         r.blocked = true;
+        r.obstruction = obstruct;
         return r;
     }
 
@@ -252,12 +487,16 @@ MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward)
     }
 
     const uint8_t dest_cell = collisionAt(world, tx, ty);
-    applyStepTimeTick(gs, dest_cell);
+    applyStepTimeTick(gs, dest_cell, roster, launch);
     events::eventVmTickSpellEyeOnStep(gs.a4(), world.isOutdoor());
+    /* Hood refresh @ 0x1B1C latches the destination collision into -$55D6. */
+    syncCurrentCellFlags(gs, world);
 
     r.acted = true;
     r.moved = true;
     r.screen_changed = screen_changed;
+    /* movement_step @ 0x5758 / 0x580c: JSR -$7E42(A4) id 0 after coords change. */
+    audio::playSoundSeq(0, gs.soundsEnabled(), gs.walkBeepEnabled());
     return r;
 }
 

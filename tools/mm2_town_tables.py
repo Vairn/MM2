@@ -9,9 +9,11 @@ Vulcania, Sandsobar). They are constants; the engine never rewrites them.
 Confirmed ASM sources (EXTRACTED/mm2.capstone.annotated.asm):
   * A4-$6720  training stat add per map   @ training_stat_apply 0x1C898
   * A4-$671A  training stat cap per map   @ 0x1C8A8
-  * A4-$6742  temple donation gold (BE u16) @ 0x1CA3A / display 0x1D556
-  * A4-$66B1  temple donation quest bit    @ doc 28 §5.2 (OR into A4-$799E)
+  * A4-$6714  temple cost scale (BE u16)  @ 0x1DC26 / 0x1DD2A / 0x1DC84
+  * A4-$6742  tavern feeding-frenzy gold  @ 0x1CA3A (NOT temple donate)
+  * A4-$66B1  temple donation quest bit   @ 0x1D7B8 (OR into A4-$799E)
   * training "town index" multiplier (FAQ §3-6, doc 34 §13): map -> [1,5,2,4,2]
+    (Vulcania training=4 but temple scale=3 — do not conflate)
 
 Stat-id -> roster record byte offset (jump table @ 0x1C86C feeding 0x1C898).
 """
@@ -25,20 +27,21 @@ TEMPLE_DONATION_ALL_BITS = 0x1F
 
 @dataclass(frozen=True)
 class TownCommerce:
-    training_town_index: int  # FAQ §3-6 cost multiplier (NOT the map index)
+    training_town_index: int  # FAQ §3-6 training fee multiplier (NOT the map index)
     stat_train_add: int       # A4-$6720[map]
     stat_train_cap: int       # A4-$671A[map]
-    donation_gold: int        # A4-$6742[map]
+    temple_cost_index: int    # A4-$6714[map]
+    feeding_frenzy_gold: int  # A4-$6742[map]
     donation_quest_bit: int   # A4-$66B1[map]
 
 
 # map id 0..4
 TOWNS = [
-    TownCommerce(1, 5, 100, 20, 0x01),    # Middlegate
-    TownCommerce(5, 20, 100, 250, 0x02),  # Atlantium
-    TownCommerce(2, 10, 100, 40, 0x04),   # Tundara
-    TownCommerce(4, 10, 100, 120, 0x08),  # Vulcania
-    TownCommerce(2, 3, 50, 40, 0x10),     # Sandsobar
+    TownCommerce(1, 5, 100, 1, 20, 0x01),    # Middlegate
+    TownCommerce(5, 20, 100, 5, 250, 0x02),  # Atlantium
+    TownCommerce(2, 10, 100, 2, 40, 0x04),   # Tundara
+    TownCommerce(4, 10, 100, 3, 120, 0x08),  # Vulcania
+    TownCommerce(2, 3, 50, 2, 40, 0x10),     # Sandsobar
 ]
 
 # stat id 0..6 -> roster record byte offset (0x1C86C / 0x1C898)
@@ -62,9 +65,14 @@ def training_cost(level: int, town_index: int) -> int:
     return max(0, level) * max(0, town_index) * 50
 
 
-def healing_cost(level: int, town_index: int) -> int:
-    """level * training_town_index * 10 gp (FAQ §3-6)."""
-    return max(0, level) * max(0, town_index) * 10
+def healing_cost(level: int, temple_cost_index: int) -> int:
+    """level * A4-$6714 * 10 gp (healthy heal path 0x1DCA2)."""
+    return max(0, level) * max(0, temple_cost_index) * 10
+
+
+def temple_donate_cost(map_id: int) -> int:
+    """A4-$6714[map] * 100 gp (0x1DC1A)."""
+    return TOWNS[map_id].temple_cost_index * 100
 
 
 # ---------------------------------------------------------------------------
@@ -285,11 +293,12 @@ def mage_guild_member_mask(map_id: int) -> int:
 
 
 def _main() -> None:
-    print("map town        idx add cap donation bit")
+    print("map town        train add cap temple frenzy bit")
     for i, t in enumerate(TOWNS):
         print(f"{i}   {TOWN_NAMES[i]:<11} {t.training_town_index}   "
               f"{t.stat_train_add:<3} {t.stat_train_cap:<3} "
-              f"{t.donation_gold:<8} 0x{t.donation_quest_bit:02x}")
+              f"{t.temple_cost_index:<6} {t.feeding_frenzy_gold:<6} "
+              f"0x{t.donation_quest_bit:02x}")
     print("\nstat id -> record offset:")
     for sid, off in enumerate(STAT_FIELD_OFFSET):
         print(f"  {sid} 0x{off:02x} {STAT_FIELD_NAME[sid]}")

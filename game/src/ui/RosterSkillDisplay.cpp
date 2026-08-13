@@ -7,9 +7,9 @@ namespace mm2::ui {
 
 namespace {
 
-// FAQ save-state note: skill nibbles 1..15 map to these names (alphabetical).
+/* A4-$8720 title/skill strings used by LAB_38EA fields $14/$15. */
 const char *kSkillNames[] = {
-    "",
+    kRosterEmptySkillSlot,
     "Arms Master",
     "Athlete",
     "Cartographer",
@@ -17,13 +17,13 @@ const char *kSkillNames[] = {
     "Diplomat",
     "Gambler",
     "Gladiator",
-    "Hero",
+    "Hero/Heroine",
     "Linguist",
     "Merchant",
-    "Mountaineering",
+    "Mountaineer",
     "Navigator",
     "Pathfinder",
-    "Pickpocket",
+    "PickPocket",
     "Soldier",
 };
 
@@ -45,7 +45,7 @@ const HirelingMeta kHirelingSkillMeta[] = {
 
 const char *skillNameFromId(uint8_t id)
 {
-    if (id >= 1 && id <= 15) {
+    if (id <= 15) {
         return kSkillNames[id];
     }
     return nullptr;
@@ -78,7 +78,7 @@ const char *skillAbbrevToName(const char *abbrev)
         return "Gladiator";
     }
     if (std::strncmp(abbrev, "Her", 3) == 0) {
-        return "Hero";
+        return "Hero/Heroine";
     }
     if (std::strncmp(abbrev, "Lin", 3) == 0) {
         return "Linguist";
@@ -87,7 +87,7 @@ const char *skillAbbrevToName(const char *abbrev)
         return "Merchant";
     }
     if (std::strncmp(abbrev, "Mou", 3) == 0) {
-        return "Mountaineering";
+        return "Mountaineer";
     }
     if (std::strncmp(abbrev, "Nav", 3) == 0) {
         return "Navigator";
@@ -96,7 +96,7 @@ const char *skillAbbrevToName(const char *abbrev)
         return "Pathfinder";
     }
     if (std::strncmp(abbrev, "Pic", 3) == 0) {
-        return "Pickpocket";
+        return "PickPocket";
     }
     if (std::strncmp(abbrev, "Sol", 3) == 0) {
         return "Soldier";
@@ -120,6 +120,12 @@ bool isRosterSkillTemplate(const Mm2RosterRecord &rec)
 
 }  // namespace
 
+const char *rosterSheetSkillName(uint8_t id)
+{
+    const char *name = skillNameFromId(id);
+    return name ? name : kRosterEmptySkillSlot;
+}
+
 uint8_t rosterDisplayThievery(const Mm2RosterRecord &rec)
 {
     /* Character sheet draw reads roster+$1E (character_sheet_draw @ $3C42). */
@@ -136,6 +142,9 @@ int collectRosterSkillNames(const Mm2RosterRecord &rec, const char **names, int 
     const uint8_t ids[2] = {static_cast<uint8_t>(packed & 0x0F),
                             static_cast<uint8_t>((packed >> 4) & 0x0F)};
     for (uint8_t id : ids) {
+        if (id == 0) {
+            continue;
+        }
         const char *name = skillNameFromId(id);
         if (!name) {
             continue;

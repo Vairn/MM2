@@ -1,6 +1,11 @@
 # MM2 music / SFX format (Paula tone synthesis)
 
-## Summary
+> **SUPERSEDED (2026-07-10).** This document misidentified save-state (`0x823C`),
+> graphics blits (`-$7B9C`), and `graphics.library` as music. See
+> **[`58-amiga-audio-in-exe.md`](58-amiga-audio-in-exe.md)** for the ASM-traced
+> audio path. Ignore all `master.32` claims.
+
+## Summary (WRONG — kept for archaeology only)
 
 Might and Magic II does **not** play sampled music or `.wav` files for title, walk, or combat cues. Sound is **Amiga Paula tone synthesis** via `audio.device`, driven from:
 

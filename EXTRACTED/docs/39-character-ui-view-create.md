@@ -216,9 +216,10 @@ SDL port uses plain ASCII enum names until decode is traced.
 | Build roster ptr | **`$01C3DE`** | **`JSR -$7F20`** → **`A4-$5A3E`**. |
 | Finalize stats | **`$01B646`**, **`$01BE44`** | Copies into record bytes **`$10`–`$15`**, **`$27`**, **`$6B`–`$73`**. |
 | Defaults | retail `roster.dat` | Age **18**, food **10**, gold **200**, town **1**, level **1**, HP/SP from class + END / INT\|PER tables. |
+| Working-level seed | **`0x272D6`** | `move.b #1, $20(a0)` — seeds the roster **working level** byte (`$20`, mirror of `$71`/Level; see [`06-roster-format.md`](06-roster-format.md)). Harmless at creation (level is always 1), but this is the same byte that goes stale on stock pre-made starters shipped at level 4+ — see [`57-user-help-trace-residuals.md`](57-user-help-trace-residuals.md) §4. |
 | Persist | **`JSR -$823C`** family | SDL: `mm2_roster_save_file(data_dir/roster.dat, …)`. |
 
-Implementation: `game/src/ui/AmigaCharacterUi.cpp` + `mm2_create_character.c`.
+Implementation: `game/src/ui/AmigaCharacterUi.cpp` + `mm2_create_character.c` (`mm2_create_build_record` sets `unknown_1a_20[6]`/`+$20`=1 and `unknown_22`/`+$23`=0 alongside `level`=1/`spell_level`=0).
 
 ---
 

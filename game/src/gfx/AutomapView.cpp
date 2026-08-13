@@ -1,5 +1,7 @@
 #include "mm2/gfx/AutomapView.h"
 
+#include <cstdio>
+
 #include "mm2/events/EventVmHelpers.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
 #include "mm2/world/Cartography.h"
@@ -65,7 +67,12 @@ void renderAutomap(ScreenCompositor &c, const EnvAssets &env, const world::MapWo
     const int origin_x = params.origin_x;
     const int origin_y = params.origin_y;
 
-    c.fillRect(kViewOriginX, kViewOriginY, kViewW, kViewH, 12, 12, 22, 255);
+    /* 0x227C: locate(0, 0x11) + print_char(-$7a52) + (-$7a51) → "(x,y)" at the
+     * top of the blacked-out play screen (img4 reference). */
+    char coord[16];
+    std::snprintf(coord, sizeof(coord), "(%d,%d)", static_cast<int>(gs.coordX()),
+                  static_cast<int>(gs.coordY()));
+    c.drawText(0x11 * 8, 0, coord, 255, 255, 255, 255);
 
     const int screen = world.currentScreen();
     const bool outdoor = world::cartoUsesOutb(screen, world.isOutdoor());
@@ -79,8 +86,9 @@ void renderAutomap(ScreenCompositor &c, const EnvAssets &env, const world::MapWo
             const int px = origin_x + cx * kTileW;
             const int py = origin_y + cy * kTileH;
 
+            /* @0x2364: 0xFF (unvisited) cells are skipped — the black interior
+             * shows through instead of a gray fill. */
             if (!vis.isVisited(screen, cx, disk_y)) {
-                c.fillRect(px, py, kTileW, kTileH, 20, 20, 30, 255);
                 continue;
             }
 
@@ -102,11 +110,12 @@ void renderAutomap(ScreenCompositor &c, const EnvAssets &env, const world::MapWo
     if (params.draw_party_marker) {
         const int px = origin_x + static_cast<int>(gs.coordX()) * kTileW;
         const int py = origin_y + (MM2_MAP_GRID_DIM - 1 - static_cast<int>(gs.coordY())) * kTileH;
-        c.drawBoxBorder(px, py, kTileW, kTileH, 255, 220, 0, 210);
         blitCartoFrame(c, sheet, automapPartyArrowFrame(gs.facingKey()), px, py);
     }
 
-    c.drawText(origin_x, origin_y + MM2_MAP_GRID_DIM * kTileH + 2, "(ESC) close map", 180, 180, 180, 255);
+    /* -$7E4E @ 0x6DA6: locate(0x17, 0x0B) + "( 'ESC' to go back )" — bottom
+     * border row of the blacked-out screen. */
+    c.drawText(0x0B * 8, 0x17 * 8, "( 'ESC' to go back )", 255, 255, 255, 255);
 }
 
 void renderSpellEyeOverlay(ScreenCompositor &c, const EnvAssets &env, const world::MapWorld &world,

@@ -117,6 +117,32 @@ Mm2EventError mm2_event_decode(const uint8_t *bytes, size_t size, Mm2EventFile *
         loc->raw = bytes + off;
         loc->raw_len = end - off;
 
+        /* Overlay banks 60..70 (ASM queued dispatch @ 0x176B6):
+         * work_buf[0..1] = LE absolute string anchor; scripts start at 2.
+         * Must NOT scan for 00 00 00 — opcode streams embed that pattern and
+         * poison string_table_offset (Corak vs Nordon index mixups). */
+        if (i >= 60 && i <= 70 && loc->raw_len >= 2) {
+            int anchor = loc->raw[0] | (loc->raw[1] << 8);
+            loc->terminated = 1;
+            loc->triplet_count = 0;
+            loc->script_offset = 2;
+            loc->string_table_offset = anchor;
+            if (anchor < 2 || (size_t)anchor > loc->raw_len)
+                script_len = 0;
+            else
+                script_len = anchor - 2;
+            loc->script_length = script_len;
+            if (script_len > 0) {
+                loc->segment_count = count_segments(loc->raw + 2, (size_t)script_len);
+            }
+            if ((size_t)anchor < loc->raw_len) {
+                loc->string_count =
+                    count_strings(loc->raw, loc->raw_len, (size_t)anchor);
+            }
+            loc->kind = MM2_EVENT_KIND_OVERLAY_BANK;
+            continue;
+        }
+
         decode_triplets(loc->raw, loc->raw_len, loc, &pos, &terminated);
         loc->terminated = terminated;
 

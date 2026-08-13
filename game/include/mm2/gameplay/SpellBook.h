@@ -24,6 +24,8 @@
 //    EXTRACTED/docs/19-spells-and-item-use.md. Per-level counts 7,7,6,6,5,5,4,4,4
 //    (grid uses cumulative offsets A4-$8C22 + counts A4-$8C2B). Flat order matches
 //    spells.dat and the items.dat use-effect index. No names/costs are invented.
+//  * Cast-when (Anytime/Combat/Explore) from spells.dat byte0 bits 0x40/0x80 —
+//    see kSorcererCastWhen / kClericCastWhen (tools/_gen_spell_cast_when.py).
 
 #include <cstdint>
 
@@ -46,9 +48,129 @@ struct SpellMeta {
     uint8_t gems;
 };
 
+/** spells.dat byte0 cast restriction (doc 19): 0x40 combat-only, 0x80 explore-only. */
+enum class SpellCastWhen : uint8_t { Anytime, Combat, Explore };
+
 inline constexpr int kSpellsPerSchool = 48;
 inline constexpr int kSpellLevels = 9;
 inline constexpr uint8_t kSpellsPerLevel[kSpellLevels] = {7, 7, 6, 6, 5, 5, 4, 4, 4};
+
+/* Cast-when / outdoor tables: decoded from spells.dat (tools/_gen_spell_cast_when.py). */
+inline constexpr SpellCastWhen kSorcererCastWhen[kSpellsPerSchool] = {
+    SpellCastWhen::Anytime,  //  0 Awaken
+    SpellCastWhen::Explore,  //  1 Detect Magic
+    SpellCastWhen::Combat,   //  2 Energy Blast
+    SpellCastWhen::Combat,   //  3 Flame Arrow
+    SpellCastWhen::Explore,  //  4 Light
+    SpellCastWhen::Explore,  //  5 Location
+    SpellCastWhen::Combat,   //  6 Sleep
+    SpellCastWhen::Explore,  //  7 Eagle Eye
+    SpellCastWhen::Combat,   //  8 Electric Arrow
+    SpellCastWhen::Combat,   //  9 Identify Monster
+    SpellCastWhen::Explore,  // 10 Jump
+    SpellCastWhen::Explore,  // 11 Levitate
+    SpellCastWhen::Explore,  // 12 Lloyd's Beacon
+    SpellCastWhen::Anytime,  // 13 Protection from Magic
+    SpellCastWhen::Combat,   // 14 Acid Stream
+    SpellCastWhen::Explore,  // 15 Fly
+    SpellCastWhen::Combat,   // 16 Invisibility
+    SpellCastWhen::Combat,   // 17 Lightning Bolt
+    SpellCastWhen::Combat,   // 18 Web
+    SpellCastWhen::Explore,  // 19 Wizard Eye
+    SpellCastWhen::Combat,   // 20 Cold Beam
+    SpellCastWhen::Combat,   // 21 Feeble Mind
+    SpellCastWhen::Combat,   // 22 Fire Ball
+    SpellCastWhen::Explore,  // 23 Guard Dog
+    SpellCastWhen::Combat,   // 24 Shield
+    SpellCastWhen::Combat,   // 25 Time Distortion
+    SpellCastWhen::Combat,   // 26 Disrupt
+    SpellCastWhen::Combat,   // 27 Fingers of Death
+    SpellCastWhen::Combat,   // 28 Sand Storm
+    SpellCastWhen::Explore,  // 29 Shelter
+    SpellCastWhen::Explore,  // 30 Teleport
+    SpellCastWhen::Combat,   // 31 Disintegration
+    SpellCastWhen::Combat,   // 32 Entrapment
+    SpellCastWhen::Combat,   // 33 Fantastic Freeze
+    SpellCastWhen::Explore,  // 34 Recharge Item
+    SpellCastWhen::Combat,   // 35 Super Shock
+    SpellCastWhen::Combat,   // 36 Dancing Sword
+    SpellCastWhen::Explore,  // 37 Duplication
+    SpellCastWhen::Explore,  // 38 Etherealize
+    SpellCastWhen::Combat,   // 39 Prismatic Light
+    SpellCastWhen::Combat,   // 40 Incinerate
+    SpellCastWhen::Combat,   // 41 Mega Volts
+    SpellCastWhen::Combat,   // 42 Meteor Shower
+    SpellCastWhen::Combat,   // 43 Power Shield
+    SpellCastWhen::Combat,   // 44 Implosion
+    SpellCastWhen::Combat,   // 45 Inferno
+    SpellCastWhen::Combat,   // 46 Star Burst
+    SpellCastWhen::Explore,  // 47 Enchant Item
+};
+
+inline constexpr SpellCastWhen kClericCastWhen[kSpellsPerSchool] = {
+    SpellCastWhen::Combat,   //  0 Apparition
+    SpellCastWhen::Anytime,  //  1 Awaken
+    SpellCastWhen::Combat,   //  2 Bless
+    SpellCastWhen::Anytime,  //  3 First Aid
+    SpellCastWhen::Explore,  //  4 Light
+    SpellCastWhen::Anytime,  //  5 Power Cure
+    SpellCastWhen::Combat,   //  6 Turn Undead
+    SpellCastWhen::Anytime,  //  7 Cure Wounds
+    SpellCastWhen::Combat,   //  8 Heroism
+    SpellCastWhen::Explore,  //  9 Nature's Gate
+    SpellCastWhen::Combat,   // 10 Pain
+    SpellCastWhen::Anytime,  // 11 Protection From Elements
+    SpellCastWhen::Combat,   // 12 Silence
+    SpellCastWhen::Combat,   // 13 Weaken
+    SpellCastWhen::Combat,   // 14 Cold Ray
+    SpellCastWhen::Explore,  // 15 Create Food
+    SpellCastWhen::Anytime,  // 16 Cure Poison
+    SpellCastWhen::Combat,   // 17 Immobilize
+    SpellCastWhen::Explore,  // 18 Lasting Light
+    SpellCastWhen::Explore,  // 19 Walk on Water
+    SpellCastWhen::Combat,   // 20 Acid Spray
+    SpellCastWhen::Explore,  // 21 Air Transmutation
+    SpellCastWhen::Anytime,  // 22 Cure Disease
+    SpellCastWhen::Explore,  // 23 Restore Alignment
+    SpellCastWhen::Explore,  // 24 Surface
+    SpellCastWhen::Combat,   // 25 Holy Bonus
+    SpellCastWhen::Combat,   // 26 Air Encasement
+    SpellCastWhen::Combat,   // 27 Deadly Swarm
+    SpellCastWhen::Combat,   // 28 Frenzy
+    SpellCastWhen::Combat,   // 29 Paralyze
+    SpellCastWhen::Anytime,  // 30 Remove Condition
+    SpellCastWhen::Explore,  // 31 Earth Transmutation
+    SpellCastWhen::Explore,  // 32 Rejuvenate
+    SpellCastWhen::Anytime,  // 33 Stone to Flesh
+    SpellCastWhen::Combat,   // 34 Water Encasement
+    SpellCastWhen::Explore,  // 35 Water Transmutation
+    SpellCastWhen::Combat,   // 36 Earth Encasement
+    SpellCastWhen::Combat,   // 37 Fiery Flail
+    SpellCastWhen::Combat,   // 38 Moon Ray
+    SpellCastWhen::Anytime,  // 39 Raise Dead
+    SpellCastWhen::Combat,   // 40 Fire Encasement
+    SpellCastWhen::Explore,  // 41 Fire Transmutation
+    SpellCastWhen::Combat,   // 42 Mass Distortion
+    SpellCastWhen::Explore,  // 43 Town Portal
+    SpellCastWhen::Combat,   // 44 Divine Intervention
+    SpellCastWhen::Combat,   // 45 Holy Word
+    SpellCastWhen::Explore,  // 46 Resurrection
+    SpellCastWhen::Explore,  // 47 Uncurse Item
+};
+
+inline SpellCastWhen spellCastWhen(SpellSchool school, int flat0)
+{
+    if (flat0 < 0 || flat0 >= kSpellsPerSchool) {
+        return SpellCastWhen::Anytime;
+    }
+    if (school == SpellSchool::Sorcerer) {
+        return kSorcererCastWhen[flat0];
+    }
+    if (school == SpellSchool::Cleric) {
+        return kClericCastWhen[flat0];
+    }
+    return SpellCastWhen::Anytime;
+}
 
 /** Cumulative flat-index base for level 1..9 (A4-$73DE / -$8C22). */
 inline constexpr uint8_t kSpellLevelBase[kSpellLevels] = {0, 7, 14, 20, 26, 31, 36, 40, 44};
@@ -66,13 +188,21 @@ inline int spellFlatFromLevelNumber(int level, int number)
     return static_cast<int>(kSpellLevelBase[level - 1]) + (number - 1);
 }
 
-/** Retail dispatch code: sorcerer/archer keep 0..47; cleric/paladin add $30 (0x79EE). */
+/** Retail picker return (0x79EE): sorc/archer = flat0; cleric/paladin = flat0+$30.
+ *  $CFF8 then does `subq.l #2,d0` before the sparse table; $CDB8 indexes as-is. */
 inline int spellDispatchCode(SpellSchool school, int flat0)
 {
     if (flat0 < 0 || flat0 >= kSpellsPerSchool) {
         return -1;
     }
     return (school == SpellSchool::Cleric) ? (flat0 + 0x30) : flat0;
+}
+
+/** $CFF8 sparse index after subq #2 (Energy Blast flat2 → code0 → stub $B66C). */
+inline int spellCff8SparseCode(SpellSchool school, int flat0)
+{
+    const int picker = spellDispatchCode(school, flat0);
+    return (picker >= 2) ? (picker - 2) : -1;
 }
 
 // Record offset of the spell-book bitfield ($51) relative to the codec's

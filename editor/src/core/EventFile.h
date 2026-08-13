@@ -78,6 +78,9 @@ struct EventFile {
         size_t p = t.absOff + static_cast<size_t>(idx);
         if (p < raw.size()) raw[p] = v;
     }
+
+    /** Replace location `locId` record and rebuild file (offsets may shift). */
+    bool replaceLocationRecord(int locId, const std::vector<uint8_t>& newRecord);
 };
 
 // Condition-flag name (towns/outdoor), matching decode_event.FLAG_NAMES.

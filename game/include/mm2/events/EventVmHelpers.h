@@ -1,11 +1,16 @@
 #pragma once
 
 #include "mm2/world/MapWorld.h"
+#include "mm2/gameplay/ExploreActions.h"
 
 #include "mm2_party_launch.h"
 #include "mm2_roster_codec.h"
+#include "mm2_items_codec.h"
 #include "mm2_gamestate.h"
 #include "mm2_event_codec.h"
+
+#include <cstddef>
+#include <cstdint>
 
 namespace mm2::events {
 
@@ -62,10 +67,25 @@ uint32_t eventVmPartyGoldTotal(const uint8_t *a4, const Mm2RosterFile *roster,
 int eventVmCountPartyNibbleMatches(const uint8_t *a4, const Mm2RosterFile *roster,
                                    const Mm2PartyLaunch *launch, uint8_t id);
 
+/** roster_count_living_chars @ 0x47A2: count party slots with (condition & 0xE0)==0.
+ *  OP_31 abort gate `-$7F14`→`0x47EC` returns nonzero (→ SCRIPT_ABORT) when this is 0. */
+int eventVmCountLivingPartyMembers(const uint8_t *a4, const Mm2RosterFile *roster,
+                                   const Mm2PartyLaunch *launch);
+
+/** OP_19 backpack place: first empty +$3A slot, else found-item overflow. Returns true
+ *  when placed on a member (cond=1 path). */
+bool eventVmPartyGiveItem(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                          uint8_t item_id, uint8_t charges, uint8_t flags);
+
+/** Scan equipped+backpack. `consume` removes from first match (either bank). */
 bool eventVmPartyHasItem(const uint8_t *a4, const Mm2RosterFile *roster,
                          const Mm2PartyLaunch *launch, uint8_t item_id, bool consume);
 
-void eventVmClearTileEventFlag(uint8_t *a4, int y, int x);
+/** OP_28 @ 0x16C86: backpack-only (+$3A) scan; always consumes on hit → cond. */
+bool eventVmPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                     uint8_t item_id);
+
+void eventVmClearTileEventFlag(uint8_t *a4, world::MapWorld &world, int y, int x);
 
 /** event_tile_scanner post-fight @ 0x1773A/0x17756: clear runtime + map collision
  *  event bits so the tile does not re-arm until map reload. */
@@ -74,12 +94,75 @@ void eventVmConsumeTileEncounterFlag(uint8_t *a4, world::MapWorld &world, int y,
 void eventVmPatchMapTile(world::MapWorld &world, int y, int x, uint8_t visual,
                          uint8_t collision);
 
-/** OP_15/18 party field op. `selector` is the raw script field-selector byte
- * (0x00..0x7F); it is translated to the real record byte offset via the ROM
- * field map (EventFieldMap.h), NOT used directly as an offset. */
-void eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
-                             uint8_t count, uint8_t selector, uint8_t val, bool masked,
-                             uint8_t and_m, uint8_t or_m, bool test_only, bool *out_cond);
+/** OP_15/18 @ 0x16426. `member_spec` is the first script byte (0=all, 1..8=one,
+ *  9=selected). `selector` maps via EventFieldMap.h. Test mode (OP_15) ORs
+ *  field/(field&val) into COND_FLAG; masked mode (OP_18) writes (f&and)|or.
+ *  Returns the final COND_FLAG byte (test) or 0 (masked). */
+uint8_t eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                uint8_t member_spec, uint8_t selector, uint8_t val, bool masked,
+                                uint8_t and_m, uint8_t or_m);
+
+/** OP_31 → 0x4952 with out-flags=0 (ASM call pattern from 0x170BC): subtract
+ *  `damage` from roster +$5E (working HP word). Skips if +$26 >= 0x80. On
+ *  lethal: bset bit6 on +$26; if bit6 already set → +$26=0x81; clear +$5E. */
+void eventVmApplyOp31Damage(Mm2RosterRecord *rec, uint16_t damage);
+
+/** OP_31 member-spec resolution + per-target 0x4952 (out-flags zeroed). */
+void eventVmOp31IterateDamage(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                              uint8_t member_spec, uint16_t damage);
+
+/** Search key @ 0x4800 → 0x1B19C. */
+enum class SearchPrepareResult : uint8_t {
+    Nothing = 0,       /* "Nothing Here!" */
+    Distributed,       /* short path: loot already given (sentinel was non-0) */
+    NeedIdentify,      /* long path: rating ready; host '1'..'4' @ 0x1B3F2 */
+};
+
+struct SearchPrepareOut {
+    uint8_t rating = 0; /* display rating after 0x1B270 re-roll */
+    char container_name[24]{}; /* -$6A54[env_row][score-1] @ 0x1B37A */
+    /* Gold/gems + up to 3 "Name found Item" lines for party-panel reward UI. */
+    char msg[256]{};
+};
+
+/** Prepare Search: nothing / short-path distribute / long-path Identify modal.
+ *  Long path does NOT clear the found buffer — call distribute after Open/Find.
+ *  Optional `items` names loot on the short-path distribute message. */
+SearchPrepareResult eventVmSearchPrepare(uint8_t *a4, Mm2RosterFile *roster,
+                                         const Mm2PartyLaunch *launch, gameplay::Rng *rng,
+                                         SearchPrepareOut *out,
+                                         const Mm2ItemsFile *items = nullptr);
+
+/** Distribute found buffer @ 0x1AC94 (after Open/Find or short path).
+ *  `msg` receives the party-panel reward text (0x1ACFA): share line then
+ *  per-item "Name found Item" lines (optional `items` for names). */
+bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                             char *msg, size_t msg_cap, const Mm2ItemsFile *items = nullptr);
+
+/** Legacy one-shot: prepare + auto-distribute (no Identify modal). Prefer
+ *  eventVmSearchPrepare when a UI can host 0x1B3F2. */
+bool eventVmSearchPayoff(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                         char *msg, size_t msg_cap);
+
+/** Open / Find Traps thievery leaf @ 0x1AEC2 / 0x1AF6E.
+ *  `party_slot` 0-based; `find_traps` selects Find path (always opens after roll).
+ *  On trap spring: damage = rating*2+4 to that member (0x1AA70 → 0x1A90E simplified). */
+struct SearchOpenResult {
+    bool opened = false;     /* distribute should run */
+    bool trapped = false;    /* thievery failed and trap sprung */
+    bool aborted = false;    /* ESC on member pick */
+    uint16_t trap_damage = 0;
+};
+
+SearchOpenResult eventVmSearchOpenOrFind(uint8_t *a4, Mm2RosterFile *roster,
+                                         const Mm2PartyLaunch *launch, int party_slot,
+                                         uint8_t rating, bool find_traps, gameplay::Rng *rng);
+
+/** Detect Magic @ 0x1AFE8 — "Contents magical (Yes|No), has trap (Yes|No)". */
+void eventVmSearchDetectMagic(uint8_t *a4, uint8_t rating, char *msg, size_t msg_cap);
+
+/** Leave @ 0x1B45C: keep loot, set -$7950 := 7. */
+void eventVmSearchLeave(uint8_t *a4);
 
 bool eventVmCheckOp30Password(const uint8_t *input_buf, const uint8_t *expected,
                               size_t expected_len);
@@ -92,12 +175,25 @@ uint32_t eventVmDeductPartyGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2Par
 void eventVmApplyTreasure(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                           const uint8_t block[14]);
 
-/** OP_0D engine_call index → side effects (0x09 = refresh hooks). */
+/** OP_0D → play_sound_seq @ 0x6FB8 (ids 0..9). Index 0x09 also sets exit bit0. */
 void eventVmExecEngineCall(uint8_t *a4, uint8_t index, world::MapWorld *world);
 
-/** OP_25 non-gold code check (tickets 208–211, keys 112–114, flags). */
-bool eventVmCheckCode16(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
-                        uint16_t code);
+/** OP_24 @ 0x16B54 → -$7E6C → 0x6ACE: if party gold (sum +$66 over slots with
+ *  roster index < 0x18) >= amount, deduct amount, pool the remainder, then
+ *  re-share it equally among all eligible members ($7BBE; remainder to first).
+ *  Returns true on success. */
+bool eventVmPartyTryPayGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                            uint32_t amount);
+
+/** OP_25 @ 0x16B82 → -$7E66 → 0x6B9A: same pool/deduct + re-share ($7CB0) for
+ *  gems (+$5C, u16). */
+bool eventVmPartyTryPayGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                            uint16_t amount);
+
+/** Bribe food pay @ 0x6C66 (thunk -$7E60): pool/deduct + re-share ($7D3E) party
+ *  food (+$25, u8). */
+bool eventVmPartyTryPayFood(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                            uint8_t amount);
 
 /* ---------------------------------------------------------------------------
  * Arena Games ticket-combat engine (ASM 0x9D76). CORRECTED 2026-07: this
@@ -179,11 +275,9 @@ int eventVmTrainingTownIndex(int map_screen);
 
 /** Per-character TRAINING cost (FAQ §3-6, doc 34 §13.2):
  *  `current_level × training_town_index × 50` gp. `town_index` comes from
- *  eventVmTrainingTownIndex() (map→index [1,5,2,4,2]). This is the gold the
- *  deferred training engine (OP_0E 0x04 → A4 thunk -$7D16 → menu 0x8050; HP
- *  path 0x9BCA, stat path 0x1C898) charges per trained character. Exposed for
- *  the future engine port + unit tests. Status: FAQ-sourced; the exact
- *  multiply/index sequence in 0x9B48/0x9BCA is not yet ASM-confirmed. */
+ *  eventVmTrainingTownIndex() (map→index [1,5,2,4,2]). OP_0E training hall
+ *  level-up (townSvcTrainLevelUp). Stat shrine 0x1C898 is a separate leaf.
+ *  0x9B48/0x9BCA are bash-door (doc 43) — not training HP. */
 uint32_t eventVmTrainingCostPerChar(int level, int town_index);
 
 /** Per-character base HEALING cost (FAQ §3-6, doc 34 §13.2) for a LIVING
@@ -194,5 +288,65 @@ uint32_t eventVmTrainingCostPerChar(int level, int town_index);
  *  (doc 06), and the dead-vs-eradicated threshold is not yet ASM-confirmed.
  *  Exposed for the future engine port + unit tests. */
 uint32_t eventVmHealingCostPerChar(int level, int town_index);
+
+/** str.dat tip/rumor bank (0x9666 / A4-$7DE8):
+ *  Bank word table at A4-$71E8; raw file at A4-$ED6 ($1E80 bytes).
+ *  Decode: (byte+0x1C), then 0x1D→NUL into A4-$ED2; 0x976E walks C-strings. */
+constexpr int kStrDatSize = 0x1E80;
+constexpr int kStrBankSpan = 0x924;
+/** DATA hunk A4-$71E8 (mm2_data_00.bin @ 0xE16, BE words): bank0..3 starts,
+ *  bank3 end sentinel, then str.dat size. 0x9666 copies $924 from start. */
+constexpr uint16_t kStrBankOffs[] = {0x0000, 0x063C, 0x0F5C, 0x1286, 0x1844, 0x1E80};
+constexpr int kStrBankCount = 4;
+constexpr int kStrBankTableWords = 6;
+
+/** Seed A4-$71E8 bank offsets (call once after loading str.dat into -$ED6). */
+void eventVmInitStrBankOffsets(uint8_t *a4);
+
+/** 0x9666: decode bank `bank_index` (0..3) into A4-$ED2; clr -$71EA. */
+void eventVmDecodeStrBank(uint8_t *a4, int bank_index, const uint8_t *str_dat, size_t str_len);
+
+/** 0x976E: next C-string in decode buf; advances -$71EA. Returns nullptr at end. */
+const char *eventVmNextStrBankCString(uint8_t *a4);
+
+/** 0x1493C GS: decode bank 3, fill OP_0E FD ptr tables via 0x976E, set -$71DC=$FD,
+ *  clr -$11DE[0..10]. Ptr slots store A4-relative int32 (Amiga stores abs addrs). */
+void eventVmFillOp0eFdStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_len);
+
+/** 0x1D208 GS: decode bank 1, fill tavern rumor/tip/food ptr tables, set -$71DC=$FD. */
+void eventVmFillTavernStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_len);
+
+/** Resolve A4-relative C-string ptr stored by fill helpers. */
+const char *eventVmGsRelCString(const uint8_t *a4, uint32_t rel_u32);
+
+/** Join `count` C-strings from an OP_0E FD ptr table (A4-relative longs) into
+ *  `out`, separated by newlines. Empty slots become blank lines (ASM print loop).
+ *  Used by 0x14A58 (PTR0×4), 0x14F98 (PTR1×4), 0x15142 (PTR2×14 + PTR3×4),
+ *  0x1531E (PTR4×11 + PTR5×10). */
+int eventVmFormatOp0eFdPtrTable(const uint8_t *a4, int32_t table_base, int count, char *out,
+                                size_t out_cap);
+
+/** 0x14106 Death Strikes panel lines (CODE @$1405A..$140F4 via A4-$6D60). */
+void eventVmDeathStrikesLines(char *out, size_t out_cap);
+
+/** 0x1B0B6: env A4-$79E3 → sign_sprite_load id ($46..$4A → NN.anm). */
+int eventVmSearchContainerAnmId(const uint8_t *a4);
+
+/** Pending -$7FBC sign_sprite_place from bit7 choreography @ 0x9888. */
+struct ScriptedKeyPlace {
+    bool active = false;
+    bool clear = false; /* place(-1) → drop handle */
+    uint8_t placement = 0;
+    uint16_t dst_x = 0x40; /* arg2 (-$71DA) */
+    uint16_t dst_y = 0x28; /* arg3 (-$71D8) + 8 @ 0x23E24 */
+};
+
+/** -$7DDC @ 0x97A2 host: pop next plain ASCII from -$119A, or -1 for real input.
+ *  Honors -$71DB delay (0x993e) and bit7 → 0x9888 place stream (-$7FBC).
+ *  Optional `place` receives one sprite place per poll when choreography fires. */
+int eventVmScriptedKeyPoll(uint8_t *a4, ScriptedKeyPlace *place = nullptr);
+void eventVmScriptedKeyReset(uint8_t *a4);
+/** Write up to 255 bytes into -$119A, append $FF, reset cursors. */
+void eventVmScriptedKeyQueue(uint8_t *a4, const uint8_t *bytes, int len);
 
 }  // namespace mm2::events

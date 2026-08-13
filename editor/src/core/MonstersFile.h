@@ -87,9 +87,11 @@ struct MonsterRecord {
     uint8_t singleEffect() const { return raw[0x12] & 0x1F; }
     bool isUndead() const { return (raw[0x12] & 0x80) != 0; }
     bool isArcher() const { return (raw[0x12] & 0x40) != 0; }
+    bool sabilMisc() const { return (raw[0x12] & 0x20) != 0; }  // bit5 misc (unmapped)
     void setSingleEffect(uint8_t e) { raw[0x12] = (raw[0x12] & ~0x1F) | (e & 0x1F); }
     void setUndead(bool v) { raw[0x12] = v ? (raw[0x12] | 0x80) : (raw[0x12] & ~0x80); }
     void setArcher(bool v) { raw[0x12] = v ? (raw[0x12] | 0x40) : (raw[0x12] & ~0x40); }
+    void setSabilMisc(bool v) { raw[0x12] = v ? (raw[0x12] | 0x20) : (raw[0x12] & ~0x20); }
 
     // Group attack: Pabil (0x11) low 5 bits = verb index into kPartyVerbNames
     // (29 = "frenzies"); bits 5-7 = a use-chance tier (asm masks 0xE0 >> 4 and
@@ -105,8 +107,16 @@ struct MonsterRecord {
         uint8_t n = (raw[0x13] & 0x0F) + 1;
         return (raw[0x13] & 0x10) ? static_cast<uint8_t>(n * 10) : n;
     }
+    uint8_t friendCount() const { return (raw[0x13] & 0x0F) + 1; }  // low nibble (1..16)
+    bool friendCountX10() const { return (raw[0x13] & 0x10) != 0; } // bit4 scales x10
     uint8_t fleeTier() const { return (raw[0x13] >> 5) & 0x03; }
     bool multiplies() const { return (raw[0x13] & 0x80) != 0; }
+    void setFriendCount(uint8_t n) {
+        uint8_t v = n > 0 ? n : 1;
+        v = v > 16 ? 16 : v;
+        raw[0x13] = static_cast<uint8_t>((raw[0x13] & ~0x0F) | ((v - 1) & 0x0F));
+    }
+    void setFriendCountX10(bool v) { raw[0x13] = v ? (raw[0x13] | 0x10) : (raw[0x13] & ~0x10); }
     void setMultiplies(bool v) { raw[0x13] = v ? (raw[0x13] | 0x80) : (raw[0x13] & ~0x80); }
 
     uint8_t picture() const { return raw[0x15]; }

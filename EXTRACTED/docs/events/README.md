@@ -6,8 +6,8 @@ Each file lists tile triggers, bytecode segments, and string table entries.
 | Resource | Doc |
 |----------|-----|
 | `event.dat` container | [`06-event-dat-format.md`](../06-event-dat-format.md) |
-| Opcode reference | [`07-event-script-opcodes.md`](../07-event-script-opcodes.md) |
-| Runtime / collision `0x80` | [`08-event-runtime.md`](../08-event-runtime.md) |
+| Opcode reference | [`07-event-script-opcodes.md`](../07-event-script-opcodes.md) — **C++ `dispatchOp` is authoritative** |
+| Runtime / collision `0x80` | [`08-event-runtime.md`](../08-event-runtime.md) — **`EventRuntime` port map** |
 | 60 `map.dat` screens | [`21-map-dat-format.md`](../21-map-dat-format.md) |
 | Wiki hub (numbered) | [`40-events-by-location.md`](../40-events-by-location.md) |
 | Class quests | [`37-mount-farview-class-quest-event.md`](../37-mount-farview-class-quest-event.md) |

@@ -6,6 +6,8 @@
 // menu loop (A4 vtable UI thunks -$7be4/-$7bfc/-$7ddc, RNG caption tables) is the
 // swappable UI backend (see TownServiceMenu.h); the LOGIC below is ASM-canonical.
 
+#include "mm2/gameplay/ExploreActions.h"
+#include "mm2/gameplay/SpellBook.h"
 #include "mm2_gamestate.h"
 #include "mm2_items_codec.h"
 #include "mm2_party_launch.h"
@@ -38,12 +40,44 @@ struct TownSvcHealResult {
 
 /* Temple heal flow @ 0x1D716: deduct `cost` from the character's own gold
  * (0x1D90C); on success restore HP (0x1DD48) and clear the condition byte
- * (clr.b $26). `cost` is the per-character healing charge — for a LIVING
- * character that is level*training_index*10 (doc 34 §13.2 / townSvcHealingCost).
- * NOTE: the dead (x10) / eradicated (x100) multipliers are a documented gap
- * (roster $26 only groups $80+; the dead-vs-eradicated threshold is not yet
- * ASM-confirmed) and must be folded into `cost` by the caller when known. */
+ * (clr.b $26). Prefer townSvcTempleHealCost() for the ASM cost builder. */
 TownSvcHealResult townSvcHeal(Mm2RosterRecord &rec, uint32_t cost);
+
+/* Roster index >= $18 (24) is a hireling slot (party table A4-$796A). */
+inline bool townSvcIsHirelingRosterIndex(int roster_index)
+{
+    return roster_index >= 0x18;
+}
+
+struct TownSvcHirelingTempleResult {
+    bool condition_cleared = false;
+    bool hp_restored = false;
+    bool align_restored = false;
+    bool any_change = false;
+};
+
+/* Temple hireling leaf @ 0x1E116: free clr.b $26, HP restore (0x1DD48), and
+ * alignment_current → alignment_base when mismatched. No gold check. Called
+ * when the outer temple loop selects a hireling (roster index >= $18 @
+ * 0x1E396). */
+TownSvcHirelingTempleResult townSvcHirelingTempleAutoHeal(Mm2RosterRecord &rec);
+
+struct TownSvcAlignResult {
+    bool paid = false;
+    uint32_t cost = 0;
+    bool restored = false; /* wrote +$0D → +$6A */
+};
+
+/* Temple B @ 0x1D758: gold vs A4-$56BA (from 0x1DC3A), then move.b $d,$6a —
+ * alignment_current → alignment_base. Cost 0 when already matched. */
+TownSvcAlignResult townSvcRestoreAlignment(Mm2RosterRecord &rec, uint32_t cost);
+
+/* Temple heal cost builder 0x1DCA2: base by condition ($FF→1000, ≥$80→100,
+ * else 10 if cond!=0 or HP needs restore, else 0), then ×level ×A4-$6714. */
+uint32_t townSvcTempleHealCost(const Mm2RosterRecord &rec, int map_id);
+
+/* Temple align cost builder 0x1DC3A: 0 if +$0D==+$6A; else 100×level×A4-$6714. */
+uint32_t townSvcTempleAlignCost(const Mm2RosterRecord &rec, int map_id);
 
 /* training_stat_apply @ 0x1C898. NOTE: this is NOT the Training Hall. It is the
  * separate "stat shrine" leaf (the Atlantium beautify / olympic stat add). It
@@ -54,54 +88,50 @@ TownSvcHealResult townSvcHeal(Mm2RosterRecord &rec, uint32_t cost);
  * Hall uses townSvcTrainLevelUp() below. Returns true when the byte was written. */
 bool townSvcTrainStat(Mm2RosterRecord &rec, int stat_id, int map_id);
 
-/* Training-hall LEVEL UP (OP_0E 0x04 -> -$7D16). The Training Hall does NOT raise
- * a stat: it advances the character one LEVEL when they have the experience
- * (record+0x62, threshold = mm2_class_xp_for_level for the next level on the
- * class's XP curve — TWO curves, Group A/B, see mm2_town_tables.h) AND can pay
- * the fee (level*training_town_index*50). */
+/* Training-hall LEVEL UP (OP_0E 0x02 -> -$7CD4). Advances one LEVEL when XP
+ * threshold is met and fee (level*training_town_index*50) is paid. */
 struct TownSvcTrainResult {
-    bool eligible = false;     /* had >= the XP threshold for the next level */
-    bool paid = false;         /* fee affordable and deducted */
-    bool leveled = false;      /* level field actually incremented */
-    uint32_t cost = 0;         /* fee charged (0 if not paid) */
-    uint32_t required_xp = 0;  /* threshold for next_level */
+    bool eligible = false;
+    bool paid = false;
+    bool leveled = false;
+    bool gained_spells = false; /* $20064 returned 1 — UI "and new spells" */
+    uint32_t cost = 0;
+    uint32_t required_xp = 0;
     uint8_t old_level = 0;
     uint8_t new_level = 0;
-    uint16_t hp_gain = 0;      /* HP added (doc-32 model; RNG roll deferred) */
-    uint16_t sp_gain = 0;      /* SP added for casters (0 otherwise) */
-    uint8_t spell_level = 0;   /* spell level after the level-up */
+    uint16_t hp_gain = 0;
+    uint16_t sp_gain = 0;
+    uint8_t old_spell_level = 0;
+    uint8_t spell_level = 0;
 };
 
-/* Faithful Training Hall transaction:
- *   1) next = level+1; threshold = mm2_class_xp_for_level(class, next).
- *   2) if experience < threshold -> not eligible, NO charge (return early).
- *   3) cost = level*training_town_index*50; deduct from the char's own gold
- *      (0x1C9C0); insufficient -> paid=false, no level change.
- *   4) on success: level++ (record+0x71), then recompute HP/SP/spell level.
- * HP/SP recompute uses the documented doc-32 per-level model (class base HP +
- * END bonus; caster SP = stat bonus + 3) because the exact per-level RANDOM roll
- * (HP path @ 0x9BCA) is a documented gap — see mm2_town_tables.h. spell_level is
- * raised to mm2_class_spell_level_for(class, new_level). */
-TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id);
+/* Level-up HP @ 0x20390: ($64DA[class]*$64EE[map])/$64E4[map] + -$7F56(+$27).
+ * 0x9BCA is bash-door — do not use it here.
+ * `roster_index`: party table value (launch.roster_slots[slot]). When >= $18
+ * (hireling), training fee is forced to 0 (ASM cost builder 0x2073A). Pass -1
+ * when the caller has no party context (tests / non-hireling default). */
+TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id,
+                                       gameplay::Rng *rng = nullptr,
+                                       int roster_index = -1);
 
 struct TownSvcDonateResult {
     bool paid = false;
     uint32_t cost = 0;
     bool all_temples_donated = false; /* A4-$799E reached 0x1F this donation */
+    bool reward_queued = false; /* 0x1D7E8: sentinel $FE + item 0xD4 in found buffer */
+    bool blessed = false; /* RNG(1,100)>0x5A → buff writes @ 0x1D7FE */
 };
 
-/* Temple donation (doc 28 §5.2). cost = donation_gold[map_id] (A4-$6742); paid
- * from the selected character's own gold (0x1C9C0). On success the per-town quest
- * bit (A4-$66B1[map_id]) is OR'd into the global temple-donation bitfield
- * (A4-$799E, MM2_GS_TEMPLE_DONATION); all_temples_donated is set when the field
- * reaches 0x1F. The 0x1F reward sequence itself (found-item buffer A4-$794C /
- * A4-$3F1C, stat bump A4-$5770, Nordon farthing payoff) is engine/presentation
- * and remains DEFERRED — only the gold + bitfield state are applied here. */
-TownSvcDonateResult townSvcTempleDonate(uint8_t *a4, Mm2RosterRecord &rec, int map_id);
+/* Temple C @ 0x1D796: cost = A4-$6714[map]×100 (0x1DC1A); OR quest bit into
+ * A4-$799E. When bits==0x1F: move.b #$FE,-$794C; move.b #$D4,-$3F1C; clr -$799E.
+ * Independent RNG -$7BB4(100,1)>0x5A → blessed buff writes 0x1D7FE..0x1D852
+ * (A4-$79AB..-$799F + addq.w #1,A4-$5770). */
+TownSvcDonateResult townSvcTempleDonate(uint8_t *a4, Mm2RosterRecord &rec, int map_id,
+                                        gameplay::Rng *rng = nullptr);
 
-/* Cost helpers (FAQ §3-6, doc 34 §13.2), thin wrappers over mm2_town_tables. */
-uint32_t townSvcTrainingCost(int level, int map_id);
-uint32_t townSvcHealingCost(int level, int map_id);
+/* Training fee. `roster_index` >= $18 → 0 (hirelings train free @ 0x2073A). */
+uint32_t townSvcTrainingCost(int level, int map_id, int roster_index = -1);
+uint32_t townSvcHealingCost(int level, int map_id); /* healthy: level×$6714×10 */
 
 /* Why a smith purchase was rejected (matches the engine's error captions @
  * 0x1C432 with the indices shown). */
@@ -123,13 +153,13 @@ struct TownSvcBuyResult {
  *   1) reject if rec.condition ($26) != 0 (0x1BE4C tst.b $26).
  *   2) scan the backpack id-run (+$3A) for the first empty slot; reject as
  *      BackpackFull when all six are used (0x1BE82 cmpi #6).
- *   3) gold check + deduct from the char's own gold (record+$66) via the
+ *   3) Merchant skill id 0x0A @ +$50 (-$7F32→0x45C4 @ 0x1BFB4): halve price.
+ *   4) gold check + deduct from the char's own gold (record+$66) via the
  *      scc(gold>=price)+subtract primitive (0x1BDD6 == 0x1C9C0). No partial spend.
- *   4) write item_id -> backpack +$3A, charges -> +$40, flags -> +$46 (0x1BEBC),
+ *   5) write item_id -> backpack +$3A, charges -> +$40, flags -> +$46 (0x1BEBC),
  *      via the SoA roster accessors (matches the OP_19 give-item path).
- * `price` is the precomputed shop price (mm2_smith_price over items.dat gold);
- * charges/flags are the per-category buy fields (mm2_smith_buy_fields). The
- * Merchant-skill half-price discount (-$7F32 @ 0x1BFB4) is a documented gap. */
+ * `price` is the precomputed shop price (mm2_smith_price over items.dat gold)
+ * before the Merchant half; charges/flags are the per-category buy fields. */
 TownSvcBuyResult townSvcSmithBuy(Mm2RosterRecord &rec, uint8_t item_id, uint8_t charges,
                                  uint8_t flags, uint32_t price);
 
@@ -147,8 +177,17 @@ struct TownSvcSellResult {
 };
 
 /* Blacksmith sell leaf (0x1BC26). Guards: condition==0, slot occupied; then
- * add `price` to record+$66 (0x1B62A) and clear backpack id/charges/flags. */
+ * credit `price` (already mm2_smith_sell_price = buy/2) and if no Merchant
+ * skill, halve again (0x1BFDC). Clear backpack id/charges/flags. */
 TownSvcSellResult townSvcSmithSell(Mm2RosterRecord &rec, int backpack_slot, uint32_t price);
+
+/* 0x1BFB4 Merchant adjust: buy → /2 if skill 0x0A; sell-halved → /2 if no skill. */
+uint32_t townSvcSmithMerchantBuyPrice(uint32_t price, const Mm2RosterRecord &rec);
+uint32_t townSvcSmithMerchantSellPrice(uint32_t sell_half_price, const Mm2RosterRecord &rec);
+
+/* Today's Specials date-roll bonus @ 0x1C146 (category/mode 2): day%30==$1D →
+ * A4-$681C[day/30], else A4-$6816[day%30]. Overwrites price_meta/flags. */
+uint8_t townSvcSmithSpecialsDateBonus(const uint8_t *a4);
 
 enum class TownSvcIdentifyReject : uint8_t {
     None = 0,
@@ -170,8 +209,8 @@ TownSvcIdentifyResult townSvcSmithIdentify(Mm2RosterRecord &rec, int backpack_sl
                                            char *summary, size_t summary_cap);
 
 /* Pub feeding frenzy (tavern menu A, leaf 0x1CA2E @ 0x1D58E). The active member
- * pays A4-$6742[map] (same BE u16 table as temple donations), then every living
- * party member with food (record+$25) below 0x28 is topped up to 40. */
+ * pays A4-$6742[map] (feeding_frenzy_gold), then every living party member with
+ * food (record+$25) below 0x28 is topped up to 40. */
 struct TownSvcFeedingResult {
     bool fed = false;
     bool paid = false;
@@ -212,14 +251,188 @@ struct TownSvcSpellResult {
     uint32_t cost = 0;
 };
 
+/* Mage guild (0x1D97A) / temple (0x1DAC6) menu-slot offer gold. Returns 0 when
+ * the selected character cannot buy the slot — same gate in both shops:
+ *   1) wrong school (guild: Sorcerer/Archer; temple: Cleric/Paladin),
+ *   2) spell_level (+$23 / rec.spell_level) < spell's required level,
+ *   3) spell already known (-$7F38 / spellKnownInBook),
+ * else returns list_gold (static stock decode). ASM still prints the L-N id;
+ * a zero offer paints "---" and blocks the buy leaf via cost==0. */
+uint32_t townSvcSpellOfferGold(const Mm2RosterRecord &rec, gameplay::SpellSchool shop_school,
+                               int spell_index, uint32_t list_gold);
+
 /* Mage guild / temple spell-purchase leaf (0x1D872, shared by both shops). The
- * ASM gate order is: (1) decoded slot cost != 0 (0x1D882 tst.l — an unpopulated
- * slot, not an "already known" check), (2) char condition $26 == 0 (0x1D898),
- * (3) gold check+deduct (0x1D90C == 0x1C9C0), (4) grant: raw record+0x51+(n>>3)
- * bit OR keyed only on the flat spell index `n` (0x1D8D4/0x1D8FA) — idempotent
- * if already known, and NO class-id check was found in the traced ASM, so none
- * is enforced here (a per-class restriction, if any, lives in the menu-open /
- * character-select UI, which is presentation and out of scope). */
+ * ASM gate order is: (1) decoded slot cost != 0 (0x1D882 tst.l — zero when the
+ * menu offer gate above rejected the slot), (2) char condition $26 == 0
+ * (0x1D898), (3) gold check+deduct (0x1D90C == 0x1C9C0), (4) grant: raw
+ * record+0x51+(n>>3) bit OR keyed only on the flat spell index `n`
+ * (0x1D8D4/0x1D8FA) — idempotent if already known. Class / already-known /
+ * spell-level gates live in townSvcSpellOfferGold (menu), not this leaf. */
 TownSvcSpellResult townSvcBuySpell(Mm2RosterRecord &rec, int spell_index, uint32_t cost);
+
+/* General store OP_0E 0x07 → 0xA62C: 100gp gate (0xA75E), then 0xA3AE table
+ * keyed on each +$50 skill nibble; clears +$50 on success. Middlegate/Vulcania. */
+struct TownSvcGeneralStoreResult {
+    bool converted = false;
+    bool paid = false;
+    const char *message = nullptr; /* ASM inline @ 0xA7D2 / 0xA7F1 */
+};
+
+TownSvcGeneralStoreResult townSvcGeneralStoreConvert(Mm2RosterRecord &rec);
+
+/* Circus OP_0E 0x64 → 0xDF04 win leaf 0xDD18. Menu keys 1..6 (0-based 0..5)
+ * map to CURRENT attr offsets (ASM adda.l):
+ *   0→+$10 might, 1→+$12 personality, 2→+$14 accuracy,
+ *   3→+$27 endurance, 4→+$13 speed, 5→+$15 luck.
+ * FAQ lists 7 games (incl. Shell Game / intellect) — ASM only has 6; default
+ * branch uses +$11 intelligence. Cap: >0x5A → 0x64 else +0x0A. */
+void townSvcCircusWinBoost(Mm2RosterRecord &rec, int attr_choice /*0..5*/);
+
+/* Circus lose leaf 0xDE2C: 50% (rng 1..0xFE > 0x7F) places Cupie Doll 0xDA
+ * in first empty backpack. Returns true when a doll was placed. */
+bool townSvcCircusGiveCupieDoll(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                gameplay::Rng *rng);
+
+/* Tavern B @ 0x1CAC4: A–F buy from A4-$6738 costs; apply via 0x1C7EC (base
+ * stats +$6B..+$72). Purchase-count gate A4-$577E[slot] vs A4-$672C limits
+ * (0x1CBDE): count < limit → pay + increment only; count >= limit → apply.
+ * Sick roll RNG(1, end+10)==2 → bset #$3,$26. */
+struct TownSvcStatBoostResult {
+    bool ok = false;
+    bool paid = false;
+    bool applied = false; /* false when only the -$577E counter advanced */
+    bool sick = false;
+    uint32_t cost = 0;
+    int slot = -1; /* 0..5 = A..F */
+};
+
+TownSvcStatBoostResult townSvcTavernStatBoost(uint8_t *a4, Mm2RosterRecord &rec, int slot,
+                                              int map_id, gameplay::Rng *rng);
+
+/* Tavern C specialties @ 0x1CD2E: pay A4-$6760[town*3+menu] (0x1CEA4), then
+ * sick RNG(1, -$7F56(+$73)+5)==1 → bset #$2,$26 and SKIP mask; else
+ * 0x1C8D4 OR A4-$786C into +$76. NOT the 0x18EC0 / +$78 encoder (0xC9/0xCA). */
+struct TownSvcSpecialtyResult {
+    bool ok = false;
+    bool paid = false;
+    bool sick = false;
+    uint32_t cost = 0;
+    int menu = -1; /* 0..2 = A..C */
+};
+
+TownSvcSpecialtyResult townSvcTavernSpecialty(uint8_t *a4, Mm2RosterRecord &rec, int map_id,
+                                              int menu /*0..2*/, gameplay::Rng *rng);
+
+/* Food encoder 0x18EC0 + party write 0x019030 (selector 0xC9 A–C). No A4-$6760
+ * gold deduct. Writes encoding to every party +$78; +$7C bit0 cleared (food).
+ * Do NOT call from tavern C specialties (0x1CD2E) — separate OP_0E path. */
+struct TownSvcFoodEncodeResult {
+    bool ok = false;
+    uint8_t encoding = 0;
+    int members_written = 0;
+};
+
+TownSvcFoodEncodeResult townSvcFoodEncodePurchase(Mm2RosterFile *roster,
+                                                  const Mm2PartyLaunch *launch, int menu /*0..2*/,
+                                                  gameplay::Rng *rng);
+
+/* Drink encoder 0x18F78 + 0x019030 with drink mode (+$7C bit0 set). Selector 0xCA.
+ * Encoding only — base-stat bonuses are FAQ fiction; apply leaf is gold @ 0x18D3A. */
+TownSvcFoodEncodeResult townSvcDrinkEncodePurchase(Mm2RosterFile *roster,
+                                                   const Mm2PartyLaunch *launch, int drink /*0..5*/,
+                                                   gameplay::Rng *rng);
+
+/* OP_0E 0xC9/0xCA key D @ 0x191A6: arm Lord's Quest on +$7C (bit2 + mode bit;
+ * food clears bit0 / sets bit3 mask path; drink keeps bit0 / bit4). Returns
+ * members newly armed, or -1 if none (ASM re-prompts A–D). */
+int townSvcQuestLordArm(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool drink);
+
+/* 0x18FBA: party must hold items 0xE2/0xE3/0xE4 (Valor/Honor/Nobility); if so
+ * consume all three and return true. Hoardall completion gate. */
+bool townSvcQuestHoardallItemsReady(Mm2RosterFile *roster, const Mm2PartyLaunch *launch);
+
+/* 0x193AC (+ apply 0x19516): bit2 quest-complete reward then encoding apply.
+ * Food XP $186A0 / drink $F4240; sets bit3 (food) or bit4 (drink), clears bit2.
+ * Returns ASM-style activity count (non-zero → skip A–D picker @ 0x1980A). */
+struct TownSvcQuestCompleteResult {
+    int activity = 0;
+    int members_rewarded = 0;
+    int encodings_applied = 0;
+    uint32_t xp_each = 0;
+};
+
+TownSvcQuestCompleteResult townSvcQuestCompleteReward(Mm2RosterFile *roster,
+                                                     const Mm2PartyLaunch *launch, bool drink,
+                                                     const Mm2ItemsFile *items);
+
+/* 0x1961E gate: any party member with bit2 or +$78 matching drink mode → busy. */
+bool townSvcQuestBusy(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool drink);
+
+/* Combat attack phase @ 0x10C66: if +$78 == monster type and +$7C bit0 (drink),
+ * bset +$7C bit1 (armed for gold apply). */
+void townSvcArmDrinkMatchOnKill(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                uint8_t monster_type);
+
+/* Drink gold apply @ 0x18D3A: +$7C bit1 + matching +$78 → A4-$6AE0[tier] added
+ * to experience +$62, then clr +$78 and clear bit1. Called from tavern check
+ * 0x19516, not mid-combat. */
+struct TownSvcDrinkApplyResult {
+    bool applied = false;
+    uint32_t gold = 0;
+};
+
+TownSvcDrinkApplyResult townSvcApplyDrinkEncoding(Mm2RosterRecord &rec);
+
+/* Food EXP apply @ 0x18DE0: +$78 encoding as items.dat id; XP = gold(+$12)×8
+ * via A4-$3EEC (= items base -$3EFE + $12). Clr +$78. Cond ≥$80 skips. */
+struct TownSvcFoodApplyResult {
+    bool applied = false;
+    uint32_t xp = 0;
+};
+
+TownSvcFoodApplyResult townSvcApplyFoodEncoding(const Mm2ItemsFile *items, Mm2RosterRecord &rec);
+
+/* Party backpack scan @ 0x18C74 / 0x18CE6: first slot whose +$3A == item_id.
+ * Returns 1-based slot count (ASM addq #1), or 0 if not found. */
+int townSvcPartyFindBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                 uint8_t item_id);
+
+/* Consume first matching backpack id @ 0x18D06 → -$7F26 clear slot. */
+bool townSvcPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                     uint8_t item_id);
+
+/* FAQ-era drink helper — no base-stat mutate. Prefer encode + apply leaves. */
+struct TownSvcDrinkResult {
+    bool ok = false;
+    bool sick = false;
+    const char *name = nullptr;
+};
+
+TownSvcDrinkResult townSvcPubDrink(Mm2RosterRecord &rec, int drink_idx, gameplay::Rng *rng);
+
+/* Tip/rumor day-pair index @ 0x1C962: returns 0, 1, or 3 (then ×2 → tip pair
+ * base into A4-$58AE / A4-$594E). Day word from -$79DE[era]. */
+int townSvcTipDayPairBase(uint16_t day_of_year);
+
+enum class TownSvcTipReject : uint8_t {
+    None = 0,
+    Condition,    /* 0x1CFD2: +$26 != 0 → caption 4 */
+    NotEnoughGold, /* 0x1C9C0 fail → caption 2 */
+    NoTip,        /* RNG miss @ 0x1D02A → caption 0 */
+};
+
+struct TownSvcTipResult {
+    bool ok = false;
+    TownSvcTipReject reject = TownSvcTipReject::None;
+    int pair_base = 0; /* 0, 2, or 6 — index of first line of the tip pair */
+};
+
+/* Tavern D @ 0x1CFCA: cond==0, deduct 1gp, RNG(1, -$7F56(+$73)+5)==1, then
+ * day-pair tips. `pair_base` indexes tips[pair_base] + tips[pair_base+1]. */
+TownSvcTipResult townSvcTavernTip(Mm2RosterRecord &rec, uint16_t day_of_year,
+                                  gameplay::Rng *rng);
+
+/* Tavern E @ 0x1D0B4: cond==0 then day-pair rumors (no gold / no RNG). */
+TownSvcTipResult townSvcTavernRumor(Mm2RosterRecord &rec, uint16_t day_of_year);
 
 }  // namespace mm2::events

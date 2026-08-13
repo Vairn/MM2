@@ -1,6 +1,7 @@
 /**
  * Present .32 assets on the ACE playfield — planar blit only (no RGBA / chunky).
- * Rect fills use ACE blitRect; 8×8 text uses a 1bpp chip glyph atlas + masked ink stamp.
+ * Rect fills use ACE blitRect. Text: CPU-assembled line mask + one masked blit
+ * for printable runs; single glyphs fall back to planar plot (or optional atlas).
  */
 
 #include "mm2/platform/amiga/Mm2AmigaPlanar.h"
@@ -54,10 +55,14 @@ static UBYTE s_rev_byte_ready;
 static tBitMap *s_font_mask_atlas; /* 128×64 × 1bpp */
 static tBitMap *s_font_ink;        /* 8×8 × playfield depth — solid pen stamp */
 static tBitMap *s_font_glyph_mask; /* 8×8 × 1bpp — one glyph extracted from atlas */
+/* Whole-line stamp: assemble mask in chip, one pen fill + one masked blit. */
+static tBitMap *s_font_line_mask; /* 320×8 × 1bpp */
+static tBitMap *s_font_line_ink;  /* 320×8 × playfield depth */
 static UBYTE s_font_ink_pen = 0xFFu;
 static UBYTE s_font_atlas_ready;
-/* Dense UI text: CPU plot wins. Set 1 to use 2-blit atlas path (batched strings later). */
+/* Per-glyph atlas (2 blits/char) is slower than CPU for dense UI; keep off. */
 static UBYTE s_font_use_atlas_blit = 0;
+#define MM2_FONT_LINE_MAX_W MM2_AGA_SCREEN_WIDTH
 
 #define MM2_VIEWPORT_CACHE_X 8u
 #define MM2_VIEWPORT_CACHE_Y 8u
@@ -242,6 +247,14 @@ static void mm2_amiga_font_atlas_destroy(void)
         bitmapDestroy(s_font_glyph_mask);
         s_font_glyph_mask = NULL;
     }
+    if (s_font_line_mask) {
+        bitmapDestroy(s_font_line_mask);
+        s_font_line_mask = NULL;
+    }
+    if (s_font_line_ink) {
+        bitmapDestroy(s_font_line_ink);
+        s_font_line_ink = NULL;
+    }
     s_font_ink_pen = 0xFFu;
     s_font_atlas_ready = 0;
 }
@@ -261,8 +274,12 @@ UBYTE mm2_amiga_font_atlas_create(void)
     s_font_mask_atlas = bitmapCreate((UWORD)MM2_FONT_ATLAS_W, (UWORD)MM2_FONT_ATLAS_H, 1, BMF_CLEAR);
     s_font_ink = bitmapCreate((UWORD)MM2_FONT_GLYPH_W, (UWORD)MM2_FONT_GLYPH_H, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
     s_font_glyph_mask = bitmapCreate((UWORD)MM2_FONT_GLYPH_W, (UWORD)MM2_FONT_GLYPH_H, 1, BMF_CLEAR);
-    if (!s_font_mask_atlas || !s_font_ink || !s_font_glyph_mask || !bitmapIsChip(s_font_mask_atlas) ||
-        !bitmapIsChip(s_font_ink) || !bitmapIsChip(s_font_glyph_mask)) {
+    s_font_line_mask = bitmapCreate((UWORD)MM2_FONT_LINE_MAX_W, (UWORD)MM2_FONT_GLYPH_H, 1, BMF_CLEAR);
+    s_font_line_ink =
+        bitmapCreate((UWORD)MM2_FONT_LINE_MAX_W, (UWORD)MM2_FONT_GLYPH_H, MM2_AGA_SCREEN_BPP, BMF_CLEAR);
+    if (!s_font_mask_atlas || !s_font_ink || !s_font_glyph_mask || !s_font_line_mask || !s_font_line_ink ||
+        !bitmapIsChip(s_font_mask_atlas) || !bitmapIsChip(s_font_ink) || !bitmapIsChip(s_font_glyph_mask) ||
+        !bitmapIsChip(s_font_line_mask) || !bitmapIsChip(s_font_line_ink)) {
         mm2_amiga_font_atlas_destroy();
         return 0;
     }
@@ -350,26 +367,110 @@ void mm2_amiga_draw_glyph8_pen(UWORD uwX, UWORD uwY, UBYTE ubCodepoint, UBYTE pe
     }
 }
 
+/**
+ * Draw one run of printable glyphs as a single masked blit:
+ *   CPU-assemble 1bpp mask strip → fill pen ink strip → blitCopyMask once.
+ * Cheaper than per-glyph (2 blits × N) for combat menus / roster lines.
+ * Requires cell-aligned X (col×8) and atlas line buffers.
+ */
+static UBYTE mm2_amiga_draw_text_line_batch(UWORD uwX, UWORD uwY, const char *text, UWORD nchars, UBYTE pen,
+                                           tBitMap *pDst)
+{
+    const uint8_t *table;
+    UWORD w;
+    UWORD i;
+    UBYTE row;
+
+    if (!s_font_atlas_ready || !s_font_line_mask || !s_font_line_ink || !pDst || nchars == 0) {
+        return 0;
+    }
+    if ((uwX & 7u) != 0u) {
+        return 0; /* cell grid only — blitter shift path not worth it here */
+    }
+    w = (UWORD)(nchars * MM2_FONT_GLYPH_W);
+    if (w > MM2_FONT_LINE_MAX_W || uwX + w > MM2_AGA_SCREEN_WIDTH ||
+        uwY + MM2_FONT_GLYPH_H > MM2_AGA_SCREEN_HEIGHT) {
+        return 0;
+    }
+    if (!bitmapIsChip(pDst) || !bitmapIsChip(s_font_line_mask) || !bitmapIsChip(s_font_line_ink)) {
+        return 0;
+    }
+
+    /* Clear mask width, then stamp glyph bits (pen 1) at byte-aligned cells. */
+    blitRect(s_font_line_mask, 0, 0, (WORD)w, (WORD)MM2_FONT_GLYPH_H, 0);
+    blitWait(); /* CPU stamp must not race the clear blit */
+    mm2_amiga_ensure_rev_byte();
+    table = mm2_font8x8_live();
+    for (i = 0; i < nchars; ++i) {
+        const UBYTE cp = (UBYTE)text[i];
+        const uint8_t *glyph = table + (ULONG)cp * (ULONG)MM2_FONT8X8_ROWS;
+        const UWORD gx = (UWORD)(i * MM2_FONT_GLYPH_W);
+        for (row = 0; row < MM2_FONT8X8_ROWS; ++row) {
+            mm2_amiga_plot_glyph_row(gx, (UWORD)row, glyph[row], 1u, s_font_line_mask);
+        }
+    }
+
+    blitRect(s_font_line_ink, 0, 0, (WORD)w, (WORD)MM2_FONT_GLYPH_H, pen);
+    blitCopyMask(s_font_line_ink, 0, 0, pDst, (WORD)uwX, (WORD)uwY, (WORD)w, (WORD)MM2_FONT_GLYPH_H,
+                 s_font_line_mask->Planes[0]);
+    return 1;
+}
+
 void mm2_amiga_draw_text_pen(UWORD uwX, UWORD uwY, const char *text, UBYTE pen, UBYTE ubA)
 {
+    tBitMap *pDst;
     UWORD cx;
+    UWORD run_x;
+    UWORD run_n;
+    const char *run_p;
 
     if (!text || ubA == 0) {
         return;
     }
+    pDst = mm2_amiga_pixel_dest();
+    if (!pDst) {
+        return;
+    }
+
     cx = uwX;
-    for (const char *p = text; *p; ++p) {
+    run_x = uwX;
+    run_n = 0;
+    run_p = text;
+
+    for (const char *p = text;; ++p) {
+        const unsigned uch = p ? (unsigned)*p : 0u;
+        const UBYTE is_print = (uch >= 32u && uch <= 127u) ? 1u : 0u;
+
+        if (is_print) {
+            if (run_n == 0u) {
+                run_x = cx;
+                run_p = p;
+            }
+            ++run_n;
+            cx += 8u;
+            continue;
+        }
+
+        /* Flush printable run: prefer one-line batch blit. */
+        if (run_n > 0u) {
+            if (run_n == 1u ||
+                !mm2_amiga_draw_text_line_batch(run_x, uwY, run_p, run_n, pen, pDst)) {
+                UWORD i;
+                for (i = 0; i < run_n; ++i) {
+                    mm2_amiga_draw_glyph8_pen((UWORD)(run_x + i * 8u), uwY, (UBYTE)run_p[i], pen, ubA);
+                }
+            }
+            run_n = 0;
+        }
+
+        if (!p || *p == '\0') {
+            break;
+        }
         if (*p == '\n') {
             cx = uwX;
             uwY += 8u;
-            continue;
         }
-        const unsigned uch = (unsigned)*p;
-        if (uch < 32u || uch > 127u) {
-            continue;
-        }
-        mm2_amiga_draw_glyph8_pen(cx, uwY, (UBYTE)uch, pen, ubA);
-        cx += 8u;
+        /* Other controls: skip (matches prior draw_text_pen). */
     }
 }
 
@@ -725,7 +826,6 @@ void mm2_amiga_apply_palette(const mm2_image32_file *img)
 void mm2_amiga_blit_frame(const mm2_image32_file *img, uint16_t frame_index, UWORD uwDstX, UWORD uwDstY,
                           UBYTE opaque)
 {
-    tSimpleBufferManager *pBfr;
     tBitMap *pDst;
     const mm2_image32_frame *frame;
     tBitMap *pSrc;
@@ -744,11 +844,12 @@ void mm2_amiga_blit_frame(const mm2_image32_file *img, uint16_t frame_index, UWO
         return;
     }
 
-    pBfr = mm2AmigaDisplayGetBuffer();
-    if (!pBfr || !pBfr->pBack) {
+    /* Honor s_pixel_target (UI / chrome cache) so menu screens can blit .32
+     * assets into the off-screen buffer that ui_cache_present copies later. */
+    pDst = mm2_amiga_pixel_dest();
+    if (!pDst) {
         return;
     }
-    pDst = pBfr->pBack;
     if (!bitmapIsChip(pSrc) || !bitmapIsChip(pDst)) {
 #if defined(ACE_DEBUG)
         logWrite(

@@ -22,7 +22,9 @@ typedef enum Mm2EventRecordKind {
     MM2_EVENT_KIND_STRING_BANK = 1,
     MM2_EVENT_KIND_CASTLE_BLOB = 2,
     MM2_EVENT_KIND_MIXED_POOL = 3,
-    MM2_EVENT_KIND_UNKNOWN = 4
+    MM2_EVENT_KIND_UNKNOWN = 4,
+    /* locs 60..70: queued-dispatch overlay (ASM 0x176B6). LE string anchor @ [0..1]. */
+    MM2_EVENT_KIND_OVERLAY_BANK = 5
 } Mm2EventRecordKind;
 
 typedef struct Mm2EventTriplet {

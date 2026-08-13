@@ -46,7 +46,10 @@ def main() -> int:
         merged = merge_symbols(bootstrap, harvested, ira, prefer="new")
     elif args.merge or args.output.exists():
         base = load_symbols(args.output) if args.output.exists() else bootstrap
-        merged = merge_symbols(base, bootstrap, harvested, ira, prefer="base")
+        # Keep existing yaml / harvest / IRA on conflict, then let curated
+        # bootstrap win so address corrections in build_bootstrap() apply.
+        merged = merge_symbols(base, harvested, ira, prefer="base")
+        merged = merge_symbols(merged, bootstrap, prefer="new")
         merged = prune_symbols(merged)
     else:
         merged = merge_symbols(bootstrap, harvested, ira, prefer="new")

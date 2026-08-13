@@ -12,8 +12,15 @@ struct PlayPartySlot {
     bool bad_condition = false;   /* roster byte +$26 != 0 (0x622C) */
     bool in_combat = false;       /* use the combat strip format (0x12848) */
     bool combat_front_rank = false; /* glyph 0x17 when slot < A4-$5E4D (0x12892) */
-    int hp = 0;                   /* roster word +$5E (0x6274) */
+    int hp = 0;                   /* roster word +$5E (0x6274) — classic strip */
     char name[16] = {0};
+    /* Agui HUD extras (ignored by ClassicPlayHud). */
+    int hp_current = 0;           /* roster +$74 */
+    int hp_max = 0;               /* roster +$5E */
+    int sp_current = 0;
+    int sp_max = 0;
+    int face_id = 0;              /* archetype face atlas index */
+    uint8_t condition = 0;        /* raw roster +$26 */
 };
 
 /** Protect panel values A4 -$79AB..-$79A6 @ 0x5E28 (doc 43 §4). */
@@ -29,13 +36,17 @@ struct PlayProtectValues {
 /** Solid black fill for a text-cell rectangle (clear_cell_rect @ 0x42DC). */
 void fillCellRect(ScreenCompositor &c, int col, int row, int width_cells, int height_cells);
 
-/** Full-screen black + red console_box for in-game Quick Ref / character sheet. */
+/** Full-screen black + play outer frame (-$7F7A) for in-game Quick Ref / sheet. */
 void drawPlayModalBackdrop(ScreenCompositor &c);
 
 /** Black interior fills + red border/divider glyphs (no dynamic text). */
 void drawPlayScreenChromeStatic(ScreenCompositor &c);
 
 void drawPlayScreenChrome(ScreenCompositor &c);
+
+/** Outer red glyph frame only (-$7F7A) — overland_map_view @ 0x223A redraws it
+ * over the blacked-out play interior. */
+void drawPlayOuterFrame(ScreenCompositor &c);
 
 /** Red v-line col 0x1B rows 0..0x10 — repaint after 3D hood (walls overwrite x=216). */
 void drawPlayViewportDivider(ScreenCompositor &c);

@@ -310,6 +310,7 @@ static void in_town_loop(void)
         return;
     }
     if (h.inTownRequestTitle()) {
+        h.syncSessionRosterToTitle();
         mm2_pending_change(&g_mm2_state_menu);
         return;
     }

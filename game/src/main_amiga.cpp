@@ -2,7 +2,9 @@
 #include "mm2/CppStdCompat.h"
 #include "mm2/states/AppHost.h"
 #include "mm2/platform/Platform.h"
+#include "mm2/platform/Audio.h"
 #include "mm2/ui/CharacterUiKind.h"
+#include "mm2/ui/PlayHudKind.h"
 #include "mm2/Mm2Dbg.h"
 
 namespace {
@@ -27,10 +29,31 @@ mm2::ui::CharacterUiKind parseUiKind(int argc, char **argv)
 #endif
 }
 
+mm2::ui::PlayHudKind parsePlayHudKind(int argc, char **argv)
+{
+#if defined(MM2_PLAY_UI_AGUI)
+    (void)argc;
+    (void)argv;
+    return mm2::ui::PlayHudKind::Agui;
+#elif defined(MM2_PLAY_UI_CLASSIC)
+    (void)argc;
+    (void)argv;
+    return mm2::ui::PlayHudKind::Classic;
+#else
+    for (int i = 1; i < argc; ++i) {
+        const char *arg = argv[i];
+        if (std::strncmp(arg, "--play-ui=", 10) == 0) {
+            return mm2::ui::playHudKindFromString(arg + 10);
+        }
+    }
+    return mm2::ui::PlayHudKind::Classic;
+#endif
+}
+
 const char *parseDataDir(int argc, char **argv)
 {
     for (int i = 1; i < argc; ++i) {
-        if (std::strncmp(argv[i], "--ui=", 5) == 0) {
+        if (std::strncmp(argv[i], "--ui=", 5) == 0 || std::strncmp(argv[i], "--play-ui=", 10) == 0) {
             continue;
         }
         return argv[i];
@@ -43,6 +66,7 @@ int main(int argc, char **argv)
 {
     const char *data_dir_hint = parseDataDir(argc, argv);
     const auto ui_kind = parseUiKind(argc, argv);
+    const auto play_hud_kind = parsePlayHudKind(argc, argv);
     if (!mm2::platform::init(&argc, &argv)) {
         return 1;
     }
@@ -61,13 +85,17 @@ int main(int argc, char **argv)
     }
 
     if (!mm2::platform::beginDisplay()) {
+        mm2::audio::shutdown();
         mm2::platform::shutdown();
         return 1;
     }
 
+    (void)mm2::audio::init(data_dir);
+
     MM2_DBG("MM2 DBG: entering ACE state loop\n");
-    const int rc = mm2_app_run(data_dir, static_cast<int>(ui_kind));
+    const int rc = mm2_app_run(data_dir, static_cast<int>(ui_kind), static_cast<int>(play_hud_kind));
     MM2_DBG("MM2 DBG: app quit\n");
+    mm2::audio::shutdown();
     mm2::platform::shutdown();
     return rc;
 }

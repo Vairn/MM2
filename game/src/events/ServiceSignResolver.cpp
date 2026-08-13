@@ -8,19 +8,26 @@ namespace mm2::events {
 
 namespace {
 
-/* Dumped from EXTRACTED/ghidra/mm2_data_00.bin @ A4-$6C62..$6C02 (0x15756).
- * Each table is 24 bytes; bases are 0x16 bytes apart in the data hunk.
- * Retail indexes str_idx-1 with no bounds check @ 0x15776C. */
-constexpr uint8_t kMiddlegate[] = {70, 62, 63, 66, 67, 68, 65, 2,  19, 26, 51, 54, 53, 12, 60, 27,
-                                   39, 4,  45, 37, 57, 47, 73, 33};
-constexpr uint8_t kAtlantium[] = {73, 33, 42, 43, 17, 14, 69, 34, 9,  26, 24, 52, 53, 21, 25, 28,
-                                  44, 49, 11, 31, 55, 36, 1,  61};
-constexpr uint8_t kTundara[] = {1,  61, 18, 47, 72, 16, 10, 23, 6,  51, 15, 8,  5,  49, 40, 11,
-                                30, 39, 4,  46, 20, 36, 1,  57};
-constexpr uint8_t kVulcania[] = {1,  57, 13, 58, 18, 47, 74, 42, 2,  17, 14, 69, 19, 34, 9,  26,
-                                 24, 52, 54, 8,  21, 25, 3,  29};
-constexpr uint8_t kSandsobar[] = {3,  29, 44, 50, 27, 39, 61, 48, 71, 59, 33, 19, 35, 10, 24, 6,
-                                  75, 51, 15, 7,  60, 56, 29, 5};
+/* Sign .anm id tables @ 0x15756, dumped from EXTRACTED/ghidra/mm2_data_00.bin.
+ * Five 24-byte tables packed at A4-$6C62/$6C4C/$6C32/$6C1A/$6C02 (data-hunk file
+ * offsets 0x139C/0x13B2/0x13CC/0x13E4/0x13FC). NB: the tables are NOT uniformly
+ * strided (deltas 22/26/24/24) and — critically — the OP_0B jump table @ 0x157D2
+ * maps env->table in a SCRAMBLED order (verified in mm2.capstone.asm: jmp base
+ * 0x157F0, handler `lea` bases below). env ids do NOT index the tables in town
+ * order:
+ *   env0 -> $6C62, env1 -> $6C32, env2 -> $6C02, env3 -> $6C4C,
+ *   env4 -> $6C1A, env5 -> $6C02, env6 -> $6C1A.
+ * Retail subtracts 1 from str_idx before the (a0,d0) fetch @ 0x1576C. */
+constexpr uint8_t kSignTbl6C62[] = {70, 62, 63, 66, 67, 68, 65, 2,  19, 26, 51, 54,
+                                    53, 12, 60, 27, 39, 4,  45, 37, 57, 47, 73, 33};
+constexpr uint8_t kSignTbl6C4C[] = {73, 33, 42, 43, 17, 14, 69, 34, 9,  26, 24, 52,
+                                    53, 21, 25, 28, 44, 49, 11, 31, 55, 36, 1,  61};
+constexpr uint8_t kSignTbl6C32[] = {72, 16, 10, 23, 6,  51, 15, 8,  5,  49, 40, 11,
+                                    30, 39, 4,  46, 20, 36, 1,  57, 13, 58, 18, 47};
+constexpr uint8_t kSignTbl6C1A[] = {74, 42, 2,  17, 14, 69, 19, 34, 9,  26, 24, 52,
+                                    54, 8,  21, 25, 3,  29, 44, 50, 27, 39, 61, 48};
+constexpr uint8_t kSignTbl6C02[] = {71, 59, 33, 19, 35, 10, 24, 6,  75, 51, 15, 7,
+                                    60, 56, 29, 5,  22, 50, 30, 41, 46, 37, 58, 0};
 
 constexpr size_t kTableLen = 24;
 
@@ -32,27 +39,30 @@ constexpr uint8_t kScreenEnvId[] = {0, 3, 1, 6, 4, 5, 2};
 
 const uint8_t *tableForEnv(int env_id, size_t *out_len)
 {
-    /* OP_0B dispatch @ 0x157D2: env 0..6 → jump table; env >= 7 leaves id 0. */
+    /* OP_0B dispatch @ 0x157D2: env 0..6 → jump table (scrambled, see above);
+     * env >= 7 leaves id 0. */
     switch (env_id) {
     case 0:
         *out_len = kTableLen;
-        return kMiddlegate;
+        return kSignTbl6C62;
     case 1:
         *out_len = kTableLen;
-        return kAtlantium;
+        return kSignTbl6C32;
     case 2:
         *out_len = kTableLen;
-        return kTundara;
+        return kSignTbl6C02;
     case 3:
         *out_len = kTableLen;
-        return kVulcania;
+        return kSignTbl6C4C;
     case 4:
+        *out_len = kTableLen;
+        return kSignTbl6C1A;
     case 5:
         *out_len = kTableLen;
-        return kSandsobar;
+        return kSignTbl6C02;
     case 6:
         *out_len = kTableLen;
-        return kVulcania;
+        return kSignTbl6C1A;
     default:
         *out_len = 0;
         return nullptr;

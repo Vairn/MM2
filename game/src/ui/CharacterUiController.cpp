@@ -108,19 +108,45 @@ void CharacterUiController::prepareCreateCharacterAssets()
     }
 }
 
+void CharacterUiController::paceMenuSpace(platform::KeyState &keys)
+{
+    /* The SDL backend level-samples SPACE (held across slow frames for combat
+     * continue prompts), so a single press would flip the roster page every
+     * frame. Convert to an edge here, scoped to the character UI: fire once on
+     * the press and remember it until release — a tiny latch that "caches" the
+     * key press, matching the Amiga backend's keyUse edge semantics. All the
+     * character-UI space uses are one-shot (toggle hirelings, insert a space in
+     * a rename/create name, reroll stats), so no held-repeat is wanted. */
+#if !MM2_HOST_AMIGA
+    if (keys.space) {
+        if (space_held_) {
+            keys.space = false; /* already latched; swallow repeats while held */
+        }
+        space_held_ = true;
+    } else {
+        space_held_ = false;
+    }
+#else
+    (void)keys;
+#endif
+}
+
 void CharacterUiController::tick(const platform::KeyState &keys)
 {
     if (!ui_ || mode_ == CharacterUiMode::None) {
         return;
     }
 
+    platform::KeyState paced = keys;
+    paceMenuSpace(paced);
+
     UiResult result = UiResult::Continue;
     if (mode_ == CharacterUiMode::ViewParty) {
-        result = ui_->tickViewParty(keys);
+        result = ui_->tickViewParty(paced);
     } else if (mode_ == CharacterUiMode::CreateCharacter) {
-        result = ui_->tickCreateCharacter(keys);
+        result = ui_->tickCreateCharacter(paced);
     } else if (mode_ == CharacterUiMode::ChooseParty) {
-        result = ui_->tickChooseParty(keys);
+        result = ui_->tickChooseParty(paced);
     }
 
     if (mode_ == CharacterUiMode::ChooseParty && result != UiResult::Continue) {

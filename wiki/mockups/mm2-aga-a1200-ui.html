@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MM2 · AGA A1200 UI mockup</title>
+<style>
+  /*
+    Budget: Amiga 1200 AGA — 6 bitplanes, pens 32–63 for UI.
+    Target feel: 320×256 (or 640×256 HIRES) chunky gadgets, not Xeen VGA chrome.
+  */
+  :root {
+    /* Fixed 16-ish UI pens from the reserved AGA range */
+    --bg: #101018;
+    --panel: #282828;
+    --panel2: #383838;
+    --hi: #a0a0a0;
+    --lo: #181818;
+    --ink: #e0e0c0;
+    --ink-dim: #909070;
+    --accent: #50a090;
+    --bronze: #c0a060;
+    --warn: #c0a020;
+    --bad: #c04040;
+    --ok: #40c040;
+    --sp: #4080c0;
+    --sky: #5888a8;
+    --sky2: #80a0b0;
+    --wall: #685848;
+    --wall2: #403028;
+    --floor: #504030;
+    --floor2: #302820;
+    --scale: 2; /* 320 CSS-px logical → 640 display */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    min-height: 100vh;
+    background: #08080c;
+    color: var(--ink);
+    font-family: Tahoma, "Geneva", "Amiga Topaz", monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 0.75rem 2rem;
+  }
+
+  header { text-align: center; max-width: 42rem; }
+  header h1 { font-size: 1.1rem; color: var(--bronze); font-weight: 700; }
+  header p { margin-top: 0.35rem; font-size: 0.82rem; color: var(--ink-dim); line-height: 1.45; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; }
+  .toolbar button {
+    appearance: none;
+    font: inherit;
+    font-size: 0.78rem;
+    padding: 0.35rem 0.7rem;
+    color: var(--ink);
+    background: var(--panel2);
+    border-top: 2px solid var(--hi);
+    border-left: 2px solid var(--hi);
+    border-right: 2px solid var(--lo);
+    border-bottom: 2px solid var(--lo);
+    cursor: pointer;
+  }
+  .toolbar button[aria-pressed="true"] {
+    color: var(--bronze);
+    border-top-color: var(--lo);
+    border-left-color: var(--lo);
+    border-right-color: var(--hi);
+    border-bottom-color: var(--hi);
+    background: var(--panel);
+  }
+
+  /* Logical 320×256 playfield, scaled ×2 */
+  .crt {
+    image-rendering: pixelated;
+    width: calc(320px * var(--scale));
+    height: calc(256px * var(--scale));
+    border: 2px solid #000;
+    box-shadow: 0 0 0 1px #404040;
+  }
+
+  .screen {
+    width: 320px;
+    height: 256px;
+    transform: scale(var(--scale));
+    transform-origin: top left;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 8px;
+    line-height: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Layout grid in low-res cells */
+  .hud {
+    display: grid;
+    grid-template-columns: 232px 80px;
+    grid-template-rows: 144px 28px 76px;
+    gap: 4px;
+    padding: 4px;
+    height: 100%;
+    background: var(--panel);
+  }
+
+  .view {
+    grid-column: 1;
+    grid-row: 1;
+    position: relative;
+    background: #000;
+    border-top: 2px solid var(--lo);
+    border-left: 2px solid var(--lo);
+    border-right: 2px solid var(--hi);
+    border-bottom: 2px solid var(--hi);
+    overflow: hidden;
+  }
+
+  .viewport {
+    position: absolute;
+    inset: 2px;
+    background: linear-gradient(180deg, var(--sky) 0 48%, var(--floor) 48% 100%);
+  }
+
+  .wall-l, .wall-r {
+    position: absolute; top: 0; bottom: 0; width: 26%;
+  }
+  .wall-l {
+    left: 0;
+    background: var(--wall2);
+    clip-path: polygon(0 0, 100% 16%, 100% 84%, 0 100%);
+  }
+  .wall-r {
+    right: 0;
+    background: var(--wall);
+    clip-path: polygon(0 16%, 100% 0, 100% 100%, 0 84%);
+  }
+  .door {
+    position: absolute;
+    left: 36%; right: 36%; top: 30%; bottom: 36%;
+    background: var(--wall2);
+    border: 2px solid #806040;
+  }
+  .building {
+    display: none;
+    position: absolute;
+    bottom: 40%;
+    width: 20%;
+    height: 38%;
+    background: #705848;
+    border: 1px solid #201810;
+  }
+  .building.b2 { background: #586848; }
+  .street {
+    display: none;
+    position: absolute;
+    left: 24%; right: 24%; bottom: 0; height: 40%;
+    background: repeating-linear-gradient(90deg, #585040 0 8px, #403828 8px 16px);
+    clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%);
+  }
+  .town .door { display: none; }
+  .town .building, .town .street { display: block; }
+  .town .building.b1 { left: 30%; }
+  .town .building.b2 { right: 30%; }
+
+  .monster {
+    display: none;
+    position: absolute;
+    bottom: 20%;
+    width: 26%;
+    height: 48%;
+    background: #603030;
+    border: 1px solid #904040;
+  }
+  .combat .monster { display: block; }
+  .combat .viewport { background: linear-gradient(180deg, #304050 0 45%, #302820 45% 100%); }
+  .monster.m1 { left: 16%; }
+  .monster.m2 { left: 37%; bottom: 24%; height: 52%; background: #704038; }
+  .monster.m3 { right: 16%; }
+  .monster .e {
+    position: absolute; top: 28%; width: 16%; height: 10%; background: var(--warn);
+  }
+  .monster .e.l { left: 20%; }
+  .monster .e.r { right: 20%; }
+
+  .pgem {
+    position: absolute;
+    width: 6px; height: 6px;
+    background: #303030;
+    transform: rotate(45deg);
+    z-index: 2;
+  }
+  .pgem.on { background: var(--accent); }
+  .pgem.tl { top: 4px; left: 4px; }
+  .pgem.tr { top: 4px; right: 4px; }
+  .pgem.bl { bottom: 14px; left: 4px; }
+  .pgem.br { bottom: 14px; right: 4px; }
+
+  .face {
+    position: absolute;
+    bottom: 3px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    width: 18px; height: 10px;
+    background: #203028;
+    border: 1px solid var(--bronze);
+    color: var(--ok);
+    font-size: 7px;
+    font-family: inherit;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .opts {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .opt {
+    appearance: none;
+    flex: 1;
+    min-height: 0;
+    font: inherit;
+    font-size: 7px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    background: var(--panel2);
+    border-top: 1px solid var(--hi);
+    border-left: 1px solid var(--hi);
+    border-right: 1px solid var(--lo);
+    border-bottom: 1px solid var(--lo);
+    cursor: pointer;
+    padding: 0 2px;
+  }
+  .opt:hover, .opt.active { color: var(--bronze); }
+  .combat .opt.ex { opacity: 0.35; pointer-events: none; }
+  .explore .opt.cb, .town .opt.cb { display: none; }
+  .combat .opt.xs { display: none; }
+
+  .msg {
+    grid-column: 1;
+    grid-row: 2;
+    background: #080808;
+    border: 1px solid var(--lo);
+    padding: 3px 4px;
+    font-size: 8px;
+    line-height: 1.25;
+    color: var(--ink);
+    overflow: hidden;
+  }
+  .msg .d { color: var(--ink-dim); }
+  .msg .h { color: var(--bronze); }
+
+  .bottom {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    display: grid;
+    grid-template-columns: 1fr 52px;
+    gap: 4px;
+  }
+
+  .party {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 2px;
+  }
+  .char {
+    appearance: none;
+    background: #181818;
+    border: 1px solid #484848;
+    padding: 1px;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+    text-align: center;
+  }
+  .char.sel { border-color: var(--bronze); }
+  .char .pf {
+    height: 28px;
+    background: #403020;
+    position: relative;
+    overflow: hidden;
+  }
+  .char .pf::before {
+    content: "";
+    position: absolute;
+    left: 22%; right: 22%; top: 18%; bottom: 28%;
+    background: var(--skin, #c0a070);
+    border-radius: 35%;
+  }
+  .char .pf::after {
+    content: "";
+    position: absolute;
+    left: 16%; right: 16%; top: 4%; height: 28%;
+    background: var(--hair, #302018);
+  }
+  .char .nm {
+    margin-top: 1px;
+    font-size: 5px;
+    color: var(--ink-dim);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .char .g {
+    width: 5px; height: 5px;
+    margin: 2px auto 1px;
+    transform: rotate(45deg);
+    background: var(--ok);
+  }
+  .char.hurt .g { background: var(--warn); }
+  .char.critical .g { background: var(--bad); }
+  .char.uncon .g { background: var(--sp); }
+  .char.uncon .pf { filter: grayscale(1) brightness(0.55); }
+  .bars { display: flex; flex-direction: column; gap: 1px; padding: 0 1px 1px; }
+  .bar { height: 2px; background: #000; }
+  .bar i { display: block; height: 100%; }
+  .bar.hp i { background: var(--ok); }
+  .char.hurt .bar.hp i { background: var(--warn); }
+  .char.critical .bar.hp i { background: var(--bad); }
+  .bar.sp i { background: var(--sp); }
+
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 1px;
+    background: #080808;
+    border: 1px solid var(--lo);
+    padding: 2px;
+  }
+  .dpad button {
+    appearance: none;
+    font: inherit;
+    font-size: 8px;
+    color: var(--bronze);
+    background: var(--panel2);
+    border-top: 1px solid var(--hi);
+    border-left: 1px solid var(--hi);
+    border-right: 1px solid var(--lo);
+    border-bottom: 1px solid var(--lo);
+    cursor: pointer;
+    padding: 0;
+  }
+  .dpad .n { grid-column: 2; grid-row: 1; }
+  .dpad .w { grid-column: 1; grid-row: 2; }
+  .dpad .c { grid-column: 2; grid-row: 2; font-size: 5px; color: var(--ink-dim); }
+  .dpad .e { grid-column: 3; grid-row: 2; }
+  .dpad .s { grid-column: 2; grid-row: 3; }
+
+  .meta {
+    width: calc(320px * var(--scale));
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--ink-dim);
+  }
+  .meta strong { color: var(--accent); font-weight: normal; }
+
+  .notes {
+    width: min(100%, 42rem);
+    font-size: 0.82rem;
+    color: var(--ink-dim);
+    line-height: 1.45;
+    border-top: 1px solid #303038;
+    padding-top: 0.85rem;
+  }
+  .notes h2 { font-size: 0.9rem; color: var(--bronze); margin-bottom: 0.35rem; }
+  .notes ul { padding-left: 1.1rem; }
+  .notes li { margin: 0.2rem 0; }
+  .notes code { color: var(--accent); font-size: 0.85em; }
+
+  .budgets {
+    width: min(100%, 42rem);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.5rem;
+  }
+  @media (max-width: 700px) { .budgets { grid-template-columns: 1fr; } }
+  .budgets article {
+    border: 1px solid #303038;
+    padding: 0.65rem;
+    background: #101014;
+  }
+  .budgets h3 { font-size: 0.8rem; color: var(--bronze); margin-bottom: 0.3rem; }
+  .budgets p { font-size: 0.75rem; color: var(--ink-dim); line-height: 1.4; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>MM2 · A1200 AGA UI mockup</h1>
+    <p>
+      Same Xeen <em>ideas</em> (portraits, icon rail, face gem, d-pad) — but budgeted for
+      AGA 6bp / Chip RAM: 320×256, flat bevel gadgets, tiny faces, no carved frame art.
+    </p>
+  </header>
+
+  <div class="toolbar">
+    <button type="button" id="btn-town" aria-pressed="true">Town</button>
+    <button type="button" id="btn-explore" aria-pressed="false">Dungeon</button>
+    <button type="button" id="btn-combat" aria-pressed="false">Combat</button>
+    <button type="button" id="btn-protect" aria-pressed="true">Protect</button>
+  </div>
+
+  <div class="crt">
+    <div class="screen" id="screen">
+      <div class="hud explore town" id="hud">
+        <div class="view">
+          <div class="viewport">
+            <div class="wall-l"></div>
+            <div class="wall-r"></div>
+            <div class="door"></div>
+            <div class="building b1"></div>
+            <div class="building b2"></div>
+            <div class="street"></div>
+            <div class="monster m1"><span class="e l"></span><span class="e r"></span></div>
+            <div class="monster m2"><span class="e l"></span><span class="e r"></span></div>
+            <div class="monster m3"><span class="e l"></span><span class="e r"></span></div>
+            <span class="pgem tl on" id="g0"></span>
+            <span class="pgem tr on" id="g1"></span>
+            <span class="pgem bl" id="g2"></span>
+            <span class="pgem br on" id="g3"></span>
+            <button type="button" class="face" id="face">N</button>
+          </div>
+        </div>
+
+        <div class="opts" id="opts">
+          <button type="button" class="opt xs" data-m="Cast spell">Cast</button>
+          <button type="button" class="opt xs" data-m="Shoot">Shoot</button>
+          <button type="button" class="opt ex" data-m="Unlock">Unlock</button>
+          <button type="button" class="opt ex" data-m="Bash door / wall">Bash</button>
+          <button type="button" class="opt ex" data-m="Rest party">Rest</button>
+          <button type="button" class="opt ex" data-m="Search">Search</button>
+          <button type="button" class="opt" data-m="Automap">Map</button>
+          <button type="button" class="opt" data-m="Quick reference">Quick</button>
+          <button type="button" class="opt cb" data-m="Attack">Attack</button>
+          <button type="button" class="opt cb" data-m="Fight (auto)">Fight</button>
+          <button type="button" class="opt cb" data-m="Run">Run</button>
+          <button type="button" class="opt cb" data-m="Block">Block</button>
+          <button type="button" class="opt cb" data-m="Cast (combat)">Cast</button>
+          <button type="button" class="opt cb" data-m="Use item">Use</button>
+        </div>
+
+        <div class="msg" id="msg">
+          <span class="h">Middlegate</span> Main St.<br />
+          <span class="d">Day 14 Yr 700 Face N</span>
+        </div>
+
+        <div class="bottom">
+          <div class="party" id="party"></div>
+          <div class="dpad">
+            <button type="button" class="n" data-d="fwd">^</button>
+            <button type="button" class="w" data-d="left">&lt;</button>
+            <button type="button" class="c" data-d="wait">W</button>
+            <button type="button" class="e" data-d="right">&gt;</button>
+            <button type="button" class="s" data-d="back">v</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="meta">
+    <span>Logical <strong>320×256</strong> ×2 display · UI pens <strong>32–63</strong></span>
+    <span id="mode">Town</span>
+  </div>
+
+  <div class="budgets">
+    <article>
+      <h3>Xeen fantasy (prev)</h3>
+      <p>Carved frames, bats/gargoyles, big portraits, lush VGA. Fun target art — not Chip-friendly.</p>
+    </article>
+    <article>
+      <h3>This pass (A1200)</h3>
+      <p>Bevel gadgets, 8× ~28px faces, 1px bars, diamond gems, text icons. Same layout language, ~64 colours.</p>
+    </article>
+    <article>
+      <h3>Still on the table</h3>
+      <p>Optional 640×256 HIRES UI plane later; keep world hood LORES 320 so 3D stays cheap.</p>
+    </article>
+  </div>
+
+  <div class="notes">
+    <h2>Hardware-honest constraints</h2>
+    <ul>
+      <li>Reuse classic 3D hood; only chrome moves to pens 32–63 (<code>41-aga-port-plan.md</code>).</li>
+      <li>Portraits: small remapped faces (or class icons) — not full Xeen busts.</li>
+      <li>No animated frame ornaments; Protect = 4 static diamonds; Face gem = 1 gadget.</li>
+      <li>Icon rail = Intuition-style bevel buttons (CPU blit / BOBs), not a 320-wide art sheet.</li>
+    </ul>
+  </div>
+
+<script>
+const FACINGS = ["N", "E", "S", "W"];
+let facing = 0;
+let protect = true;
+
+const party = [
+  { n: "Aubrey", hp: 92, mx: 100, sp: 0,  sx: 0,  sk: "#c0a070", hr: "#302018", st: "ok" },
+  { n: "Mira",   hp: 61, mx: 70,  sp: 40, sx: 55, sk: "#d0b090", hr: "#603020", st: "ok" },
+  { n: "Thorne", hp: 28, mx: 85,  sp: 0,  sx: 0,  sk: "#a08060", hr: "#181010", st: "critical" },
+  { n: "Lysa",   hp: 44, mx: 60,  sp: 70, sx: 90, sk: "#c0a080", hr: "#c0a030", st: "hurt" },
+  { n: "Grom",   hp:100, mx:110,  sp: 0,  sx: 0,  sk: "#807050", hr: "#201810", st: "ok" },
+  { n: "Elowen", hp: 55, mx: 55,  sp: 88, sx: 88, sk: "#d0c0a0", hr: "#e0d060", st: "ok" },
+  { n: "Hick",   hp: 0,  mx: 75,  sp: 12, sx: 40, sk: "#b09070", hr: "#403020", st: "uncon" },
+  { n: "Vex",    hp: 38, mx: 50,  sp: 20, sx: 35, sk: "#907060", hr: "#101018", st: "hurt" },
+];
+
+const partyEl = document.getElementById("party");
+const msg = document.getElementById("msg");
+const hud = document.getElementById("hud");
+const face = document.getElementById("face");
+const modeEl = document.getElementById("mode");
+
+function status() {
+  return `<span class="d">Day 14 Yr 700 Face ${FACINGS[facing]}${protect ? " Prot" : ""}</span>`;
+}
+
+function renderParty() {
+  partyEl.innerHTML = party.map((c, i) => `
+    <button type="button" class="char ${c.st}" data-i="${i}" style="--skin:${c.sk};--hair:${c.hr}">
+      <div class="pf"></div>
+      <div class="nm">${c.n}</div>
+      <div class="g"></div>
+      <div class="bars">
+        <div class="bar hp"><i style="width:${Math.round(100*c.hp/Math.max(1,c.mx))}%"></i></div>
+        <div class="bar sp"><i style="width:${c.sx ? Math.round(100*c.sp/c.sx) : 0}%"></i></div>
+      </div>
+    </button>`).join("");
+}
+
+function setMode(m) {
+  hud.className = "hud " + (m === "combat" ? "combat" : m === "town" ? "explore town" : "explore");
+  ["town", "explore", "combat"].forEach((id) => {
+    document.getElementById("btn-" + (id === "explore" ? "explore" : id))
+      .setAttribute("aria-pressed", String(
+        (id === "town" && m === "town") ||
+        (id === "explore" && m === "explore") ||
+        (id === "combat" && m === "combat")
+      ));
+  });
+  if (m === "combat") {
+    modeEl.textContent = "Combat";
+    msg.innerHTML = `<span class="h">Combat!</span> 3 foes<br />${status()}`;
+  } else if (m === "town") {
+    modeEl.textContent = "Town";
+    msg.innerHTML = `<span class="h">Middlegate</span> Main St.<br />${status()}`;
+  } else {
+    modeEl.textContent = "Dungeon";
+    msg.innerHTML = `<span class="h">Corsair Cove</span> door ahead<br />${status()}`;
+  }
+}
+
+function applyProtect() {
+  [0, 1, 3].forEach((i) => document.getElementById("g" + i).classList.toggle("on", protect));
+  document.getElementById("g2").classList.remove("on");
+}
+
+document.getElementById("btn-town").onclick = () => setMode("town");
+document.getElementById("btn-explore").onclick = () => setMode("explore");
+document.getElementById("btn-combat").onclick = () => setMode("combat");
+document.getElementById("btn-protect").onclick = function () {
+  protect = !protect;
+  this.setAttribute("aria-pressed", String(protect));
+  applyProtect();
+  msg.innerHTML = `Protect ${protect ? "ON" : "OFF"}<br />${status()}`;
+};
+
+face.onclick = () => {
+  msg.innerHTML = `<span class="h">Control Panel</span><br /><span class="d">Load Save Sound Quit</span>`;
+};
+
+document.getElementById("opts").onclick = (e) => {
+  const b = e.target.closest(".opt");
+  if (!b) return;
+  document.querySelectorAll(".opt").forEach((x) => x.classList.remove("active"));
+  b.classList.add("active");
+  msg.innerHTML = `${b.dataset.m}<br />${status()}`;
+};
+
+partyEl.onclick = (e) => {
+  const c = e.target.closest(".char");
+  if (!c) return;
+  document.querySelectorAll(".char").forEach((x) => x.classList.remove("sel"));
+  c.classList.add("sel");
+  const p = party[+c.dataset.i];
+  msg.innerHTML = `<span class="h">${p.n}</span> HP ${p.hp}/${p.mx}` +
+    (p.sx ? ` SP ${p.sp}/${p.sx}` : "") + `<br /><span class="d">Items Quick Exch Exit</span>`;
+};
+
+document.querySelector(".dpad").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const d = b.dataset.d;
+  if (d === "left") facing = (facing + 3) % 4;
+  if (d === "right") facing = (facing + 1) % 4;
+  face.textContent = FACINGS[facing];
+  const t = { fwd: "Forward", back: "Back", left: "Turn L", right: "Turn R", wait: "Wait" }[d];
+  msg.innerHTML = `${t} · ${FACINGS[facing]}<br />${status()}`;
+};
+
+renderParty();
+applyProtect();
+setMode("town");
+</script>
+</body>
+</html>

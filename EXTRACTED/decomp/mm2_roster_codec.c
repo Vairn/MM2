@@ -384,6 +384,58 @@ void mm2_roster_set_backpack(Mm2RosterRecord *record, int idx, Mm2RosterItemSlot
     }
 }
 
+/* The tail (global save stream, file offset 0x1860) round-trips through the
+ * decoded records for slots 48..63. Byte access must go through the record
+ * encoder/decoder so multibyte record fields keep their on-disk LE layout
+ * regardless of host endianness. */
+static int tail_locate(int tail_off, int *rec_idx, int *rec_off)
+{
+    if (tail_off < 0 || tail_off >= MM2_ROSTER_TAIL_SIZE) {
+        return 0;
+    }
+    *rec_idx = MM2_ROSTER_TAIL_FIRST_SLOT + tail_off / MM2_ROSTER_RECORD_SIZE;
+    *rec_off = tail_off % MM2_ROSTER_RECORD_SIZE;
+    return 1;
+}
+
+uint8_t mm2_roster_tail_u8(const Mm2RosterFile *roster, int tail_off)
+{
+    uint8_t raw[MM2_ROSTER_RECORD_SIZE];
+    int rec_idx;
+    int rec_off;
+    if (!roster || !tail_locate(tail_off, &rec_idx, &rec_off)) {
+        return 0;
+    }
+    encode_record(&roster->records[rec_idx], raw);
+    return raw[rec_off];
+}
+
+void mm2_roster_tail_set_u8(Mm2RosterFile *roster, int tail_off, uint8_t v)
+{
+    uint8_t raw[MM2_ROSTER_RECORD_SIZE];
+    int rec_idx;
+    int rec_off;
+    if (!roster || !tail_locate(tail_off, &rec_idx, &rec_off)) {
+        return;
+    }
+    encode_record(&roster->records[rec_idx], raw);
+    raw[rec_off] = v;
+    decode_record(raw, &roster->records[rec_idx]);
+}
+
+uint16_t mm2_roster_tail_u16(const Mm2RosterFile *roster, int tail_off)
+{
+    /* LE on disk; byte-wise so a value straddling a record boundary works. */
+    return (uint16_t)(mm2_roster_tail_u8(roster, tail_off)
+                      | ((uint16_t)mm2_roster_tail_u8(roster, tail_off + 1) << 8));
+}
+
+void mm2_roster_tail_set_u16(Mm2RosterFile *roster, int tail_off, uint16_t v)
+{
+    mm2_roster_tail_set_u8(roster, tail_off, (uint8_t)(v & 0xFF));
+    mm2_roster_tail_set_u8(roster, tail_off + 1, (uint8_t)((v >> 8) & 0xFF));
+}
+
 int mm2_roster_slot_is_empty(const Mm2RosterRecord *record)
 {
     int i;

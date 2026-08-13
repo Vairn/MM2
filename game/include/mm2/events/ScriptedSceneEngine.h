@@ -1,6 +1,8 @@
 #pragma once
-// Castle / scripted-scene graphics @ 0x6FB8 / 0x76AC, overlay @ 0x316E / mode $17,
-// text+wait @ 0x64F8. See EXTRACTED/docs/46-scripted-scene-graphics.md.
+// Castle / scripted-scene graphics: viewport overlay @ 0x316E / mode $17,
+// draw helpers 0x76AC / 0x738C, text+wait @ 0x64F8.
+// NOTE: 0x6FB8 is play_sound_seq (audio) — see docs/58-amiga-audio-in-exe.md.
+// See EXTRACTED/docs/46-scripted-scene-graphics.md.
 
 #include "mm2/Config.h"
 #include "mm2/CppStdCompat.h"
@@ -17,7 +19,7 @@ namespace mm2::events {
 
 enum class ScriptedSceneId : uint8_t {
     None = 0,
-    CorakIntro,   /* Middlegate first visit: ghost overlay + loc 60 str[8] */
+    CorakIntro,   /* Middlegate first visit: ghost overlay + loc 60 str[1] */
     PegasusC2,    /* Overland C2 (map 11) evt 04 @ (4,7): 21.anm sprite + loc 11 str[5] */
 };
 

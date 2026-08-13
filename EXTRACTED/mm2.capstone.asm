@@ -2329,6 +2329,13 @@
 001b14  7200              moveq     #$0, d1
 001b16  122c860f          move.b    -$79f1(a4), d1
 001b1a  d081              add.l     d1, d0
+;@LBL-START
+; ========================================================================
+; 001b1c  current_cell_collision_latch
+;   Writes current-cell collision/event bits into A4-$55D6.
+;   Feeds Rest ambush gate, Too-dangerous bit3, and darkness tests.
+; ========================================================================
+;@LBL-END
 001b1c  41ecab46          lea.l     -$54ba(a4), a0
 001b20  19700800aa2a      move.b    (a0, d0.l), -$55d6(a4)
 001b26  4e5d              unlk      a5
@@ -3383,9 +3390,8 @@
 ;@LBL-START
 ; ========================================================================
 ; 002900  frustum_wall_cell_builder  (LAB_2900)
-;   Reads map page-0 visual bytes around party (A4-$55C9..) into
+;   Reads map page-1 wall codes around party (A4-$55C9..) into
 ;   frustum slots A4-$F0D..-$F20 for the 3D painter's pass.
-;   (Page 1 at A4-$54BA is collision/events/darkness only.)
 ; ========================================================================
 ;@LBL-END
 002900  29448a3a          move.l    d4, -$75c6(a4)
@@ -5556,6 +5562,12 @@
 00443c  544f              addq.w    #$2, a7
 00443e  4e5d              unlk      a5
 004440  4e75              rts       
+;@LBL-START
+; ========================================================================
+; 004442  luck_bonus_table_walk
+;   Walks A4-$7486 luck threshold table; returns bonus used by Rest SP.
+; ========================================================================
+;@LBL-END
 004442  4e55fffc          link.w    a5, #$fffc
 004446  1b7c00fdffff      move.b    #$fd, -$1(a5)
 00444c  426dfffc          clr.w     -$4(a5)
@@ -5875,6 +5887,14 @@
 0047fa  4e75              rts       
 0047fc  7001              moveq     #$1, d0
 0047fe  60f8              bra.b     $47f8
+;@LBL-START
+; ========================================================================
+; 004800  search_key_handler
+;   S-key Search (also auto-run when A4-$794C == $FE).
+;   Prints 'Search...'; scans found-item buffer (-$3F1C/-$3F10/-$3F12);
+;   empty → 'Nothing Here!'; else jsr -$7D1C → search_payoff_ui.
+; ========================================================================
+;@LBL-END
 004800  4e55fffe          link.w    a5, #$fffe
 004804  4267              clr.w     -(a7)
 004806  4eac83c2          jsr       -$7c3e(a4)
@@ -8287,6 +8307,14 @@
 006616  544f              addq.w    #$2, a7
 006618  4eac808c          jsr       -$7f74(a4)
 00661c  3f3c0001          move.w    #$1, -(a7)
+;@LBL-START
+; ========================================================================
+; 006622  spell_grid_ui_build
+;   Builds spell picker grid from A4-$8C22/$8C2B tables and
+;   character spellbook field $51(A0). Called before -$7E12.
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 006620  3f3c0005          move.w    #$5, -(a7)
 006624  4eac8404          jsr       -$7bfc(a4)
 006628  584f              addq.w    #$4, a7
@@ -8882,6 +8910,14 @@
 006e22  3f3c001d          move.w    #$1d, -(a7)
 006e26  3f3c0007          move.w    #$7, -(a7)
 006e2a  3f3c000a          move.w    #$a, -(a7)
+;@LBL-START
+; ========================================================================
+; 006e30  spell_cast_session_explore
+;   Non-combat spell cast: UI setup, LAB_6622 grid, JSR -$7E12 picker,
+;   JSR LAB_CDB8 effect dispatch. See docs/26-spell-cast-asm.md.
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 006e2e  4eac838c          jsr       -$7c74(a4)
 006e32  504f              addq.w    #$8, a7
 006e34  294085be          move.l    d0, -$7a42(a4)
@@ -16133,6 +16169,13 @@
 00cf12  0002fe1c          ori.b     #$1c, d2
 00cf16  00020002          ori.b     #$2, d2
 00cf1a  0002fe24          ori.b     #$24, d2
+;@LBL-START
+; ========================================================================
+; 00cf1e  DATA_skill_spell_offsets_A
+;   Sparse word offsets consumed by $CFDE. Entry value +2 means
+;   fall-through to return ($CFF4), i.e. code has no handler.
+; ========================================================================
+;@LBL-END
 00cf1e  00020002          ori.b     #$2, d2
 00cf22  0002fe2c          ori.b     #$2c, d2
 00cf26  00020002          ori.b     #$2, d2
@@ -16191,14 +16234,21 @@
 ; ========================================================================
 ; 00cfd0  skill_spell_effect_dispatch  (LAB_CFD0)
 ;   Reads skill/spell index (arg +8) and runs the shared effect
-;   dispatcher: bra $D23E -> jmp via per-effect jsr-stub table.
-;   Fight stubs $B644.. ; Cast stubs $B982.. ; shared exit $D256.
+;   dispatcher. Two sparse executors are used: $CFDE (0..95 via $CF1E)
+;   and $D266 (post-subq domain via $D1AE).
 ; ========================================================================
 ;@LBL-END
 00cfd0  4e550000          link.w    a5, #$0
 00cfd4  302d0008          move.w    $8(a5), d0
 00cfd8  48c0              ext.l     d0
 00cfda  60000262          bra.w     $d23e
+;@LBL-START
+; ========================================================================
+; 00cfde  skill_spell_sparse_executor_A
+;   Validates D0 against #$60, then jmp's via word table at $CF1E
+;   to CDB8 jsr/bra stubs (43 live codes, sparse).
+; ========================================================================
+;@LBL-END
 00cfde  4ebae664          jsr       $b644(pc)
 00cfe2  60000272          bra.w     $d256
 00cfe6  4ebae69c          jsr       $b684(pc)
@@ -16211,8 +16261,8 @@
 ;@LBL-START
 ; ========================================================================
 ; 00d002  spell_effect_jump_table
-;   Cast-command dispatch: sequence of `jsr stub ; bra $D256` pairs
-;   for spell handlers in the $B900..$C800 block (doc 17).
+;   Dense `jsr stub ; bra $D27E` block ($D006..) for core spell handlers.
+;   Entered through sparse executor $D266 and table $D1AE.
 ; ========================================================================
 ;@LBL-END
 00d002  60000252          bra.w     $d256
@@ -16333,6 +16383,13 @@
 00d1a6  fdca              .byte     0xfd, 0xca
 00d1a8  0002fdd2          ori.b     #$d2, d2
 00d1ac  fdda              .byte     0xfd, 0xda
+;@LBL-START
+; ========================================================================
+; 00d1ae  DATA_skill_spell_offsets_B
+;   Sparse word offsets consumed by $D266; +2 entries return at $D27E.
+;   Targets include $D006..$D182 and extra handlers $D186..$D1AA.
+; ========================================================================
+;@LBL-END
 00d1ae  fde2              .byte     0xfd, 0xe2
 00d1b0  0002fdea          ori.b     #$ea, d2
 00d1b4  fdf2              .byte     0xfd, 0xf2
@@ -16387,8 +16444,8 @@
 ;@LBL-START
 ; ========================================================================
 ; 00d23e  skill_spell_jump_executor
-;   Indexes DATA_spell_effect_offset_table by effect number and
-;   jmp's to the matching stub; common landing for Fight + Cast.
+;   Legacy label area; active sparse executor is at $D266 using table
+;   $D1AE. Region still contains offset words used by dispatch logic.
 ; ========================================================================
 ;@LBL-END
 00d23e  5580              subq.l    #$2, d0
@@ -16565,6 +16622,13 @@
 00d454  1b7c0041fffe      move.b    #$41, -$2(a5)
 00d45a  6006              bra.b     $d462
 00d45c  1b7c001bfffe      move.b    #$1b, -$2(a5)
+;@LBL-START
+; ========================================================================
+; 00d464  spell_target_picker
+;   Combat target selection for spells; 'which (A-J)?' style UI.
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 00d462  60000090          bra.w     $d4f4
 00d466  1b6c8842ffff      move.b    -$77be(a4), -$1(a5)
 00d46c  0c2d000affff      cmpi.b    #$a, -$1(a5)
@@ -20825,6 +20889,13 @@
 0108b2  4a2cfae0          tst.b     -$520(a4)
 0108b6  6704              beq.b     $108bc
 0108b8  522dfffb          addq.b    #$1, -$5(a5)
+;@LBL-START
+; ========================================================================
+; 0108bc  spell_combat_apply
+;   Combat spell effect apply helper (party/monster arrays, RNG).
+;   Called from per-spell stubs after $133B6.
+; ========================================================================
+;@LBL-END
 0108bc  0c2c0002fac5      cmpi.b    #$2, -$53b(a4)
 0108c2  671e              beq.b     $108e2
 0108c4  4267              clr.w     -(a7)
@@ -24205,6 +24276,13 @@
 0133ac  4a2dfffd          tst.b     -$3(a5)
 0133b0  6716              beq.b     $133c8
 0133b2  7000              moveq     #$0, d0
+;@LBL-START
+; ========================================================================
+; 0133b6  spell_effect_apply_loop
+;   Per-target spell effect loop using caster level and RNG -$7BB4.
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 0133b4  102d0009          move.b    $9(a5), d0
 0133b8  3f00              move.w    d0, -(a7)
 0133ba  3f3c0001          move.w    #$1, -(a7)
@@ -24499,6 +24577,14 @@
 013724  b26d0008          cmp.w     $8(a5), d1
 013728  670c              beq.b     $13736
 01372a  526dfffc          addq.w    #$1, -$4(a5)
+;@LBL-START
+; ========================================================================
+; 013730  spell_school_gate
+;   Compares picked spell index to 13 words at A4-$6D88;
+;   returns 1 -> cleric $CDB8, 0 -> sorcerer $CFF8.
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 01372e  0c6d000cfffc      cmpi.w    #$c, -$4(a5)
 013734  6dde              blt.b     $13714
 013736  0c6d000cfffc      cmpi.w    #$c, -$4(a5)
@@ -27830,9 +27916,9 @@
 0160c0  4e75              rts       
 ;@LBL-START
 ; ========================================================================
-; 0160c2  event_op0e_selector_dispatch
-;   Event opcode 0x0E: town-service selector dispatch (shops, temple,
-;   training, guilds, travel portals — see doc 07 OP_0E table).
+; 0160c2  op_0e_service_dispatch
+;   OP_0E town-service router: chained subtract on selector byte,
+;   then jsr to inn/training/tavern/temple/guild/smith/store/arena.
 ; ========================================================================
 ;@LBL-END
 0160c2  4e55fffe          link.w    a5, #$fffe
@@ -32508,6 +32594,13 @@
 019c22  206dfffa          movea.l   -$6(a5), a0
 019c26  226dfffa          movea.l   -$6(a5), a1
 019c2a  33680074005e      move.w    $74(a0), $5e(a1)
+;@LBL-START
+; ========================================================================
+; 019c30  rest_sp_recompute
+;   Inside Rest: spell-level / SP recompute path.
+;   jsr -$7F56 → luck_bonus_table_walk; mulu with record +$20 → +$5A/+58.
+; ========================================================================
+;@LBL-END
 019c30  206dfffa          movea.l   -$6(a5), a0
 019c34  4a280023          tst.b     $23(a0)
 019c38  676a              beq.b     $19ca4
@@ -32597,6 +32690,13 @@
 019d5e  7465              moveq     #$65, d2
 019d60  7273              moveq     #$73, d1
 019d62  2e00              move.l    d0, d7
+;@LBL-START
+; ========================================================================
+; 019d64  rest_ambush_helper
+;   Rest ambush setup: wake living members (bset #4,$26), mode -$796B=3,
+;   clr -$77BE. Skips ambush when -$55D6 >= $80 (event-tile gate).
+; ========================================================================
+;@LBL-END
 019d64  4e55fff8          link.w    a5, #$fff8
 019d68  426dfffc          clr.w     -$4(a5)
 019d6c  7000              moveq     #$0, d0
@@ -32648,6 +32748,14 @@
 019e18  302dfffc          move.w    -$4(a5), d0
 019e1c  4e5d              unlk      a5
 019e1e  4e75              rts       
+;@LBL-START
+; ========================================================================
+; 019e20  world_rest
+;   R-key Rest (thunk -$7D2E). Inn lodging rest shares this leaf.
+;   btst #3,-$55D6 → 'Too dangerous!'; Y/N prompt; hireling pay check;
+;   then rest_ambush_helper + SP recompute (0x19C30 / 0x4442).
+; ========================================================================
+;@LBL-END
 019e20  4e55fffe          link.w    a5, #$fffe
 019e24  197c000186b0      move.b    #$1, -$7950(a4)
 019e2a  4267              clr.w     -(a7)
@@ -32937,6 +33045,15 @@
 01a128  2028792f          move.l    $792f(a0), d0
 01a12c  6e29              bgt.b     $1a157
 01a12e  3f22              move.w    -(a2), -(a7)
+;@LBL-START
+; ========================================================================
+; 01a132  open_inn_lodging
+;   OP_0E selector 0x01 — inn registry y/n (home-town write).
+;   Actual rest is world_rest @ 0x19E20. Capstone splits link.w across
+;   01a130/01a134 (entry is mid-instruction in the listing).
+;   (no exact capstone boundary; attached to containing line)
+; ========================================================================
+;@LBL-END
 01a130  00004e55          ori.b     #$55, d0
 01a134  fffa              .byte     0xff, 0xfa
 01a136  197c000686b0      move.b    #$6, -$7950(a4)
@@ -34384,6 +34501,13 @@
 01b194  6561              bcs.b     $1b1f7
 01b196  7665              moveq     #$65, d3
 01b198  20697400          movea.l   $7400(a1), a0
+;@LBL-START
+; ========================================================================
+; 01b19c  search_payoff_ui
+;   Found-item presentation + distribution ('you found…' / Identify).
+;   Reached via -$7D1C from search_key_handler after loot predicate.
+; ========================================================================
+;@LBL-END
 01b19c  4e55fff0          link.w    a5, #$fff0
 01b1a0  422dfff7          clr.b     -$9(a5)
 01b1a4  422dfff6          clr.b     -$a(a5)

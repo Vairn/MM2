@@ -1,8 +1,9 @@
 # Event VM — Graphics-Related Opcodes
 
-> **Corak ghost / Pegasus full illustration / castle scene engine:** see
-> [46-scripted-scene-graphics.md](46-scripted-scene-graphics.md) — those beats use
-> **`0x6FB8` / `0x64F8` / viewport overlay (`0x316E`)**, not event VM opcodes alone.
+> **Corak ghost / Pegasus full illustration / castle overlays:** see
+> [46-scripted-scene-graphics.md](46-scripted-scene-graphics.md) — viewport overlay
+> (`0x316E` / mode `$17`). **`0x6FB8` is audio** (`play_sound_seq`) — [58-amiga-audio-in-exe.md](58-amiga-audio-in-exe.md).
+> `0x64F8` is scripted text+wait, not the Paula title theme.
 
 Which `event.dat` script opcodes (`0x00..0x32`) reach **sprites, `.32` sheets,
 or `.anm` animation** (not plain 8×8 text). Companion docs:
@@ -40,7 +41,7 @@ Classification: **Sprite** = `.anm`/planar sheet blit; **Font chrome** = control
 | `08` | `0x15D26` | Same as `07` | Wraps `0x15CE6(1)` (scripted key replay) | — | — |
 | **`0B`** | **`0x15DB0`** | **Sprite** | **`sign_sprite_load` @ `0x316E`** → **`0x9A30(id)`** loads **`.anm`**; mode **`$16`** prep @ `-$7BAE`; **`sign_sprite_place` @ `0x3266`** → mode **`$17`** overlay; table **`A4-$7538`** (24 slots); handle **`A4-$79FE`** | Over **3D viewport** (208×120 @ px 8,8); arg2 = placement index passed to `sign_sprite_place(pos, $40, $20)` | loc 00 evt 24 — `OP_0B` “Lock and Key LTD”; loc 11 evt 04 — Pegasus tile sign `"<- Castle / Pinehurst"` |
 | `0C` | `0x15E12` | Indirect | `-$7FDA` map init → full **3D hood redraw** (walls from env `.32`); **no** event overlay sprite | New screen coords from args | loc 00 evt 20 — exit to overland `map_transition(0x0B, 0x37)` |
-| `0D` | `0x15EC4` | None in stub | `-$7E42(index)` generic engine call; per-index table **untraced** | — | loc 08 evt 04 — `engine_call(0x09)` after sickness block |
+| `0D` | `0x15EC4` | None | `-$7E42(index)` → **`play_sound_seq`** @ `0x6FB8` (ids 0..9; [doc 58](58-amiga-audio-in-exe.md)) | — | e.g. `OP_0D 0x09` before map transition |
 | `0E` | `0x160C2` | Indirect | Shop/temple/inn handlers (`0x1A132`, `0x1C54A`, …) — UI is mostly **text**; no VM blit in stub | Service windows | loc 00 — `exec_selector(0x01)` tavern |
 | `0F`–`11` | — | None | Control flow | — | — |
 | **`12`/`13`** | **`0x16300`/`0x16386`** | **Indirect** | **`-$7EDE` / `-$7F1A`** enter combat → **`0x316E`** layers up to **24 monster `.anm`** sprites (`A4-$7538`) | Viewport slots | loc 22 evt 09 — crypt guardian `encounter_setup` |
@@ -190,5 +191,5 @@ apply_party(…) → OP_0B str[14] "<- Castle / Pinehurst" → OP_01 str[5] "Gre
 1. **`0x23C8C`** — `sign_sprite_place` pixel math (OP_0B arg2 → screen x/y).
 2. **`0x9A30`** — full sign-id → `.anm` index table dump.
 3. **Corak `(7,4)` first-time** — which record (loc 60 / castle 63/65 / embedded script) emits `str[8]`; trigger not in loc 00 triplet table.
-4. **`OP_0D` `-$7E42`** — complete per-index table (any hidden gfx calls).
+4. Castle overlay slot tables beyond `0x316E` / mode `$17` (Corak ghost asset confirm).
 5. **Feldecarb fountain** — FAQ/loc 60 `str[23]` vs loc 00 evt 17 clairvoyance text mismatch (retail vs FAQ or era-gated overlay).

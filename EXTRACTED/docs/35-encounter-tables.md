@@ -49,9 +49,11 @@ python tools/decode_encounters.py --json EXTRACTED/encounter_tables.json
 | `-$6FC0` | `0x103E` | 4 B | `0x11F14` | Disposition modifier indexed by `A4-$79AE` |
 | `-$6FCA` | `0x1034` | 4 B | `0x12110` | Running party XP budget vs proposed group |
 
-**Partial:** the master monster **pool blob** (16-byte rows indexed by
-`base*16 + RNG` in `0x11F0A`) is not fully mapped. The picker at `0x11F0A` uses
-`A4-$6FC0`, attrib min/max, and RNG tiers — not `A4-$718A` (arena-only).
+**Superseded — see "Resolved" below.** An earlier pass here claimed a
+"master monster pool blob" that wasn't fully mapped; the fully-traced picker
+section further down established there is **no such blob** — the picker
+selects type ids directly from `monsters.dat` tiers. This paragraph is kept
+only as a historical marker that the pool-blob theory was retired.
 
 ## Random encounter flow
 
@@ -173,8 +175,8 @@ the party's highest-level member** (rounded down).
 | `-$11DE[]` | Monster type ids for this fight |
 | `-$77BE` | Live monster count |
 | `-$6FC1` | Picker "done" flag (budget/gate exhausted) |
-| `-$6FC2` | Tier-roll modifier byte (unnamed, read @ `0x11F20`) |
-| `-$11B7` | Picked monster's "friend count" field (set by `-$7EF6`) |
+| `-$6FC2` | Tier-roll modifier byte — `MM2_GS_PICKER_TIER_MOD` in the remake (read @ `0x11F20`) |
+| `-$11B7` | Picked monster's "friend count" field — `MM2_GS_MONSTER_FRIEND_COUNT` (set by `-$7EF6`) |
 
 ## Open work
 
@@ -184,4 +186,4 @@ the party's highest-level member** (rounded down).
    zeros/low values on towns, `5` on late castles — likely pool tier, not
    monster id).
 3. Grep all `event.dat` OP_12 blocks for fixed fight catalog.
-4. Name `A4-$6FC2` and confirm what `-$7EF6(a4)` unpacks besides `A4-$11B7`.
+4. `A4-$6FC2` is named (`MM2_GS_PICKER_TIER_MOD`) — remaining gap: confirm what `-$7EF6(a4)` unpacks besides `A4-$11B7`.

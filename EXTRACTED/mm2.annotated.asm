@@ -1616,7 +1616,7 @@ LAB_105C:
 	MOVE.W	#$0001,-(A7)		;01080: 3f3c0001
 	JSR	-31806(A4)		;01084: 4eac83c2
 	ADDQ.W	#2,A7			;01088: 544f
-LAB_108A:
+LAB_108A:	; title_menu_key_dispatch
 	CMPI.W	#$0043,-2(A5)		;0108a: 0c6d0043fffe
 	BEQ.W	LAB_12B0		;01090: 6700021e
 	CMPI.W	#$004d,-2(A5)		;01094: 0c6d004dfffe
@@ -1836,7 +1836,7 @@ LAB_131C:
 	ADDQ.W	#4,A7			;01330: 584f
 LAB_1332:
 	MOVE.W	#$0079,-(A7)		;01332: 3f3c0079
-	MOVE.W	#$004e,-(A7)		;01336: 3f3c004e
+	MOVE.W	#$004e,-(A7)		;01336: 3f3c004e	; word_51
 	JSR	-32664(A4)		;0133a: 4eac8068
 	ADDQ.W	#4,A7			;0133e: 584f
 	MOVEQ	#0,D1			;01340: 7200
@@ -1880,7 +1880,7 @@ LAB_13A4:
 LAB_13BC:
 	JSR	-32196(A4)		;013bc: 4eac823c
 	BRA.W	LAB_151A		;013c0: 60000158
-LAB_13C4:
+LAB_13C4:	; title_menu_create_character
 	JSR	FUNC_ClearModalBusyState(PC)		;013c4: 4eba3fe4
 	JSR	-32094(A4)		;013c8: 4eac82a2
 	BRA.W	LAB_151A		;013cc: 6000014c
@@ -1907,10 +1907,10 @@ LAB_13F0:
 	ADDQ.W	#2,A7			;0140c: 544f
 LAB_140E:
 	BRA.W	LAB_151A		;0140e: 6000010a
-LAB_1412:
+LAB_1412:	; title_menu_view_party
 	TST.B	-31154(A4)		;01412: 4a2c864e
 	BNE.S	LAB_142E		;01416: 6616
-	CLR.W	-(A7)			;01418: 4267
+	CLR.W	-(A7)			;01418: 4267	; byte_8
 	JSR	-31806(A4)		;0141a: 4eac83c2
 	ADDQ.W	#2,A7			;0141e: 544f
 	JSR	-32430(A4)		;01420: 4eac8152
@@ -1919,7 +1919,7 @@ LAB_1412:
 	ADDQ.W	#2,A7			;0142c: 544f
 LAB_142E:
 	BRA.W	LAB_151A		;0142e: 600000ea
-LAB_1432:
+LAB_1432:	; title_menu_quit_confirm
 	JSR	FUNC_ClearModalBusyState(PC)		;01432: 4eba3f76
 	MOVE.W	-2(A5),-(A7)		;01436: 3f2dfffe
 	JSR	-32256(A4)		;0143a: 4eac8200
@@ -1958,7 +1958,7 @@ LAB_146C:
 	ADDQ.W	#2,A7			;014a6: 544f
 LAB_14A8:
 	BRA.S	LAB_151A		;014a8: 6070
-LAB_14AA:
+LAB_14AA:	; title_menu_command_switch
 	SUB.L	#$00000011,D0		;014aa: 90bc00000011
 	BEQ.W	LAB_131C		;014b0: 6700fe6a
 	SUB.L	#$00000031,D0		;014b4: 90bc00000031
@@ -4365,7 +4365,7 @@ LAB_3156:
 	MOVE.W	D0,-(A7)		;03166: 3f00
 	JSR	LAB_2DDC(PC)		;03168: 4ebafc72
 	ADDQ.W	#4,A7			;0316c: 584f
-LAB_316E:
+LAB_316E:	; sign_sprite_load
 	TST.B	-3864(A4)		;0316e: 4a2cf0e8
 	BEQ.S	LAB_3186		;03172: 6712
 	MOVE.W	#$0001,-(A7)		;03174: 3f3c0001
@@ -4724,7 +4724,7 @@ LAB_360A:
 LAB_3624:
 	ADDQ.W	#1,-2(A5)		;03624: 526dfffe
 	MOVE.W	-2(A5),D0		;03628: 302dfffe
-	EXT.L	D0			;0362c: 48c0
+	EXT.L	D0			;0362c: 48c0	; remove_hireling_from_party
 	ASL.L	#1,D0			;0362e: e380
 	LEA	-31082(A4),A0		;03630: 41ec8696
 	CMPI.W	#$ffff,0(A0,D0.L)	;03634: 0c70ffff0800
@@ -4968,7 +4968,7 @@ LAB_3842:
 	DC.W	$636b			;038e0
 	MOVE.L	$2D2D(A5),-(A4)		;038e2: 292d2d2d
 	MOVE.L	0(A5),-(A6)		;038e6: 2d2d0000
-LAB_38EA:
+LAB_38EA:	; character_field_print
 	LINK.W	A5,#-2			;038ea: 4e55fffe
 LAB_38EE:
 	MOVE.B	$D(A5),-1(A5)		;038ee: 1b6d000dffff
@@ -5040,7 +5040,7 @@ LAB_399A:
 LAB_39B0:
 	UNLK	A5			;039b0: 4e5d
 	RTS				;039b2: 4e75
-	LINK.W	A5,#-6			;039b4: 4e55fffa
+	LINK.W	A5,#-6			;039b4: 4e55fffa	; character_sheet_draw
 	MOVE.W	$A(A5),D0		;039b8: 302d000a
 	MULS	#$0082,D0		;039bc: c1fc0082
 	LEA	-10814(A4),A0		;039c0: 41ecd5c2
@@ -5765,7 +5765,7 @@ LAB_4226:
 	MOVE.W	-6(A5),-24966(A4)	;04248: 396dfffa9e7a
 	UNLK	A5			;0424e: 4e5d
 	RTS				;04250: 4e75
-LAB_4252:
+LAB_4252:	; book_frame_blit_setup
 	LINK.W	A5,#0			;04252: 4e550000
 	MOVE.W	#$000b,-(A7)		;04256: 3f3c000b
 	MOVE.W	#$000b,-(A7)		;0425a: 3f3c000b
@@ -5789,7 +5789,7 @@ LAB_4252:
 	MOVE.W	#$0011,-(A7)		;0429e: 3f3c0011
 	MOVE.W	#$0010,-(A7)		;042a2: 3f3c0010
 	JSR	LAB_4132(PC)		;042a6: 4ebafe8a
-	LEA	$10(A7),A7		;042aa: 4fef0010
+	LEA	$10(A7),A7		;042aa: 4fef0010	; read_key_within_range
 	UNLK	A5			;042ae: 4e5d
 	RTS				;042b0: 4e75
 	LINK.W	A5,#0			;042b2: 4e550000
@@ -5812,7 +5812,7 @@ LAB_42D6:
 	CMPI.B	#$1b,-1(A5)		;042de: 0c2d001bffff
 	BEQ.S	LAB_42FA		;042e4: 6714
 	MOVE.B	-1(A5),D0		;042e6: 102dffff
-	CMP.B	9(A5),D0		;042ea: b02d0009
+	CMP.B	9(A5),D0		;042ea: b02d0009	; frame_index_scale
 	BCS.S	LAB_42D6		;042ee: 65e6
 	MOVE.B	-1(A5),D0		;042f0: 102dffff
 	CMP.B	$B(A5),D0		;042f4: b02d000b
@@ -6198,7 +6198,7 @@ LAB_471C:
 	EXT.L	D0			;04776: 48c0
 	MOVEA.L	D0,A1			;04778: 2240
 	ADDA.L	8(A5),A1		;0477a: d3ed0008
-	MOVE.B	$46(A0),$46(A1)		;0477e: 136800460046
+	MOVE.B	$46(A0),$46(A1)		;0477e: 136800460046	; party_member_ptr_by_slot
 	ADDQ.W	#1,$C(A5)		;04784: 526d000c
 	BRA.S	LAB_471C		;04788: 6092
 LAB_478A:
@@ -6210,7 +6210,7 @@ LAB_478A:
 	CLR.B	$4B(A0)			;0479e: 4228004b
 	UNLK	A5			;047a2: 4e5d
 	RTS				;047a4: 4e75
-FUNC_GetPartyMemberPtrBySlot:	; get_party_member_ptr_by_slot
+FUNC_GetPartyMemberPtrBySlot:	; roster_ptr_by_party_slot
 	LINK.W	A5,#0			;047a6: 4e550000
 	MOVE.W	8(A5),D0		;047aa: 302d0008
 	EXT.L	D0			;047ae: 48c0
@@ -6942,7 +6942,7 @@ LAB_5070:
 	MOVE.B	0(A0,D0.W),D1		;05078: 12300000
 	EXT.W	D1			;0507c: 4881
 	MOVE.W	D1,-(A7)		;0507e: 3f01
-	JSR	-31842(A4)		;05080: 4eac839e
+	JSR	-31842(A4)		;05080: 4eac839e	; restore_completeness
 	ADDQ.W	#2,A7			;05084: 544f
 	ADDQ.W	#1,-2(A5)		;05086: 526dfffe
 LAB_508A:
@@ -7349,7 +7349,7 @@ LAB_54F2:
 	MOVE.W	-2(A5),-24972(A4)	;05510: 396dfffe9e74
 	UNLK	A5			;05516: 4e5d
 	RTS				;05518: 4e75
-LAB_551A:
+LAB_551A:	; party_roster_panel_draw
 	LINK.W	A5,#0			;0551a: 4e550000
 	MOVEQ	#0,D0			;0551e: 7000
 	MOVE.B	-31313(A4),D0		;05520: 102c85af
@@ -7423,7 +7423,7 @@ LAB_55E2:
 	JSR	-32610(A4)		;05600: 4eac809e
 	ADDQ.W	#8,A7			;05604: 504f
 	MOVE.W	#$0002,-(A7)		;05606: 3f3c0002
-	JSR	-31746(A4)		;0560a: 4eac83fe
+	JSR	-31746(A4)		;0560a: 4eac83fe	; bottom_chrome_redraw
 	ADDQ.W	#2,A7			;0560e: 544f
 	MOVE.W	#$0011,-(A7)		;05610: 3f3c0011
 	CLR.W	-(A7)			;05614: 4267
@@ -7522,7 +7522,7 @@ LAB_5708:
 LAB_5720:
 	UNLK	A5			;05720: 4e5d
 	RTS				;05722: 4e75
-LAB_5724:
+LAB_5724:	; create_character_confirm
 	LINK.W	A5,#-4			;05724: 4e55fffc
 	JSR	LAB_944C(PC)		;05728: 4eba3d22
 	MOVE.W	D0,-2(A5)		;0572c: 3b40fffe
@@ -7618,7 +7618,7 @@ LAB_5850:
 LAB_585C:
 	UNLK	A5			;0585c: 4e5d
 	RTS				;0585e: 4e75
-LAB_5860:
+LAB_5860:	; create_nav_handler
 	LINK.W	A5,#0			;05860: 4e550000
 	CMPI.W	#$00f1,8(A5)		;05864: 0c6d00f10008
 	BNE.S	LAB_58A2		;0586a: 6636
@@ -7697,7 +7697,7 @@ LAB_58E0:
 	MOVE.L	$73(A4,D2.W),$7769(A3)	;05936: 277420737769
 	DC.W	$6d21			;0593c
 	DC.W	$0000			;0593e
-LAB_5940:
+LAB_5940:	; view_party_session
 	LINK.W	A5,#0			;05940: 4e550000
 	CLR.W	-(A7)			;05944: 4267
 	JSR	-31806(A4)		;05946: 4eac83c2
@@ -7722,7 +7722,7 @@ LAB_5972:
 LAB_5980:
 	UNLK	A5			;05980: 4e5d
 	RTS				;05982: 4e75
-	LINK.W	A5,#-6			;05984: 4e55fffa
+	LINK.W	A5,#-6			;05984: 4e55fffa	; party_roster_list_draw
 	CLR.W	-2(A5)			;05988: 426dfffe
 	MOVE.W	#$0004,-(A7)		;0598c: 3f3c0004
 	JSR	-32472(A4)		;05990: 4eac8128
@@ -8061,7 +8061,7 @@ LAB_5D36:
 	DC.W	$6963			;05d44
 	BMI.S	LAB_5D66+2		;05d46: 6b20
 	ADDQ.W	#1,-(A5)		;05d48: 5265
-	BNE.W	LAB_AF6C		;05d4a: 66005220
+	BNE.W	LAB_AF6C		;05d4a: 66005220	; pick_frame_from_sheet
 	ADDQ.W	#1,-(A5)		;05d4e: 5265
 	DC.W	$7374			;05d50
 	MOVE.L	-(A0),D0		;05d52: 2020
@@ -8145,7 +8145,7 @@ LAB_5DE6:
 	BEQ.S	LAB_5E40		;05e1e: 6720
 	JSR	LAB_5632(PC)		;05e20: 4ebaf810
 	MOVE.W	#$0011,-(A7)		;05e24: 3f3c0011
-	MOVE.W	#$0001,-(A7)		;05e28: 3f3c0001
+	MOVE.W	#$0001,-(A7)		;05e28: 3f3c0001	; protect_panel_draw
 	JSR	-31740(A4)		;05e2c: 4eac8404
 	ADDQ.W	#4,A7			;05e30: 584f
 	PEA	LAB_5E44(PC)		;05e32: 487a0010
@@ -8359,7 +8359,7 @@ LAB_60A8:
 	MOVE.L	D0,-(A2)		;060b2: 2500
 LAB_60B4:
 	DC.W	$4c65			;060b4
-	MOVEQ	#$69,D3			;060b6: 7669
+	MOVEQ	#$69,D3			;060b6: 7669	; bottom_panel_fidelity
 	MOVEQ	#$61,D2			;060b8: 7461
 	MOVEQ	#$65,D2			;060ba: 7465
 LAB_60BC:
@@ -8419,7 +8419,7 @@ LAB_613C:
 LAB_614A:
 	CLR.W	-(A7)			;0614a: 4267
 	JSR	-32646(A4)		;0614c: 4eac807a
-	ADDQ.W	#6,A7			;06150: 5c4f
+	ADDQ.W	#6,A7			;06150: 5c4f	; party_status_panel_redraw
 	MOVE.W	#$001b,-(A7)		;06152: 3f3c001b
 	MOVE.W	#$0010,-(A7)		;06156: 3f3c0010
 	CLR.W	-(A7)			;0615a: 4267
@@ -8660,7 +8660,7 @@ LAB_640E:
 LAB_6412:
 	MOVEQ	#0,D0			;06412: 7000
 	BRA.S	LAB_640E		;06414: 60f8
-LAB_6416:
+LAB_6416:	; create_temp_slots_clear
 	LINK.W	A5,#-2			;06416: 4e55fffe
 	CLR.L	-16144(A4)		;0641a: 42acc0f0
 	CLR.W	-16146(A4)		;0641e: 426cc0ee
@@ -8752,7 +8752,7 @@ LAB_64EC:
 	MOVE.B	D0,-1(A5)		;064f2: 1b40ffff
 LAB_64F6:
 	MOVEQ	#0,D0			;064f6: 7000
-	MOVE.B	-1(A5),D0		;064f8: 102dffff	; play_song_scripted
+	MOVE.B	-1(A5),D0		;064f8: 102dffff	; scripted_text_scene
 	SUBQ.W	#1,D0			;064fc: 5340
 LAB_64FE:
 	MOVEQ	#0,D1			;064fe: 7200
@@ -8981,7 +8981,7 @@ LAB_6762:
 	JSR	-31830(A4)		;06790: 4eac83aa
 	ADDQ.W	#4,A7			;06794: 584f
 	CLR.W	-(A7)			;06796: 4267
-	JSR	-31770(A4)		;06798: 4eac83e6	; audio_wait_helper
+	JSR	-31770(A4)		;06798: 4eac83e6	; wait_frames_helper
 	ADDQ.W	#2,A7			;0679c: 544f
 	MOVE.L	8(A5),-(A7)		;0679e: 2f2d0008
 	JSR	LAB_6622(PC)		;067a2: 4ebafe7e
@@ -9655,7 +9655,7 @@ LAB_6FAE:
 	DC.W	$7572			;06fb0
 	ORI.W	#$7564,D1		;06fb2: 00417564
 	DC.W	$696f			;06fb6
-LAB_6FB8:
+LAB_6FB8:	; play_sound_seq
 	MOVEA.L	-(A6),A0		;06fb8: 2066
 	BVS.S	LAB_7032		;06fba: 6976
 	DC.W	$6500			;06fbc
@@ -9727,7 +9727,7 @@ LAB_7046:
 	MOVEQ	#0,D0			;0706a: 7000
 	MOVE.B	(A0),D0			;0706c: 1010
 	ASL.L	#1,D0			;0706e: e380
-	LEA	-29266(A4),A0		;07070: 41ec8dae
+	LEA	-29266(A4),A0		;07070: 41ec8dae	; audio_device_init
 	MOVE.W	0(A0,D0.L),-16(A5)	;07074: 3b700800fff0
 	TST.W	-16(A5)			;0707a: 4a6dfff0
 	BNE.S	LAB_7084		;0707e: 6604
@@ -10215,7 +10215,7 @@ LAB_7662:
 	MOVE.W	-4(A5),D0		;07662: 302dfffc
 	MOVEA.L	8(A5),A0		;07666: 206d0008
 	MOVEA.L	-10(A5),A1		;0766a: 226dfff6
-	ADDQ.L	#1,-10(A5)		;0766e: 52adfff6
+	ADDQ.L	#1,-10(A5)		;0766e: 52adfff6	; wave_synth_init
 	MOVE.B	0(A0,D0.W),(A1)		;07672: 12b00000
 	MOVE.W	-6(A5),D0		;07676: 302dfffa
 	ADD.W	D0,-4(A5)		;0767a: d16dfffc
@@ -10234,7 +10234,7 @@ LAB_768A:
 	JSR	-31506(A4)		;076a2: 4eac84ee
 	ADDQ.W	#8,A7			;076a6: 504f
 	MOVE.L	D0,-3802(A4)		;076a8: 2940f126
-	TST.L	-3802(A4)		;076ac: 4aacf126
+	TST.L	-3802(A4)		;076ac: 4aacf126	; scene_sheet_handles
 	BNE.S	LAB_76BC		;076b0: 660a
 	MOVE.W	#$0005,-(A7)		;076b2: 3f3c0005
 	JSR	LAB_72CE(PC)		;076b6: 4ebafc16
@@ -10421,7 +10421,7 @@ LAB_78D0:
 	MOVE.B	(A0),D0			;078de: 1010
 	LSR.W	#6,D0			;078e0: ec48
 	AND.W	#$0003,D0		;078e2: c07c0003
-	MOVE.B	D0,-1(A5)		;078e6: 1b40ffff
+	MOVE.B	D0,-1(A5)		;078e6: 1b40ffff	; descriptor_type_1_not_combat_panel
 	TST.B	-1(A5)			;078ea: 4a2dffff
 	BNE.S	LAB_78F6		;078ee: 6606
 	MOVEQ	#1,D0			;078f0: 7001
@@ -10510,7 +10510,7 @@ LAB_79C0:
 	RTS				;079c2: 4e75
 LAB_79C4:
 	MOVEQ	#1,D0			;079c4: 7001
-	BRA.S	LAB_79C0		;079c6: 60f8
+	BRA.S	LAB_79C0		;079c6: 60f8	; spell_level_number_prompt
 LAB_79C8:
 	LINK.W	A5,#0			;079c8: 4e550000
 	MOVEA.L	8(A5),A0		;079cc: 206d0008
@@ -10849,7 +10849,7 @@ LAB_7DB0:
 	MOVEQ	#0,D0			;07dc2: 7000
 	MOVE.B	-1(A5),D0		;07dc4: 102dffff
 	SUB.W	D0,-4(A5)		;07dc8: 916dfffc
-	ADDQ.W	#1,-6(A5)		;07dcc: 526dfffa	; play_death_tones
+	ADDQ.W	#1,-6(A5)		;07dcc: 526dfffa	; party_wipe_ui
 LAB_7DD0:
 	MOVE.W	-6(A5),D0		;07dd0: 302dfffa
 	CMP.W	-31066(A4),D0		;07dd4: b06c86a6
@@ -11361,7 +11361,7 @@ LAB_9266:
 	DC.L	$4eac8374,$4fef000a,$2f2dfffc,$4eac8380 ;09436
 	DC.L	$584f4e5d		;09446
 	DC.W	$4e75			;0944a
-LAB_944C:
+LAB_944C:	; create_slot_picker
 	DC.L	$4e55fffa,$3b7cffff,$fffe7000,$102caa2a ;0944c
 	DC.L	$7200122c,$aa28c041,$c07c0055,$1b40fffa ;0945c
 	DC.L	$4a2dfffa,$6608302d,$fffe4e5d,$4e754a2c ;0946c

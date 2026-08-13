@@ -26,12 +26,10 @@ enum class EventVmWait : uint8_t {
     MemberSelect,
     /** OP_2F @ 0x16FEA: -$7F92 fills A4-$5C50 (10 chars, space-padded). */
     Answer,
-};
-
-struct EventPortalOffer {
-    uint32_t cost = 0;
-    uint8_t dest_screen = 0;
-    uint8_t dest_tile = 0; /* packed (y<<4)|x */
+    /** OP_0E 0x7E free-teleport @ 0xD576: hex digit 0..F via -$7F8C. */
+    HexDigit,
+    /** OP_0E 0xC9/0xCA @ 0x1980A: A–D quest difficulty pick. */
+    LetterSelect,
 };
 
 class EventRuntime {
@@ -49,12 +47,19 @@ public:
     /** Resume VM after SPACE or Y/N; returns false when script finished. */
     bool continueInput(GameStateView &gs, world::MapWorld &world, const platform::KeyState &keys);
 
+    /** Host funeral / GameOver: drop Yes/No waits and console OP_02 layers so a
+     *  post-wipe tile re-prompt cannot stack under the death band. */
+    void haltUiForHostOverlay(GameStateView &gs);
+
     bool isActive() const { return script_active_; }
     bool blocksMovement() const { return script_active_ || wait_ != EventVmWait::None; }
 
     /** Set when OP_0C map transition ran; caller reloads env + 3D assets. */
     bool screenChanged() const { return screen_changed_; }
     void clearScreenChanged() { screen_changed_ = false; }
+    /** Host (spell-driven) screen transition: mirror OP_0C so the caller
+     *  reloads env + 3D assets for the new screen (Fly / recall teleports). */
+    void markScreenChanged() { screen_changed_ = true; }
 
     EventTextView &textView() { return text_; }
     const EventTextView &textView() const { return text_; }
@@ -87,21 +92,18 @@ public:
     void bindCombat(combat::CombatSession *combat) { combat_ = combat; }
     combat::CombatSession *combat() const { return combat_; }
 
-    void setPendingPortal(const EventPortalOffer &offer) { pending_portal_ = offer; pending_portal_active_ = true; }
-    void clearPendingPortal() { pending_portal_active_ = false; }
-    bool hasPendingPortal() const { return pending_portal_active_; }
-
-    /** After a str.dat service intro Y/N (OP_0E 0x03/0x04/0x06), open the bound
+    /** After a service intro Y/N (OP_0E 0x02/0x03/0x04/0x06), open the bound
      *  town-service menu on "yes" (ASM: handler shell gates on A4-$7951). */
     enum class PendingTownMenu : uint8_t {
         None = 0,
         Tavern,
         Temple,
         Smith,
+        Training,
         Inn,
-        GuildEnroll,
-        BrainDetox,
         SkillBuy,
+        GeneralStore,
+        Circus,
     };
     void setPendingTownMenu(PendingTownMenu kind) { pending_town_menu_ = kind; }
     void setPendingSkillBuy(uint8_t skill_id, uint32_t gold_cost)
@@ -110,13 +112,25 @@ public:
         pending_skill_cost_ = gold_cost;
         pending_town_menu_ = PendingTownMenu::SkillBuy;
     }
-    bool hasPendingTownMenu() const { return pending_town_menu_ != PendingTownMenu::None; }
-    bool takePendingBrainDetoxMemberSelect()
+    void setPendingGeneralStore()
     {
-        const bool v = pending_brain_detox_member_;
-        pending_brain_detox_member_ = false;
-        return v;
+        /* Y/N wait only — member prompt is armed in finishPendingTownMenu on accept. */
+        pending_town_menu_ = PendingTownMenu::GeneralStore;
     }
+    bool hasPendingTownMenu() const { return pending_town_menu_ != PendingTownMenu::None; }
+
+    /** OP_0E 0x7E @ 0xD576: prompt X then Y (0–15 hex). */
+    void armFreeTeleportUi();
+    /** OP_0E 0xC9/0xCA @ 0x19AB4/0x19AC4 → 0x1980A: Hoardall/Slayer Y/N then A–D. */
+    void armQuestEncodeUi(bool drink);
+    /** OP_0E 0xFD abort==2 / inn accept: arm Goto Town @ 0x1A1F8. */
+    void armInnGotoTown() { pending_inn_goto_town_ = true; }
+    /** OP_0E 0xFD abort==3 → 0x14106 Death Strikes panel, then Goto Town. */
+    void armDeathStrikes() { pending_death_strikes_ = true; }
+    /** OP_0E 0xFD / 0x1493C print chrome: PTR0..PTR5 message pages (no fight GS). */
+    void armOp0eFdPrintChrome() { pending_fd_print_chrome_ = true; }
+    /** OP_0E 0x80 @ 0xD6A4: after "Magical slide trap!" SPACE → halve party stats. */
+    void armSlideTrapHalve() { pending_slide_trap_halve_ = true; }
 
     int locationId() const { return location_id_; }
 
@@ -132,6 +146,18 @@ public:
     {
         const bool v = pending_inn_goto_town_;
         pending_inn_goto_town_ = false;
+        return v;
+    }
+    bool takePendingDeathStrikes()
+    {
+        const bool v = pending_death_strikes_;
+        pending_death_strikes_ = false;
+        return v;
+    }
+    bool takePendingOp0eFdPrintChrome()
+    {
+        const bool v = pending_fd_print_chrome_;
+        pending_fd_print_chrome_ = false;
         return v;
     }
 
@@ -161,7 +187,6 @@ private:
     void remapOp0cDest(uint8_t &dest_screen, uint8_t &dest_tile);
     /** Restore home location after OP_0E overlay swap when idle. */
     void restoreOverlayIfIdle(GameStateView &gs);
-    bool finishPendingPortal(GameStateView &gs, world::MapWorld &world, bool accepted);
     bool finishPendingTownMenu(GameStateView &gs, bool accepted);
 
     Mm2EventFile file_{};
@@ -182,12 +207,18 @@ private:
     ITownServiceUi *town_service_ui_ = nullptr;
     gameplay::Rng *rng_ = nullptr;
     combat::CombatSession *combat_ = nullptr;
-    bool pending_portal_active_ = false;
-    EventPortalOffer pending_portal_{};
     PendingTownMenu pending_town_menu_ = PendingTownMenu::None;
     bool pending_inn_goto_town_ = false;
-    bool pending_brain_detox_member_ = false;
+    bool pending_death_strikes_ = false;
+    bool pending_fd_print_chrome_ = false;
     bool pending_skill_buy_member_ = false;
+    bool pending_general_store_member_ = false;
+    bool pending_circus_attr_ = false;
+    bool pending_slide_trap_halve_ = false;
+    uint8_t pending_free_teleport_stage_ = 0; /* 0=idle 1=X 2=Y */
+    uint8_t pending_free_teleport_x_ = 0;
+    uint8_t pending_quest_encode_stage_ = 0; /* 0=idle 1=Y/N 2=A–D */
+    bool pending_quest_drink_ = false;
     uint8_t pending_skill_id_ = 0;
     uint32_t pending_skill_cost_ = 0;
 

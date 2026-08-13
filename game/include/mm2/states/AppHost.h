@@ -11,6 +11,7 @@
 #include "mm2/ui/CharacterUiController.h"
 
 #include "mm2/ui/CharacterUiKind.h"
+#include "mm2/ui/PlayHudKind.h"
 
 #include "mm2_party_launch.h"
 
@@ -33,7 +34,8 @@ public:
 
 
 
-    bool start(const char *data_dir, ui::CharacterUiKind ui_kind);
+    bool start(const char *data_dir, ui::CharacterUiKind ui_kind,
+               ui::PlayHudKind play_hud_kind = ui::PlayHudKind::Classic);
 
     void shutdown();
 
@@ -155,6 +157,11 @@ public:
 private:
     void refreshPlayWindowTitle();
 
+    /** Seed pending_launch_ + town filter from the roster.dat global tail
+     *  (party words saved by save_game_state @ 0x823C) when no in-memory
+     *  selection exists yet — restores the saved party across relaunch. */
+    void restoreSavedPartyFromRosterTail();
+
     AppHost() = default;
 
     static AppHost *s_instance_;
@@ -162,6 +169,7 @@ private:
     const char *data_dir_ = nullptr;
 
     ui::CharacterUiKind ui_kind_ = ui::CharacterUiKind::AmigaClassic;
+    ui::PlayHudKind play_hud_kind_ = ui::PlayHudKind::Classic;
 
     platform::KeyState keys_{};
 
@@ -210,7 +218,7 @@ extern "C" {
 
 extern unsigned char mm2_app_host_storage[];
 
-int mm2_app_run(const char *data_dir, int ui_kind);
+int mm2_app_run(const char *data_dir, int ui_kind, int play_hud_kind = 0);
 
 
 

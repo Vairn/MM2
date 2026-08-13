@@ -64,12 +64,15 @@ def decode_from_amiga() -> list[list[int]]:
     tf = find_text_font(code)
     glyphs: list[list[int]] = []
     for cp in range(128):
-        _w, h, pix = decode_glyph(code, tf, cp)
+        w, h, pix = decode_glyph(code, tf, cp)
         rows: list[int] = []
         for y in range(h):
             byte = 0
             for x in range(8):
-                if pix[y * 8 + x]:
+                on = False
+                if w > 0 and x < w and pix:
+                    on = bool(pix[y * w + x])
+                if on:
                     byte |= 1 << x  # LSB column order
             rows.append(byte)
         glyphs.append(rows)

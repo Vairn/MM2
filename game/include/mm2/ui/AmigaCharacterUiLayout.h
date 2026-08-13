@@ -9,30 +9,31 @@ constexpr int kCellH = 8;
 inline int cellX(int col) { return col * kCellW; }
 inline int cellY(int row) { return row * kCellH; }
 
-// Red frame via JSR -$809E: font-8 box glyphs 0x0E..0x15 (palette $17 = red on Amiga).
+// Red frame: full-screen modals use play outer frame (-$7F7A → 0x422A,
+// glyphs 1/2/3/4/5/0x0B on cols 0..39 rows 0..23). Smaller popups use
+// console_box glyphs 0x0E..0x15.
 constexpr uint8_t kBorderR = 255;
 constexpr uint8_t kBorderG = 0;
 constexpr uint8_t kBorderB = 0;
 
-// Title roster session — red frame around the whole screen (matches WinUAE
-// screenshot: ~1 cell margin on an NTSC 40x25 text grid = 320x200). The console
-// box routine (-$7F62) draws a near-full-screen outline; prior constants placed
-// it at (col 27, row 21) which framed only the bottom-right corner.
-constexpr int kRosterBorderRow = 1;
-constexpr int kRosterBorderCol = 1;
-constexpr int kRosterBorderW = 38;   // cols 1..39 -> x 8..312 (8px right margin)
-constexpr int kRosterBorderH = 23;   // rows 1..24 -> y 8..192 (8px bottom margin, NTSC 320x200)
+// Title roster / sheet / party-assemble — same -$7F7A outer frame as in-game
+// Quick Ref ($595C) and character sheet ($398C). Text Locate cols start at 1.
+constexpr int kRosterBorderRow = 0;
+constexpr int kRosterBorderCol = 0;
+constexpr int kRosterBorderW = 40;   // cols 0..39
+constexpr int kRosterBorderH = 24;   // rows 0..23 (NTSC 320x200)
 
-// Header sits ABOVE the slot list (centered on the 40-col NTSC grid), matching
-// the WinUAE screenshot: "(View All)" / "Characters" + underline at the top.
+// "(View All)" embedded in top outer-frame row; title below inside the frame.
 constexpr int kRosterTextCols = 40;        // NTSC text columns (320/8) for centering
-constexpr int kRosterViewAllRow = 0x01;    // "(View All)" embedded in top border row
+constexpr int kRosterViewAllRow = 0x00;    // top border row (outer frame)
 constexpr int kRosterTitleRow = 0x03;      // $008b8 "Characters"
 constexpr int kRosterUnderlineRow = 0x04;  // dashes on their own row beneath
 
-constexpr int kRosterListRowBase = 6;      // roster_slot_list_draw LAB_470 @ $0470
-constexpr int kRosterListColLeft = 2;      // indented off the left border
-constexpr int kRosterListColRight = 20;    // 20
+/* LAB_470 @ $0448/$0470: row = (slot % 12) + 5; locate col = (slot>11)*20 + 1
+ * then putchar tick/space — letter starts one cell right (2 / 22). */
+constexpr int kRosterListRowBase = 5;
+constexpr int kRosterListColLeft = 2;
+constexpr int kRosterListColRight = 0x16;  // 22
 constexpr int kRosterSlotsPerColumn = 12;
 constexpr int kRosterSlotCount = 24;
 constexpr int kRosterHirelingPageOffset = 0x18;
@@ -40,88 +41,93 @@ constexpr int kRosterHirelingPageOffset = 0x18;
 constexpr int kRosterFooterRow = 0x15;     // $00aec
 constexpr int kRosterFooterCol = 0x02;
 
-// Title sheet modal — same full-screen red frame as the roster list (NTSC 40x25).
-constexpr int kSheetBorderRow = 1;
-constexpr int kSheetBorderCol = 1;
-constexpr int kSheetBorderW = 38;
-constexpr int kSheetBorderH = 23;   // rows 1..24 -> y 8..192 (NTSC 320x200)
+// Title sheet modal — same full-screen outer frame (cols 0..39, rows 0..23).
+constexpr int kSheetBorderRow = 0;
+constexpr int kSheetBorderCol = 0;
+constexpr int kSheetBorderW = 40;
+constexpr int kSheetBorderH = 24;
 
-constexpr int kSheetHeaderRow = 0x01;      // character name embedded in top border row
-constexpr int kSheetHeaderCol = 0x02;
+constexpr int kSheetHeaderRow = 0x01;      // character_sheet_draw locate(1,1)
+constexpr int kSheetHeaderCol = 0x01;
+constexpr int kSheetHeaderRaceCol = 0x16;  // locate(1,$16) then ' ' + race + ' ' + class
 
-// Three-column stat block (title sheet path; matches WinUAE screenshot).
-constexpr int kSheetStatRowBase = 0x04;    // one row down from border (8px)
-constexpr int kSheetStatColLeft = 0x02;
+// LAB_38EA A4-$8AF8/$8AE0 field table (character_sheet_draw $39B4).
+constexpr int kSheetStatRowBase = 0x03;
+constexpr int kSheetStatColLeft = 0x01;
 constexpr int kSheetStatColMid = 0x09;     // HP=/SP=/AC=/Thievery/skills
-constexpr int kSheetStatColSlash = 0x12;   // /max, SL=
-constexpr int kSheetStatColCost = 0x18;    // Cost/Gold, Gems, Food
-constexpr int kSheetStatColRight = 0x1a;   // Age, Exp, Cond=
+constexpr int kSheetStatColSlash = 0x11;   // '/' + max, SL=
+constexpr int kSheetStatColCost = 0x18;    // Gold/Cost, Gems, Food
+constexpr int kSheetStatColRight = 0x19;   // Age, Exp
+constexpr int kSheetStatColCond = 0x16;    // Cond=
+constexpr int kSheetStatColCostDay = 0x22; // hireling "/Day" ($3C0E)
 
-// Equipped/backpack block + footer compressed to fit the NTSC 25-row grid
-// (stats end at row 11; footer must stay inside the row-24 border bottom).
-constexpr int kSheetDividerRow = 0x0c;     // 12
-constexpr int kSheetEquipRowBase = 0x0d;   // 13 -> rows 13..18 (6 item slots)
-constexpr int kSheetEquipCol = 0x02;
-constexpr int kSheetBackpackCol = 0x14;    // 20
+// Equipped/backpack @ $3D18: rows $0D..$12, cols 1 / $14.
+constexpr int kSheetDividerRow = 0x0c;
+constexpr int kSheetEquipRowBase = 0x0d;
+constexpr int kSheetEquipCol = 0x01;
+constexpr int kSheetBackpackCol = 0x14;
 constexpr int kSheetBackpackHeaderCol = kSheetBackpackCol;
 
-constexpr int kSheetFooterRow1 = 0x14;     // 20 — command row 1 ($8FF0)
-constexpr int kSheetFooterRow2 = 0x15;     // 21 — command row 2 ($9017)
-constexpr int kSheetFooterCmdRow3 = 0x16;  // 22 — command row 3 ($903E)
-constexpr int kSheetFooterRow3 = 0x18;     // 24 — bottom border row for ESC prompt
-constexpr int kSheetFooterCol = 0x02;
+constexpr int kSheetFooterRow1 = 0x14;     // $8FF0
+constexpr int kSheetFooterRow2 = 0x15;     // $9017
+constexpr int kSheetFooterCmdRow3 = 0x16;  // $903E
+constexpr int kSheetFooterRow3 = 0x17;     // $6DA6 ESC row
+constexpr int kSheetFooterCol = 0x01;
 
 // In-game party panel (book.32) — NOT title P; kept for create confirm / combat paths.
 constexpr int kPartyPanelBlitX = 0x27 * kCellW;
 constexpr int kPartyPanelBlitY = 0x12 * kCellH;
 
-// ---- Choose-party screen ( "( N-Town )" inn roster ) ----------------------
-// Same full-screen red frame (NTSC 40x25) as the roster list. Layout traced
-// from the WinUAE screenshot of the original party-assembly screen.
-constexpr int kPartyTextCols = 40;            // NTSC text columns used for centering
-constexpr int kPartyTitleRow = 0x02;          // "( 1-Middlegate )" centered
-constexpr int kPartyOtherTownsRow = 0x03;     // "Other Towns" (left)
-constexpr int kPartyOtherTownsCol = 0x03;
-constexpr int kPartyTownKeysRow = 0x04;       // "'1' - '5'" (left)
-constexpr int kPartyTownKeysCol = 0x05;
-constexpr int kPartyHeaderRow = 0x04;         // "Characters"/"Hirelings" (center)
-constexpr int kPartyUnderlineRow = 0x05;      // underline under header
-constexpr int kPartyPartyLabelRow = 0x03;     // "PARTY" (right)
-constexpr int kPartyCountRow = 0x04;          // "C=x / H=y" (right)
-constexpr int kPartyRightCol = 0x1c;          // 28
-constexpr int kPartyFullRow = 0x06;           // "*** Party is Full ***" (center)
+// ---- Choose-party screen — char_create_party_assemble @ $0826 -------------
+// String/locate coords from $086A..$0AD0; slot list is LAB_470 ($0448) with
+// town filter in +$A(A5). Tick glyph is font $17 (putchar -$7C62), not DIY pixels.
+constexpr int kPartyTextCols = 40;
+constexpr int kPartyOtherTownsRow = 0x01;     // $089A col $02 "Other Towns"
+constexpr int kPartyOtherTownsCol = 0x02;
+constexpr int kPartyTownKeysRow = 0x02;       // $08B2 col $02 " '1' - '5'"
+constexpr int kPartyTownKeysCol = 0x02;
+constexpr int kPartyPartyLabelRow = 0x01;     // $08CA col $1F "PARTY"
+constexpr int kPartyPartyLabelCol = 0x1F;
+constexpr int kPartyCountRow = 0x02;          // $08E2 col $1D "C=  / H="
+constexpr int kPartyCountCol = 0x1D;
+constexpr int kPartyFullRow = 0x04;           // $09D0 col $0A "*** Party is Full ***"
+constexpr int kPartyFullCol = 0x0A;
 
-constexpr int kPartyListRowBase = 0x07;       // rows 7..18 (12 per column)
-constexpr int kPartyListColLeftCheck = 0x01;  // checkmark cell (left column)
-constexpr int kPartyListColLeft = 0x02;       // "A- Name Cls" (left column)
-constexpr int kPartyListColRightCheck = 0x13; // 19 checkmark cell (right column)
-constexpr int kPartyListColRight = 0x14;      // 20 (right column)
+constexpr int kPartyListRowBase = 0x05;       // LAB_470: rows 5..16
+constexpr int kPartyListColLeftCheck = 0x01;  // locate col 1 / 21, then glyph $17 or $20
+constexpr int kPartyListColLeft = 0x02;       // letter starts here
+constexpr int kPartyListColRightCheck = 0x15; // 21
+constexpr int kPartyListColRight = 0x16;      // 22
 constexpr int kPartySlotsPerColumn = 12;
 constexpr int kPartySlotCount = 24;
+constexpr uint8_t kPartyCheckGlyph = 0x17;    // same mark as combat front-rank
 
-constexpr int kPartyFooterViewRow = 0x14;     // 20 "'A' - 'X' to View"
-constexpr int kPartyFooterAddRow = 0x15;      // 21 "(Ctrl) 'A' - 'X' to Add/Remove"
-constexpr int kPartyFooterHireRow = 0x16;     // 22 "'Space' for Hirelings" / "'Z' to exit"
-constexpr int kPartyFooterHireCol = 0x03;
-constexpr int kPartyFooterExitCol = 0x1a;     // "'Z' to exit"
-constexpr int kPartyFooterEscRow = 0x18;      // 24 — bottom border row for ESC prompt
+constexpr int kPartyFooterViewRow = 0x12;     // $086A col $0C "'A' - 'X' to View"
+constexpr int kPartyFooterViewCol = 0x0C;
+constexpr int kPartyFooterAddRow = 0x13;      // $0882 col $05 "(Ctrl) 'A' - 'X'…"
+constexpr int kPartyFooterAddCol = 0x05;
+constexpr int kPartyFooterHireRow = 0x15;     // $0AC4 col $02 "'Space' for "
+constexpr int kPartyFooterHireCol = 0x02;
+constexpr int kPartyFooterExitCol = 0x1B;     // $09A0 "'Z' to exit"
+constexpr int kPartyFooterEscRow = 0x18;
 
 // Highlight (inverse-video) colors for "*** Party is Full ***".
 constexpr uint8_t kPartyHiliteR = 220;
 constexpr uint8_t kPartyHiliteG = 220;
 constexpr uint8_t kPartyHiliteB = 220;
 
-// ---- Create-character stat roll (WinUAE reference @ ASM $01BC8A / $01C494) ----
-// Full-screen red frame; header breaks top border; throw.32 tableau (304×72) centered
-// under header; stats + class list below the graphic.
-constexpr int kCreateBorderRow = 1;
-constexpr int kCreateBorderCol = 1;
-constexpr int kCreateBorderW = 38;
-constexpr int kCreateBorderH = 23;
+// ---- Create-character stat roll — overlay ASM $280BA ----
+// Window 4 ($5312 tables @ A4-$745C…) = cells (0,0)-(39,23): frame on the
+// outermost cells, "(Create New Characters)" printed at (col 10, row 0) over
+// the top border. The throw.32 tableau (px 8..311 × 8..79 = cells 1..38 ×
+// rows 1..9) fits exactly inside the frame.
+constexpr int kCreateBorderRow = 0;
+constexpr int kCreateBorderCol = 0;
+constexpr int kCreateBorderW = 40;
+constexpr int kCreateBorderH = 24;
 
-constexpr int kCreateHeaderRow = 0x01;       // "( Create New Characters )"
-constexpr int kCreateTableauY = 0x10;        // px y=16 (row 2), below header
-constexpr int kCreateTableauW = 304;         // throw.32 frame 0 width
+constexpr int kCreateHeaderRow = 0;          // $2810A locate(0xA, 0)
+constexpr int kCreateHeaderCol = 0x0a;       // "(Create New Characters)"
 
 constexpr int kCreateStatRowBase = 0x0c;     // row 12 — below 72px tableau (y=16..88)
 constexpr int kCreateStatColLetter = 0x02;   // "A -"
@@ -158,43 +164,27 @@ constexpr int kCreatePromptRow3 = 0x16;      // step prompt line 3 (stat roll on
 constexpr int kCreateEscRow = 0x18;          // bottom border row for ESC prompt
 constexpr int kCreatePromptCol = 0x02;
 
-// throw.32 dice tableau — measured from decoded asset + ASM LAB_551A / LAB_5632 / LAB_60DE.
-//   frame 0: 304×72 full rest (fist + table); frames 1–10: 96,144,80,64,80,64,48,48,64,48 px
-//   sprite rows 0–43 = hand art; rows 44–71 = table (255,170,0) → screen y=62..89 when blit y=18
-// BlitBob @ $0054F2: col 39, y=18. Anim @ $005632: LAB_60DE highlights + LAB_62F0 die text.
-constexpr int kCreateThrowBlitCol = 0x27;     // x anchor = 312
-constexpr int kCreateThrowBlitY = 0x12;       // px y=18
-constexpr int kCreateThrowSpriteH = 72;
-constexpr int kCreateThrowTableauW = 304;
-constexpr int kCreateThrowTableauX = kCreateThrowBlitCol * kCellW - kCreateThrowTableauW; // 8
-constexpr int kCreateThrowOrangeRow = 44;       // first orange row inside sprite
-constexpr int kCreateThrowOrangeH = 28;
-constexpr int kCreateThrowOrangeY = kCreateThrowBlitY + kCreateThrowOrangeRow; // 62
-constexpr int kCreateThrowRestFrame = 0;
-constexpr int kCreateThrowAnimFrameFirst = 1;
-constexpr int kCreateThrowAnimFrameCount = 10;
-// WinUAE 174..205: toss frames 1–5 blit at tableau left; die-roll frames 6–10 right-anchored.
-constexpr int kCreateThrowAnimRightAnchorFrameFirst = 6;
-// LAB_60DE FillBox triplet (y=$10): highlight widths 12/21/31 px at die cols 12/21/31.
-constexpr int kCreateThrowHighlightY = 0x10;
-constexpr int kCreateThrowHighlightH = 0x10;
-constexpr int kCreateThrowHighlightW0 = 12;
-constexpr int kCreateThrowHighlightW1 = 21;
-constexpr int kCreateThrowHighlightW2 = 31;
-constexpr int kCreateThrowDieCol0 = 0x0C;
-constexpr int kCreateThrowDieCol1 = 0x15;
-constexpr int kCreateThrowDieCol2 = 0x1F;
-constexpr int kCreateThrowDieRowTop = 0x10;    // might / int / per (rest, LAB_551A)
-constexpr int kCreateThrowDieRowBot = 0x12;    // end / spd / acc
-constexpr uint8_t kCreateThrowOrangeR = 255;
-constexpr uint8_t kCreateThrowOrangeG = 170;
-constexpr uint8_t kCreateThrowOrangeB = 0;
-constexpr uint8_t kCreateThrowHighlightR = 255;
-constexpr uint8_t kCreateThrowHighlightG = 136;
-constexpr uint8_t kCreateThrowHighlightB = 119;
-
-constexpr int kCreateThrowAnimStepTicks = 4;  // ~15 Hz hand advance @ 60 Hz tick
-constexpr int kCreateThrowAnimSteps = 15;     // A4-$7A52 runs 0..$0F during reroll ($05E12)
+// throw.32 dice-throw animation — overlay ASM $27096 (traced against the real
+// binary; the old LAB_551A/LAB_5632/LAB_60DE notes described in-game chrome, not
+// this screen). Per loop iteration i = 0..10:
+//   i==0: SetAPen(0) ($21704) + FillRect (8,8)-(311,79) ($217BA)   [hidden buffer]
+//   BlitBob(throw.32, i, x = xtab[i]-1, y = ytab[i]+8) ($2203C — opaque, minterm $C0)
+//   i==0: LoadRGB4 palette refresh ($23ED2)
+//   raster-wait line 79 ($22E3A), copy rect (8,8)-(311,79) hidden→front ($21ED8)
+//   Delay(75 ms → 3 ticks = 60 ms) ($22B4A)
+// The region is cleared once; frames accumulate on top of each other and the
+// final pile-up stays on screen after the loop (there is no rest-frame redraw,
+// and nothing else — no highlights, no die-value text — is drawn in the region).
+// xtab @ A4-$6344 = {8,43,61,148,195,221,248,264,264,241,229}; ytab @ A4-$632E = 0s.
+constexpr int kCreateThrowClearX = 8;
+constexpr int kCreateThrowClearY = 8;
+constexpr int kCreateThrowClearW = 304;  // x 8..311
+constexpr int kCreateThrowClearH = 72;   // y 8..79
+constexpr int kCreateThrowFrameCount = 11;
+constexpr int kCreateThrowFrameX[kCreateThrowFrameCount] = {
+    7, 42, 60, 147, 194, 220, 247, 263, 263, 240, 228};  // xtab[i] - 1
+constexpr int kCreateThrowFrameY = 8;                     // ytab[i] + 8
+constexpr int kCreateThrowAnimStepTicks = 4;  // Delay(3/50 s) = 60 ms/frame @ 60 Hz tick
 
 // Name-entry cursor @ read_key_with_spinner / A4-$77BC table (4-char spin).
 constexpr int kCreateNameCursorStepTicks = 4; // ~15 Hz @ 60 Hz tick

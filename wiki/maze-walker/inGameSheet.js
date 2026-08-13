@@ -2,13 +2,29 @@
 "use strict";
 
 import { drawChar, drawGlyph } from "./ui.js";
-import { itemNameFromManifest } from "./sessionState.js";
+import { itemNameFromManifest, memberSpellKnown } from "./sessionState.js";
 import { fillCellRect, drawPlayModalBackdrop } from "./playScreen.js";
+import { kSorcererSpells, kClericSpells } from "./combatSpells.js";
 
 const CLASS_NAMES = ["Knight", "Paladin", "Archer", "Cleric", "Sorcerer", "Robber", "Ninja", "Barbarian"];
 const ALIGN_NAMES = ["Good", "Neut", "Evil"];
 const RACE_NAMES = ["Human", "Elf", "Dwarf", "Gnome", "Half-Orc"];
 const PACK_LETTERS = "ABCDEF";
+const SPELLS_PER_LEVEL = [7, 7, 6, 6, 5, 5, 4, 4, 4];
+const SPELL_LEVELS = 9;
+
+/** Sheet sub-modes — InGameCharacterSheet.h SheetSubMode. */
+export const SheetSubMode = {
+  Normal: "Normal",
+  SpellBook: "SpellBook",
+  CastPicker: "CastPicker",
+  UsePick: "UsePick",
+};
+
+export const CastPromptPhase = {
+  Level: "Level",
+  Number: "Number",
+};
 
 const L = {
   overlayRow: 1,
@@ -178,6 +194,42 @@ function itemLabel(manifest, itemId) {
   return itemNameFromManifest(manifest, itemId);
 }
 
+/** SpellSchool for class — InGameCharacterSheet / SpellBook.h. */
+export function spellSchoolForClass(classId) {
+  const c = classId | 0;
+  if (c === 2 || c === 4) return 0; /* sorc */
+  if (c === 1 || c === 3) return 1; /* cler */
+  return -1;
+}
+
+function schoolSpellTable(school) {
+  if (school === 0) return kSorcererSpells;
+  if (school === 1) return kClericSpells;
+  return null;
+}
+
+function spellFlatFromLevelNumber(level, number) {
+  if (level < 1 || level > SPELL_LEVELS || number < 1) return -1;
+  const maxN = SPELLS_PER_LEVEL[level - 1];
+  if (number > maxN) return -1;
+  let base = 0;
+  for (let i = 0; i < level - 1; i++) base += SPELLS_PER_LEVEL[i];
+  return base + (number - 1);
+}
+
+/** @returns {object} fresh SheetSession */
+export function createSheetSession(partySlot = 0) {
+  return {
+    partySlot: partySlot | 0,
+    subMode: SheetSubMode.Normal,
+    castPhase: CastPromptPhase.Level,
+    castLevel: 0,
+    castSpellFlat: -1,
+    pendingUseSlot: -1,
+    statusLine: "",
+  };
+}
+
 /** @param {CanvasRenderingContext2D} ctx @param {object} session @param {object|null} manifest */
 export function renderQuickRef(ctx, session, manifest) {
   drawPlayModalBackdrop(ctx);
@@ -202,16 +254,17 @@ export function renderQuickRef(ctx, session, manifest) {
   );
 
   const party = session.party ?? [];
+  const gray = [200, 200, 200];
   for (let i = 0; i < party.length && i < 8; i++) {
     const rec = party[i];
-    const name = (rec.name ?? "").slice(0, 11).padEnd(11, " ");
+    if (!rec) continue;
     const row1 = L.quickRow1Base + i;
-    drawCellText(ctx, row1, L.quickColIndex, `${i + 1})  ${name}`);
+    const name = (rec.name ?? "").slice(0, 11);
+    drawCellText(ctx, row1, L.quickColIndex, `${i + 1})  ${name.padEnd(11)}`);
     drawQuickRefSlashPair(ctx, row1, L.quickColHpSlash, rec.hpCurrent ?? 0, rec.hpMax ?? 0);
     drawQuickRefSlashPair(ctx, row1, L.quickColSpSlash, rec.spCurrent ?? 0, rec.spMax ?? 0);
 
     const row2 = L.quickRow2Base + i;
-    const gray = [200, 200, 200];
     drawCellText(ctx, row2, L.quickColIndex, String(i + 1), ...gray);
     drawCellText(ctx, row2, L.quickColLvl, String(rec.level ?? 0), ...gray);
     drawCellText(ctx, row2, L.quickColSL, String(rec.spellLevel ?? 0), ...gray);
@@ -225,8 +278,76 @@ export function renderQuickRef(ctx, session, manifest) {
   drawModalEscFooter(ctx);
 }
 
-/** @param {CanvasRenderingContext2D} ctx @param {object} session @param {number} partySlot @param {object|null} manifest */
-export function renderCharacterSheet(ctx, session, partySlot, manifest) {
+function renderSpellBook(ctx, rec) {
+  const school = spellSchoolForClass(rec.classId);
+  if (school < 0) return;
+
+  const kWinRow = 10;
+  const kWinCol = 7;
+  const kWinW = 29;
+  const kWinH = 14;
+  const kTitleRow = kWinRow + 1;
+  const kHeaderRow = kWinRow + 3;
+  const kGridRowBase = kWinRow + 4;
+  const kLvlCol = kWinCol + 2;
+  const kMarkColBase = kWinCol + 5;
+
+  fillCellRect(ctx, kWinCol, kWinRow, kWinW, kWinH);
+  /* Blue fill approx — playScreen fill is black; draw solid via cell chars. */
+  for (let r = 0; r < kWinH; r++) {
+    for (let c = 0; c < kWinW; c++) {
+      /* leave backdrop; yellow border via glyphs */
+    }
+  }
+  /* Yellow console box border */
+  for (let c = 0; c < kWinW; c++) {
+    drawGlyph(ctx, (kWinCol + c) * 8, kWinRow * 8, 0x2d, 255, 255, 0);
+    drawGlyph(ctx, (kWinCol + c) * 8, (kWinRow + kWinH - 1) * 8, 0x2d, 255, 255, 0);
+  }
+  for (let r = 0; r < kWinH; r++) {
+    drawGlyph(ctx, kWinCol * 8, (kWinRow + r) * 8, 0x7c, 255, 255, 0);
+    drawGlyph(ctx, (kWinCol + kWinW - 1) * 8, (kWinRow + r) * 8, 0x7c, 255, 255, 0);
+  }
+
+  drawBorderIntegratedText(ctx, kTitleRow, kWinCol, kWinW, "Spell Book", 255, 255, 128);
+  drawCellText(ctx, kHeaderRow, kLvlCol, "Lvl 1 2 3 4 5 6 7", 255, 255, 255);
+
+  let flat = 0;
+  for (let level = 1; level <= SPELL_LEVELS; level++) {
+    const row = kGridRowBase + (level - 1);
+    drawCellText(ctx, row, kLvlCol, String(level), 255, 255, 255);
+    const slots = SPELLS_PER_LEVEL[level - 1];
+    for (let slot = 0; slot < slots; slot++) {
+      if (memberSpellKnown(rec, flat)) {
+        const col = kMarkColBase + slot * 2;
+        drawGlyph(ctx, col * 8, row * 8, 0x17, 255, 255, 255);
+      }
+      flat++;
+    }
+  }
+}
+
+function renderCastPicker(ctx, rec, sheetSession) {
+  renderSpellBook(ctx, rec);
+  const kPromptRow = 0x16;
+  if (sheetSession.castPhase === CastPromptPhase.Level) {
+    drawCellText(ctx, kPromptRow, 0x02, " Spell Level: ", 255, 255, 255);
+  } else {
+    drawCellText(ctx, kPromptRow, 0x02, ` Spell Level: ${sheetSession.castLevel}`, 255, 255, 255);
+    drawCellText(ctx, kPromptRow, 0x0c, "Number: ", 255, 255, 255);
+  }
+}
+
+/**
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} session
+ * @param {number} partySlot
+ * @param {object|null} manifest
+ * @param {{ combatMode?: boolean, sheetSession?: object }} [opts]
+ */
+export function renderCharacterSheet(ctx, session, partySlot, manifest, opts = {}) {
+  const combatMode = !!opts.combatMode;
+  const sheetSession = opts.sheetSession ?? null;
   const party = session.party ?? [];
   const rec = party[partySlot];
   drawPlayModalBackdrop(ctx);
@@ -274,7 +395,7 @@ export function renderCharacterSheet(ctx, session, partySlot, manifest) {
     const eq = equipped[i];
     let eline;
     if (eq?.id) {
-      const iname = itemLabel(manifest, eq.id).slice(0, 10).padEnd(10, " ");
+      const iname = itemLabel(manifest, eq.id);
       eline = `${i + 1}) ${iname}`;
     } else {
       eline = `${i + 1})`;
@@ -283,7 +404,7 @@ export function renderCharacterSheet(ctx, session, partySlot, manifest) {
 
     const bp = backpack[i];
     if (bp?.id) {
-      const iname = itemLabel(manifest, bp.id).slice(0, 10).padEnd(10, " ");
+      const iname = itemLabel(manifest, bp.id);
       eline = `${PACK_LETTERS[i]}) ${iname}`;
     } else {
       eline = `${PACK_LETTERS[i]})`;
@@ -292,32 +413,143 @@ export function renderCharacterSheet(ctx, session, partySlot, manifest) {
   }
 
   fillCellRect(ctx, L.sheetFooterCol, L.sheetFooterRow1 - 1, L.overlayW - 2, 4);
-  drawCellText(
-    ctx,
-    L.sheetFooterRow1,
-    L.sheetFooterCol,
-    "'Q' Quick Ref  'C' Cast    'D' Drop",
-    180,
-    180,
-    180
-  );
-  drawCellText(
-    ctx,
-    L.sheetFooterRow2,
-    L.sheetFooterCol,
-    "'E' Equip      'G' Gather  'R' Remove",
-    180,
-    180,
-    180
-  );
-  drawCellText(
-    ctx,
-    L.sheetFooterCmdRow3,
-    L.sheetFooterCol,
-    "'S' Share  'T' Trade  'U' Use",
-    180,
-    180,
-    180
-  );
+  /* InGameCharacterSheet.cpp:500 — combat footer is V-only; Cast/Use are exploration. */
+  if (combatMode) {
+    drawCellText(ctx, L.sheetFooterRow1, L.sheetFooterCol, "'V' View spell book", 180, 180, 180);
+  } else {
+    drawCellText(
+      ctx,
+      L.sheetFooterRow1,
+      L.sheetFooterCol,
+      "'Q' Quick Ref  'C' Cast    'D' Drop",
+      180,
+      180,
+      180
+    );
+    drawCellText(
+      ctx,
+      L.sheetFooterRow2,
+      L.sheetFooterCol,
+      "'E' Equip      'G' Gather  'R' Remove",
+      180,
+      180,
+      180
+    );
+    drawCellText(
+      ctx,
+      L.sheetFooterCmdRow3,
+      L.sheetFooterCol,
+      "'S' Share  'T' Trade  'U' Use",
+      180,
+      180,
+      180
+    );
+  }
+
+  if (sheetSession?.statusLine) {
+    drawCellText(ctx, L.sheetFooterRow1 - 1, L.sheetFooterCol, sheetSession.statusLine, 255, 255, 128);
+  }
+
   drawSheetEscFooter(ctx);
+
+  if (sheetSession?.subMode === SheetSubMode.SpellBook) {
+    renderSpellBook(ctx, rec);
+  } else if (sheetSession?.subMode === SheetSubMode.CastPicker) {
+    renderCastPicker(ctx, rec, sheetSession);
+  }
+}
+
+/**
+ * InGameCharacterSheet::handleKey — combat_mode matches C++ (V spellbook;
+ * C/U Cast/Use are exploration-only and break in combat).
+ * @returns {"none"|"close"|"cast"|"use"}
+ */
+export function handleSheetKey(key, sheetSession, session, combatMode) {
+  const party = session.party ?? [];
+  const rec = party[sheetSession.partySlot];
+  if (!rec) return "close";
+
+  const upper = String(key || "").toUpperCase();
+
+  if (sheetSession.subMode === SheetSubMode.UsePick) {
+    sheetSession.subMode = SheetSubMode.Normal;
+    if (upper >= "1" && upper <= "6") {
+      sheetSession.pendingUseSlot = upper.charCodeAt(0) - 0x31;
+      sheetSession.statusLine = "Using...";
+      return "use";
+    }
+    if (upper >= "A" && upper <= "F") {
+      sheetSession.pendingUseSlot = 6 + (upper.charCodeAt(0) - 0x41);
+      sheetSession.statusLine = "Using...";
+      return "use";
+    }
+    sheetSession.pendingUseSlot = -1;
+    sheetSession.statusLine = "";
+    return "none";
+  }
+
+  if (sheetSession.subMode === SheetSubMode.SpellBook) {
+    return "none";
+  }
+
+  if (sheetSession.subMode === SheetSubMode.CastPicker) {
+    if (upper >= "1" && upper <= "9") {
+      const digit = upper.charCodeAt(0) - 0x30;
+      if (sheetSession.castPhase === CastPromptPhase.Level) {
+        const maxSl = rec.spellLevel | 0;
+        if (digit < 1 || digit > maxSl || digit > SPELL_LEVELS) return "none";
+        sheetSession.castLevel = digit;
+        sheetSession.castPhase = CastPromptPhase.Number;
+        return "none";
+      }
+      const flat = spellFlatFromLevelNumber(sheetSession.castLevel, digit);
+      if (flat < 0 || !memberSpellKnown(rec, flat)) return "none";
+      sheetSession.castSpellFlat = flat;
+      sheetSession.subMode = SheetSubMode.Normal;
+      sheetSession.castPhase = CastPromptPhase.Level;
+      const school = spellSchoolForClass(rec.classId);
+      const table = schoolSpellTable(school);
+      sheetSession.statusLine = table?.[flat]?.name ? `Cast ${table[flat].name}.` : "Cast.";
+      return "cast";
+    }
+    return "none";
+  }
+
+  switch (upper) {
+    case "V":
+      if (combatMode) {
+        const school = spellSchoolForClass(rec.classId);
+        if (school < 0) sheetSession.statusLine = "No spell book.";
+        else {
+          sheetSession.subMode = SheetSubMode.SpellBook;
+          sheetSession.statusLine = "";
+        }
+      }
+      break;
+    case "C": {
+      /* Combat mode: break — InGameCharacterSheet.cpp:1059. Combat 'C' is CombatSession. */
+      if (combatMode) break;
+      const school = spellSchoolForClass(rec.classId);
+      if (school < 0 || !(rec.spellLevel | 0)) {
+        sheetSession.statusLine = "No spell book.";
+        break;
+      }
+      sheetSession.subMode = SheetSubMode.CastPicker;
+      sheetSession.castPhase = CastPromptPhase.Level;
+      sheetSession.castLevel = 0;
+      sheetSession.castSpellFlat = -1;
+      sheetSession.statusLine = "";
+      break;
+    }
+    case "U":
+      /* Combat mode: break — InGameCharacterSheet.cpp:1119. */
+      if (combatMode) break;
+      sheetSession.subMode = SheetSubMode.UsePick;
+      sheetSession.pendingUseSlot = -1;
+      sheetSession.statusLine = "Use which? (1-6/A-F)";
+      break;
+    default:
+      break;
+  }
+  return "none";
 }

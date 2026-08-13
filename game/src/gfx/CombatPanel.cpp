@@ -6,6 +6,8 @@
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/gfx/mm2_font8x8.h"
 
+#include <cstring>
+
 #if MM2_HOST_AMIGA
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
 #endif
@@ -41,11 +43,31 @@ void textAt(ScreenCompositor &c, int col, int row, const char *text, uint8_t r =
         return;
     }
 #if MM2_HOST_AMIGA
-    /* drawTextPen skips codepoints < 32; combat check glyph 0x17 needs drawGlyphPen. */
+    /* drawTextPen skips codepoints < 32; combat check glyph 0x17 needs drawGlyphPen.
+     * Roster lines are usually 0x17 + ASCII — stamp the check, then batch the rest. */
     const uint8_t pen = (r >= 200 && g >= 200 && b <= 80) ? kPenYellow : kPenWhite;
     int x = col * 8;
     const int y = row * 8;
-    for (const char *p = text; *p; ++p) {
+    const char *p = text;
+    if (static_cast<unsigned char>(*p) == static_cast<unsigned char>(kCheckGlyph)) {
+        c.drawGlyphPen(x, y, static_cast<uint8_t>(kCheckGlyph), pen);
+        x += 8;
+        ++p;
+    }
+    bool has_ctrl = false;
+    for (const char *q = p; *q; ++q) {
+        if (static_cast<unsigned char>(*q) < 32u) {
+            has_ctrl = true;
+            break;
+        }
+    }
+    if (!has_ctrl) {
+        if (*p) {
+            c.drawTextPen(x, y, p, pen);
+        }
+        return;
+    }
+    for (; *p; ++p) {
         const unsigned uch = static_cast<unsigned char>(*p);
         if (uch >= MM2_FONT8X8_GLYPHS) {
             continue;
@@ -65,6 +87,91 @@ void textAt(ScreenCompositor &c, int col, int row, const char *text, uint8_t r =
         x += 8;
     }
 #endif
+}
+
+/* Long lines wrap onto the band's following rows instead of running off the
+ * right edge (PC + Amiga alike): the round band is cleared rows 0x0F..0x11 by
+ * 0x1119E, so up to 3 wrapped rows fit; pre-round keeps one status row. */
+void textAtWrapped(ScreenCompositor &c, int col, int row, const char *text, int max_cols,
+                   int max_rows, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255)
+{
+    if (!text || max_cols <= 0 || max_rows <= 0) {
+        return;
+    }
+    /* Identify Monster @ 0xB760 (and any other positioned band dump) is one
+     * newline-separated block; keep interior spaces so columns stay put. */
+    if (std::strchr(text, '\n') != nullptr) {
+        int rows_used = 0;
+        const char *p = text;
+        while (*p != '\0' && rows_used < max_rows) {
+            const char *nl = std::strchr(p, '\n');
+            int n = nl ? static_cast<int>(nl - p) : static_cast<int>(std::strlen(p));
+            if (n > max_cols) {
+                n = max_cols;
+            }
+            char line[80];
+            if (n > 0) {
+                std::memcpy(line, p, static_cast<size_t>(n));
+            }
+            line[n] = '\0';
+            textAt(c, col, row + rows_used, line, r, g, b);
+            ++rows_used;
+            if (!nl) {
+                break;
+            }
+            p = nl + 1;
+        }
+        return;
+    }
+    char line[80];
+    int len = 0;
+    int rows_used = 0;
+    const auto flush = [&]() {
+        if (len <= 0) {
+            return;
+        }
+        line[len] = '\0';
+        textAt(c, col, row + rows_used, line, r, g, b);
+        ++rows_used;
+        len = 0;
+    };
+    const char *p = text;
+    while (*p != '\0' && rows_used < max_rows) {
+        while (*p == ' ') {
+            ++p;
+        }
+        const char *w = p;
+        while (*w != '\0' && *w != ' ') {
+            ++w;
+        }
+        const int wlen = static_cast<int>(w - p);
+        if (wlen == 0) {
+            break;
+        }
+        if (len > 0 && len + 1 + wlen <= max_cols) {
+            line[len++] = ' ';
+            for (int i = 0; i < wlen; ++i) {
+                line[len++] = p[i];
+            }
+        } else {
+            flush();
+            const char *q = p;
+            int remain = wlen;
+            while (remain > 0 && rows_used < max_rows) {
+                const int take = remain < max_cols ? remain : max_cols;
+                for (int i = 0; i < take; ++i) {
+                    line[len++] = q[i];
+                }
+                q += take;
+                remain -= take;
+                if (remain > 0) {
+                    flush();
+                }
+            }
+        }
+        p = w;
+    }
+    flush();
 }
 
 /* "+N more" name pluralisation @ 0x12706/0x12E9C: append 's' unless the
@@ -95,16 +202,26 @@ void drawCombatViewportFrame(ScreenCompositor &c)
 
 void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view)
 {
+    /* Victory panel @ 0x124D2 clears (0x10,3)-(0x26,0x0D); row 1 must not keep
+     * the round-loop "D-Delay P-Prot Q-Quick" header over the Victory! chrome. */
+    if (view.show_victory) {
+        fillCellRect(c, kCombatRightCol, 1, kCombatRightWidthCells,
+                     kCombatMonsterOverflowRow - 1 + 1);
+        return;
+    }
+
     if (!view.label_monster_slots) {
         /* Pre-combat encounter list @ 0x12D80..0x12E7E: yellow console_box at
          * cols 0x16..0x26 row 1, height = names + 2 (+3 when > 10), monster
          * names at window col 1 (screen 0x17) rows 2.., overflow "+N more" at
-         * window (4, 0xC) and the pluralised name at window (1, 0xD). */
+         * window (4, 0xC) and the pluralised name at window (1, 0xD).
+         * win_open @ 0x21B9A blacks the full window first — border glyphs are
+         * sparse, so without that wipe the 3D hatch shows through the frame. */
         const bool overflow = view.overflow_more > 0;
         const int box_rows = view.monster_line_count + 2 + (overflow ? 3 : 0);
+        fillCellRect(c, kCombatEncounterBoxCol, 1, kCombatEncounterBoxWidthCells, box_rows);
         c.drawConsoleBox(1, kCombatEncounterBoxCol, kCombatEncounterBoxWidthCells, box_rows, kCombatBoxR,
                          kCombatBoxG, kCombatBoxB);
-        fillCellRect(c, kCombatEncounterBoxCol + 1, 2, kCombatEncounterBoxWidthCells - 2, box_rows - 2);
 
         for (int i = 0; i < view.monster_line_count; ++i) {
             textAt(c, kCombatEncounterBoxCol + 1, 2 + i, view.monster_lines[i].name);
@@ -122,15 +239,23 @@ void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view)
     }
 
     /* Round roster @ 0x129CC / 0x1265E: header (0x10,1), slot i at row i+3,
-     * overflow line at row 0x0D. */
-    fillCellRect(c, kCombatRightCol, kCombatMonsterRow0, kCombatRightWidthCells,
-                 kCombatMonsterOverflowRow - kCombatMonsterRow0 + 1);
+     * overflow line at row 0x0D.
+     * Clear from row 1 (not only row 3): renderCombatBackdrop paints the indoor
+     * ceiling hatch past the narrow hood into cols 0x10+, and
+     * maskCombatBackdropBleed only blacks the divider column — without this
+     * fill, "D-Delay P-" sits on hatch and reads as a truncated "Prot Q-Quick". */
+    fillCellRect(c, kCombatRightCol, 1, kCombatRightWidthCells,
+                 kCombatMonsterOverflowRow - 1 + 1);
 
     textAt(c, kCombatRightCol, 1, "D-Delay P-Prot Q-Quick");
 
     for (int i = 0; i < view.monster_line_count && i < 10; ++i) {
         const CombatMonsterLine &line = view.monster_lines[i];
         const int row = kCombatMonsterRow0 + i;
+        if (!line.occupied) {
+            /* 0x129CC: empty/dead battle slot → clear row (fill above already did). */
+            continue;
+        }
 
         char buf[48];
         char field[24];
@@ -154,7 +279,13 @@ void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view)
 
         std::snprintf(buf, sizeof(buf), "%c%c) %s", line.show_checkmark ? kCheckGlyph : ' ',
                       line.letter ? line.letter : static_cast<char>('A' + i), field);
-        textAt(c, kCombatRightCol, row, buf);
+        /* 0x1061E: pen #$1 while 0x1265E redraws the acting slot, then pen 0. */
+        if (line.highlighted) {
+            c.fillRect(kCombatRightCol * 8, row * 8, kCombatRightWidthCells * 8, 8, 255, 255, 0, 255);
+            textAt(c, kCombatRightCol, row, buf, 0, 0, 0);
+        } else {
+            textAt(c, kCombatRightCol, row, buf);
+        }
     }
 
     if (view.overflow_more > 0) {
@@ -169,26 +300,78 @@ void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view)
 
 void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
 {
-    /* 0x1119E: clear cols 1..0x26 rows 0x0F..0x11, cursor (1, 0x0F). */
-    fillCellRect(c, 1, kMessageRow, 0x26, 3);
+    /* Pre-combat (encounter entry @ 0x12C6E) still uses the exploration hood;
+     * Options/Bribe/surprise strings print via -$7EC0 → 0x54F2 at row $11.
+     * Round-loop messages use 0x1119E at row $0F (hood bottom is then $0E). */
+    if (view.show_victory) {
+        /* 0x124D2 panel owns the chrome; leave the message band blank. */
+        fillCellRect(c, 1, kMessageRow, 0x26, 3);
+        return;
+    }
+    const bool round_layout = view.label_monster_slots;
+    const int msg_row = round_layout ? kMessageRow : 0x11;
+
+    if (round_layout) {
+        /* 0x1119E: clear cols 1..0x26 rows 0x0F..0x11, cursor (1, 0x0F). */
+        fillCellRect(c, 1, kMessageRow, 0x26, 3);
+    } else {
+        /* 0x54F2: clear the exploration status/message line (row $11). */
+        fillCellRect(c, 1, 0x11, 0x26, 1);
+    }
 
     if (view.show_party_options) {
-        /* string @ 0x13222, printed via -$7EC0 (0x12F74). */
-        textAt(c, 1, kMessageRow, "Options: A-Attack B-Bribe H-Hide R-Run");
+        /* string @ 0x13222, printed via -$7EC0 (0x12F74) → row $11. */
+        textAt(c, 1, msg_row, "Options: A-Attack B-Bribe H-Hide R-Run");
         return;
     }
 
-    /* Combat cast @ 0x11A90 → 0x79EE: prompts on message band only (no LAB_6622 grid).
-       Combat mode uses prompt row $0F (0x7A04); exploration uses $15. */
+    if (view.show_bribe_kind) {
+        /* string @ 0x13249 (0x12FBC) via -$7EC0. */
+        textAt(c, 1, msg_row, "Bribe with:  1-Food  2-Gold  3-Gems");
+        return;
+    }
+    if (view.show_bribe_amount) {
+        /* string @ 0x1326D (0x12FF6); digits via -$7F8C → 0x3EE0. */
+        textAt(c, 1, msg_row, "How much?");
+        return;
+    }
+
+    /* Combat cast @ 0x11A90 → 0x79C6/0x79EE: message band only (no LAB_6622).
+     * Combat row $0F (0x79DC); exploration row $15.
+     * Level line @ (2,$0F) string 0x7BA2 "Cast Spell Level: "; digit echoed;
+     * Number @ (0x0C, row+1) string 0x7BB5 — must not share the level row. */
     if (view.show_cast_level) {
-        textAt(c, 2, kMessageRow, " Spell Level: ");
+        textAt(c, 2, msg_row, "Cast Spell Level: ");
         return;
     }
     if (view.show_cast_number) {
         char buf[32];
-        std::snprintf(buf, sizeof(buf), " Spell Level: %d", view.cast_level);
-        textAt(c, 2, kMessageRow, buf);
-        textAt(c, 0x0C, kMessageRow, "Number: ");
+        std::snprintf(buf, sizeof(buf), "Cast Spell Level: %d", view.cast_level);
+        textAt(c, 2, msg_row, buf);
+        textAt(c, 0x0C, msg_row + 1, "Number: ");
+        return;
+    }
+    if (view.show_cast_target) {
+        /* Cast: 0xD52E family. Fight/Shoot: status already "Fight/Shoot which (A-x)?". */
+        if (view.message[0] != '\0') {
+            textAtWrapped(c, 1, msg_row, view.message, 0x26, round_layout ? 3 : 1);
+        } else {
+            textAt(c, 1, msg_row, "Which monster?");
+        }
+        return;
+    }
+    if (view.show_party_pick) {
+        /* 0xD2EA patches "On whom (1-N)?" — message already in view.message. */
+        if (view.message[0] != '\0') {
+            textAtWrapped(c, 1, msg_row, view.message, 0x26, round_layout ? 3 : 1);
+        }
+        return;
+    }
+    if (view.show_item_pick) {
+        /* 0xB56E / Use pick — prompt already in view.message. */
+        if (view.message[0] != '\0') {
+            textAtWrapped(c, 1, msg_row, view.message, 0x26, round_layout ? 3 : 1);
+        }
         return;
     }
 
@@ -225,8 +408,68 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
     }
 
     if (view.message[0] != '\0') {
-        textAt(c, 1, kMessageRow, view.message);
+        /* Surprise strings @ 0x12F30/0x12F44 also go through -$7EC0 → row $11. */
+        textAtWrapped(c, 1, msg_row, view.message, 0x26, round_layout ? 3 : 1);
     }
+}
+
+void drawCombatVictoryPanel(ScreenCompositor &c, const CombatPanelView &view)
+{
+    /* combat_victory_rewards presentation @ 0x124D2..0x125F8:
+     *   win_clear_cells(0x10,3,0x26,0x0D) — screen cells (16,3)-(38,13)
+     *   A-pen ← -$7A4D (20, light blue)
+     *   glyph 5 × $17 at rows 4 and 0x0C starting col 0x10 (blue H-rules)
+     *   A-pen ← -$7A52 (1, white); strings @ 0x12610.. + XP share from -$6FC6 */
+    if (!view.show_victory) {
+        return;
+    }
+
+    constexpr int kX1 = 0x10;
+    constexpr int kY1 = 3;
+    constexpr int kX2 = 0x26;
+    constexpr int kY2 = 0x0D;
+    constexpr int kRuleLen = 0x17; /* 0x12516 / 0x1253E loop bound */
+    constexpr uint8_t kGlyphHSeg = 0x05;
+    /* Play-palette pen 20 ≈ light blue (A4-$7A4D / OutdoorView3D star_color). */
+    using namespace play_layout;
+
+    fillCellRect(c, kX1, kY1, kX2 - kX1 + 1, kY2 - kY1 + 1);
+
+    for (int i = 0; i < kRuleLen; ++i) {
+        c.drawGlyph((kX1 + i) * 8, 4 * 8, kGlyphHSeg, kUiBlueBorderR, kUiBlueBorderG, kUiBlueBorderB);
+        c.drawGlyph((kX1 + i) * 8, 0x0C * 8, kGlyphHSeg, kUiBlueBorderR, kUiBlueBorderG, kUiBlueBorderB);
+    }
+
+    textAt(c, 0x18, 5, "Victory!");
+    textAt(c, kX1, 7, "Your party has won its");
+    /* 0x12584 cursor (0x16,8) then 0x1215A: number + st/nd/rd/th + " battle." */
+    {
+        const unsigned n = view.victory_battles_won;
+        const unsigned rem = n % 10u;
+        const char *suf = "th";
+        if (rem == 1u && n != 11u) {
+            suf = "st";
+        } else if (rem == 2u && n != 12u) {
+            suf = "nd";
+        } else if (rem == 3u && n != 13u) {
+            suf = "rd";
+        }
+        char battle_line[40];
+        std::snprintf(battle_line, sizeof(battle_line), "%u%s battle.", n, suf);
+        textAt(c, 0x16, 8, battle_line);
+    }
+    textAt(c, kX1, 0x0A, "Each survivor receives");
+
+    char xp_line[48];
+    /* 0x125BC..0x125F6: number + " experience p" + ("ts" if share>=100000 else "oints"). */
+    if (view.victory_xp_share >= 100000u) {
+        std::snprintf(xp_line, sizeof(xp_line), "%lu experience pts",
+                      static_cast<unsigned long>(view.victory_xp_share));
+    } else {
+        std::snprintf(xp_line, sizeof(xp_line), "%lu experience points",
+                      static_cast<unsigned long>(view.victory_xp_share));
+    }
+    textAt(c, kX1, 0x0B, xp_line);
 }
 
 }  // namespace mm2::gfx

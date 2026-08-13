@@ -153,6 +153,11 @@ static inline uint8_t mm2_attrib_door_trap_byte(const Mm2AttribRecord *r)
 /* Unpack a packed (Y<<4)|X coordinate byte (entry 0x0E / transition 0x16). */
 void mm2_attrib_unpack_coord(uint8_t packed, int *x, int *y);
 
+static inline uint8_t mm2_attrib_entry_coord(const Mm2AttribRecord *r)
+{
+    return r ? r->raw[MM2_ATTRIB_OFF_ENTRY_COORD] : 0;
+}
+
 /* Roof bitmap: tile in 0..255. */
 int mm2_attrib_roof_bit(const Mm2AttribRecord *r, int tile);
 void mm2_attrib_set_roof_bit(Mm2AttribRecord *r, int tile, int value);

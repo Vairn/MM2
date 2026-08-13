@@ -38,18 +38,24 @@ From `0x11866` / `0x1175C` — bar strings at `A4-$6F9C`:
 
 | Key | Action |
 |-----|--------|
-| A | Attack (single target) |
-| F | Fight (auto melee) |
-| S | Shoot (ranged / bow) |
+| A | Attack first target (no picker; `0x1162C` arg 0) |
+| F | Fight — pick target if >1 live (`0x1162C` arg `$FF`) |
+| S | Shoot — pick target if >1 live (`0x11610` arg `$FF`) |
+| Ctrl-A | Quick: Shoot if able, else Attack (`0x11A2A`) |
 | C | Cast spell → jump table `0xD000` |
-| U | Use item → `0x133EC` |
-| B | Block |
-| R | Run / retreat |
-| E | Exchange |
-| V | View character |
+| U / P | Use item → `0x133EC` |
+| B | **End turn only — no Block** (was mislabeled "Block") |
+| D | **Block** → `0x11B0A` |
+| R | Run / retreat → `0x116B0`/`0x11B9A` |
+| E | Exchange → `0x11B1A`/`0x20FF2` |
+| V / Q | View character |
+
+See [Combat System](17-combat-system.md) for the corrected `B`/`D`/`E`/`R` dispatch trace (2026-07-17).
 
 Capability flags (`-$5E36` melee, `-$5E35` shoot, `-$5E34` cast) depend on rank,
-class, silence, and SP.
+class, silence, and SP. When a party member falls through `0x4AAA`, the KO follow-up
+(`0xFD8C`/`0xFE00`) increments the front-rank cutoff `-$5E4D` when a back-rank
+member remains, allowing the next slot to enter melee range.
 
 ## Monster behaviour (summary)
 
@@ -59,7 +65,7 @@ Unpack each slot with **`0x4C8E`** from `monsters.dat`, then AI at **`0x106A0`**
 - **Group verb** — Pabil low 5 → table `A4-$6E56` @ `0x10002` (e.g. “frenzies”)
 - **Single-target status** — Sabil low 5 → victim table @ `0xFEEA`
 - **Multiply** — Oabil bit 7 → `0x100B0`
-- **Adds friends** — Oabil low nibble → `0x11F0A`
+- **Adds friends (mid-fight)** ? Oabil low nibble ? `0x10082`; the initial random encounter group fill at `0x11F0A` is a separate path.
 
 ## Gallery & catalogs
 
@@ -69,4 +75,4 @@ Unpack each slot with **`0x4C8E`** from `monsters.dat`, then AI at **`0x106A0`**
 
 ## Still open
 
-See [Combat System](17-combat-system.md) § Open items — to-hit math, HP/XP tables, per-spell handlers.
+HP/XP decode tables are **resolved** (see [`16-monster-ability-format.md`](16-monster-ability-format.md) and the unpacker at `0x4C8E`) — drop that from "open". Remaining open items: to-hit math and per-spell handlers; see [Combat System](17-combat-system.md).

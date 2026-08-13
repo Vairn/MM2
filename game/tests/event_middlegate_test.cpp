@@ -31,6 +31,7 @@
 #include "mm2_party_launch.h"
 #include "mm2_gamestate.h"
 #include "mm2_map_codec.h"
+#include "mm2_town_tables.h"
 
 namespace {
 
@@ -264,7 +265,8 @@ void setupMember(Mm2RosterFile &roster, int idx, uint8_t level, uint32_t gold)
     rec.hp_current = 5;         /* current HP (record+0x74) */
     rec.might_base = 20;        /* record+0x6B */
     rec.class_id = 0;           /* Knight (XP Group A) — record+0x0F */
-    rec.endurance_base = 14;    /* attr bonus 1 (record+0x73) */
+    rec.endurance_base = 14;    /* +$73 — tip RNG / specialty sick */
+    rec.endurance_current = 14; /* +$27 — training HP -$7F56 @ 0x2042E */
     rec.experience = 0;         /* record+0x62 (callers set for level-up tests) */
 }
 
@@ -317,9 +319,108 @@ void testTownServiceTransactions(int &fails)
         expect(r.cost == 50u, "training fee = level*index*50 = 1*1*50 = 50", fails);
         expect(rec.gold == 9950u, "training deducts the fee from char gold", fails);
         expect(r.leveled && rec.level == 2, "Knight advanced from L1 to L2", fails);
-        /* Knight HP/level = 12 + END(14)->bonus 1 = 13 added to permanent max. */
-        expect(r.hp_gain == 13 && rec.hp_aux == 53, "level-up adds class HP + END bonus", fails);
-        expect(rec.hp_current == rec.hp_aux, "level-up heals to new max", fails);
+        /* Middlegate: (12*$64EE[0]=1)/$64E4[0]=2 → 6 + -$7F56(14)=1 → 7.
+         * Adds to +$60/+ $74/+ $5E (not replace-to-max). */
+        expect(r.hp_gain == 7 && rec.hp_aux == 47, "level-up HP @ 0x20390 Middlegate Knight", fails);
+        expect(rec.hp_current == 12 && rec.hp_max == 17, "level-up adds gain to current/work max", fails);
+    }
+
+    /* ---- Training spell leaf @ 0x20064: Sorcerer L1→L2 gains SL1, auto-spells, SP. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 1, 10000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.class_id = 4; /* Sorcerer — XP Group B: L2 needs 2000 */
+        rec.experience = 2500;
+        rec.intelligence_current = 15;
+        rec.spell_level = 0;
+        rec.sp_max = 0;
+        rec.sp_current = 0;
+        const TownSvcTrainResult r = townSvcTrainLevelUp(rec, 0);
+        expect(r.leveled && rec.level == 2, "Sorcerer L1→L2 leveled", fails);
+        expect(r.gained_spells && rec.spell_level == 1, "Sorcerer gains spell level 1 at L2", fails);
+        /* Auto spells SL1: flats 1,3,4,5 → bits in $51/$51. */
+        expect(mm2::gameplay::spellKnownInBook(rec, 1) && mm2::gameplay::spellKnownInBook(rec, 3) &&
+                   mm2::gameplay::spellKnownInBook(rec, 4) && mm2::gameplay::spellKnownInBook(rec, 5),
+               "Sorcerer auto-learns Detect Magic/Flame Arrow/Light/Location", fails);
+        /* -$7F56(15)+3 = 1+3 = 4; SP = 4 * SL1 = 4. */
+        expect(rec.sp_max == 4 && rec.sp_current == 4, "Sorcerer SP = (bonus+3)*spell_level", fails);
+        expect(r.sp_gain == 4, "train result reports SP gain", fails);
+    }
+
+    /* ---- Cleric L2→L3 gains SL2 + "and new spells"; L3→L4 does not. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 2, 10000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.class_id = 3;
+        rec.experience = 4000; /* Group A L3 = 3000 */
+        rec.personality_current = 15;
+        rec.spell_level = 1;
+        rec.unknown_1a_20[6] = 2;
+        rec.unknown_22 = static_cast<uint16_t>(1u << 8);
+        rec.sp_max = 4;
+        rec.sp_current = 4;
+        const TownSvcTrainResult r = townSvcTrainLevelUp(rec, 0);
+        expect(r.gained_spells && rec.spell_level == 2, "Cleric L2→L3 gains SL2", fails);
+        expect(mm2::gameplay::spellKnownInBook(rec, 7) && mm2::gameplay::spellKnownInBook(rec, 10) &&
+                   mm2::gameplay::spellKnownInBook(rec, 12),
+               "Cleric SL2 auto-spells (flats 7/10/12)", fails);
+        expect(rec.sp_max == 8, "Cleric SP recalc to (bonus+3)*2", fails);
+
+        rec.experience = 7000; /* L4 threshold 6000 */
+        const TownSvcTrainResult r2 = townSvcTrainLevelUp(rec, 0);
+        expect(r2.leveled && rec.level == 4, "Cleric L3→L4 leveled", fails);
+        expect(!r2.gained_spells && rec.spell_level == 2, "Cleric L3→L4 no new spell level", fails);
+        expect(rec.sp_max == 8, "Cleric SP unchanged without spell-level gain", fails);
+    }
+
+    /* ---- SL jump 1→3 (stale +$20 / skipped trains) still grants SL2 autos. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 4, 20000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.class_id = 4;
+        rec.experience = 20000; /* Group B L5 = 16000 */
+        rec.intelligence_current = 15;
+        rec.spell_level = 1; /* skipped the L3 SL2 grant */
+        rec.unknown_1a_20[6] = 4;
+        rec.unknown_22 = static_cast<uint16_t>(1u << 8);
+        rec.sp_max = 4;
+        rec.sp_current = 4;
+        mm2::gameplay::spellLearnInBook(rec, 1);
+        mm2::gameplay::spellLearnInBook(rec, 3);
+        mm2::gameplay::spellLearnInBook(rec, 4);
+        mm2::gameplay::spellLearnInBook(rec, 5);
+        const TownSvcTrainResult r = townSvcTrainLevelUp(rec, 0);
+        expect(r.gained_spells && rec.spell_level == 3, "Sorcerer L4→L5 jumps SL1→SL3", fails);
+        expect(mm2::gameplay::spellKnownInBook(rec, 8) && mm2::gameplay::spellKnownInBook(rec, 10) &&
+                   mm2::gameplay::spellKnownInBook(rec, 11),
+               "SL jump still grants SL2 Electric Arrow/Jump/Levitate", fails);
+        expect(mm2::gameplay::spellKnownInBook(rec, 15) && mm2::gameplay::spellKnownInBook(rec, 16) &&
+                   mm2::gameplay::spellKnownInBook(rec, 18),
+               "SL jump still grants SL3 Fly/Invisibility/Web", fails);
+    }
+
+    /* ---- Launch backfill restores SL2 autos on a Cassandra-like book. ---- */
+    {
+        Mm2RosterRecord cass{};
+        mm2_roster_clear_record(&cass);
+        cass.class_id = 4;
+        cass.spell_level = 3;
+        mm2::gameplay::spellLearnInBook(cass, 1);
+        mm2::gameplay::spellLearnInBook(cass, 3);
+        mm2::gameplay::spellLearnInBook(cass, 4);
+        mm2::gameplay::spellLearnInBook(cass, 5);
+        mm2::gameplay::spellLearnInBook(cass, 15);
+        mm2::gameplay::spellLearnInBook(cass, 16);
+        mm2::gameplay::spellLearnInBook(cass, 18);
+        mm2_train_backfill_auto_spells(&cass);
+        expect(mm2::gameplay::spellKnownInBook(cass, 8) && mm2::gameplay::spellKnownInBook(cass, 10) &&
+                   mm2::gameplay::spellKnownInBook(cass, 11),
+               "backfill adds Cassandra's missing SL2 Electric Arrow/Jump/Levitate", fails);
+        expect(mm2::gameplay::spellKnownInBook(cass, 1) && mm2::gameplay::spellKnownInBook(cass, 15),
+               "backfill keeps existing SL1/SL3 bits", fails);
     }
 
     /* ---- Training XP gate: under threshold -> not eligible AND no charge. ---- */
@@ -371,16 +472,16 @@ void testTownServiceTransactions(int &fails)
         expect(rec.might_base == 254, "stat unchanged on overflow", fails);
     }
 
-    /* ---- Temple donation (doc 28 §5.2): gold + quest bit into A4-$799E. ---- */
+    /* ---- Temple donation (0x1D796): A4-$6714×100 + quest bit into A4-$799E. ---- */
     {
         uint8_t a4img[static_cast<size_t>(MM2_A4_ANCHOR) + 0x100u]{};
         uint8_t *a4 = mm2_gs_base_from_image(a4img);
         Mm2RosterFile roster{};
         setupMember(roster, 0, 5, 10000);
         Mm2RosterRecord &rec = roster.records[0];
-        TownSvcDonateResult r = townSvcTempleDonate(a4, rec, 0 /*Middlegate cost 20 bit 0x01*/);
-        expect(r.paid && r.cost == 20u, "Middlegate donation costs 20", fails);
-        expect(rec.gold == 9980u, "donation deducts 20 from char gold", fails);
+        TownSvcDonateResult r = townSvcTempleDonate(a4, rec, 0 /*Middlegate $6714*100=100*/);
+        expect(r.paid && r.cost == 100u, "Middlegate donation costs 100", fails);
+        expect(rec.gold == 9900u, "donation deducts 100 from char gold", fails);
         expect(mm2_gs_u8(a4, MM2_GS_TEMPLE_DONATION) == 0x01, "donation sets Middlegate quest bit", fails);
         expect(!r.all_temples_donated, "one donation is not all five", fails);
         /* Donate at the other four towns -> bitfield reaches 0x1F. */
@@ -388,8 +489,31 @@ void testTownServiceTransactions(int &fails)
         townSvcTempleDonate(a4, rec, 2);
         townSvcTempleDonate(a4, rec, 3);
         r = townSvcTempleDonate(a4, rec, 4);
-        expect(mm2_gs_u8(a4, MM2_GS_TEMPLE_DONATION) == 0x1F, "all five donation bits set", fails);
         expect(r.all_temples_donated, "5th donation reports all temples donated", fails);
+        /* 0x1D7E8: clr -$799E; sentinel $FE; item 0xD4 in found buffer. */
+        expect(mm2_gs_u8(a4, MM2_GS_TEMPLE_DONATION) == 0,
+               "0x1F payoff clears donation bitfield", fails);
+        expect(mm2_gs_u8(a4, MM2_GS_FOUND_SENTINEL) == MM2_GS_FOUND_SENTINEL_PENDING,
+               "0x1F payoff sets found sentinel $FE", fails);
+        expect(mm2_gs_u8(a4, MM2_GS_FOUND_ITEM_ID) == 0xD4,
+               "0x1F payoff queues Fe Farthing 0xD4", fails);
+        expect(r.reward_queued, "0x1F payoff sets reward_queued", fails);
+    }
+
+    /* ---- Temple B alignment restore (0x1D758): +$0D → +$6A. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 5, 10000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.alignment_current = 1;
+        rec.alignment_base = 0;
+        const uint32_t cost = townSvcTempleAlignCost(rec, 0); /* 100*5*1 = 500 */
+        expect(cost == 500u, "align cost Middlegate L5 mismatched = 500", fails);
+        const TownSvcAlignResult r = townSvcRestoreAlignment(rec, cost);
+        expect(r.paid && r.restored, "align restore paid+wrote", fails);
+        expect(rec.alignment_base == 1, "align base copied from current", fails);
+        expect(rec.gold == 9500u, "align deducts 500", fails);
+        expect(townSvcTempleAlignCost(rec, 0) == 0u, "align cost 0 when matched", fails);
     }
 
     /* ---- Menu driver with scripted UI: heal member 0 then exit. ---- */
@@ -498,6 +622,7 @@ void testMageGuildAndTemple(int &fails)
     using mm2::gameplay::kClericSpells;
     using mm2::gameplay::kSorcererSpells;
     using mm2::gameplay::spellKnownInBook;
+    using mm2::gameplay::spellLearnInBook;
 
     /* ---- Static stock + membership-mask data sanity (doc 28, doc 36). ---- */
     {
@@ -542,7 +667,7 @@ void testMageGuildAndTemple(int &fails)
 
         const TownSvcSpellResult again = townSvcBuySpell(rec, 0, 10);
         expect(again.learned && rec.gold == 980u,
-               "re-buying an already-known spell is idempotent, not rejected (no ASM check found)",
+               "buy leaf re-buy of known spell is idempotent; menu offer gate zeros cost first",
                fails);
 
         const TownSvcSpellResult broke = townSvcBuySpell(rec, 2, 1000000);
@@ -558,6 +683,142 @@ void testMageGuildAndTemple(int &fails)
         const TownSvcSpellResult afflicted = townSvcBuySpell(rec, 6, 50);
         expect(!afflicted.learned && afflicted.reject == TownSvcSpellReject::Condition,
                "afflicted character cannot buy spells", fails);
+    }
+
+    /* ---- Menu offer gold gate (guild 0x1D97A / temple 0x1DAC6): class, SL,
+     * already-known. Buy leaf itself stays idempotent on already-known. ---- */
+    {
+        Mm2SpellShopSlot temple[MM2_TEMPLE_SPELL_SLOTS];
+        expect(mm2_temple_spell_stock(0, temple) != 0, "offer-gate uses Middlegate temple stock",
+               fails);
+        Mm2SpellShopSlot guild[MM2_MAGE_GUILD_SLOTS];
+        expect(mm2_mage_guild_stock(0, guild) != 0, "offer-gate uses Middlegate guild stock", fails);
+
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 5, 10000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.condition = 0;
+        rec.class_id = 0; /* Knight — no school */
+        rec.spell_level = 9;
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == 0u,
+               "Knight cannot buy temple cleric spells", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == 0u,
+               "Knight cannot buy guild sorcerer spells", fails);
+
+        rec.class_id = 3; /* Cleric */
+        rec.spell_level = 0;
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == 0u,
+               "Cleric SL0 cannot buy C1 spells", fails);
+        rec.spell_level = 1;
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == temple[0].gold,
+               "Cleric SL1 can buy Apparition", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == 0u,
+               "Cleric cannot buy guild sorcerer spells", fails);
+
+        spellLearnInBook(rec, temple[0].spell_index);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == 0u,
+               "already-known temple spell offers 0 gold", fails);
+
+        rec.class_id = 4; /* Sorcerer */
+        rec.spell_level = 1;
+        std::memset(rec.spells, 0, sizeof(rec.spells));
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == guild[0].gold,
+               "Sorcerer SL1 can buy Awaken", fails);
+        spellLearnInBook(rec, guild[0].spell_index);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == 0u,
+               "already-known guild spell offers 0 gold", fails);
+
+        /* Paladin (class 1) / Archer (class 2) share schools with Cleric / Sorcerer. */
+        rec.class_id = 1; /* Paladin */
+        rec.spell_level = 1;
+        std::memset(rec.spells, 0, sizeof(rec.spells));
+        expect(mm2::gameplay::spellSchoolForClass(1) == mm2::gameplay::SpellSchool::Cleric,
+               "Paladin maps to Cleric school", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == temple[0].gold,
+               "Paladin SL1 can buy temple Cleric spells", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == 0u,
+               "Paladin cannot buy guild Sorcerer spells", fails);
+
+        rec.class_id = 2; /* Archer */
+        expect(mm2::gameplay::spellSchoolForClass(2) == mm2::gameplay::SpellSchool::Sorcerer,
+               "Archer maps to Sorcerer school", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Sorcerer, guild[0].spell_index,
+                                     guild[0].gold) == guild[0].gold,
+               "Archer SL1 can buy guild Sorcerer spells", fails);
+        expect(townSvcSpellOfferGold(rec, mm2::gameplay::SpellSchool::Cleric, temple[0].spell_index,
+                                     temple[0].gold) == 0u,
+               "Archer cannot buy temple Cleric spells", fails);
+
+        /* Remaining XP to next level (threshold - current), not absolute. */
+        expect(mm2_class_xp_for_level(0, 2) == 1500u, "Knight L2 threshold still 1500", fails);
+        const uint32_t need = mm2_class_xp_for_level(0, 2);
+        const uint32_t have = 500u;
+        expect(need - have == 1000u, "training remaining XP example: 1500-500 = 1000", fails);
+    }
+
+    /* ---- Hireling town-service rules (roster index >= $18). ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 5, 10000);   /* hero */
+        setupMember(roster, 24, 5, 10);     /* hireling slot A, almost broke */
+        Mm2RosterRecord &hero = roster.records[0];
+        Mm2RosterRecord &hire = roster.records[24];
+        hire.condition = 0x10;
+        hire.hp_aux = 40;
+        hire.hp_max = 20;
+        hire.hp_current = 5;
+        hire.alignment_current = 50;
+        hire.alignment_base = 0;
+        hire.experience = mm2_class_xp_for_level(hire.class_id, 6);
+        hire.level = 5;
+
+        expect(townSvcIsHirelingRosterIndex(24), "roster 24 is hireling", fails);
+        expect(!townSvcIsHirelingRosterIndex(0), "roster 0 is not hireling", fails);
+        expect(townSvcTrainingCost(5, 0, 24) == 0u, "hireling training fee is 0 (0x2073A)", fails);
+        expect(townSvcTrainingCost(5, 0, 0) == 250u, "hero Middlegate L5 fee still 250", fails);
+
+        const uint32_t gold_before = hire.gold;
+        const TownSvcTrainResult tr = townSvcTrainLevelUp(hire, 0, nullptr, 24);
+        expect(tr.eligible && tr.paid && tr.leveled, "hireling can train when XP met", fails);
+        expect(tr.cost == 0u, "hireling train charged 0 gold", fails);
+        expect(hire.gold == gold_before, "hireling gold untouched by training", fails);
+        expect(hire.level == 6, "hireling leveled to 6", fails);
+
+        const TownSvcHirelingTempleResult hr = townSvcHirelingTempleAutoHeal(hire);
+        expect(hr.condition_cleared && hr.hp_restored && hr.align_restored,
+               "hireling temple auto-heal clears cond + HP + align", fails);
+        expect(hire.condition == 0 && hire.hp_max == hire.hp_aux &&
+                   hire.alignment_base == hire.alignment_current,
+               "hireling temple auto-heal mutated fields", fails);
+        expect(hire.gold == gold_before, "hireling temple auto-heal is free", fails);
+
+        int members[2] = {0, 24};
+        Mm2PartyLaunch launch{};
+        mm2_party_launch_build(&launch, 1, members, 2);
+        TownServiceContext ctx;
+        ctx.roster = &roster;
+        ctx.launch = &launch;
+        ctx.map_id = 0;
+        expect(townSvcFirstNonHirelingSlot(ctx) == 0, "first non-hireling is hero slot 0", fails);
+        expect(townSvcPartySlotIsHireling(ctx, 1), "party slot 1 is hireling", fails);
+        expect(!townSvcPartySlotIsHireling(ctx, 0), "party slot 0 is hero", fails);
+
+        /* Paid temple heal still charges heroes. */
+        hero.condition = 0x10;
+        hero.hp_aux = 40;
+        hero.hp_max = 20;
+        const uint32_t hero_cost = townSvcTempleHealCost(hero, 0);
+        expect(hero_cost > 0, "afflicted hero has nonzero temple heal cost", fails);
     }
 
     /* ---- Menu driver: whole-party gate denies entry when no one qualifies. ---- */
@@ -583,6 +844,8 @@ void testMageGuildAndTemple(int &fails)
         Mm2RosterFile roster{};
         setupMember(roster, 0, 5, 10000);
         roster.records[0].condition = 0;
+        roster.records[0].class_id = 4; /* Sorcerer — guild school */
+        roster.records[0].spell_level = 1;
         roster.records[0].class_quest_guild_mask = static_cast<uint8_t>(mm2_mage_guild_member_mask(0));
         int member_idx[1] = {0};
         Mm2PartyLaunch launch{};
@@ -606,6 +869,8 @@ void testMageGuildAndTemple(int &fails)
         Mm2RosterFile roster{};
         setupMember(roster, 0, 5, 10000);
         roster.records[0].condition = 0;
+        roster.records[0].class_id = 3; /* Cleric — temple school */
+        roster.records[0].spell_level = 1;
         int member_idx[1] = {0};
         Mm2PartyLaunch launch{};
         mm2_party_launch_build(&launch, 1, member_idx, 1);
@@ -651,7 +916,7 @@ void testSmithTransactions(int &fails, const Mm2ItemsFile &items)
                "weapon meta 3 -> base*2 + 2000", fails);
         expect(mm2_smith_sell_price(100u) == 50u, "sell price is half buy-style price", fails);
         expect(mm2_smith_identify_cost(0) == 10u, "identify plain item costs 10 gp", fails);
-        expect(mm2_smith_identify_cost(3) == 150u, "identify +3 uses midpoint of 1..300", fails);
+        expect(mm2_smith_identify_cost(3) == 300u, "identify +3 costs meta*100", fails);
     }
 
     /* ---- Buy: deduct items.dat gold, add item to first empty backpack slot. ---- */
@@ -1059,6 +1324,65 @@ void testPlayTownServiceUi(int &fails, const Mm2ItemsFile &items)
                "play tavern A tops all members to 40 food", fails);
         expect(ui.active(), "play tavern stays on top menu after feeding frenzy", fails);
     }
+
+    /* ---- Temple hireling digit-select: free leaf 0x1E116 — heal text, no A–F menu. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 5, 10000);
+        setupMember(roster, 24, 5, 10);
+        Mm2RosterRecord &hire = roster.records[24];
+        hire.condition = 0x10;
+        hire.hp_aux = 40;
+        hire.hp_max = 20;
+        hire.hp_current = 5;
+        hire.alignment_current = 50;
+        hire.alignment_base = 0;
+        int members[2] = {0, 24};
+        Mm2PartyLaunch launch{};
+        mm2_party_launch_build(&launch, 1, members, 2);
+        uint8_t a4img[static_cast<size_t>(MM2_A4_ANCHOR) + 0x100u]{};
+
+        TownServiceContext ctx;
+        ctx.roster = &roster;
+        ctx.launch = &launch;
+        ctx.items = &items;
+        ctx.a4 = mm2_gs_base_from_image(a4img);
+        ctx.map_id = 0;
+
+        mm2::ui::PlayTownServiceUi ui;
+        townSvcRunTemple(ui, ctx);
+        ui.begin();
+        expect(!ui.templeHirelingHealView(), "temple opens on hero paid menu, not hireling leaf",
+               fails);
+
+        ui.handleKey('2', false); /* party slot 1 = roster 24 hireling */
+        expect(ui.templeHirelingHealView(), "hireling digit enters 0x1E116 heal view", fails);
+        expect(std::strcmp(ui.templeHirelingHealMessage(), "has been healed.") == 0,
+               "hireling heal view shows centered 'has been healed.' text", fails);
+        expect(hire.condition == 0 && hire.hp_max == hire.hp_aux && hire.gold == 10u,
+               "hireling auto-heal is free and clears cond/HP", fails);
+
+        const uint32_t hire_gold = hire.gold;
+        const uint32_t hero_gold = roster.records[0].gold;
+        ui.handleKey('A', false); /* paid menu keys must be ignored on hireling leaf */
+        expect(hire.gold == hire_gold && roster.records[0].gold == hero_gold,
+               "hireling temple view ignores paid A–F keys", fails);
+        expect(ui.templeHirelingHealView(), "hireling heal view stays after ignored A", fails);
+
+        ui.render(comp);
+
+        ui.handleKey('1', false); /* back to hero → paid menu 0x1DD8E */
+        expect(!ui.templeHirelingHealView(), "hero digit returns to paid temple menu", fails);
+        expect(ui.active(), "temple stays open after returning to hero", fails);
+
+        ui.handleKey('2', false);
+        expect(ui.templeHirelingHealView(), "reselecting hireling re-enters heal view", fails);
+        expect(std::strcmp(ui.templeHirelingHealMessage(), "  is healthy.") == 0,
+               "already-healed hireling shows '  is healthy.'", fails);
+
+        ui.handleKey(0, true); /* Esc closes temple (0x1E224 → outer 0x1B exit) */
+        expect(!ui.active(), "Esc from hireling temple leaf closes temple", fails);
+    }
 }
 
 void testFeedingFrenzy(int &fails)
@@ -1184,7 +1508,7 @@ int main(int argc, char **argv)
         expect(all_match, "eventVmTokenDelta[0x00..0x32] matches ROM opcode_len_tbl byte-exact", fails);
         expect(eventVmTokenDelta(0x00) == 0, "OP_00 (invalid) skip delta = 0, not 1+argc", fails);
         expect(eventVmTokenDelta(0x25) == 2,
-               "OP_25 (check-code16) skip delta = 2 though handler reads 2 args (ROM quirk)", fails);
+               "OP_25 (gems pool-pay) skip delta = 2 though handler reads 2 args (ROM quirk)", fails);
         expect(eventVmTokenDelta(0x12) == 13, "OP_12 skip delta = 13 (12 args + opcode)", fails);
         expect(eventVmTokenDelta(0x2B) == 2, "OP_2B skip delta = 2 (count byte + opcode)", fails);
     }
@@ -1274,7 +1598,8 @@ int main(int argc, char **argv)
         mm2::events::eventRunFixedEncounter(gs, text, wait, block, 12, /*variant_b=*/false, &combat,
                                              &fixedWorld);
 
-        expect(mm2_gs_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE) == 0x80, "OP_12 seeds mode = 0x80 (fixed)", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE) == 0x00,
+               "OP_12 fixed fight: enter() strips #$80 → mode 0 (0x12CFE)", fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS) == 9, "OP_12 seeds monster_slots[0]", fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT) == 1,
                "OP_12 sets SCRIPT_ABORT so the VM yields to combat", fails);
@@ -1283,13 +1608,24 @@ int main(int argc, char **argv)
                "OP_2B's gate is clear before the fight resolves", fails);
 
         mm2::platform::KeyState keys{};
-        keys.last_ascii = 'A';
-        combat.tick(gs, fixedWorld, keys); /* party options -> round loop -> member turn */
-        keys.last_ascii = 'A';
-        combat.tick(gs, fixedWorld, keys); /* attack resolves; kill message awaits a key */
-        keys.last_ascii = ' ';
-        const bool ended = combat.tick(gs, fixedWorld, keys); /* ack -> victory */
-        expect(ended, "acknowledging the kill message ends the fight", fails);
+        bool ended = false;
+        for (int i = 0; i < 64 && combat.active(); ++i) {
+            keys = mm2::platform::KeyState{};
+            switch (combat.state()) {
+            case mm2::combat::CombatState::AwaitingSurpriseDismiss:
+            case mm2::combat::CombatState::AwaitingPartyOptions:
+            case mm2::combat::CombatState::AwaitingCommand:
+            case mm2::combat::CombatState::AwaitingAttackTarget:
+                keys.last_ascii = 'A';
+                break;
+            default:
+                keys.space = true;
+                keys.last_ascii = ' ';
+                break;
+            }
+            ended = combat.tick(gs, fixedWorld, keys);
+        }
+        expect(ended || !combat.active(), "dismissing the victory panel ends the fight", fails);
         expect(!combat.active(), "combat inactive after victory", fails);
         expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 1,
                "OP_2B's gate (COMBAT_VICTORY_LATCH) set after victory", fails);
@@ -1339,12 +1675,22 @@ int main(int argc, char **argv)
         expect(combat.active(), "arena selector queues CombatSession via eventRunFixedEncounter", fails);
 
         mm2::platform::KeyState keys{};
-        keys.last_ascii = 'A';
-        combat.tick(gs, arenaWorld, keys); /* party options -> member turn */
-        keys.last_ascii = 'A';
-        combat.tick(gs, arenaWorld, keys); /* attack kills; message awaits a key */
-        keys.last_ascii = ' ';
-        combat.tick(gs, arenaWorld, keys); /* ack -> victory */
+        for (int i = 0; i < 64 && combat.active(); ++i) {
+            keys = mm2::platform::KeyState{};
+            switch (combat.state()) {
+            case mm2::combat::CombatState::AwaitingSurpriseDismiss:
+            case mm2::combat::CombatState::AwaitingPartyOptions:
+            case mm2::combat::CombatState::AwaitingCommand:
+            case mm2::combat::CombatState::AwaitingAttackTarget:
+                keys.last_ascii = 'A';
+                break;
+            default:
+                keys.space = true;
+                keys.last_ascii = ' ';
+                break;
+            }
+            combat.tick(gs, arenaWorld, keys);
+        }
         expect(!combat.active(), "arena combat resolves after Attack", fails);
         expect(combat.lastOutcome() == mm2::combat::CombatOutcome::Victory,
                "arena combat outcome == Victory", fails);
@@ -1555,10 +1901,10 @@ int main(int argc, char **argv)
            "enroll mage guild must not show farthing error string", fails);
     expect(runtime.textView().containsText("sleepy conjurer"),
            "enroll mage guild shows real shared-string-bank prompt", fails);
-    expect(runtime.textView().containsText("enroll you in the local mage guild"),
+    expect(runtime.textView().containsText("local mage guild"),
            "enroll mage guild prompt mentions the guild (not farthing)", fails);
 
-    /* Accept enroll: 20 gp + Middlegate membership bit in record+0x79. */
+    /* Accept enroll: loc 60 qid 5 — OP_24 pay 20 + OP_18 mask sel 0x74 → +$79. */
     {
         Mm2RosterFile roster{};
         setupMember(roster, 0, 5, 100);
@@ -1572,25 +1918,137 @@ int main(int argc, char **argv)
         expect(mm2::events::townSvcMageGuildMember(roster.records[0], 0),
                "enroll sets Middlegate guild membership (record+0x79)", fails);
         expect(roster.records[0].gold == 80u, "enroll deducted 20 gp", fails);
-        expect(roster.records[0].town_flags == 1, "enroll sets home town (record+0x0B)", fails);
         runtime.bindParty(nullptr, nullptr);
     }
 
-    /* Nordon goblet quest @ event 30 (10,2)/DIR_W: OP_0E 0x0A must show the
-     * real Nordon intro, not Feldecarb Fountain text (that is selector 0x0E
-     * @ (15,15) event 17). */
-    runtime.enterLocation(0, gs, world);
-    gs.setCoordX(10);
-    gs.setCoordY(2);
-    gs.setFacingKey('W');
-    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
-    expect(runtime.scanAndRun(gs, world), "event 30 Nordon fires at (10,2) facing W", fails);
-    expect(runtime.textView().containsText("Nordon"),
-           "goblet quest shows Nordon intro", fails);
-    expect(runtime.textView().containsText("do me a service"),
-           "goblet quest shows Nordon service prompt", fails);
-    expect(!runtime.textView().containsText("Feldecarb Fountain"),
-           "Nordon must not show Feldecarb fountain text", fails);
+    /* Nordon @ event 30 (10,2)/W: OP_0E 0x0A → loc 60 qid 2 (default-range overlay).
+     * Quest state is roster+$76 bits — not EVENT_VAR_BANK FAQ stubs. */
+    {
+        auto dismissSpace = [&]() {
+            mm2::platform::KeyState space{};
+            space.space = true;
+            space.any_key = true;
+            (void)runtime.continueInput(gs, world, space);
+        };
+        /* Selector 0x76 → roster+$7B (EventFieldMap), not literal +$76. */
+        auto questByte = [](Mm2RosterRecord &r) -> uint8_t & {
+            return reinterpret_cast<uint8_t *>(&r)[0x7B];
+        };
+
+        Mm2RosterFile nordon_roster{};
+        setupMember(nordon_roster, 0, 5, 100);
+        nordon_roster.records[0].condition = 0;
+        questByte(nordon_roster.records[0]) = 0;
+        Mm2PartyLaunch nordon_launch{};
+        nordon_launch.party_count = 1;
+        nordon_launch.roster_slots[0] = 0;
+        runtime.bindParty(&nordon_roster, &nordon_launch);
+
+        runtime.enterLocation(0, gs, world);
+        gs.setCoordX(10);
+        gs.setCoordY(2);
+        gs.setFacingKey('W');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "event 30 Nordon fires at (10,2) facing W", fails);
+        expect(runtime.textView().containsText("Nordon"),
+               "goblet quest shows Nordon intro", fails);
+        expect(runtime.textView().containsText("do me a service"),
+               "goblet quest shows Nordon service prompt", fails);
+        expect(!runtime.textView().containsText("Feldecarb Fountain"),
+               "Nordon must not show Feldecarb fountain text", fails);
+        expect(runtime.blocksMovement(), "Nordon waits for Y/N", fails);
+
+        mm2::platform::KeyState yes{};
+        yes.last_ascii = 'Y';
+        expect(runtime.continueInput(gs, world, yes),
+               "Nordon Y without goblet waits for SPACE", fails);
+        expect(runtime.textView().containsText("magical golden"),
+               "Nordon without goblet shows quest brief", fails);
+        expect(nordon_roster.records[0].experience == 0,
+               "no XP without goblet turn-in", fails);
+        expect((questByte(nordon_roster.records[0]) & 0x01) != 0,
+               "Nordon accept sets roster+$7B bit0 (sel 0x76)", fails);
+        dismissSpace();
+
+        /* Quest accepted (bit0) + Gold Goblet → consume + rewards (no member pick). */
+        questByte(nordon_roster.records[0]) = 0x01;
+        nordon_roster.records[0].backpack_id[0] = 0xE0;
+        nordon_roster.records[0].experience = 0;
+        runtime.enterLocation(0, gs, world);
+        gs.setCoordX(10);
+        gs.setCoordY(2);
+        gs.setFacingKey('W');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "Nordon with goblet fires", fails);
+        expect(runtime.textView().containsText("Eagle Eye"),
+               "Nordon turn-in shows goblet award text", fails);
+        expect(nordon_roster.records[0].backpack_id[0] == 0,
+               "goblet consumed on turn-in", fails);
+        expect(nordon_roster.records[0].experience == 2000u,
+               "Nordon grants 2000 XP via OP_1F", fails);
+        expect(mm2_gs_u32(gs.a4(), MM2_GS_FOUND_GOLD_EXP) == 1000u,
+               "Nordon puts 1000 gp in found-item buffer", fails);
+        expect(runtime.blocksMovement(), "Nordon award waits for SPACE", fails);
+        dismissSpace();
+        expect(runtime.textView().containsText("Nordonna"),
+               "Nordon follow-up sends party to Nordonna", fails);
+        expect((questByte(nordon_roster.records[0]) & 0x02) != 0,
+               "Nordon turn-in sets roster+$7B bit1 (visit sister)", fails);
+        dismissSpace();
+    }
+
+    /* Nordonna @ event 31 (1,2)/N: OP_0E 0x0B → loc 60 qid 3. Gates on roster+$76. */
+    {
+        auto dismissSpace = [&]() {
+            mm2::platform::KeyState space{};
+            space.space = true;
+            space.any_key = true;
+            (void)runtime.continueInput(gs, world, space);
+        };
+        /* Selector 0x76 → roster+$7B (EventFieldMap), not literal +$76. */
+        auto questByte = [](Mm2RosterRecord &r) -> uint8_t & {
+            return reinterpret_cast<uint8_t *>(&r)[0x7B];
+        };
+
+        Mm2RosterFile nn_roster{};
+        setupMember(nn_roster, 0, 5, 100);
+        nn_roster.records[0].condition = 0;
+        questByte(nn_roster.records[0]) = 0;
+        Mm2PartyLaunch nn_launch{};
+        nn_launch.party_count = 1;
+        nn_launch.roster_slots[0] = 0;
+        runtime.bindParty(&nn_roster, &nn_launch);
+
+        runtime.enterLocation(0, gs, world);
+        gs.setCoordX(1);
+        gs.setCoordY(2);
+        gs.setFacingKey('N');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "event 31 Nordonna fires at (1,2)", fails);
+        expect(runtime.textView().containsText("Begone"),
+               "Nordonna before Nordon done shows begone", fails);
+        dismissSpace();
+
+        questByte(nn_roster.records[0]) = 0x02; /* Nordon sister bit */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "Nordonna after Nordon fires", fails);
+        expect(runtime.textView().containsText("kidnapped sons"),
+               "Nordonna after Nordon shows rescue quest", fails);
+        expect((questByte(nn_roster.records[0]) & 0x04) != 0,
+               "Nordonna quest-given sets roster+$7B bit2", fails);
+        dismissSpace();
+
+        /* Sons rescued: cavern OP_18 or=0x0A into sel 0x76 (+$7B). */
+        questByte(nn_roster.records[0]) = 0x0A;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "Nordonna after sons rescue fires", fails);
+        expect(runtime.textView().containsText("grateful sons"),
+               "Nordonna after rescue shows hireling reward", fails);
+        expect((questByte(nn_roster.records[0]) & 0x10) != 0,
+               "Nordonna done sets roster+$7B bit4", fails);
+        dismissSpace();
+        runtime.bindParty(nullptr, nullptr);
+    }
 
     /* Corak ghost @ event 18 (4,7)/DIR_N: OP_0B 51.anm + OP_0E 0x09 → loc-60
      * queued dispatch. ASM rebuilds the string anchor as LE from work_buf[0..1]
@@ -1625,6 +2083,64 @@ int main(int argc, char **argv)
            "Feldecarb shows fountain prompt", fails);
     expect(!runtime.textView().containsText("Nordon"),
            "Feldecarb must not show Nordon text", fails);
+    expect(runtime.blocksMovement(), "Feldecarb waits for Y/N", fails);
+    {
+        /* No farthing → loc 60 str[18] via OP_01 then OP_29 (no Space wait). */
+        Mm2RosterFile fountain_roster{};
+        setupMember(fountain_roster, 0, 5, 100);
+        fountain_roster.records[0].condition = 0;
+        Mm2PartyLaunch fountain_launch{};
+        fountain_launch.party_count = 1;
+        fountain_launch.roster_slots[0] = 0;
+        runtime.bindParty(&fountain_roster, &fountain_launch);
+        mm2::platform::KeyState yes{};
+        yes.last_ascii = 'Y';
+        (void)runtime.continueInput(gs, world, yes);
+        expect(runtime.textView().containsText("no farthing"),
+               "Feldecarb without farthing shows str[18]", fails);
+        expect(fountain_roster.records[0].backpack_id[0] == 0,
+               "no castle key without farthing", fails);
+    }
+
+    /* Feldecarb with Fe Farthing → consume + castle key. */
+    {
+        runtime.enterLocation(0, gs, world);
+        gs.setCoordX(15);
+        gs.setCoordY(15);
+        gs.setFacingKey('N');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        Mm2RosterFile fountain_roster{};
+        setupMember(fountain_roster, 0, 5, 100);
+        fountain_roster.records[0].condition = 0;
+        fountain_roster.records[0].backpack_id[0] = 0xD4; /* Fe Farthing */
+        Mm2PartyLaunch fountain_launch{};
+        fountain_launch.party_count = 1;
+        fountain_launch.roster_slots[0] = 0;
+        runtime.bindParty(&fountain_roster, &fountain_launch);
+        expect(runtime.scanAndRun(gs, world), "Feldecarb with farthing fires", fails);
+        mm2::platform::KeyState yes{};
+        yes.last_ascii = 'Y';
+        (void)runtime.continueInput(gs, world, yes);
+        expect(runtime.textView().containsText("castle key"),
+               "Feldecarb success shows str[17]", fails);
+        expect(fountain_roster.records[0].backpack_id[0] == 0xD5,
+               "Feldecarb replaces farthing slot with castle key", fails);
+    }
+
+    /* OP_31 living-party abort gate (-$7F14 → 0x47EC). */
+    {
+        Mm2RosterFile dead_roster{};
+        setupMember(dead_roster, 0, 5, 100);
+        dead_roster.records[0].condition = 0x81; /* dead — &0xE0 != 0 */
+        Mm2PartyLaunch dead_launch{};
+        dead_launch.party_count = 1;
+        dead_launch.roster_slots[0] = 0;
+        expect(mm2::events::eventVmCountLivingPartyMembers(gs.a4(), &dead_roster, &dead_launch) == 0,
+               "dead party counts as zero living", fails);
+        dead_roster.records[0].condition = 0;
+        expect(mm2::events::eventVmCountLivingPartyMembers(gs.a4(), &dead_roster, &dead_launch) == 1,
+               "healthy party counts as living", fails);
+    }
 
     /* Fountain of Clairvoyance @ event 42 (4,8)/DIR_S: OP_1A sets both eye timers. */
     runtime.enterLocation(0, gs, world);
@@ -1785,14 +2301,16 @@ int main(int argc, char **argv)
     expect(!still_waiting_n, "Y/N answered N — script ended", fails);
     expect(gs.screenId() == 0, "N stays in Middlegate", fails);
 
-    /* C2 portcullis loc 11 evt 01: OP_0B str[24] → 29.anm (env 3 Vulcania @ 0x15756). */
+    /* C2 loc 11 evt 01: OP_0B str[24] → 61.anm City overland icon. env 3 uses the
+     * A4-$6C4C table (OP_0B jump table @ 0x157D2 is scrambled; env3 -> $6C4C, not
+     * $6C1A "Vulcania"). $6C4C[23] = 61. */
     expect(mm2::events::ServiceSignResolver::envIdForScreen(11, nullptr) == 3,
-           "C2 screen 11 area_env_lookup -> env 3 Vulcania", fails);
+           "C2 screen 11 area_env_lookup -> env 3", fails);
     world.enterScreen(11);
-    expect(mm2::events::ServiceSignResolver::resolveForScreen(11, &world.attribFile().records[11], 24) == 29,
-           "C2 OP_0B str[24] resolves to 29.anm portcullis", fails);
-    expect(mm2::events::ServiceSignResolver::resolveForScreen(11, &world.attribFile().records[11], 24) != 61,
-           "C2 OP_0B str[24] must not use wrong env 61.anm warrior", fails);
+    expect(mm2::events::ServiceSignResolver::resolveForScreen(11, &world.attribFile().records[11], 24) == 61,
+           "C2 OP_0B str[24] resolves to 61.anm City", fails);
+    expect(mm2::events::ServiceSignResolver::resolveForScreen(11, &world.attribFile().records[11], 24) != 29,
+           "C2 OP_0B str[24] must not use wrong-env 29.anm", fails);
 
     /* Town screens 0..4 share area_env_lookup range 0 → env 0 (Middlegate table @ 0x15756).
      * Blacksmith OP_0B str[2] → id 62; str[3] Slaughtered Lamb → 63; evt 26 str[6] → 68.
@@ -1833,15 +2351,16 @@ int main(int argc, char **argv)
     gs.setFacingKey('S');
     mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
     expect(runtime.scanAndRun(gs, world), "C2 portcullis evt 01 fires at (3,7) facing S", fails);
-    expect(runtime.textView().hasServicePortrait(), "C2 portcullis OP_0B loads 29.anm overlay", fails);
+    expect(runtime.textView().hasServicePortrait(), "C2 portcullis OP_0B loads 61.anm overlay", fails);
     expect(runtime.textView().containsText("portcullis"), "C2 portcullis OP_02 text", fails);
     expect(runtime.blocksMovement(), "C2 portcullis waits for Y/N", fails);
 
-    /* Hillstone Lord Slayer evt 15: OP_0B str[14] → 49.anm (env 2 Tundara table @ 0x15756). */
-    expect(mm2::events::ServiceSignResolver::resolveForScreen(55, &world.attribFile().records[55], 14) == 49,
-           "Hillstone OP_0B str[14] resolves to 49.anm", fails);
-    expect(mm2::events::ServiceSignResolver::resolveForScreen(55, &world.attribFile().records[55], 14) != 53,
-           "Hillstone OP_0B str[14] must not resolve to 53.anm (Middlegate str[13] mummy)", fails);
+    /* Hillstone (castle) evt 15: OP_0B str[14] → 56.anm King NPC. env 2 uses the
+     * A4-$6C02 table (jump table @ 0x157D2: env2 -> $6C02); $6C02[13] = 56. */
+    expect(mm2::events::ServiceSignResolver::resolveForScreen(55, &world.attribFile().records[55], 14) == 56,
+           "Hillstone OP_0B str[14] resolves to 56.anm King", fails);
+    expect(mm2::events::ServiceSignResolver::resolveForScreen(55, &world.attribFile().records[55], 14) != 49,
+           "Hillstone OP_0B str[14] must not use wrong-env 49.anm", fails);
     world.enterScreen(55);
     gs.setScreenId(55);
     runtime.enterLocation(55, gs, world);
@@ -1987,16 +2506,16 @@ int main(int argc, char **argv)
         expect(!runtime.continueInput(gs, world, yes), "Otto skill buy completes after member pick", fails);
         expect(mm2::gameplay::rosterHasSkillId(roster.records[0], 3),
                "Otto Mapper grants Cartographer (id 3) at roster+0x50", fails);
+        expect(roster.records[0].gold == 90u, "Otto deducted 10 gp via OP_24", fails);
         runtime.bindParty(nullptr, nullptr);
     }
 
-    /* Brain detox @ event 16 (1,8)/W: OP_0E 0x10 clears roster+0x50 skills. */
+    /* Event 16 (1,8)/W: OP_0E 0x10 → loc 60 qid 8 (locksmith key buy), NOT
+     * FAQ "brain detox". Detox is a FAQ invention; retail script is key purchase. */
     {
         Mm2RosterFile roster{};
-        setupMember(roster, 0, 1, 200);
+        setupMember(roster, 0, 1, 600);
         roster.records[0].condition = 0;
-        mm2::gameplay::rosterGrantSkillId(roster.records[0], 3);
-        mm2::gameplay::rosterGrantSkillId(roster.records[0], 11);
         Mm2PartyLaunch launch{};
         launch.party_count = 1;
         launch.roster_slots[0] = 0;
@@ -2006,19 +2525,18 @@ int main(int argc, char **argv)
         gs.setCoordY(8);
         gs.setFacingKey('W');
         mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
-        expect(runtime.scanAndRun(gs, world), "event 16 brain detox fires at (1,8) facing W", fails);
+        expect(runtime.scanAndRun(gs, world), "event 16 locksmith fires at (1,8) facing W", fails);
         expect(!runtime.textView().containsText("farthing"),
-               "brain detox must not show Feldecarb farthing text", fails);
-        expect(runtime.textView().containsText("Detoxification"),
-               "brain detox shows specialist intro", fails);
+               "locksmith must not show Feldecarb farthing text", fails);
+        expect(runtime.textView().containsText("mystic green glow"),
+               "locksmith shows ancient-key prompt (loc 60 str[19])", fails);
+        expect(runtime.blocksMovement(), "locksmith waits for Y/N", fails);
         mm2::platform::KeyState yes{};
         yes.last_ascii = 'Y';
-        runtime.continueInput(gs, world, yes);
-        yes.last_ascii = '1';
-        expect(!runtime.continueInput(gs, world, yes), "brain detox completes after member pick", fails);
-        expect(mm2::gameplay::rosterSkillPackedByte(roster.records[0]) == 0,
-               "brain detox clears roster+0x50 skill pack", fails);
-        expect(roster.records[0].gold == 100u, "brain detox deducted 100 gp from selected char", fails);
+        (void)runtime.continueInput(gs, world, yes);
+        expect(roster.records[0].gold == 100u, "locksmith deducted 500 gp", fails);
+        expect(roster.records[0].backpack_id[0] == 0x6F,
+               "locksmith grants item 0x6F", fails);
         runtime.bindParty(nullptr, nullptr);
     }
 
@@ -2055,6 +2573,46 @@ int main(int argc, char **argv)
             expect(mm2_gs_u16(castle_gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR) == 0xFFFF,
                    "castle blob loc 63 leaves anchor $FFFF", fails);
         }
+    }
+
+    /* OP_24 / OP_25: 0x6ACE gold + 0x6B9A gems pool+deduct. */
+    {
+        using mm2::events::eventVmPartyTryPayGold;
+        using mm2::events::eventVmPartyTryPayGems;
+
+        Mm2RosterFile pay_roster{};
+        setupMember(pay_roster, 0, 5, 100);
+        setupMember(pay_roster, 1, 5, 100);
+        pay_roster.records[0].gold = 30;
+        pay_roster.records[1].gold = 20;
+        pay_roster.records[0].gems = 5;
+        pay_roster.records[1].gems = 7;
+        Mm2PartyLaunch pay_launch{};
+        pay_launch.party_count = 2;
+        pay_launch.roster_slots[0] = 0;
+        pay_launch.roster_slots[1] = 1;
+
+        expect(!eventVmPartyTryPayGold(nullptr, &pay_roster, &pay_launch, 51),
+               "OP_24 fails when gold short", fails);
+        expect(pay_roster.records[0].gold == 30 && pay_roster.records[1].gold == 20,
+               "OP_24 failure leaves gold unchanged", fails);
+
+        expect(eventVmPartyTryPayGold(nullptr, &pay_roster, &pay_launch, 40),
+               "OP_24 succeeds when gold enough", fails);
+        expect(pay_roster.records[0].gold == 5 && pay_roster.records[1].gold == 5,
+               "OP_24 pools remainder then re-shares across eligible members", fails);
+
+        expect(!eventVmPartyTryPayGems(nullptr, &pay_roster, &pay_launch, 13),
+               "OP_25 fails when gems short", fails);
+        expect(eventVmPartyTryPayGems(nullptr, &pay_roster, &pay_launch, 8),
+               "OP_25 succeeds when gems enough", fails);
+        expect(pay_roster.records[0].gems == 2 && pay_roster.records[1].gems == 2,
+               "OP_25 pools remainder then re-shares gems", fails);
+
+        expect(eventVmPartyTryPayGold(nullptr, &pay_roster, &pay_launch, 0),
+               "OP_24 amount 0 succeeds", fails);
+        expect(eventVmPartyTryPayGems(nullptr, &pay_roster, &pay_launch, 0),
+               "OP_25 amount 0 succeeds", fails);
     }
 
     if (fails == 0) {

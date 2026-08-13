@@ -1,4 +1,12 @@
 #include "mm2/events/TownServiceMenu.h"
+#include "mm2/events/TownServiceTransactions.h"
+#include "mm2/events/EventVmHelpers.h"
+
+#include "mm2/CppStdCompat.h"
+
+#include "mm2_gamestate.h"
+
+#include <cstdio>
 
 namespace mm2::events {
 
@@ -20,6 +28,35 @@ Mm2RosterRecord *townSvcMemberRecord(const TownServiceContext &ctx, int party_sl
         return nullptr;
     }
     return &rec;
+}
+
+int townSvcRosterIndex(const TownServiceContext &ctx, int party_slot)
+{
+    if (!ctx.launch || party_slot < 0 || party_slot >= ctx.launch->party_count ||
+        party_slot >= MM2_PARTY_LAUNCH_SLOTS) {
+        return -1;
+    }
+    return ctx.launch->roster_slots[party_slot];
+}
+
+bool townSvcPartySlotIsHireling(const TownServiceContext &ctx, int party_slot)
+{
+    return townSvcIsHirelingRosterIndex(townSvcRosterIndex(ctx, party_slot));
+}
+
+/* ASM shop initial pick (temple 0x1E35A / guild 0x1E4F0 / smith 0x1C5F0 /
+ * tavern 0x1D3A0): first living slot whose roster index < $18. */
+int townSvcFirstNonHirelingSlot(const TownServiceContext &ctx)
+{
+    if (!ctx.launch) {
+        return -1;
+    }
+    for (int i = 0; i < ctx.launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        if (townSvcMemberRecord(ctx, i) && !townSvcPartySlotIsHireling(ctx, i)) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 void townSvcRunTemple(ITownServiceUi &ui, const TownServiceContext &ctx)
@@ -47,23 +84,42 @@ void townSvcRunTemple(ITownServiceUi &ui, const TownServiceContext &ctx)
             continue;
         }
 
+        /* Hireling (roster >= $18): outer temple loop @ 0x1E396 takes the free
+         * auto-heal leaf instead of the paid A–F menu. */
+        if (townSvcPartySlotIsHireling(ctx, slot)) {
+            const TownSvcHirelingTempleResult hr = townSvcHirelingTempleAutoHeal(*rec);
+            TownSvcHealResult r;
+            r.paid = true;
+            r.cost = 0;
+            r.hp_restored = hr.hp_restored || hr.condition_cleared || hr.align_restored;
+            ui.reportHeal(r);
+            continue;
+        }
+
         switch (opt) {
         case TempleOption::Heal: {
-            const uint32_t cost = townSvcHealingCost(rec->level, ctx.map_id);
+            const uint32_t cost = townSvcTempleHealCost(*rec, ctx.map_id);
             const TownSvcHealResult r = townSvcHeal(*rec, cost);
-            if (!r.paid) {
+            if (cost > 0 && !r.paid) {
                 ui.reportNotEnoughGold();
             } else {
                 ui.reportHeal(r);
             }
             break;
         }
-        case TempleOption::RestoreCondition:
-            townSvcRestoreCondition(*rec);
-            ui.reportHeal(TownSvcHealResult{}); /* no charge for cond-only path */
+        case TempleOption::RestoreAlignment: {
+            const uint32_t cost = townSvcTempleAlignCost(*rec, ctx.map_id);
+            const TownSvcAlignResult r = townSvcRestoreAlignment(*rec, cost);
+            if (cost > 0 && !r.paid) {
+                ui.reportNotEnoughGold();
+            } else {
+                ui.reportAlign(r);
+            }
             break;
+        }
         case TempleOption::Donate: {
-            const TownSvcDonateResult r = townSvcTempleDonate(ctx.a4, *rec, ctx.map_id);
+            const TownSvcDonateResult r =
+                townSvcTempleDonate(ctx.a4, *rec, ctx.map_id, ctx.rng);
             if (!r.paid) {
                 ui.reportNotEnoughGold();
             } else {
@@ -72,8 +128,11 @@ void townSvcRunTemple(ITownServiceUi &ui, const TownServiceContext &ctx)
             break;
         }
         case TempleOption::BuySpell: {
+            const uint32_t offer = townSvcSpellOfferGold(
+                *rec, gameplay::SpellSchool::Cleric, spells[spell_slot].spell_index,
+                spells[spell_slot].gold);
             const TownSvcSpellResult r =
-                townSvcBuySpell(*rec, spells[spell_slot].spell_index, spells[spell_slot].gold);
+                townSvcBuySpell(*rec, spells[spell_slot].spell_index, offer);
             if (r.learned) {
                 ui.reportSpellLearned(r);
             } else if (r.reject == TownSvcSpellReject::NotEnoughGold) {
@@ -108,7 +167,9 @@ void townSvcRunTraining(ITownServiceUi &ui, const TownServiceContext &ctx)
         }
 
         (void)stat_id; /* the Training Hall has no stat sub-option (level-up only) */
-        const TownSvcTrainResult r = townSvcTrainLevelUp(*rec, ctx.map_id);
+        const int ridx = townSvcRosterIndex(ctx, slot);
+        const TownSvcTrainResult r =
+            townSvcTrainLevelUp(*rec, ctx.map_id, ctx.rng, ridx);
         if (r.eligible && !r.paid) {
             ui.reportNotEnoughGold();
         } else {
@@ -156,13 +217,20 @@ void townSvcRunMageGuild(ITownServiceUi &ui, const TownServiceContext &ctx)
         if (!ui.selectMember(ctx, member)) {
             continue;
         }
+        /* Guild number-key gate @ 0x1E840: hirelings cannot buy spells. */
+        if (townSvcPartySlotIsHireling(ctx, member)) {
+            continue;
+        }
         Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
         if (!rec) {
             continue;
         }
 
+        const uint32_t offer = townSvcSpellOfferGold(
+            *rec, gameplay::SpellSchool::Sorcerer, slots[spell_slot].spell_index,
+            slots[spell_slot].gold);
         const TownSvcSpellResult r =
-            townSvcBuySpell(*rec, slots[spell_slot].spell_index, slots[spell_slot].gold);
+            townSvcBuySpell(*rec, slots[spell_slot].spell_index, offer);
         if (r.learned) {
             ui.reportSpellLearned(r);
         } else if (r.reject == TownSvcSpellReject::NotEnoughGold) {
@@ -215,6 +283,10 @@ void townSvcRunSmith(ITownServiceUi &ui, const TownServiceContext &ctx)
         if (!ui.selectMember(ctx, member)) {
             continue;
         }
+        /* Blacksmith validate @ 0x1C39C: hirelings cannot be the buyer. */
+        if (townSvcPartySlotIsHireling(ctx, member)) {
+            continue;
+        }
         Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
         if (!rec) {
             continue;
@@ -238,130 +310,112 @@ void townSvcRunSmith(ITownServiceUi &ui, const TownServiceContext &ctx)
  * Pub / tavern tables and runner
  * -------------------------------------------------------------------------- */
 
-/* str.dat RUMOR pool (A4-$594E): per-town strings for option E "Listen for rumors".
- * The game init fills this table FIRST (40 strings = 8 per town × 5 towns).
- * Day-based selector (0x1c962) returns 0, 1, or 3; only pairs {0,1}, {2,3},
- * {6,7} are ever displayed.  Entries at index 4 and 5 are never shown. */
+/* tip-cipher C-strings after 40 pre-rumor fills (0x1D2B0/0x1D2EE via -$7DE2).
+ * Bank1 @ str.dat+$5BA (0x9666 / A4-$71E8[1]); day-pair {0,1}/{2,3}/{6,7}.
+ * Fallback only — live path fills A4-$594E/-$58AE via eventVmFillTavernStrTables. */
 static const char *const kPubRumors[5][kPubRumorCount] = {
-    /* 0 Middlegate */
     {
         "Children at 0,15",
         "Goblets at 0,7",
         "Meal A, then C1 2,10",
         "Meal B, then C1 2,6",
-        "(unused)",                             /* index 4 – never shown */
-        "(unused)",                             /* index 5 – never shown */
+        "Time travel at",
+        "Pinehurst",
+        "Meal B, then A2",
+        "14,10",
+    },
+    {
+        "S7,1 B2 15,11",
         "Meal C, then C1 1,8",
         "'Murray's rejuvenates'",
-    },
-    /* 1 Atlantium */
-    {
         "Hirelings at 15,10",
-        "Cast C2,3 day 93\n   gain S9,3",
+        "Cast C2,3 day 93",
+        "gain S9,3",
         "Meal C-an experience",
-        "B2, day 140-170,\n     14,4",
-        "(unused)",
-        "(unused)",
+        "B2, day 140-170,",
+    },
+    {
+        "14,4",
+        "C3,6 C2 11,1",
+        "Lord Haart B1 5,5",
         "Meal B is a riot",
         "Mandagaul D2 6,8",
-    },
-    /* 2 Tundara */
-    {
         "The Gourmet A3 7,6",
         "C9,2 C1 south",
         "Meal C, 7,3-Sarakin",
+    },
+    {
         "See Nordon at 10,2",
-        "(unused)",
-        "(unused)",
+        "Donate at all",
+        "temples",
+        "Nordon has S2,1",
         "Meal C, then D1 2,7",
         "Hirelings at 0,14",
+        "Transmutations 8,8",
+        "the corners",
     },
-    /* 3 Vulcania */
     {
-        "Transmutations 8,8\nthe corners",
-        "Castle Xabran holds\nall clues",
+        "Castle Xabran holds",
+        "all clues",
         "Meal A, then C4 14,8",
         "C2,3 C3 1,9",
-        "(unused)",
-        "(unused)",
+        "Hoardall seeks items",
+        "Keys add castle gold",
         "Meal B, then C3 1,9",
         "Visit Dawn's, D4 3,7",
     },
-    /* 4 Sandsobar */
+};
+/* Linear 0x976E fill after rumors: town0 tips then drink/food chrome (ASM-faithful). */
+static const char *const kPubTips[5][kPubTipCount] = {
     {
         "Slayer seeks death",
         "S5,2 C1 1,8",
         "Meal C, then E1 2,3",
-        "Tavern drinks give a\nbonus",
-        "(unused)",
-        "(unused)",
+        "Tavern drinks give a",
+        "bonus",
+        "S3,6 7,4",
+        "Meal A, then 3,11",
         "Meal B, then E4 3,10",
-        "See Nordon at 10,2",
     },
-};
-
-/* str.dat TIP pool (A4-$58AE): per-town strings for option D "Tip the bartender".
- * The game init fills this table SECOND (40 more strings), AFTER the rumor table.
- * Same day-based selector as rumors; D costs 1 gold and only succeeds on a 1-in-N
- * RNG roll (N = char_attr_0x73 + 5).  Exact original strings are stored encoded
- * in the game binary (+0x1C cipher, blob @ A4-$77CE); these are approximations
- * from game guides until the decoder is ported.  Same {0,1}/{2,3}/{6,7} pair
- * scheme applies — indices 4 and 5 are never displayed. */
-static const char *const kPubTips[5][kPubTipCount] = {
-    /* 0 Middlegate */
     {
-        "S7,1 B2 15,11",
-        "Time travel at\n  Pinehurst",
-        "Lord Haart B1 5,5",
-        "C3 Jail - show your\nticket",
-        "(unused)",
-        "(unused)",
-        "Keys add castle gold",
-        "Nordon has S2,1",
+        "A) Orc Beer      - ",
+        "B) Straight shot - ",
+        "C) Id Elixir     - ",
+        "D) Academic Ale  - ",
+        "E) Rare Vintage  - ",
+        "F) Mystic Brew   - ",
+        "A) Horrors",
+        "d'oeuvres",
     },
-    /* 1 Atlantium */
     {
-        "C3,6 C2 11,1",
-        "Lord Haart B1 5,5",
-        "Hoardall seeks items",
-        "Keys add castle gold",
-        "(unused)",
-        "(unused)",
-        "Castle Xabran holds\nall clues",
-        "Donate at all\ntemples",
+        "B) Soup de Ghoul",
+        "w/garlic toast",
+        "C) Dragon Steak",
+        "Tartar",
+        "A) Lightly salted",
+        "tongue of toad",
+        "B) Puree of Gnome",
+        "C) Devils Food",
     },
-    /* 2 Tundara */
     {
-        "Nordon has S2,1",
-        "Donate at all\ntemples",
-        "Transmutations 8,8\nthe corners",
-        "C2,3 C3 1,9",
-        "(unused)",
-        "(unused)",
-        "Hirelings at 0,14",
-        "C9,2 C1 south",
+        "Brownie",
+        "A) Sizzling",
+        "Swine Soup",
+        "B) Red Hot Wolf",
+        "Nipple Chips",
+        "C) Roast Leg of",
+        "Wyvern",
+        "A) Pickled Pixie",
     },
-    /* 3 Vulcania */
     {
-        "Hoardall seeks items",
-        "Keys add castle gold",
-        "S3,6 7,4",
-        "Meal A, then 3,11",
-        "(unused)",
-        "(unused)",
-        "Slayer seeks death",
-        "S5,2 C1 1,8",
-    },
-    /* 4 Sandsobar */
-    {
-        "C2,3 C3 1,9",
-        "Hirelings at 15,10",
-        "Lord Haart B1 5,5",
-        "Meal A, then C4 14,8",
-        "(unused)",
-        "(unused)",
-        "S3,6 7,4",
-        "Meal A, then 3,11",
+        "Brains",
+        "B) Deep fried",
+        "Troll liver",
+        "C) Cream of",
+        "Kobold soup",
+        "A) Gourmet Dinner",
+        "B Wyrm Chop Suey",
+        "B) Roast Peasant",
     },
 };
 
@@ -380,7 +434,8 @@ static const char *const kPubFood[5][kPubFoodOptions] = {
     {"Gourmet Dinner", "Wyrm Chop Suey", "Steak and Taters"},
 };
 
-/* str.dat ~208-213: drink menu (same for all towns). */
+/* str.dat ~208-213: the six drink names. These are the tavern key-B captions
+ * (A4-$580E / MM2_GS_TAVERN_BOOST_LBL); headless fallback when no live str.dat. */
 static const char *const kPubDrinks[kPubDrinkCount] = {
     "Orc Beer",
     "Straight shot",
@@ -390,34 +445,112 @@ static const char *const kPubDrinks[kPubDrinkCount] = {
     "Mystic Brew",
 };
 
-void townSvcPubTables(int map_id, TavernMenuData &out)
+/* Tavern key B @ 0x1CAC4 prints the six A4-$580E captions — the DRINK names
+ * ("A) Orc Beer" … "F) Mystic Brew"), each of which boosts a stat when drunk
+ * (doc 34 §5 / FAQ §3-10-3). Fallback for the headless path (no live str.dat);
+ * costs are A4-$6738. */
+static const uint16_t kStatBoostGold[kPubStatBoostCount] = {5, 5, 20, 20, 50, 100};
+
+/* A4-$6760 specialties gold (town × menu). */
+static const uint16_t kSpecialtyGoldTable[5][kPubFoodOptions] = {
+    {10, 50, 100}, {1000, 2000, 3000}, {200, 100, 1000}, {5000, 500, 1000}, {20, 50, 250},
+};
+
+/* str.dat specialty lines already embed an "A) "/"B) "/"C) " label (retail 0x1CD76
+ * prints them verbatim). The UI adds its own "%c)" prefix, so drop the embedded one
+ * here to avoid a doubled "A) A)" label. */
+static const char *stripSpecialtyLabel(const char *s, int index)
+{
+    if (!s) {
+        return s;
+    }
+    const char letter = static_cast<char>('A' + index);
+    if (s[0] == letter && s[1] == ')') {
+        s += 2;
+        while (*s == ' ') {
+            ++s;
+        }
+    }
+    return s;
+}
+
+void townSvcPubTables(int map_id, TavernMenuData &out, uint8_t *a4)
 {
     const int town = (map_id >= 0 && map_id < 5) ? map_id : 0;
     for (int i = 0; i < kPubRumorCount; ++i) {
-        out.rumors[i] = kPubRumors[town][i];
+        const char *s = nullptr;
+        if (a4) {
+            s = eventVmGsRelCString(
+                a4, mm2_gs_u32(a4, MM2_GS_TAVERN_RUMORS + town * 0x20 + i * 4));
+        }
+        /* nullptr = no GS; "" = real empty day-pair slot. */
+        out.rumors[i] = s ? s : kPubRumors[town][i];
     }
     for (int i = 0; i < kPubTipCount; ++i) {
-        out.tips[i] = kPubTips[town][i];
+        const char *s = nullptr;
+        if (a4) {
+            s = eventVmGsRelCString(a4, mm2_gs_u32(a4, MM2_GS_TAVERN_TIPS + town * 0x20 + i * 4));
+        }
+        /* Empty NUL slots are valid (day-pair second line often blank). */
+        out.tips[i] = s ? s : kPubTips[town][i];
     }
     for (int i = 0; i < kPubFoodOptions; ++i) {
-        out.food.options[i] = kPubFood[town][i];
+        /* 0x1CD76: print -$57F6[town][2*i] then [2*i+1] (two gotoxy lines). */
+        const char *a = nullptr;
+        const char *b = nullptr;
+        if (a4) {
+            a = eventVmGsRelCString(a4, mm2_gs_u32(a4, MM2_GS_TAVERN_FOOD + town * 0x18 + (2 * i) * 4));
+            b = eventVmGsRelCString(a4,
+                                    mm2_gs_u32(a4, MM2_GS_TAVERN_FOOD + town * 0x18 + (2 * i + 1) * 4));
+        }
+        const char *a_txt = stripSpecialtyLabel(a, i);
+        out.food_joined[i][0] = '\0';
+        if (a_txt && a_txt[0]) {
+            if (b && b[0]) {
+                std::snprintf(out.food_joined[i], sizeof(out.food_joined[i]), "%s\n%s", a_txt, b);
+            } else {
+                std::snprintf(out.food_joined[i], sizeof(out.food_joined[i]), "%s", a_txt);
+            }
+            out.food.options[i] = out.food_joined[i];
+        } else {
+            out.food.options[i] = kPubFood[town][i];
+        }
+        out.food.costs[i] =
+            a4 ? mm2_gs_u16(a4, MM2_GS_TAVERN_SPECIALTY_GOLD + (town * 3 + i) * 2)
+               : kSpecialtyGoldTable[town][i];
     }
     for (int i = 0; i < kPubDrinkCount; ++i) {
-        out.drinks[i].label = kPubDrinks[i];
+        const char *s = nullptr;
+        if (a4) {
+            s = eventVmGsRelCString(a4, mm2_gs_u32(a4, MM2_GS_TAVERN_DRINK_LBL + i * 4));
+        }
+        out.drinks[i].label = (s && s[0]) ? s : kPubDrinks[i];
+    }
+    for (int i = 0; i < kPubStatBoostCount; ++i) {
+        /* 0x1CB26: caption = A4-$580E[i] (MM2_GS_TAVERN_BOOST_LBL) = the drink name,
+         * NOT a stat name. The live str.dat text embeds its own "A) "/"B) " letter
+         * (like specialties), so strip it — the UI adds its own "%c)" prefix. */
+        const char *s = nullptr;
+        if (a4) {
+            s = eventVmGsRelCString(a4, mm2_gs_u32(a4, MM2_GS_TAVERN_BOOST_LBL + i * 4));
+        }
+        out.boosts[i].label = stripSpecialtyLabel((s && s[0]) ? s : kPubDrinks[i], i);
+        out.boosts[i].cost =
+            a4 ? mm2_gs_u16(a4, MM2_GS_TAVERN_BOOST_GOLD + i * 2) : kStatBoostGold[i];
     }
 }
 
 void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
 {
     TavernMenuData data{};
-    townSvcPubTables(ctx.map_id, data);
+    townSvcPubTables(ctx.map_id, data, ctx.a4);
 
     TavernOption opt = TavernOption::Exit;
     while (ui.chooseTavernOption(ctx, data, opt)) {
         switch (opt) {
         case TavernOption::FeedingFrenzy: {
             int member = 0;
-            if (ui.selectMember(ctx, member)) {
+            if (ui.selectMember(ctx, member) && !townSvcPartySlotIsHireling(ctx, member)) {
                 Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
                 if (rec) {
                     townSvcFeedingFrenzy(*rec, ctx.launch, ctx.roster, ctx.map_id);
@@ -425,50 +558,103 @@ void townSvcRunTavern(ITownServiceUi &ui, const TownServiceContext &ctx)
             }
             break;
         }
+        case TavernOption::StatBoost: {
+            /* B @ 0x1CAC4 — "Have a drink": A–F drinks (each boosts a stat). */
+            int slot = -1;
+            if (ui.chooseTavernStatBoost(ctx, data, slot) && slot >= 0 &&
+                slot < kPubStatBoostCount) {
+                int member = 0;
+                if (ui.selectMember(ctx, member) && !townSvcPartySlotIsHireling(ctx, member)) {
+                    Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
+                    if (rec) {
+                        const TownSvcStatBoostResult r =
+                            townSvcTavernStatBoost(ctx.a4, *rec, slot, ctx.map_id, ctx.rng);
+                        ui.reportTavernStatBoost(r);
+                    }
+                }
+            }
+            break;
+        }
         case TavernOption::Specialties: {
-            /* Food sub-menu — effects (food-satiation byte +$78, RNG-gated result
-             * "Great Stuff!" / "You feel sick!") are not yet traced; defer. */
+            /* C @ 0x1CD2E — A4-$6760 pay + (sick OR A4-$786C → +$76). No 0x18EC0. */
             int food = -1;
             if (ui.chooseTavernFood(ctx, data, food) && food >= 0 && food < kPubFoodOptions) {
+                int member = 0;
+                if (ui.selectMember(ctx, member) && !townSvcPartySlotIsHireling(ctx, member)) {
+                    Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
+                    if (rec) {
+                        const TownSvcSpecialtyResult r =
+                            townSvcTavernSpecialty(ctx.a4, *rec, ctx.map_id, food, ctx.rng);
+                        ui.reportTavernSpecialty(r);
+                    }
+                }
                 ui.reportTavernFood(ctx, food);
             }
             break;
         }
-        case TavernOption::Drink: {
-            /* Drink sub-menu — stat-bonus effects (0x19B28) are not yet traced. */
-            int drink = -1;
-            if (ui.chooseTavernDrink(ctx, data, drink) && drink >= 0 && drink < kPubDrinkCount) {
-                ui.reportTavernDrink(ctx, drink);
-            }
-            break;
-        }
         case TavernOption::Tip: {
-            /* D "Tip the bartender": draws from the separate TIP pool (A4-$58AE),
-             * NOT the rumor pool.  The original uses the same day-based selector
-             * (0x1c962 -> 0/1/3) to choose which pair to show, then a 1-in-N RNG
-             * roll (N = char_attr_0x73+5) before displaying.  We pick the first
-             * non-trivial tip entry for now; the exact RNG gate is not yet ported. */
-            const char *tip = data.tips[0];
-            for (int i = 0; i < kPubTipCount; ++i) {
-                if (data.tips[i] && data.tips[i][0] && data.tips[i][0] != '(') {
-                    tip = data.tips[i];
-                    break;
-                }
+            /* D @ 0x1CFCA: member → 1gp + RNG + day-pair tips (0x1C962). */
+            int member = 0;
+            if (!ui.selectMember(ctx, member) || townSvcPartySlotIsHireling(ctx, member)) {
+                break;
             }
-            ui.reportTavernTip(ctx, tip);
+            Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
+            if (!rec) {
+                break;
+            }
+            const uint16_t day = ctx.a4 ? mm2_gs_day(ctx.a4, mm2_gs_u16(ctx.a4, MM2_GS_ERA)) : 1;
+            const TownSvcTipResult tip_r = townSvcTavernTip(*rec, day, ctx.rng);
+            if (!tip_r.ok) {
+                if (tip_r.reject == TownSvcTipReject::NotEnoughGold) {
+                    ui.reportNotEnoughGold();
+                } else if (tip_r.reject == TownSvcTipReject::NoTip) {
+                    ui.reportTavernTip(ctx, "Thank you -\nPlease come again");
+                }
+                break;
+            }
+            char tip_buf[160];
+            const int b = tip_r.pair_base;
+            const char *a = (b >= 0 && b < kPubTipCount) ? data.tips[b] : nullptr;
+            const char *c = (b + 1 < kPubTipCount) ? data.tips[b + 1] : nullptr;
+            if (a && c && a[0] && a[0] != '(' && c[0] && c[0] != '(') {
+                std::snprintf(tip_buf, sizeof(tip_buf), "%s\n%s", a, c);
+            } else if (a && a[0] && a[0] != '(') {
+                std::snprintf(tip_buf, sizeof(tip_buf), "%s", a);
+            } else {
+                std::snprintf(tip_buf, sizeof(tip_buf), "Thank you -\nPlease come again");
+            }
+            ui.reportTavernTip(ctx, tip_buf);
             break;
         }
         case TavernOption::Rumors: {
-            /* E "Listen for rumors": draws from the RUMOR pool (A4-$594E).
-             * Separate from the tip pool used by D. */
-            const char *rumor = data.rumors[0];
-            for (int i = 0; i < kPubRumorCount; ++i) {
-                if (data.rumors[i] && data.rumors[i][0] && data.rumors[i][0] != '(') {
-                    rumor = data.rumors[i];
-                    break;
-                }
+            /* E @ 0x1D0B4: cond gate + day-pair rumors (no gold). */
+            int member = 0;
+            if (!ui.selectMember(ctx, member) || townSvcPartySlotIsHireling(ctx, member)) {
+                break;
             }
-            ui.reportTavernRumor(ctx, rumor);
+            Mm2RosterRecord *rec = townSvcMemberRecord(ctx, member);
+            if (!rec) {
+                break;
+            }
+            const uint16_t day = ctx.a4 ? mm2_gs_day(ctx.a4, mm2_gs_u16(ctx.a4, MM2_GS_ERA)) : 1;
+            const TownSvcTipResult rum_r = townSvcTavernRumor(*rec, day);
+            if (!rum_r.ok) {
+                break;
+            }
+            char rum_buf[160];
+            const int b = rum_r.pair_base;
+            const char *a = (b >= 0 && b < kPubRumorCount) ? data.rumors[b] : nullptr;
+            const char *c = (b + 1 < kPubRumorCount) ? data.rumors[b + 1] : nullptr;
+            if (a && c && a[0] && a[0] != '(' && c[0] && c[0] != '(') {
+                std::snprintf(rum_buf, sizeof(rum_buf), "%s\n%s", a, c);
+            } else if (a && a[0] && a[0] != '(') {
+                std::snprintf(rum_buf, sizeof(rum_buf), "%s", a);
+            } else {
+                rum_buf[0] = '\0';
+            }
+            if (rum_buf[0]) {
+                ui.reportTavernRumor(ctx, rum_buf);
+            }
             break;
         }
         case TavernOption::Exit:

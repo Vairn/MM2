@@ -1,9 +1,11 @@
 #include "sections/StrSection.h"
 
 #include <cstdio>
+#include <string>
 
 #include "imgui.h"
 #include "widgets/UiLayout.h"
+#include "widgets/UiTheme.h"
 
 namespace mm2 {
 
@@ -43,19 +45,18 @@ void StrSection::syncTextFromLines() {
     file_.text = std::move(joined);
 }
 
-void StrSection::draw(App& app) {
+void StrSection::drawWorkspace(App& app, EditorSelection& sel) {
     (void)app;
     if (!loaded) {
-        ImGui::TextDisabled("str.dat not loaded.");
+        ui::EmptyState("str.dat not loaded", "Open a folder containing str.dat");
         return;
     }
     if (!linesBuilt_) rebuildLines();
 
-    ImGui::Text("Decoded text pool: %zu bytes, %zu lines. Transform: (byte + 0x1C) & 0xFF.",
-                file_.rawSize, lines_.size());
-    ImGui::TextDisabled("Editing length changes file size on save (encoded newline = 0x01).");
+    ImGui::TextDisabled("%zu bytes · %zu lines · transform (byte + 0x1C) & 0xFF", file_.rawSize,
+                        lines_.size());
+    ImGui::Spacing();
 
-    // Resizable per-row buffer backed by the std::string.
     auto callback = [](ImGuiInputTextCallbackData* data) -> int {
         if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
             auto* str = static_cast<std::string*>(data->UserData);
@@ -65,15 +66,12 @@ void StrSection::draw(App& app) {
         return 0;
     };
 
-    // A ListClipper-driven table keeps the draw list small: only the visible
-    // rows are emitted, so the whole pool never overflows the 16-bit index
-    // limit the way a single giant InputTextMultiline did.
     ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                             ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY |
                             ImGuiTableFlags_SizingFixedFit;
     if (ImGui::BeginTable("str_lines", 2, flags, ImVec2(0, 0))) {
         ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 56.f);
+        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, ui::Em(3.5f));
         ImGui::TableSetupColumn("Text", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
 
@@ -85,7 +83,13 @@ void StrSection::draw(App& app) {
 
                 ImGui::TableNextColumn();
                 ImGui::AlignTextToFramePadding();
-                ImGui::TextDisabled("%d", i);
+                const bool rowSel = selectedLine_ == i;
+                if (ImGui::Selectable(std::to_string(i).c_str(), rowSel,
+                                      ImGuiSelectableFlags_SpanAllColumns |
+                                          ImGuiSelectableFlags_AllowOverlap)) {
+                    selectedLine_ = i;
+                    sel.Select(DocKind::Str, EditorSelection::Kind::StringLine, i);
+                }
 
                 ImGui::TableNextColumn();
                 ImGui::PushID(i);
@@ -94,11 +98,36 @@ void StrSection::draw(App& app) {
                                      ImGuiInputTextFlags_CallbackResize, callback, &lines_[i])) {
                     syncTextFromLines();
                     dirty = true;
+                    selectedLine_ = i;
+                    sel.Select(DocKind::Str, EditorSelection::Kind::StringLine, i);
                 }
                 ImGui::PopID();
             }
         }
         ImGui::EndTable();
+    }
+}
+
+void StrSection::drawProperties(App& app, EditorSelection& sel) {
+    (void)app;
+    if (!loaded) {
+        ui::EmptyState("Not loaded", "str.dat missing from the data folder");
+        return;
+    }
+    if (!linesBuilt_) rebuildLines();
+    if (sel.doc == DocKind::Str && sel.kind == EditorSelection::Kind::StringLine) selectedLine_ = sel.index;
+
+    ui::SectionBlock("String pool");
+    ImGui::Text("%zu lines", lines_.size());
+    ImGui::TextDisabled("%zu encoded bytes on disk", file_.rawSize);
+    ImGui::Spacing();
+    if (selectedLine_ >= 0 && selectedLine_ < static_cast<int>(lines_.size())) {
+        ui::SectionBlock("Selected line");
+        ImGui::Text("Line %d", selectedLine_);
+        ImGui::TextWrapped("%s", lines_[selectedLine_].empty() ? "(empty)" : lines_[selectedLine_].c_str());
+        ImGui::TextDisabled("%zu chars", lines_[selectedLine_].size());
+    } else {
+        ui::EmptyState("No line selected", "Click a row number in the Workspace");
     }
 }
 

@@ -12,7 +12,8 @@
 //   draw_viewport_red_lines   0x60B6  — three 8080 segments (status-bar column dividers)
 //   play_screen_panel_box     0x55D8  — 809E box row=0x11 col=0x26 (Protection header rule)
 //   show_command_reference    0x5D54  — 809E + party/command text rows
-//   draw_party_status_panel   0x42DC  — nwcp.32 portrait/stats blits (called from 0x5312)
+//   draw_party_status_panel   0x6150  — party lines rows 0x13..0x16
+//   clear_cell_rect           0x42DC  — win_clear_cells (not nwcp portraits)
 //   play_frame_draw           0x5444  — 5312 party lines → 53A0 viewport (2ECE 3D)
 //
 // 3D backdrop anchors (view_3d_master @ 0x2ECE): sky @ (8,8), floor @ (8,68), 208×60 each.
@@ -27,23 +28,39 @@ constexpr uint8_t kBorderR = 255;
 constexpr uint8_t kBorderG = 0;
 constexpr uint8_t kBorderB = 0;
 
+/* Blue modal frames: outdoor init @ 0x2680E stores A4-$7A4C = pen $16 and
+ * A4-$7A50 = pen $12 (town.32 / play palette). Controls @ 0x13CCE paints the
+ * window with -$7A4C then prints with -$7A50. Death Strikes / Search use
+ * -$7A4C via -$7F74 console_box; Victory rules use A4-$7A4D (pen 20) glyph 5.
+ * RGB matches town.32 pens $16 / $12 / $14-ish border highlight. */
+constexpr uint8_t kUiBlueFillR = 51;   /* pen $16 — Controls window fill */
+constexpr uint8_t kUiBlueFillG = 51;
+constexpr uint8_t kUiBlueFillB = 119;
+constexpr uint8_t kUiBlueBorderR = 0x55; /* brighter frame approx (pens $14/$15) */
+constexpr uint8_t kUiBlueBorderG = 0x88;
+constexpr uint8_t kUiBlueBorderB = 0xFF;
+constexpr uint8_t kUiYellowTextR = 255; /* pen $12 — Controls / OP_06 text+border */
+constexpr uint8_t kUiYellowTextG = 255;
+constexpr uint8_t kUiYellowTextB = 0;
+
 // Interior first-person lattice (View3D / 0x2ECE).
 constexpr int kViewOriginX = 8;
 constexpr int kViewOriginY = 8;
 constexpr int kViewW = 208;
 constexpr int kViewH = 120;
 
-// Red frame around the 3D window (outer chrome from 0x54F2 / 0x60F4 path).
-constexpr int kViewportFrameX = 6;
-constexpr int kViewportFrameY = 6;
-constexpr int kViewportFrameW = 212;
-constexpr int kViewportFrameH = 126;
+// Red frame around the 3D window — outer glyph border uses cells, not a 2px frame.
+// Viewport interior cells (1,1)-(26,15) → px (8,8)-(215,127). Right column (28,1)-(38,15).
+constexpr int kViewportFrameX = 8;
+constexpr int kViewportFrameY = 8;
+constexpr int kViewportFrameW = 208;
+constexpr int kViewportFrameH = 120;
 
-// Protection / stats column (809E @ 0x55D8 uses row 0x11 ≈ this band).
-constexpr int kProtectFrameX = 220;
-constexpr int kProtectFrameY = 6;
-constexpr int kProtectFrameW = 94;
-constexpr int kProtectFrameH = 126;
+// Protection / Options column interior: cols 28..38, rows 1..15.
+constexpr int kProtectFrameX = 0x1C * 8;
+constexpr int kProtectFrameY = 8;
+constexpr int kProtectFrameW = 11 * 8;
+constexpr int kProtectFrameH = 15 * 8;
 
 // Eagle/Wizard Eye 5×5 overlay (spell_eye @ 0x1E74, blit loop @ 0x1F7E).
 // Dest X = col*0xE + 0xE8; dest Y = 0x3D - row*0xB (row 0 = bottom).
@@ -55,16 +72,16 @@ constexpr int kAutomapOriginX = 0x36;
 constexpr int kAutomapBottomY = 0xAC;
 constexpr int kAutomapOriginY = kAutomapBottomY - 15 * 11; /* row 15 (north) → Y=7 */
 
-// Status strip ('O' Options, Day, Year, Face) — 8080 @ 0x60B6 row 0x12 cell dividers.
-constexpr int kStatusBarY = 134;
-constexpr int kStatusBarH = 10;
-constexpr int kStatusColDiv1X = 96;
-constexpr int kStatusColDiv2X = 168;
-constexpr int kStatusColDiv3X = 248;
+// Status strip ('O' Options, Day, Year, Face) — row 0x11 (engine y = 17*8).
+constexpr int kStatusBarY = 0x11 * 8;
+constexpr int kStatusBarH = 8;
+constexpr int kStatusColDiv1X = 0x0C * 8;
+constexpr int kStatusColDiv2X = 0x15 * 8;
+constexpr int kStatusColDiv3X = 0x1F * 8;
 
-// Eight-slot party list (format_party_status_line @ 0x5312, rows in nwcp band).
-constexpr int kPartyPanelY = 146;
-constexpr int kPartyPanelH = 52;
+// Eight-slot party list @ 0x6150 — rows 0x13..0x16 (engine y = 19*8).
+constexpr int kPartyPanelY = 0x13 * 8;
+constexpr int kPartyPanelH = 4 * 8;
 
 // Status + party band chrome (0x60F4 h-lines rows 0x10/0x12; dividers 0x60B6).
 // Exploration chrome uses h_line/v_line/outerFrame only — NOT console_box (809E
@@ -115,11 +132,13 @@ constexpr AgaCombatSpriteLayout kAgaCombatSpriteLayout[kAgaCombatSpriteLayoutCou
     {40, 48}, /* front-center */
 };
 
-// In-game modal overlays (Quick Ref @ 0x595C, character sheet @ 0x39B4 family).
-constexpr int kPlayOverlayBorderRow = 1;
-constexpr int kPlayOverlayBorderCol = 1;
-constexpr int kPlayOverlayBorderW = 38;
-constexpr int kPlayOverlayBorderH = 23;
+// In-game modal overlays (Quick Ref @ 0x595C, character sheet wrapper @ 0x398C).
+// Red frame is play outer frame (-$7F7A → 0x422A), NOT console_box: cols 0..39,
+// rows 0..23. Sheet/QR text Locate(1,…) sits inside that frame.
+constexpr int kPlayOverlayBorderRow = 0;
+constexpr int kPlayOverlayBorderCol = 0;
+constexpr int kPlayOverlayBorderW = 40;
+constexpr int kPlayOverlayBorderH = 24;
 
 // Quick Ref table — party_roster_list_draw @ 0x5984 (Locate/Print cols).
 constexpr int kQuickRefHeaderRow1 = 0x01;
@@ -127,17 +146,17 @@ constexpr int kQuickRefHeaderRow2 = 0x0c;
 constexpr int kQuickRefDataRow1Base = 0x03;   // slot + 3
 constexpr int kQuickRefDataRow2Base = 0x0e;   // slot + 14
 constexpr int kQuickRefColIndex = 0x01;
-constexpr int kQuickRefColHpSlash = 0x14;     // HP '/' column
-constexpr int kQuickRefColSpSlash = 0x20;     // SP '/' column
-constexpr int kQuickRefColLvl = 0x08;
-constexpr int kQuickRefColSL = 0x0a;
+constexpr int kQuickRefColHpSlash = 0x14;     // '/' after live HP
+constexpr int kQuickRefColSpCurrent = 0x1b;   // SP current (width-1)
+constexpr int kQuickRefColSpSlash = 0x20;     // '/' then SP max
+constexpr int kQuickRefColSL = 0x08;
+constexpr int kQuickRefColAC = 0x0a;
 constexpr int kQuickRefColAge = 0x0e;
-constexpr int kQuickRefColAC = 0x12;
-constexpr int kQuickRefColGems = 0x18;
-constexpr int kQuickRefColFood = 0x1c;
-constexpr int kQuickRefColCond = 0x20;
+constexpr int kQuickRefColGems = 0x12;
+constexpr int kQuickRefColFood = 0x18;
+constexpr int kQuickRefColCond = 0x1c;
 
-// In-game character sheet slash column (LAB_38EA / title sheet WinUAE path).
-constexpr int kInGameSheetSlashCol = 0x12;
+// LAB_38EA field 2/6: '/' + max at col $11 (not $12).
+constexpr int kInGameSheetSlashCol = 0x11;
 
 }  // namespace mm2::gfx::play_layout

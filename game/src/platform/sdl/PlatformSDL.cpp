@@ -4,7 +4,15 @@
 
 #include <SDL.h>
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
@@ -20,7 +28,42 @@ SDL_Renderer *g_renderer = nullptr;
 SDL_Texture *g_texture = nullptr;
 int g_tex_w = 0;
 int g_tex_h = 0;
+int g_requested_scale = 2;
 int g_scale = 2;
+
+constexpr int kFbW = 320;
+constexpr int kFbH = 200;
+
+int dpiAdjustedScale(int requested)
+{
+    if (requested < 1) {
+        requested = 1;
+    }
+    float ddpi = 96.f;
+    if (SDL_GetDisplayDPI(0, &ddpi, nullptr, nullptr) != 0 || ddpi < 48.f) {
+        return requested;
+    }
+    int adj = static_cast<int>(std::lround(static_cast<double>(requested) * (static_cast<double>(ddpi) / 96.0)));
+    if (adj < requested) {
+        adj = requested;
+    }
+    SDL_DisplayMode mode{};
+    if (SDL_GetDesktopDisplayMode(0, &mode) == 0 && mode.w > 0 && mode.h > 0) {
+        const int max_s = std::min(mode.w / kFbW, mode.h / kFbH);
+        if (max_s >= 1 && adj > max_s) {
+            adj = max_s;
+        }
+    }
+    return adj;
+}
+
+void applyWindowScale()
+{
+    g_scale = dpiAdjustedScale(g_requested_scale);
+    if (g_window) {
+        SDL_SetWindowSize(g_window, kFbW * g_scale, kFbH * g_scale);
+    }
+}
 
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
 constexpr Uint32 kTexturePixelFormat = SDL_PIXELFORMAT_RGBA8888;
@@ -36,6 +79,10 @@ bool init(int *argc, char ***argv)
 {
     (void)argc;
     (void)argv;
+    /* These hints are sampled at SDL_Init / CreateTexture — setting them after
+     * CreateRenderer left DWM/DPI bilinear-scaling the 8×8 glyphs (1px jitter). */
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return false;
@@ -54,8 +101,7 @@ bool init(int *argc, char ***argv)
         return false;
     }
 
-    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
     return true;
 }
@@ -140,23 +186,65 @@ KeyState pollInput()
     const bool right = kb[SDL_SCANCODE_RIGHT] != 0 || kb[SDL_SCANCODE_KP_6] != 0;
     const bool arrow = up || down || left || right;
 
-    /* First arrow frame fires immediately; while held, re-fire ~8 Hz so walk
-     * does not burn a step every vsync. */
+    /* Arrow pacing. Amiga key_read_3d @ 0x1E9CE returns immediately if a key is
+     * already down, then waits via 0x6798(8) ≈ 4×Delay(1) ≈ 80 ms when idle;
+     * A500 hood rebuild then dominates. PC redraw is ~1 ms, so without a floor
+     * hold-repeat runs at the main-loop rate.
+     *
+     * Fire on rising edge; while held, wait an initial delay before the first
+     * re-fire (so a normal ~150 ms tap is one step), then re-fire at ~Amiga
+     * idle cadence. A one-deep buffer latches a press that lands during the
+     * cooldown and delivers it when the gap expires — even if the key is
+     * already up — so taps are not dropped. */
     static bool s_arrow_held = false;
+    static bool s_arrow_repeating = false;
     static Uint32 s_arrow_last_ms = 0;
-    constexpr Uint32 kArrowRepeatMs = 120;
+    static bool s_arrow_pending = false;
+    static bool s_pend_up = false, s_pend_down = false, s_pend_left = false, s_pend_right = false;
+    constexpr Uint32 kArrowInitialRepeatMs = 180; /* first re-fire while held */
+    constexpr Uint32 kArrowRepeatMs = 100;        /* hold cadence ≈ Amiga idle wait */
+    constexpr Uint32 kArrowMinGapMs = 80;         /* floor between any two steps */
+    const Uint32 now = SDL_GetTicks();
+    auto fire_arrow = [&](bool fu, bool fd, bool fl, bool fr) {
+        k.up = fu;
+        k.down = fd;
+        k.left = fl;
+        k.right = fr;
+        s_arrow_last_ms = now == 0 ? 1 : now;
+        s_arrow_pending = false;
+    };
+    const bool gap_ok = (s_arrow_last_ms == 0) || (now - s_arrow_last_ms >= kArrowMinGapMs);
     if (arrow) {
-        const Uint32 now = SDL_GetTicks();
-        if (!s_arrow_held || now - s_arrow_last_ms >= kArrowRepeatMs) {
-            k.up = up;
-            k.down = down;
-            k.left = left;
-            k.right = right;
-            s_arrow_last_ms = now;
+        if (!s_arrow_held) {
+            /* Rising edge: step now, or buffer if the previous step is too fresh. */
+            if (gap_ok) {
+                fire_arrow(up, down, left, right);
+            } else {
+                s_arrow_pending = true;
+                s_pend_up = up;
+                s_pend_down = down;
+                s_pend_left = left;
+                s_pend_right = right;
+            }
             s_arrow_held = true;
+            s_arrow_repeating = false;
+        } else if (s_arrow_pending && gap_ok) {
+            /* Buffered rising edge matured while the key is still down. */
+            fire_arrow(s_pend_up, s_pend_down, s_pend_left, s_pend_right);
+        } else {
+            const Uint32 need = s_arrow_repeating ? kArrowRepeatMs : kArrowInitialRepeatMs;
+            if (now - s_arrow_last_ms >= need) {
+                fire_arrow(up, down, left, right);
+                s_arrow_repeating = true;
+            }
         }
     } else {
+        /* Key up: deliver a buffered press once the min gap has elapsed. */
+        if (s_arrow_pending && gap_ok) {
+            fire_arrow(s_pend_up, s_pend_down, s_pend_left, s_pend_right);
+        }
         s_arrow_held = false;
+        s_arrow_repeating = false;
     }
 
     /* Edge-trigger letters/digits and named menu keys so combat/menus get one
@@ -172,8 +260,21 @@ KeyState pollInput()
         }
         s_prev_letter[i] = key_down;
     }
+    /* SDL_SCANCODE_1..9 are 30..38, then SDL_SCANCODE_0 is 39 — not 0+i.
+     * Same for KP_1..9 then KP_0. KP_2/4/6/8 are already movement aliases above. */
+    static const SDL_Scancode kRowDigit[10] = {
+        SDL_SCANCODE_0, SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4,
+        SDL_SCANCODE_5, SDL_SCANCODE_6, SDL_SCANCODE_7, SDL_SCANCODE_8, SDL_SCANCODE_9,
+    };
+    static const SDL_Scancode kKpDigit[10] = {
+        SDL_SCANCODE_KP_0, SDL_SCANCODE_KP_1, SDL_SCANCODE_KP_2, SDL_SCANCODE_KP_3, SDL_SCANCODE_KP_4,
+        SDL_SCANCODE_KP_5, SDL_SCANCODE_KP_6, SDL_SCANCODE_KP_7, SDL_SCANCODE_KP_8, SDL_SCANCODE_KP_9,
+    };
     for (int i = 0; i < 10; ++i) {
-        const bool key_down = kb[SDL_SCANCODE_0 + i] != 0 || kb[SDL_SCANCODE_KP_0 + i] != 0;
+        bool key_down = kb[kRowDigit[i]] != 0;
+        if (i != 2 && i != 4 && i != 6 && i != 8) {
+            key_down = key_down || kb[kKpDigit[i]] != 0;
+        }
         if (key_down && !s_prev_digit[i] && k.last_ascii == 0) {
             k.last_ascii = static_cast<char>('0' + i);
         }
@@ -230,20 +331,33 @@ void presentFrame(const uint8_t *rgba, int width, int height)
         g_texture = SDL_CreateTexture(g_renderer, kTexturePixelFormat, SDL_TEXTUREACCESS_STREAMING, width, height);
         g_tex_w = width;
         g_tex_h = height;
+        if (g_texture) {
+            SDL_SetTextureScaleMode(g_texture, SDL_ScaleModeNearest);
+        }
     }
 
     if (!g_texture) {
         return;
     }
 
-    const int scaled_w = width * g_scale;
-    const int scaled_h = height * g_scale;
     int win_w = 0;
     int win_h = 0;
     if (SDL_GetRendererOutputSize(g_renderer, &win_w, &win_h) != 0) {
         SDL_GetWindowSize(g_window, &win_w, &win_h);
     }
-
+    /* Integer letterbox only — fractional dst sizes shift 8×8 cells by a pixel. */
+    int scale = g_scale;
+    if (win_w > 0 && win_h > 0) {
+        const int fit = std::min(win_w / width, win_h / height);
+        if (fit > 0) {
+            scale = fit;
+        }
+    }
+    if (scale < 1) {
+        scale = 1;
+    }
+    const int scaled_w = width * scale;
+    const int scaled_h = height * scale;
     const int dst_x = std::max(0, (win_w - scaled_w) / 2);
     const int dst_y = std::max(0, (win_h - scaled_h) / 2);
     SDL_Rect dst{dst_x, dst_y, scaled_w, scaled_h};
@@ -260,9 +374,9 @@ void waitVblank() {}
 void setPresentScale(int scale)
 {
     if (scale > 0) {
-        g_scale = scale;
+        g_requested_scale = scale;
     }
-
+    applyWindowScale();
 }
 
 void setWindowTitle(const char *title)
@@ -275,10 +389,11 @@ void setWindowTitle(const char *title)
 
 void setWindowSize(int width, int height)
 {
-    if (g_window && width > 0 && height > 0) {
-        SDL_SetWindowSize(g_window, width, height);
-    }
-
+    (void)width;
+    (void)height;
+    /* AppHost passes 320×N / 200×N; apply DPI so the window stays the old
+     * on-screen size after per-monitor awareness (640×400 was shrinking). */
+    applyWindowScale();
 }
 
 void delayMs(int ms) { SDL_Delay(static_cast<Uint32>(ms)); }
@@ -318,16 +433,25 @@ bool resolveDataDir(const char *hint, char *out, size_t out_cap)
         std::snprintf(out, out_cap, "%s", (dir && dir[0]) ? dir : ".");
     };
 
-    /* Explicit CLI path: validate only that directory (matches playscreen_golden). */
+    /* Explicit CLI path: that directory, or an ``amiga`` child (distribute layout). */
     if (hint && hint[0] && !(hint[0] == '.' && hint[1] == '\0')) {
         if (probeMapDat(hint)) {
             writeResolved(hint);
             return true;
         }
+        char amiga_child[MM2_PATH_SCRATCH_CAP];
+        if (joinDataPath(amiga_child, sizeof(amiga_child), hint, "amiga") && probeMapDat(amiga_child)) {
+            writeResolved(amiga_child);
+            return true;
+        }
         return false;
     }
 
-    static const char *const kCandidates[] = {hint, ".", "..", "../..", "../../.."};
+    /* Default: cwd / parents, plus ``amiga`` subfolders used by the dist package. */
+    static const char *const kCandidates[] = {
+        hint, ".", "amiga", "./amiga", "..", "../amiga", "../..", "../../amiga", "../../..",
+        "../../../amiga",
+    };
     for (const char *dir : kCandidates) {
         if (probeMapDat(dir)) {
             writeResolved(dir);

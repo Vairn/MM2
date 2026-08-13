@@ -82,17 +82,41 @@ public:
      *  3D view + party panel visible — faithful, non-fullscreen (doc 15 §4). */
     void render(gfx::ScreenCompositor &c) const;
 
+    /** Temple hireling leaf @ 0x1E116 — paid A–F menu suppressed; heal text only. */
+    bool templeHirelingHealView() const
+    {
+        return active_ && kind_ == Kind::Temple && phase_ == Phase::HirelingTemple;
+    }
+
+    /** ASM string @ 0x1E26A / 0x1E27B while hireling heal view is active; else "". */
+    const char *templeHirelingHealMessage() const;
+
 private:
     enum class Kind : uint8_t { None, Temple, Training, Smith, MageGuild, Tavern };
-    enum class Phase : uint8_t { Menu, SmithItems, Denied, TavernFood, TavernDrink, TavernRumor };
+    enum class Phase : uint8_t {
+        Menu,
+        SmithItems,
+        Denied,
+        TavernFood,
+        TavernBoost,
+        TavernRumor,
+        HirelingTemple /* free auto-heal leaf 0x1E116 — no A–F captions */
+    };
     enum class SmithMode : uint8_t { Buy, Sell, Identify };
 
     void applyTempleAndReturn(int party_slot);
+    void applyHirelingTempleAutoHeal(int party_slot);
+    void enterTempleMemberView(int party_slot);
+    void drawHirelingTempleHeal(gfx::ScreenCompositor &c) const;
     void applyTrainingAndReturn(int party_slot);
     void applySmithBuyAndReturn(int party_slot);
     void applySmithSellAndReturn(int party_slot);
     void applySmithIdentifyAndReturn(int party_slot);
     void applyTavernFeedingFrenzy();
+    void applyTavernStatBoost(int slot);
+    void applyTavernSpecialty(int food_idx);
+    void applyTavernTip();
+    void applyTavernRumor();
     void applyGuildBuyAndReturn(int party_slot);
     void showActiveMemberGold();
     void buildSmithView();
@@ -134,6 +158,8 @@ private:
     int active_member_ = 0;         /* A4-$5A3A shop member index; digits 1..8 or # */
 
     char status_[96] = {};        /* last transaction feedback line */
+    /* Hireling temple leaf message: "has been healed." or "  is healthy." (0x1E26A/0x1E27B). */
+    char hireling_heal_msg_[24] = {};
 };
 
 }  // namespace mm2::ui
