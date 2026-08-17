@@ -28,11 +28,11 @@ In DATA hunk 0, offset `0x07B0..0x0838` is a contiguous array of relocated longw
 - `town.32`
 - `cavef.32`
 - `cavet.32`
-- `townb.32` (reused)
+- `townb.32` (reused; cavern hardware palette is `cave.32`)
 - `cave.32`
 - `castlef.32`
 - `castlet.32`
-- `townb.32` (reused)
+- `townb.32` (reused; castle hardware palette is `castle.32`)
 - `castle.32`
 - `outdoor1.32`
 - `outdoor2.32`

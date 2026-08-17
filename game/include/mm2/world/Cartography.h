@@ -1,5 +1,6 @@
 #pragma once
 // Auto-map tile mapping (@0x2182, called by overland_map_view @0x223A).
+// Indoor tiles are always townb.32; cavern/castle only swap the env wall palette.
 // See editor/src/core/Cartography.h and EXTRACTED/docs/15-3d-view-and-game-screen.md §3.
 
 #include "mm2/CppStdCompat.h"

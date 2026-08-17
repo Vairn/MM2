@@ -20,8 +20,8 @@ struct FieldSpec {
 // does NOT set bit7 on the selector, so the field engine (0x17766) accesses the
 // field at its natural width. Resolve the script selector to its real record
 // offset+width via the ROM jump table @ 0x17FEA (EventFieldMap.h). Returns false
-// for the two computed getters (sel 0x00/0x01 = base max HP/SP @ 0x181B0), which
-// have no writable record offset.
+// for the two computed getters (sel 0x00 = roster array index, sel 0x01
+// unconfirmed, both @ 0x181B0), which have no writable record offset.
 bool resolveField(uint8_t selector, FieldSpec *out)
 {
     if (!out) {

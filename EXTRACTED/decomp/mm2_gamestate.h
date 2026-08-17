@@ -54,6 +54,7 @@
 #define MM2_GS_PARTY_RAN_LATCH  (-0x5E4C)  /* byte  ($A1B4) set #1 on successful char Run @ 0x116D2; → 0x11646 */
 #define MM2_GS_MELEE_RANGE_N    (-0x0524)  /* byte  ($FADC) monsters in melee reach; 0x11D0C / AI @ 0x1079A */
 #define MM2_GS_FRONT_RANK_N     (-0x5E4D)  /* byte  ($A1B3) party front-rank cutoff; 0x11D0C / 0xFE00 KO expand / 0x103BA */
+#define MM2_GS_HIDE_THRESH      (-0x5E4E)  /* byte  ($A1B2) party thievery mean @ 0x12D42 ← 0x4B60; Hide/surprise */
 #define MM2_GS_ATTRIB_FLAGS     (-0x5600)  /* byte  ($AA00) = attrib 0x1A flags */
 #define MM2_GS_SIGN_ENV_ID      (-0x79E3)  /* byte  ($861D) OP_0B table pick @ 0x15772 */
 #define MM2_GS_RUNTIME_ENV      (-0x7660)  /* byte  ($89A0) area gfx env id; surface_flag&0xF @ 0x1650 */
@@ -110,6 +111,7 @@
 #define MM2_GS_SHIELD_COUNTER   (-0x799B)  /* byte  ($8665) Shield addq @ 0xBB5C; half dmg @ 0xFD48 */
 #define MM2_GS_POWER_SHIELD_CTR (-0x799A)  /* byte  ($8666) Power Shield addq @ 0xBEC8; half @ 0xFD2C */
 #define MM2_GS_HOLY_BONUS_CTR   (-0x7999)  /* byte  ($8667) Holy Bonus add @ 0xC320 */
+#define MM2_GS_ATTRIB_TRAP_SHIFT (-0x5606) /* byte ($A9FA) attrib+0x14; 0x1A8A4 *2 loop */
 #define MM2_GS_ATTRIB_RECALL_COORD (-0x5604) /* byte ($A9FC) attrib+0x16 packed YX; Surface @ 0xB2B2 */
 #define MM2_GS_ATTRIB_RECALL_SCREEN (-0x5602) /* byte ($A9FE) attrib+0x18 dest screen; Surface */
 #define MM2_GS_MONSTER_PABIL    (-0x11BC)  /* byte  ($EE44) Pabil&$1F @ 0x4DFA */
@@ -130,7 +132,7 @@
 #define MM2_GS_LUCK_THRESH_TBL  (-0x7486)  /* byte[] ($8B7A) 0x4442 luck→bonus */
 #define MM2_GS_RESIST_BUFF_A    (-0x79AA)  /* byte ($8656) added to +$16 in 0x4952 */
 #define MM2_GS_RESIST_BUFF_C    (-0x79A9)  /* byte ($8657) added in 0x4952 flag-C */
-#define MM2_GS_TIME_DISTORT     (-0x0523)  /* byte  ($FADD) Time Distortion addq @ 0xBBCE */
+#define MM2_GS_TIME_DISTORT     (-0x0523)  /* byte  ($FADD) Time Distortion addq @ 0xBBA6; 0x13282 ends fight */
 #define MM2_GS_ENTRAPMENT       (-0x0522)  /* byte  ($FADE) Entrapment addq @ 0xBD00 */
 #define MM2_GS_HOLY_WORD_GATE   (-0x0520)  /* byte  ($FAE0) Holy Word sets #1 @ 0xC756 */
 #define MM2_GS_TURN_UNDEAD_USED (-0x051F)  /* byte  ($FAE1) Turn Undead latch @ 0xC078 */
@@ -298,6 +300,11 @@
 #define MM2_GS_SCRIPTED_KEY_DX  (-0x71D8)  /* word  place arg3 default $20 → dst_y-8 */
 #define MM2_GS_SCRIPTED_KEY_MAXP (-0x1116) /* byte  placement clamp (sign load @ 0x320C) */
 #define MM2_GS_SCRIPTED_KEY_MODE MM2_GS_OP0E_FD_MODE /* -$71DC: $FD wrap, $FF stop */
+/* OP_0E 0xE2 @ 0x18204: bank-0 next-string ptrs (A4-relative i32 in remake).
+ * 22 jokes × 4 lines; index = day[era] % 22 (divs.w #$16 / swap). */
+#define MM2_GS_JOKE_PTR         (-0x5C42)  /* long[22][4] stride $10 per joke */
+#define MM2_GS_JOKE_COUNT       22
+#define MM2_GS_JOKE_LINES       4
 /* Tavern 0x1D208 bank-1 fill (A4-relative i32 ptrs in remake): */
 #define MM2_GS_TAVERN_HDR       (-0x59EE)  /* long[5][4] town×4 menu headers */
 #define MM2_GS_TAVERN_DRINK_LBL (-0x599E)  /* long[6] */

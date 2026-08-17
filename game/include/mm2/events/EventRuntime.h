@@ -30,6 +30,9 @@ enum class EventVmWait : uint8_t {
     HexDigit,
     /** OP_0E 0xC9/0xCA @ 0x1980A: A–D quest difficulty pick. */
     LetterSelect,
+    /** OP_1E @ 0x16780: timed wait (~arg/50 s, skip on a fresh key). Also used
+     *  as a port hop-dwell after silent OP_0D 0x09 / OP_0C cruise teleports. */
+    Delay,
 };
 
 class EventRuntime {
@@ -121,6 +124,8 @@ public:
 
     /** OP_0E 0x7E @ 0xD576: prompt X then Y (0–15 hex). */
     void armFreeTeleportUi();
+    /** OP_0E 0xCF @ 0x1480A: Pinehurst Wayback machine, "What era do you desire (1-8)?" */
+    void armWaybackMachineUi();
     /** OP_0E 0xC9/0xCA @ 0x19AB4/0x19AC4 → 0x1980A: Hoardall/Slayer Y/N then A–D. */
     void armQuestEncodeUi(bool drink);
     /** OP_0E 0xFD abort==2 / inn accept: arm Goto Town @ 0x1A1F8. */
@@ -133,6 +138,14 @@ public:
     void armSlideTrapHalve() { pending_slide_trap_halve_ = true; }
 
     int locationId() const { return location_id_; }
+
+    /** Current location record (triplets / scripts) for developer overlay. */
+    const Mm2EventLocation *currentLocation() const { return loc_; }
+
+    /** PORT DEVIATION (ASM unclear): mark this map tile's scripted triplet as
+     *  resolved for the rest of the current map visit. Distinct from collision
+     *  page bit7 (ambient-encounter gate). Reset by enterLocation. */
+    void markTileEventResolved(int y, int x);
 
     /** OP_0E default-range dispatch (0x15EDC → event_dat_loader): run overlay
      *  location `category` string/script slot `index` (ASM stores index in
@@ -179,6 +192,7 @@ private:
     void dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t op);
     void endScript(GameStateView &gs);
     void abortScript(GameStateView &gs);
+    void resetDelayState();
     void applyMapTransition(GameStateView &gs, world::MapWorld &world, uint8_t dest_screen,
                             uint8_t dest_tile);
     /** Queued dispatch @ 0x176B6: seek queued id in current work_buf and run VM. */
@@ -198,6 +212,19 @@ private:
 
     bool script_active_ = false;
     EventVmWait wait_ = EventVmWait::None;
+    /** OP_07 SPACE is level-sampled on the host; require a release after the wait
+     *  arms so a held victory-dismiss / prior-page key cannot skip the plaque. */
+    bool space_wait_armed_ = true;
+    bool space_wait_active_ = false;
+    /** OP_1E / hop-dwell remaining host frames (~60 Hz). */
+    uint16_t delay_remaining_ = 0;
+    /** Leftover Y/Enter from the prior Yes/No must not skip OP_1E. */
+    bool delay_skip_armed_ = false;
+    bool delay_key_skippable_ = false;
+    /** This script executed OP_0D index 0x09 (pre-transition sound). */
+    bool op0d_09_this_script_ = false;
+    /** This script already paused (SPACE / Y/N / OP_1E); skip hop-dwell. */
+    bool script_had_wait_ = false;
     bool screen_changed_ = false;
     char service_title_[128]{};
     EventTextView text_{};
@@ -214,11 +241,14 @@ private:
     bool pending_skill_buy_member_ = false;
     bool pending_general_store_member_ = false;
     bool pending_circus_attr_ = false;
+    bool pending_time_machine_ = false;
     bool pending_slide_trap_halve_ = false;
     uint8_t pending_free_teleport_stage_ = 0; /* 0=idle 1=X 2=Y */
     uint8_t pending_free_teleport_x_ = 0;
     uint8_t pending_quest_encode_stage_ = 0; /* 0=idle 1=Y/N 2=A–D */
     bool pending_quest_drink_ = false;
+    /** Formatted A–C quest briefing (item/monster name via townSvcQuestTargetName). */
+    char quest_msg_[256] = {};
     uint8_t pending_skill_id_ = 0;
     uint32_t pending_skill_cost_ = 0;
 
@@ -232,6 +262,10 @@ private:
     /** OP_2F answer entry: chars typed so far (max 10), space-padded on commit. */
     int answer_len_ = 0;
     char answer_buf_[11]{};
+
+    /** Per-tile scripted-event resolved flags for the current location visit.
+     *  Index = (y<<4)|x. Not an ASM A4 field — see markTileEventResolved. */
+    uint8_t tile_event_resolved_[256]{};
 };
 
 }  // namespace mm2::events

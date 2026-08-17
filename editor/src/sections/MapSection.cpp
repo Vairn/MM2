@@ -6,6 +6,7 @@
 #include "app/App.h"
 #include "core/AreaNames.h"
 #include "core/Cartography.h"
+#include "core/Gfx.h"
 #include "imgui.h"
 #include "widgets/Texture.h"
 #include "widgets/UiLayout.h"
@@ -22,6 +23,7 @@ void MapSection::Sheet::release(std::vector<unsigned int>* deferGl) {
     ok = false;
     frameW.clear();
     frameH.clear();
+    std::memset(palette, 0, sizeof(palette));
     if (deferGl) {
         for (unsigned int t : tex)
             if (t) deferGl->push_back(t);
@@ -31,10 +33,11 @@ void MapSection::Sheet::release(std::vector<unsigned int>* deferGl) {
     tex.clear();
 }
 
-void MapSection::Sheet::loadFile(const std::string& path) {
+void MapSection::Sheet::loadFile(const std::string& path, const uint8_t (*palette_override)[4]) {
     GfxImage tmp;
-    if (!gfxLoad(path, false, tmp)) return;
+    if (!gfxLoad(path, false, tmp, palette_override)) return;
     ok = tmp.ok;
+    std::memcpy(palette, tmp.palette, sizeof(palette));
     frameW.clear();
     frameH.clear();
     tex.clear();
@@ -71,6 +74,8 @@ void MapSection::releaseTextures(bool deferGl) {
     std::vector<unsigned int>* defer = deferGl ? &pendingFreeTextures_ : nullptr;
     outb_.release(defer);
     townb_.release(defer);
+    townbCave_.release(defer);
+    townbCastle_.release(defer);
     sky_.release(defer);
     floorTown_.release(defer);
     floorCave_.release(defer);
@@ -105,7 +110,6 @@ void MapSection::loadTilesets(const std::string& dataDir) {
     dataDir_ = dataDir;
     releaseTextures(/*deferGl=*/true);
     outb_.loadFile(dataDir + "/outb.32");
-    townb_.loadFile(dataDir + "/townb.32");
     sky_.loadFile(dataDir + "/sky.32");
     floorTown_.loadFile(dataDir + "/townf.32");
     floorCave_.loadFile(dataDir + "/cavef.32");
@@ -114,6 +118,10 @@ void MapSection::loadTilesets(const std::string& dataDir) {
     wallTown_.loadFile(dataDir + "/town.32");
     wallCave_.loadFile(dataDir + "/cave.32");
     wallCastle_.loadFile(dataDir + "/castle.32");
+    /* Cavern/castle share townb.32; only the env wall palette changes. */
+    townb_.loadFile(dataDir + "/townb.32", wallTown_.ok ? wallTown_.palette : nullptr);
+    townbCave_.loadFile(dataDir + "/townb.32", wallCave_.ok ? wallCave_.palette : nullptr);
+    townbCastle_.loadFile(dataDir + "/townb.32", wallCastle_.ok ? wallCastle_.palette : nullptr);
     torchTown_.loadFile(dataDir + "/townt.32");
     torchCave_.loadFile(dataDir + "/cavet.32");
     torchCastle_.loadFile(dataDir + "/castlet.32");
@@ -159,6 +167,17 @@ MapSection::Env MapSection::envOf(int screen) const {
         if (cat == 4 || env == 19 || env == 20) return Env::Castle;
     }
     return Env::Town;
+}
+
+const MapSection::Sheet& MapSection::indoorCartoSheet() const {
+    switch (envOf(screen_)) {
+        case Env::Cavern:
+            return townbCave_.ok ? townbCave_ : townb_;
+        case Env::Castle:
+            return townbCastle_.ok ? townbCastle_ : townb_;
+        default:
+            return townb_;
+    }
 }
 
 const MapSection::Sheet* MapSection::biomeSheet(OutdoorBiome biome) const {
@@ -687,7 +706,8 @@ void MapSection::drawGrid(const char* id, std::array<uint8_t, kMapPageSize>& pag
 void MapSection::drawCartoGrid(const char* id, std::array<uint8_t, kMapPageSize>& page,
                                int& selTile, bool forceTownb, bool markEvents) {
     bool useTownb = forceTownb || !usesOutbCarto(screen_);
-    const std::vector<unsigned int>& tex = useTownb ? townb_.tex : outb_.tex;
+    const Sheet& carto = useTownb ? indoorCartoSheet() : outb_;
+    const std::vector<unsigned int>& tex = carto.tex;
     if (tex.empty()) {  // tileset missing -> fall back to the hex grid
         drawGrid(id, page, selTile, markEvents);
         return;
@@ -752,7 +772,8 @@ void MapSection::drawMinimap() {
     // Visual tab.  Event dots still come from page 1 (collision 0x80 flag).
     const bool  useOutb    = usesOutbCarto(screen_);
     const bool  useTownb   = !useOutb;
-    const std::vector<unsigned int>& tex = useTownb ? townb_.tex : outb_.tex;
+    const Sheet& carto = useTownb ? indoorCartoSheet() : outb_;
+    const std::vector<unsigned int>& tex = carto.tex;
     const int   dim        = kMapGridDim;
     const float tw         = 14.0f * zoom_;
     const float th         = 11.0f * zoom_;
@@ -820,7 +841,7 @@ void MapSection::drawMinimap() {
                           ui::ToU32(ImVec4(0.95f, 0.82f, 0.28f, 0.22f)));
         dl->AddRect(ImVec2(pcx, pcy), ImVec2(pcx + tw, pcy + th),
                     ui::ToU32(ImVec4(0.95f, 0.82f, 0.28f, 0.78f)), 0.0f, 0, 1.5f);
-        dl->AddImage(static_cast<ImTextureID>(townb_.tex[dirFrame]),
+        dl->AddImage(static_cast<ImTextureID>(carto.tex[dirFrame]),
                      ImVec2(pcx, pcy), ImVec2(pcx + tw, pcy + th));
     } else {
         // Primitive fallback: yellow circle + white facing triangle

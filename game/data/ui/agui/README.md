@@ -14,9 +14,25 @@ Disabled on purpose: `gen_agui_seed_art.py` (rectangles), `remaster_agui_art.py`
 
 ```powershell
 python tools/author_agui_pixel_art.py
+python tools/author_agui_doll.py
 python tools/pack_agui_ui.py
 python tools/ui_pack_preview.py
 ```
+
+## Item icons (paper doll)
+
+`--play-ui=agui` character sheet uses a paper-doll + backpack grid. **You** generate
+the 12×12 item sprites with an image AI — the repo does not invent them.
+
+1. Prompt: [`ITEM_ICON_PROMPT.md`](ITEM_ICON_PROMPT.md)
+2. Ingest: `python tools/ingest_agui_item_icons.py --from-dir <exports>`
+   or `--sheet batch.png --start 0x01 --cols 8 --cell 96`
+3. Drop results in [`items/`](items/) as `i01.png`…`iff.png`, then re-pack.
+
+Doll chrome (`doll/body`, `doll/slot`) is authored on-grid by `author_agui_doll.py`.
+Classic `--play-ui=classic` keeps the original Equipped 1–6 / Backpack A–F text list.
+
+## Runtime
 
 ## Runtime
 

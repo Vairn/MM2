@@ -1005,6 +1005,41 @@ build playsession_input_test.exe: CXX_EXECUTABLE_LINKER__playsession_input_test_
   TARGET_PDB = playsession_input_test.exe.dbg
 
 # =============================================================================
+# Object build statements for EXECUTABLE target dev_menu_test
+
+
+#############################################
+# Order-only phony target for dev_menu_test
+
+build cmake_object_order_depends_target_dev_menu_test: phony || cmake_object_order_depends_target_mm2_codecs
+
+build CMakeFiles/dev_menu_test.dir/tests/dev_menu_test.cpp.obj: CXX_COMPILER__dev_menu_test_Release C$:/_20260421_/D-REC/development/MM2/game/tests/dev_menu_test.cpp || cmake_object_order_depends_target_dev_menu_test
+  DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
+  DEP_FILE = CMakeFiles\dev_menu_test.dir\tests\dev_menu_test.cpp.obj.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++17
+  INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp
+  OBJECT_DIR = CMakeFiles\dev_menu_test.dir
+  OBJECT_FILE_DIR = CMakeFiles\dev_menu_test.dir\tests
+
+
+# =============================================================================
+# Link build statements for EXECUTABLE target dev_menu_test
+
+
+#############################################
+# Link the executable dev_menu_test.exe
+
+build dev_menu_test.exe: CXX_EXECUTABLE_LINKER__dev_menu_test_Release CMakeFiles/dev_menu_test.dir/tests/dev_menu_test.cpp.obj | libmm2_codecs.a || libmm2_codecs.a
+  FLAGS = -O3 -DNDEBUG
+  LINK_LIBRARIES = libmm2_codecs.a  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
+  OBJECT_DIR = CMakeFiles\dev_menu_test.dir
+  POST_BUILD = cd .
+  PRE_LINK = cd .
+  TARGET_FILE = dev_menu_test.exe
+  TARGET_IMPLIB = libdev_menu_test.dll.a
+  TARGET_PDB = dev_menu_test.exe.dbg
+
+# =============================================================================
 # Object build statements for EXECUTABLE target explore_commands_test
 
 
@@ -1267,6 +1302,14 @@ build CMakeFiles/character_sheet_input_test.dir/src/ui/RosterSkillDisplay.cpp.ob
   OBJECT_DIR = CMakeFiles\character_sheet_input_test.dir
   OBJECT_FILE_DIR = CMakeFiles\character_sheet_input_test.dir\src\ui
 
+build CMakeFiles/character_sheet_input_test.dir/src/ui/AguiAtlas.cpp.obj: CXX_COMPILER__character_sheet_input_test_Release C$:/_20260421_/D-REC/development/MM2/game/src/ui/AguiAtlas.cpp || cmake_object_order_depends_target_character_sheet_input_test
+  DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
+  DEP_FILE = CMakeFiles\character_sheet_input_test.dir\src\ui\AguiAtlas.cpp.obj.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++17
+  INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp
+  OBJECT_DIR = CMakeFiles\character_sheet_input_test.dir
+  OBJECT_FILE_DIR = CMakeFiles\character_sheet_input_test.dir\src\ui
+
 build CMakeFiles/character_sheet_input_test.dir/src/gfx/GfxBackend.cpp.obj: CXX_COMPILER__character_sheet_input_test_Release C$:/_20260421_/D-REC/development/MM2/game/src/gfx/GfxBackend.cpp || cmake_object_order_depends_target_character_sheet_input_test
   DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
   DEP_FILE = CMakeFiles\character_sheet_input_test.dir\src\gfx\GfxBackend.cpp.obj.d
@@ -1323,7 +1366,7 @@ build CMakeFiles/character_sheet_input_test.dir/src/runtime/PathScratch.cpp.obj:
 #############################################
 # Link the executable character_sheet_input_test.exe
 
-build character_sheet_input_test.exe: CXX_EXECUTABLE_LINKER__character_sheet_input_test_Release CMakeFiles/character_sheet_input_test.dir/tests/character_sheet_input_test.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gameplay/InGameCharacterSheet.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gameplay/RosterSkills.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/ui/RosterSkillDisplay.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gfx/GfxBackend.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gfx/ScreenCompositor.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gfx/PlayScreenChrome.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gfx/PartyStatusFormat.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gfx/mm2_font8x8.c.obj CMakeFiles/character_sheet_input_test.dir/src/runtime/PathScratch.cpp.obj | libmm2_codecs.a libmm2_audio_stub.a || libmm2_audio_stub.a libmm2_codecs.a
+build character_sheet_input_test.exe: CXX_EXECUTABLE_LINKER__character_sheet_input_test_Release CMakeFiles/character_sheet_input_test.dir/tests/character_sheet_input_test.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gameplay/InGameCharacterSheet.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gameplay/RosterSkills.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/ui/RosterSkillDisplay.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/ui/AguiAtlas.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gfx/GfxBackend.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gfx/ScreenCompositor.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gfx/PlayScreenChrome.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gfx/PartyStatusFormat.cpp.obj CMakeFiles/character_sheet_input_test.dir/src/gfx/mm2_font8x8.c.obj CMakeFiles/character_sheet_input_test.dir/src/runtime/PathScratch.cpp.obj | libmm2_codecs.a libmm2_audio_stub.a || libmm2_audio_stub.a libmm2_codecs.a
   FLAGS = -O3 -DNDEBUG
   LINK_LIBRARIES = libmm2_codecs.a  libmm2_audio_stub.a  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\character_sheet_input_test.dir
@@ -1332,6 +1375,41 @@ build character_sheet_input_test.exe: CXX_EXECUTABLE_LINKER__character_sheet_inp
   TARGET_FILE = character_sheet_input_test.exe
   TARGET_IMPLIB = libcharacter_sheet_input_test.dll.a
   TARGET_PDB = character_sheet_input_test.exe.dbg
+
+# =============================================================================
+# Object build statements for EXECUTABLE target paper_doll_layout_test
+
+
+#############################################
+# Order-only phony target for paper_doll_layout_test
+
+build cmake_object_order_depends_target_paper_doll_layout_test: phony || CMakeFiles/paper_doll_layout_test.dir
+
+build CMakeFiles/paper_doll_layout_test.dir/tests/paper_doll_layout_test.cpp.obj: CXX_COMPILER__paper_doll_layout_test_Release C$:/_20260421_/D-REC/development/MM2/game/tests/paper_doll_layout_test.cpp || cmake_object_order_depends_target_paper_doll_layout_test
+  DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
+  DEP_FILE = CMakeFiles\paper_doll_layout_test.dir\tests\paper_doll_layout_test.cpp.obj.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++17
+  INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp
+  OBJECT_DIR = CMakeFiles\paper_doll_layout_test.dir
+  OBJECT_FILE_DIR = CMakeFiles\paper_doll_layout_test.dir\tests
+
+
+# =============================================================================
+# Link build statements for EXECUTABLE target paper_doll_layout_test
+
+
+#############################################
+# Link the executable paper_doll_layout_test.exe
+
+build paper_doll_layout_test.exe: CXX_EXECUTABLE_LINKER__paper_doll_layout_test_Release CMakeFiles/paper_doll_layout_test.dir/tests/paper_doll_layout_test.cpp.obj
+  FLAGS = -O3 -DNDEBUG
+  LINK_LIBRARIES = -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
+  OBJECT_DIR = CMakeFiles\paper_doll_layout_test.dir
+  POST_BUILD = cd .
+  PRE_LINK = cd .
+  TARGET_FILE = paper_doll_layout_test.exe
+  TARGET_IMPLIB = libpaper_doll_layout_test.dll.a
+  TARGET_PDB = paper_doll_layout_test.exe.dbg
 
 # =============================================================================
 # Object build statements for EXECUTABLE target party_hp_format_test
@@ -2445,6 +2523,14 @@ build CMakeFiles/playscreen_golden.dir/src/gameplay/InGameControlsScreen.cpp.obj
   OBJECT_DIR = CMakeFiles\playscreen_golden.dir
   OBJECT_FILE_DIR = CMakeFiles\playscreen_golden.dir\src\gameplay
 
+build CMakeFiles/playscreen_golden.dir/src/gameplay/DevMenu.cpp.obj: CXX_COMPILER__playscreen_golden_Release C$:/_20260421_/D-REC/development/MM2/game/src/gameplay/DevMenu.cpp || cmake_object_order_depends_target_playscreen_golden
+  DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
+  DEP_FILE = CMakeFiles\playscreen_golden.dir\src\gameplay\DevMenu.cpp.obj.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++17
+  INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2
+  OBJECT_DIR = CMakeFiles\playscreen_golden.dir
+  OBJECT_FILE_DIR = CMakeFiles\playscreen_golden.dir\src\gameplay
+
 build CMakeFiles/playscreen_golden.dir/src/gfx/ScreenCompositor.cpp.obj: CXX_COMPILER__playscreen_golden_Release C$:/_20260421_/D-REC/development/MM2/game/src/gfx/ScreenCompositor.cpp || cmake_object_order_depends_target_playscreen_golden
   DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
   DEP_FILE = CMakeFiles\playscreen_golden.dir\src\gfx\ScreenCompositor.cpp.obj.d
@@ -2669,7 +2755,7 @@ build CMakeFiles/playscreen_golden.dir/src/runtime/PathScratch.cpp.obj: CXX_COMP
 #############################################
 # Link the executable playscreen_golden.exe
 
-build playscreen_golden.exe: CXX_EXECUTABLE_LINKER__playscreen_golden_Release CMakeFiles/playscreen_golden.dir/tests/playscreen_golden.cpp.obj CMakeFiles/playscreen_golden.dir/src/GameSession.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/AutomapView.cpp.obj CMakeFiles/playscreen_golden.dir/src/world/AutomapState.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/RosterSkills.cpp.obj CMakeFiles/playscreen_golden.dir/src/platform/sdl/PlatformSDL.cpp.obj CMakeFiles/playscreen_golden.dir/src/platform/sdl/AudioSDL.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/PlayHudKind.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/PlayHudFactory.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/ClassicPlayHud.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/AguiPlayHud.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/AguiAtlas.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/ScriptedSceneEngine.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/Movement.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/PlaySessionInput.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/ExploreActions.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/InGameCharacterSheet.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/RosterSkillDisplay.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/InGameControlsScreen.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/ScreenCompositor.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/mm2_font8x8.c.obj CMakeFiles/playscreen_golden.dir/src/gfx/View3D.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/OutdoorView3D.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/PlayScreenChrome.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/CombatPanel.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/PartyStatusFormat.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/EnvAssets.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/GfxBackend.cpp.obj CMakeFiles/playscreen_golden.dir/src/world/MapWorld.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventRuntime.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventVmHelpers.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventPartyEffects.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventTownServices.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventSkillBuy.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/TownServiceTransactions.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/TownServiceMenu.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventCombatEncounter.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventTextView.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/ServiceSignResolver.cpp.obj CMakeFiles/playscreen_golden.dir/src/combat/EncounterPicker.cpp.obj CMakeFiles/playscreen_golden.dir/src/combat/CombatSession.cpp.obj CMakeFiles/playscreen_golden.dir/src/combat/CombatAuto.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/PlayTownServiceUi.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/ViewportAnmOverlay.cpp.obj CMakeFiles/playscreen_golden.dir/src/runtime/Mm2Alloc.cpp.obj CMakeFiles/playscreen_golden.dir/src/runtime/PathScratch.cpp.obj | libmm2_codecs.a _deps/sdl2-build/libSDL2.a || _deps/sdl2-build/libSDL2.a libmm2_codecs.a
+build playscreen_golden.exe: CXX_EXECUTABLE_LINKER__playscreen_golden_Release CMakeFiles/playscreen_golden.dir/tests/playscreen_golden.cpp.obj CMakeFiles/playscreen_golden.dir/src/GameSession.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/AutomapView.cpp.obj CMakeFiles/playscreen_golden.dir/src/world/AutomapState.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/RosterSkills.cpp.obj CMakeFiles/playscreen_golden.dir/src/platform/sdl/PlatformSDL.cpp.obj CMakeFiles/playscreen_golden.dir/src/platform/sdl/AudioSDL.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/PlayHudKind.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/PlayHudFactory.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/ClassicPlayHud.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/AguiPlayHud.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/AguiAtlas.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/ScriptedSceneEngine.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/Movement.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/PlaySessionInput.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/ExploreActions.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/InGameCharacterSheet.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/RosterSkillDisplay.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/InGameControlsScreen.cpp.obj CMakeFiles/playscreen_golden.dir/src/gameplay/DevMenu.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/ScreenCompositor.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/mm2_font8x8.c.obj CMakeFiles/playscreen_golden.dir/src/gfx/View3D.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/OutdoorView3D.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/PlayScreenChrome.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/CombatPanel.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/PartyStatusFormat.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/EnvAssets.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/GfxBackend.cpp.obj CMakeFiles/playscreen_golden.dir/src/world/MapWorld.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventRuntime.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventVmHelpers.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventPartyEffects.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventTownServices.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventSkillBuy.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/TownServiceTransactions.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/TownServiceMenu.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventCombatEncounter.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/EventTextView.cpp.obj CMakeFiles/playscreen_golden.dir/src/events/ServiceSignResolver.cpp.obj CMakeFiles/playscreen_golden.dir/src/combat/EncounterPicker.cpp.obj CMakeFiles/playscreen_golden.dir/src/combat/CombatSession.cpp.obj CMakeFiles/playscreen_golden.dir/src/combat/CombatAuto.cpp.obj CMakeFiles/playscreen_golden.dir/src/ui/PlayTownServiceUi.cpp.obj CMakeFiles/playscreen_golden.dir/src/gfx/ViewportAnmOverlay.cpp.obj CMakeFiles/playscreen_golden.dir/src/runtime/Mm2Alloc.cpp.obj CMakeFiles/playscreen_golden.dir/src/runtime/PathScratch.cpp.obj | libmm2_codecs.a _deps/sdl2-build/libSDL2.a || _deps/sdl2-build/libSDL2.a libmm2_codecs.a
   FLAGS = -O3 -DNDEBUG
   LINK_LIBRARIES = libmm2_codecs.a  _deps/sdl2-build/libSDL2.a  -lm  -lkernel32  -luser32  -lgdi32  -lwinmm  -limm32  -lole32  -loleaut32  -lversion  -luuid  -ladvapi32  -lsetupapi  -lshell32  -ldinput8  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\playscreen_golden.dir
@@ -2835,6 +2921,14 @@ build CMakeFiles/combat_golden.dir/src/ui/RosterSkillDisplay.cpp.obj: CXX_COMPIL
 build CMakeFiles/combat_golden.dir/src/gameplay/InGameControlsScreen.cpp.obj: CXX_COMPILER__combat_golden_Release C$:/_20260421_/D-REC/development/MM2/game/src/gameplay/InGameControlsScreen.cpp || cmake_object_order_depends_target_combat_golden
   DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
   DEP_FILE = CMakeFiles\combat_golden.dir\src\gameplay\InGameControlsScreen.cpp.obj.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++17
+  INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2
+  OBJECT_DIR = CMakeFiles\combat_golden.dir
+  OBJECT_FILE_DIR = CMakeFiles\combat_golden.dir\src\gameplay
+
+build CMakeFiles/combat_golden.dir/src/gameplay/DevMenu.cpp.obj: CXX_COMPILER__combat_golden_Release C$:/_20260421_/D-REC/development/MM2/game/src/gameplay/DevMenu.cpp || cmake_object_order_depends_target_combat_golden
+  DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
+  DEP_FILE = CMakeFiles\combat_golden.dir\src\gameplay\DevMenu.cpp.obj.d
   FLAGS = -O3 -DNDEBUG -std=gnu++17
   INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2
   OBJECT_DIR = CMakeFiles\combat_golden.dir
@@ -3064,7 +3158,7 @@ build CMakeFiles/combat_golden.dir/src/runtime/PathScratch.cpp.obj: CXX_COMPILER
 #############################################
 # Link the executable combat_golden.exe
 
-build combat_golden.exe: CXX_EXECUTABLE_LINKER__combat_golden_Release CMakeFiles/combat_golden.dir/tests/combat_golden.cpp.obj CMakeFiles/combat_golden.dir/src/GameSession.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/AutomapView.cpp.obj CMakeFiles/combat_golden.dir/src/world/AutomapState.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/RosterSkills.cpp.obj CMakeFiles/combat_golden.dir/src/platform/sdl/PlatformSDL.cpp.obj CMakeFiles/combat_golden.dir/src/platform/sdl/AudioSDL.cpp.obj CMakeFiles/combat_golden.dir/src/ui/PlayHudKind.cpp.obj CMakeFiles/combat_golden.dir/src/ui/PlayHudFactory.cpp.obj CMakeFiles/combat_golden.dir/src/ui/ClassicPlayHud.cpp.obj CMakeFiles/combat_golden.dir/src/ui/AguiPlayHud.cpp.obj CMakeFiles/combat_golden.dir/src/ui/AguiAtlas.cpp.obj CMakeFiles/combat_golden.dir/src/events/ScriptedSceneEngine.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/Movement.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/PlaySessionInput.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/ExploreActions.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/InGameCharacterSheet.cpp.obj CMakeFiles/combat_golden.dir/src/ui/RosterSkillDisplay.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/InGameControlsScreen.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/ScreenCompositor.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/mm2_font8x8.c.obj CMakeFiles/combat_golden.dir/src/gfx/View3D.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/OutdoorView3D.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/PlayScreenChrome.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/CombatPanel.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/PartyStatusFormat.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/EnvAssets.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/GfxBackend.cpp.obj CMakeFiles/combat_golden.dir/src/world/MapWorld.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventRuntime.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventVmHelpers.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventPartyEffects.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventTownServices.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventSkillBuy.cpp.obj CMakeFiles/combat_golden.dir/src/events/TownServiceTransactions.cpp.obj CMakeFiles/combat_golden.dir/src/events/TownServiceMenu.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventCombatEncounter.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventTextView.cpp.obj CMakeFiles/combat_golden.dir/src/events/ServiceSignResolver.cpp.obj CMakeFiles/combat_golden.dir/src/combat/EncounterPicker.cpp.obj CMakeFiles/combat_golden.dir/src/combat/CombatSession.cpp.obj CMakeFiles/combat_golden.dir/src/combat/CombatAuto.cpp.obj CMakeFiles/combat_golden.dir/src/ui/PlayTownServiceUi.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/ViewportAnmOverlay.cpp.obj CMakeFiles/combat_golden.dir/src/runtime/Mm2Alloc.cpp.obj CMakeFiles/combat_golden.dir/src/runtime/PathScratch.cpp.obj | libmm2_codecs.a _deps/sdl2-build/libSDL2.a || _deps/sdl2-build/libSDL2.a libmm2_codecs.a
+build combat_golden.exe: CXX_EXECUTABLE_LINKER__combat_golden_Release CMakeFiles/combat_golden.dir/tests/combat_golden.cpp.obj CMakeFiles/combat_golden.dir/src/GameSession.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/AutomapView.cpp.obj CMakeFiles/combat_golden.dir/src/world/AutomapState.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/RosterSkills.cpp.obj CMakeFiles/combat_golden.dir/src/platform/sdl/PlatformSDL.cpp.obj CMakeFiles/combat_golden.dir/src/platform/sdl/AudioSDL.cpp.obj CMakeFiles/combat_golden.dir/src/ui/PlayHudKind.cpp.obj CMakeFiles/combat_golden.dir/src/ui/PlayHudFactory.cpp.obj CMakeFiles/combat_golden.dir/src/ui/ClassicPlayHud.cpp.obj CMakeFiles/combat_golden.dir/src/ui/AguiPlayHud.cpp.obj CMakeFiles/combat_golden.dir/src/ui/AguiAtlas.cpp.obj CMakeFiles/combat_golden.dir/src/events/ScriptedSceneEngine.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/Movement.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/PlaySessionInput.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/ExploreActions.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/InGameCharacterSheet.cpp.obj CMakeFiles/combat_golden.dir/src/ui/RosterSkillDisplay.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/InGameControlsScreen.cpp.obj CMakeFiles/combat_golden.dir/src/gameplay/DevMenu.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/ScreenCompositor.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/mm2_font8x8.c.obj CMakeFiles/combat_golden.dir/src/gfx/View3D.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/OutdoorView3D.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/PlayScreenChrome.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/CombatPanel.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/PartyStatusFormat.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/EnvAssets.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/GfxBackend.cpp.obj CMakeFiles/combat_golden.dir/src/world/MapWorld.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventRuntime.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventVmHelpers.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventPartyEffects.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventTownServices.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventSkillBuy.cpp.obj CMakeFiles/combat_golden.dir/src/events/TownServiceTransactions.cpp.obj CMakeFiles/combat_golden.dir/src/events/TownServiceMenu.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventCombatEncounter.cpp.obj CMakeFiles/combat_golden.dir/src/events/EventTextView.cpp.obj CMakeFiles/combat_golden.dir/src/events/ServiceSignResolver.cpp.obj CMakeFiles/combat_golden.dir/src/combat/EncounterPicker.cpp.obj CMakeFiles/combat_golden.dir/src/combat/CombatSession.cpp.obj CMakeFiles/combat_golden.dir/src/combat/CombatAuto.cpp.obj CMakeFiles/combat_golden.dir/src/ui/PlayTownServiceUi.cpp.obj CMakeFiles/combat_golden.dir/src/gfx/ViewportAnmOverlay.cpp.obj CMakeFiles/combat_golden.dir/src/runtime/Mm2Alloc.cpp.obj CMakeFiles/combat_golden.dir/src/runtime/PathScratch.cpp.obj | libmm2_codecs.a _deps/sdl2-build/libSDL2.a || _deps/sdl2-build/libSDL2.a libmm2_codecs.a
   FLAGS = -O3 -DNDEBUG
   LINK_LIBRARIES = libmm2_codecs.a  _deps/sdl2-build/libSDL2.a  -lm  -lkernel32  -luser32  -lgdi32  -lwinmm  -limm32  -lole32  -loleaut32  -lversion  -luuid  -ladvapi32  -lsetupapi  -lshell32  -ldinput8  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\combat_golden.dir
@@ -3134,6 +3228,14 @@ build CMakeFiles/mm2.dir/src/gameplay/InGameCharacterSheet.cpp.obj: CXX_COMPILER
 build CMakeFiles/mm2.dir/src/gameplay/InGameControlsScreen.cpp.obj: CXX_COMPILER__mm2_Release C$:/_20260421_/D-REC/development/MM2/game/src/gameplay/InGameControlsScreen.cpp || cmake_object_order_depends_target_mm2
   DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
   DEP_FILE = CMakeFiles\mm2.dir\src\gameplay\InGameControlsScreen.cpp.obj.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++17
+  INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2
+  OBJECT_DIR = CMakeFiles\mm2.dir
+  OBJECT_FILE_DIR = CMakeFiles\mm2.dir\src\gameplay
+
+build CMakeFiles/mm2.dir/src/gameplay/DevMenu.cpp.obj: CXX_COMPILER__mm2_Release C$:/_20260421_/D-REC/development/MM2/game/src/gameplay/DevMenu.cpp || cmake_object_order_depends_target_mm2
+  DEFINES = -DMM2_HOST_SDL -DMM2_UI_CLASSIC
+  DEP_FILE = CMakeFiles\mm2.dir\src\gameplay\DevMenu.cpp.obj.d
   FLAGS = -O3 -DNDEBUG -std=gnu++17
   INCLUDES = -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2
   OBJECT_DIR = CMakeFiles\mm2.dir
@@ -3555,7 +3657,7 @@ build CMakeFiles/mm2.dir/src/platform/sdl/AudioSDL.cpp.obj: CXX_COMPILER__mm2_Re
 #############################################
 # Link the executable mm2.exe
 
-build mm2.exe: CXX_EXECUTABLE_LINKER__mm2_Release CMakeFiles/mm2.dir/src/main.cpp.obj CMakeFiles/mm2.dir/src/GameSession.cpp.obj CMakeFiles/mm2.dir/src/gameplay/Movement.cpp.obj CMakeFiles/mm2.dir/src/gameplay/PlaySessionInput.cpp.obj CMakeFiles/mm2.dir/src/gameplay/ExploreActions.cpp.obj CMakeFiles/mm2.dir/src/gameplay/InGameCharacterSheet.cpp.obj CMakeFiles/mm2.dir/src/gameplay/InGameControlsScreen.cpp.obj CMakeFiles/mm2.dir/src/gameplay/RosterSkills.cpp.obj CMakeFiles/mm2.dir/src/TitleScreen.cpp.obj CMakeFiles/mm2.dir/src/states/mm2_state.c.obj CMakeFiles/mm2.dir/src/states/mm2_app_context.c.obj CMakeFiles/mm2.dir/src/states/mm2_goto_trace.c.obj CMakeFiles/mm2.dir/src/states/mm2_states.cpp.obj CMakeFiles/mm2.dir/src/states/AppHost.cpp.obj CMakeFiles/mm2.dir/src/states/mm2_app_run.cpp.obj CMakeFiles/mm2.dir/src/gfx/ScreenCompositor.cpp.obj CMakeFiles/mm2.dir/src/gfx/mm2_font8x8.c.obj CMakeFiles/mm2.dir/src/gfx/View3D.cpp.obj CMakeFiles/mm2.dir/src/gfx/OutdoorView3D.cpp.obj CMakeFiles/mm2.dir/src/gfx/PlayScreenChrome.cpp.obj CMakeFiles/mm2.dir/src/gfx/CombatPanel.cpp.obj CMakeFiles/mm2.dir/src/gfx/PartyStatusFormat.cpp.obj CMakeFiles/mm2.dir/src/gfx/EnvAssets.cpp.obj CMakeFiles/mm2.dir/src/gfx/GfxBackend.cpp.obj CMakeFiles/mm2.dir/src/gfx/AutomapView.cpp.obj CMakeFiles/mm2.dir/src/world/AutomapState.cpp.obj CMakeFiles/mm2.dir/src/world/MapWorld.cpp.obj CMakeFiles/mm2.dir/src/combat/EncounterPicker.cpp.obj CMakeFiles/mm2.dir/src/combat/CombatSession.cpp.obj CMakeFiles/mm2.dir/src/combat/CombatAuto.cpp.obj CMakeFiles/mm2.dir/src/events/EventRuntime.cpp.obj CMakeFiles/mm2.dir/src/events/EventVmHelpers.cpp.obj CMakeFiles/mm2.dir/src/events/EventPartyEffects.cpp.obj CMakeFiles/mm2.dir/src/events/EventTownServices.cpp.obj CMakeFiles/mm2.dir/src/events/EventSkillBuy.cpp.obj CMakeFiles/mm2.dir/src/events/TownServiceTransactions.cpp.obj CMakeFiles/mm2.dir/src/events/TownServiceMenu.cpp.obj CMakeFiles/mm2.dir/src/events/EventCombatEncounter.cpp.obj CMakeFiles/mm2.dir/src/events/EventTextView.cpp.obj CMakeFiles/mm2.dir/src/events/ServiceSignResolver.cpp.obj CMakeFiles/mm2.dir/src/events/ScriptedSceneEngine.cpp.obj CMakeFiles/mm2.dir/src/gfx/ViewportAnmOverlay.cpp.obj CMakeFiles/mm2.dir/src/runtime/Mm2Alloc.cpp.obj CMakeFiles/mm2.dir/src/runtime/PathScratch.cpp.obj CMakeFiles/mm2.dir/src/ui/CharacterUiKind.cpp.obj CMakeFiles/mm2.dir/src/ui/CharacterUiFactory.cpp.obj CMakeFiles/mm2.dir/src/ui/CharacterUiController.cpp.obj CMakeFiles/mm2.dir/src/ui/StubCharacterUi.cpp.obj CMakeFiles/mm2.dir/src/ui/AmigaCharacterUi.cpp.obj CMakeFiles/mm2.dir/src/ui/RosterSkillDisplay.cpp.obj CMakeFiles/mm2.dir/src/ui/PlayTownServiceUi.cpp.obj CMakeFiles/mm2.dir/src/ui/PlayHudKind.cpp.obj CMakeFiles/mm2.dir/src/ui/PlayHudFactory.cpp.obj CMakeFiles/mm2.dir/src/ui/ClassicPlayHud.cpp.obj CMakeFiles/mm2.dir/src/ui/AguiPlayHud.cpp.obj CMakeFiles/mm2.dir/src/ui/AguiAtlas.cpp.obj CMakeFiles/mm2.dir/src/platform/sdl/PlatformSDL.cpp.obj CMakeFiles/mm2.dir/src/platform/sdl/AudioSDL.cpp.obj | libmm2_codecs.a _deps/sdl2-build/libSDL2main.a _deps/sdl2-build/libSDL2.a || _deps/sdl2-build/libSDL2.a _deps/sdl2-build/libSDL2main.a libmm2_codecs.a
+build mm2.exe: CXX_EXECUTABLE_LINKER__mm2_Release CMakeFiles/mm2.dir/src/main.cpp.obj CMakeFiles/mm2.dir/src/GameSession.cpp.obj CMakeFiles/mm2.dir/src/gameplay/Movement.cpp.obj CMakeFiles/mm2.dir/src/gameplay/PlaySessionInput.cpp.obj CMakeFiles/mm2.dir/src/gameplay/ExploreActions.cpp.obj CMakeFiles/mm2.dir/src/gameplay/InGameCharacterSheet.cpp.obj CMakeFiles/mm2.dir/src/gameplay/InGameControlsScreen.cpp.obj CMakeFiles/mm2.dir/src/gameplay/DevMenu.cpp.obj CMakeFiles/mm2.dir/src/gameplay/RosterSkills.cpp.obj CMakeFiles/mm2.dir/src/TitleScreen.cpp.obj CMakeFiles/mm2.dir/src/states/mm2_state.c.obj CMakeFiles/mm2.dir/src/states/mm2_app_context.c.obj CMakeFiles/mm2.dir/src/states/mm2_goto_trace.c.obj CMakeFiles/mm2.dir/src/states/mm2_states.cpp.obj CMakeFiles/mm2.dir/src/states/AppHost.cpp.obj CMakeFiles/mm2.dir/src/states/mm2_app_run.cpp.obj CMakeFiles/mm2.dir/src/gfx/ScreenCompositor.cpp.obj CMakeFiles/mm2.dir/src/gfx/mm2_font8x8.c.obj CMakeFiles/mm2.dir/src/gfx/View3D.cpp.obj CMakeFiles/mm2.dir/src/gfx/OutdoorView3D.cpp.obj CMakeFiles/mm2.dir/src/gfx/PlayScreenChrome.cpp.obj CMakeFiles/mm2.dir/src/gfx/CombatPanel.cpp.obj CMakeFiles/mm2.dir/src/gfx/PartyStatusFormat.cpp.obj CMakeFiles/mm2.dir/src/gfx/EnvAssets.cpp.obj CMakeFiles/mm2.dir/src/gfx/GfxBackend.cpp.obj CMakeFiles/mm2.dir/src/gfx/AutomapView.cpp.obj CMakeFiles/mm2.dir/src/world/AutomapState.cpp.obj CMakeFiles/mm2.dir/src/world/MapWorld.cpp.obj CMakeFiles/mm2.dir/src/combat/EncounterPicker.cpp.obj CMakeFiles/mm2.dir/src/combat/CombatSession.cpp.obj CMakeFiles/mm2.dir/src/combat/CombatAuto.cpp.obj CMakeFiles/mm2.dir/src/events/EventRuntime.cpp.obj CMakeFiles/mm2.dir/src/events/EventVmHelpers.cpp.obj CMakeFiles/mm2.dir/src/events/EventPartyEffects.cpp.obj CMakeFiles/mm2.dir/src/events/EventTownServices.cpp.obj CMakeFiles/mm2.dir/src/events/EventSkillBuy.cpp.obj CMakeFiles/mm2.dir/src/events/TownServiceTransactions.cpp.obj CMakeFiles/mm2.dir/src/events/TownServiceMenu.cpp.obj CMakeFiles/mm2.dir/src/events/EventCombatEncounter.cpp.obj CMakeFiles/mm2.dir/src/events/EventTextView.cpp.obj CMakeFiles/mm2.dir/src/events/ServiceSignResolver.cpp.obj CMakeFiles/mm2.dir/src/events/ScriptedSceneEngine.cpp.obj CMakeFiles/mm2.dir/src/gfx/ViewportAnmOverlay.cpp.obj CMakeFiles/mm2.dir/src/runtime/Mm2Alloc.cpp.obj CMakeFiles/mm2.dir/src/runtime/PathScratch.cpp.obj CMakeFiles/mm2.dir/src/ui/CharacterUiKind.cpp.obj CMakeFiles/mm2.dir/src/ui/CharacterUiFactory.cpp.obj CMakeFiles/mm2.dir/src/ui/CharacterUiController.cpp.obj CMakeFiles/mm2.dir/src/ui/StubCharacterUi.cpp.obj CMakeFiles/mm2.dir/src/ui/AmigaCharacterUi.cpp.obj CMakeFiles/mm2.dir/src/ui/RosterSkillDisplay.cpp.obj CMakeFiles/mm2.dir/src/ui/PlayTownServiceUi.cpp.obj CMakeFiles/mm2.dir/src/ui/PlayHudKind.cpp.obj CMakeFiles/mm2.dir/src/ui/PlayHudFactory.cpp.obj CMakeFiles/mm2.dir/src/ui/ClassicPlayHud.cpp.obj CMakeFiles/mm2.dir/src/ui/AguiPlayHud.cpp.obj CMakeFiles/mm2.dir/src/ui/AguiAtlas.cpp.obj CMakeFiles/mm2.dir/src/platform/sdl/PlatformSDL.cpp.obj CMakeFiles/mm2.dir/src/platform/sdl/AudioSDL.cpp.obj | libmm2_codecs.a _deps/sdl2-build/libSDL2main.a _deps/sdl2-build/libSDL2.a || _deps/sdl2-build/libSDL2.a _deps/sdl2-build/libSDL2main.a libmm2_codecs.a
   FLAGS = -O3 -DNDEBUG
   LINK_LIBRARIES = libmm2_codecs.a  _deps/sdl2-build/libSDL2main.a  _deps/sdl2-build/libSDL2.a  -Wl,--undefined=WinMain  -lm  -lkernel32  -luser32  -lgdi32  -lwinmm  -limm32  -lole32  -loleaut32  -lversion  -luuid  -ladvapi32  -lsetupapi  -lshell32  -ldinput8  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\mm2.dir
@@ -5980,6 +6082,8 @@ build combat_golden: phony combat_golden.exe
 
 build combat_setup_test: phony combat_setup_test.exe
 
+build dev_menu_test: phony dev_menu_test.exe
+
 build event_middlegate_test: phony event_middlegate_test.exe
 
 build event_op_demo: phony event_op_demo.exe
@@ -6003,6 +6107,8 @@ build mm2_audio_stub: phony libmm2_audio_stub.a
 build mm2_codecs: phony libmm2_codecs.a
 
 build movement_middlegate_test: phony movement_middlegate_test.exe
+
+build paper_doll_layout_test: phony paper_doll_layout_test.exe
 
 build party_hp_format_test: phony party_hp_format_test.exe
 
@@ -6040,7 +6146,7 @@ build view3d_torch_door_test: phony view3d_torch_door_test.exe
 #############################################
 # Folder: C:/_20260421_/D-REC/development/MM2/game/build-agui
 
-build all: phony libmm2_codecs.a libmm2_audio_stub.a image32_golden.exe roster_tail_test.exe pc_gfx_rgba_dump.exe pc_monsters_rgba_dump.exe pc_gfx_pixels_dump.exe pc_lzw_dump.exe font_golden.exe view3d_middlegate_check.exe view3d_torch_door_test.exe view3d_outdoor_check.exe movement_middlegate_test.exe calendar_rollover_test.exe combat_setup_test.exe playsession_input_test.exe explore_commands_test.exe automap_golden.exe character_sheet_input_test.exe party_hp_format_test.exe repro_fight_refire.exe event_middlegate_test.exe event_town_skills_test.exe event_op_demo.exe playscreen_golden.exe combat_golden.exe mm2.exe _deps/sdl2-build/all
+build all: phony libmm2_codecs.a libmm2_audio_stub.a image32_golden.exe roster_tail_test.exe pc_gfx_rgba_dump.exe pc_monsters_rgba_dump.exe pc_gfx_pixels_dump.exe pc_lzw_dump.exe font_golden.exe view3d_middlegate_check.exe view3d_torch_door_test.exe view3d_outdoor_check.exe movement_middlegate_test.exe calendar_rollover_test.exe combat_setup_test.exe playsession_input_test.exe dev_menu_test.exe explore_commands_test.exe automap_golden.exe character_sheet_input_test.exe paper_doll_layout_test.exe party_hp_format_test.exe repro_fight_refire.exe event_middlegate_test.exe event_town_skills_test.exe event_op_demo.exe playscreen_golden.exe combat_golden.exe mm2.exe _deps/sdl2-build/all
 
 # =============================================================================
 

@@ -209,8 +209,9 @@ OutdoorBiome sectorBiome(const Mm2AttribFile &attrib, uint8_t sectorLabel)
 OutdoorBiome biomeForCell(uint8_t mapByte, uint8_t sectorLabel, const Mm2AttribFile &attrib)
 {
     const uint8_t tid = mapByte & 0x1F;
+    /* Ids 2/3 already mean ocean.32. remapOutdoorBiome would rotate that to tundra. */
     if (tid == 2 || tid == 3) {
-        return remapOutdoorBiome(OutdoorBiome::Ocean, sectorLabel);
+        return OutdoorBiome::Ocean;
     }
     return remapOutdoorBiome(sectorBiome(attrib, sectorLabel), sectorLabel);
 }
@@ -288,7 +289,7 @@ void buildDecorBlits(const std::array<uint8_t, kOutdoorLaneCols> &c6,
                 pushDecor(col + 12, T::kDecorX);
             }
             if (mainC) {
-                pushDecor(col + 16, T::kDecorXBde[col] - kView3DOriginX);
+                pushDecor(col + 16, T::kDecorXBde[col]);
             }
         } else {
             if (mainB) {

@@ -31,7 +31,7 @@ struct HirelingMeta {
     const char *skills; /* space-separated FAQ abbreviations, or nullptr */
 };
 
-// FAQ §3-4-1: hireling preset skills (A–X); cost/level live in AmigaCharacterUi.
+// FAQ §3-4-1: hireling preset skills (A–X). Daily fee is roster +$66.
 const HirelingMeta kHirelingSkillMeta[] = {
     {nullptr}, {nullptr}, {nullptr},
     {"Cru"},   {"Car"},   {"Lin"},
@@ -126,10 +126,11 @@ const char *rosterSheetSkillName(uint8_t id)
     return name ? name : kRosterEmptySkillSlot;
 }
 
-uint8_t rosterDisplayThievery(const Mm2RosterRecord &rec)
+uint8_t rosterDisplayThievery(const Mm2RosterRecord &rec, const Mm2ItemsFile *items)
 {
-    /* Character sheet draw reads roster+$1E (character_sheet_draw @ $3C42). */
-    return rec.unknown_1a_20[4];
+    /* Character sheet @ $3C42 reads live +$1E. Remake keeps create/training in
+     * +$1E and adds equipped type-14 here so pre-worn gear is counted. */
+    return gameplay::rosterLiveThievery(rec, items);
 }
 
 int collectRosterSkillNames(const Mm2RosterRecord &rec, const char **names, int max_names)

@@ -28,10 +28,12 @@ constexpr SheetMap kSheetMaps[] = {
     {"cave.32", "CAVE.4", "CAVE.16"},
     {"cavef.32", "CAVEF.4", "CAVEF.16"},
     {"cavet.32", "CAVET.4", "CAVET.16"},
+    /* PC-only index-recolors of TOWNB (Amiga reuses townb.32 + env wall palette). */
     {"caveb.32", "CAVEB.4", "CAVEB.16"},
     {"castle.32", "CASTLE.4", "CASTLE.16"},
     {"castlef.32", "CASTLEF.4", "CASTLEF.16"},
     {"castlet.32", "CASTLET.4", "CASTLET.16"},
+    /* PC-only index-recolors of TOWNB (Amiga reuses townb.32 + env wall palette). */
     {"castleb.32", "CASTLEB.4", "CASTLEB.16"},
     {"sky.32", "SKY.4", "SKY.16"},
     {"outf.32", "OUTF.4", "OUTF.16"},

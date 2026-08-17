@@ -281,6 +281,8 @@ $6E08(charPtr):
   exit sync identical to 0x907A (screen-mode / coord change -> map reload, beep, -$4F4E)
 ```
 
+Party-target leaves (First Aid, Power Cure, …) call **`0xCC18`** (`On whom (1-N)?` at col `$18`). When **`-$795A` (party count) is 1**, that path JSRs **`0xCCE8`**: locate **(col `$16`, row `$15` explore / `$0F` combat)** and print **`'Return' to cast`** (`0xCD7E`); **`-$7F68($D,$D)`** waits for Return (`0x0D`). Combat duplicate is **`0xD390`** / string **`0xD41A`**. Item-cast **`-$3F0C`** skips the wait.
+
 `$6DA6` (= thunk `-$7E4E`) prints `('ESC' to go back)` at `($B,$17)` — used by the
 Ctrl-Q prompt and Dismiss too.
 

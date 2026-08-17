@@ -70,6 +70,14 @@ offsets observed in combat:
 5. `0x13282` decides whether the round/combat continues.
 6. End: `-$77BE==0` -> `0x12430` victory; else defeat/retreat via `0x11646`.
 
+**Time Distortion (S4/6, stub `0xBB86`):** after a successful D390 confirm and
+`btst #3,-$5600` clear, `addq.b #1,-$523`. `0x13282` tests `-$523` **before**
+the in-fight party scan and returns 1 immediately, so the `0x12C3E` epilogue
+reaches `0x12C60` -> `0x11646` flee **without** remaining party/monster turns.
+(Char-Run latch `-$5E4C` is *not* in `0x13282`; it only fires at that epilogue
+after everyone has acted.) Attrib byte `0x1A` bit 3 (`-$5600`) fails the spell
+(`jsr $d29c`). Screens with bit 3 set: 23, 41-44 (elemental planes), 49, 50.
+
 RNG helper: `JSR -$7BB4(A4)` with `(1, max)` returns a roll in `[1,max]`.
 
 ## Player turn (0x119C2)
@@ -112,6 +120,22 @@ routes: **B** → `0x11A60` (end-turn no-op), **D** → `0x11B0A` (Block), **E**
 
 Target selection: `0x111DA` ("which (A - x)?") when arg=`$FF`; arg `0` hits index 0.
 Single live monster forces arg←0 (auto). Spell Attack path also has `0xD43C`/`0xD390`.
+
+### Party options before the round loop (0x12F74)
+
+After surprise (or a fixed-mode fight that skips it), the party bar is
+`Options: A-Attack B-Bribe H-Hide R-Run`. Key handling is `0x130CC`–`0x1319C`:
+
+| Key | Success | Fail |
+|-----|---------|------|
+| **H** Hide (`0x13104`) | `rng(1,100) < A4-$5E4E` (mean thievery). Sets **`-$77BD`**, rewrites key to `'S'`. **Does not** `jsr $11646`. | Rewrite key to `'A'` → `0x12A22` (start the round). |
+| **B** Bribe (`0x12FB8`) | Paid + roll/demand/gate. Sets **`-$77BD`**, key `'S'`. Same leave as Hide. | Rewrite key to `'A'` → round loop. |
+| **R** Run (`0x1312A`) | Mode 2 **or** `rng(1,100) < -$560D`. **`jsr $11646`** (restore attrib `0x0E` entry/safe square, battles-lost++, cond wipe), then key `'S'`. | Rewrite key to `'A'` → round loop. |
+| **A** Attack | `jsr $12A22` | — |
+
+Any path that ends with key `'S'` prints **`Success!`** (`0x13278` via `0x131A4`)
+and returns from the encounter UI. Hide/Bribe therefore leave the party **on the
+encounter square**; only Run/wipe teleport to the safe square.
 
 ### Spells (Cast)
 `0xD000..0xD256` is a jump table of per-spell handlers (`JSR $bc3a`, `$bc7a`, …
@@ -194,6 +218,7 @@ case.
 | `0x10002` | monster group attack (verb table `A4-$6E56`) |
 | `0xFEEA`  | monster single attack |
 | `0x10118` | melee resolution |
+| `0x10894` / `0x108BC` | spell apply; `jsr $132e6` after **each** target (`0x10B24`) |
 | `0x10DFC` | flee ("runs") |
 | `0x100B0` | multiply / breed |
 | `0x10082` | adds friends, mid-fight (reinforcements) — `0x11F0A` is the *initial* encounter group-size fill, not a round action |

@@ -9,6 +9,7 @@
 #include "mm2_found_items.h"
 #include "mm2_gamestate.h"
 #include "mm2_items_codec.h"
+#include "mm2_monsters_codec.h"
 #include "mm2_town_tables.h"
 
 namespace mm2::events {
@@ -407,7 +408,17 @@ TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id, gamepla
                               ? 0u
                               : mm2_town_training_cost(rec.level, town.training_town_index);
     r.cost = cost;
-    if (!townSvcCharGoldDeduct(rec, cost)) {
+    if (cost == 0u) {
+        /* 0x202AC..0x202E6: when train cost arg is 0, daily fee at +$66 becomes
+         * fee + floor(fee/2) via -$7B4E(d0,d1=2), capped at #$C350 (50000).
+         * Hirelings take this path (free train); PCs deduct gold instead. */
+        const uint32_t half = rec.gold / 2u;
+        uint64_t bumped = static_cast<uint64_t>(rec.gold) + half;
+        if (bumped > 50000u) {
+            bumped = 50000u;
+        }
+        rec.gold = static_cast<uint32_t>(bumped);
+    } else if (!townSvcCharGoldDeduct(rec, cost)) {
         r.cost = 0;
         return r;
     }
@@ -416,6 +427,13 @@ TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id, gamepla
     /* 0x20338..0x20356: -$7F3E increments +$20 and +$71. */
     rec.level = static_cast<uint8_t>(next_level);
     rec.unknown_1a_20[6] = rec.level;
+
+    /* 0x20360: Robber/Ninja with nonzero +$1E get -$7F3E sat-add 1. */
+    if ((rec.class_id == 5 || rec.class_id == 6) && rec.unknown_1a_20[4] != 0) {
+        if (rec.unknown_1a_20[4] < 0xFF) {
+            rec.unknown_1a_20[4] = static_cast<uint8_t>(rec.unknown_1a_20[4] + 1);
+        }
+    }
 
     /* HP @ 0x20390..0x20478: class*$64EE[map]/$64E4[map] (+rem bump) +
      * -$7F56(+$27). Writes +$60/+ $74/+ $5E. Not 0x9BCA (bash door). */
@@ -648,37 +666,159 @@ TownSvcSellResult townSvcSmithSell(Mm2RosterRecord &rec, int backpack_slot, uint
     return r;
 }
 
-static void appendIdentifyEffect(const Mm2ItemRecord *item, char *buf, size_t cap)
+/* Equip-slot id ranges (items.dat id, not roster slot index) — same bands
+ * InGameCharacterSheet.cpp's equip picker uses: 0xF5F4 1H melee, 0xF612 2H
+ * melee, 0xF630 missile, 0xF64E shield, 0xF66C body armor, 0xF68E helm. */
+bool idIsWeapon(uint8_t id) { return id >= 0x01 && id <= 0x72; }
+bool idIsArmorPiece(uint8_t id) { return id >= 0x73 && id <= 0x9F; }
+
+/* Class bit order K P A C S R N B = 0x80..0x01 (mm2_items_codec.h). Identify
+ * screen labels are the embedded strings @ 0x1B51A.."Class rating(s) - " and
+ * @ 0x1BBF2 "( classless )"; the per-letter list for a restricted mask isn't
+ * confirmed against the binary (screenshot only shows the classless case). */
+void appendClassRatings(uint8_t forbidden_mask, char *out, size_t cap)
 {
-    if (!item || !buf || cap == 0 || item->effect_byte == 0) {
+    if (forbidden_mask == 0) {
+        std::snprintf(out, cap, "( classless )");
         return;
     }
-    const uint8_t eff = item->effect_byte;
-    char tmp[48];
-    if (eff >= 0x01 && eff <= 0x7F) {
-        static const char *kKinds[] = {"MaxHP", "Mgt", "Spd", "Acc", "?",
-                                       "Level", "SpLvl"};
-        const unsigned kind = (eff >> 4) & 0x7u;
-        const unsigned amt = eff & 0xFu;
-        const char *label = (kind < 7) ? kKinds[kind] : "?";
-        std::snprintf(tmp, sizeof(tmp), " use +%u %s", amt, label);
-    } else if (eff >= 0x81 && eff <= 0xB0) {
-        const int idx = eff - 0x81;
-        const char *nm = (idx < mm2::gameplay::kSpellsPerSchool)
-                             ? mm2::gameplay::kSorcererSpells[idx].name
-                             : "Sorcerer spell";
-        std::snprintf(tmp, sizeof(tmp), " casts %s", nm);
-    } else if (eff >= 0xB1 && eff <= 0xE0) {
-        const int idx = eff - 0xB0;
-        const char *nm = (idx < mm2::gameplay::kSpellsPerSchool)
-                             ? mm2::gameplay::kClericSpells[idx].name
-                             : "Cleric spell";
-        std::snprintf(tmp, sizeof(tmp), " casts %s", nm);
-    } else {
-        std::snprintf(tmp, sizeof(tmp), " effect 0x%02X", eff);
+    static const char kLetters[] = "KPACSRNB";
+    char list[24] = "( ";
+    for (int i = 0; i < 8; ++i) {
+        const uint8_t bit = static_cast<uint8_t>(0x80 >> i);
+        if ((forbidden_mask & bit) == 0) {
+            const size_t n = std::strlen(list);
+            std::snprintf(list + n, sizeof(list) - n, "%c ", kLetters[i]);
+        }
     }
-    if (std::strlen(buf) + std::strlen(tmp) + 1 < cap) {
-        std::strncat(buf, tmp, cap - std::strlen(buf) - 1);
+    const size_t n = std::strlen(list);
+    std::snprintf(list + n, sizeof(list) - n, ")");
+    std::snprintf(out, cap, "%s", list);
+}
+
+/* 0x0E bonus byte high-nibble types (doc 18). Transcribed from the same table
+ * the editor uses (editor/src/core/ItemsFile.cpp kItemBonusTypeNames). */
+const char *const kEquipBonusTypeNames[16] = {
+    "Might",     "Intellect",  "Personality", "Speed",      "Accuracy",
+    "Luck",      "Magic resist", "Fire resist", "Electricity resist",
+    "Cold resist", "Energy resist", "Sleep resist", "Max HP",
+    "Acid resist", "Thievery", "Armor Class"};
+
+/* items.dat 0x0F use-power bytes below 0x80 are packed stat boosts (doc 18):
+ * hi nibble = kind (index below), lo nibble = amount. */
+const char *const kUseBoostKinds[8] = {"Max HP", "Might", "Speed", "Accuracy",
+                                       "?",      "Level", "Spell Level", "?"};
+
+/* Describe the item's equipped special power from items.dat 0x0E. */
+void appendEquipBonus(uint8_t bonus_byte, uint8_t flags_lo, char *out, size_t cap)
+{
+    const uint8_t type = static_cast<uint8_t>(bonus_byte >> 4);
+    const uint8_t amount = static_cast<uint8_t>(bonus_byte & 0x0Fu);
+    if (amount == 0) {
+        std::snprintf(out, cap, "( none )");
+        return;
+    }
+    const char *name = kEquipBonusTypeNames[type & 0x0Fu];
+    std::snprintf(out, cap, "%s +%u", name, static_cast<unsigned>(amount + (flags_lo & 0x3Fu)));
+}
+
+/* Describe the item's use power from items.dat 0x0F. Spell flat indices decode
+ * through the spellbook tables (SpellBook.h); sub-0x80 bytes are boosts. */
+void appendUsePower(uint8_t effect_byte, char *out, size_t cap)
+{
+    if (effect_byte == 0) {
+        std::snprintf(out, cap, "( none )");
+        return;
+    }
+    if (effect_byte < 0x80) {
+        const uint8_t kind = static_cast<uint8_t>(effect_byte >> 4);
+        const uint8_t amount = static_cast<uint8_t>(effect_byte & 0x0Fu);
+        const char *name = (kind < 8) ? kUseBoostKinds[kind] : "?";
+        std::snprintf(out, cap, "%s +%u", name, static_cast<unsigned>(amount));
+        return;
+    }
+    const bool cleric = effect_byte > 0xB0;
+    const int code = static_cast<int>(effect_byte & 0x7F) - 1;
+    const int flat = (code >= 0x30) ? (code - 0x30) : code;
+    const mm2::gameplay::SpellMeta *meta =
+        mm2::gameplay::schoolSpellTable(cleric ? mm2::gameplay::SpellSchool::Cleric
+                                               : mm2::gameplay::SpellSchool::Sorcerer);
+    if (!meta || flat < 0 || flat >= mm2::gameplay::kSpellsPerSchool) {
+        std::snprintf(out, cap, "Spell #%u", static_cast<unsigned>(effect_byte & 0x7F));
+        return;
+    }
+    std::snprintf(out, cap, "%c %u/%u", mm2::gameplay::schoolTag(cleric
+                                ? mm2::gameplay::SpellSchool::Cleric
+                                : mm2::gameplay::SpellSchool::Sorcerer),
+                  static_cast<unsigned>(meta[flat].level), static_cast<unsigned>(meta[flat].number));
+}
+
+/* Blacksmith/found-item identify report (0x1B6E0). Field labels are the
+ * embedded exe strings at 0x1B51A ("Identify - "), 0x1B525 ("Class
+ * rating(s) - "), 0x1B537 ("Equipable - "), 0x1B543 ("Use item - "),
+ * 0x1B54E ("Charges = "), 0x1BC12 ("Damage = 1-") and 0x1BC1E ("Armor
+ * bonus = ") — see EXTRACTED/embedded_strings.txt. Equipable/Use item are
+ * derived from items.dat (equip-range id or a nonzero passive bonus nibble;
+ * a nonzero effect byte) rather than traced bit-for-bit from the ASM. */
+void buildIdentifySummary(const Mm2ItemRecord *item, const Mm2RosterItemSlot &slot, char *summary,
+                          size_t summary_cap)
+{
+    if (!summary || summary_cap == 0) {
+        return;
+    }
+    char name[20] = "item";
+    uint8_t forbidden_mask = 0;
+    uint8_t bonus_amount = 0;
+    uint8_t effect_byte = 0;
+    uint8_t die = 0;
+    if (item) {
+        mm2_item_name_to_cstr(item, name, sizeof(name));
+        forbidden_mask = item->forbidden_class_mask;
+        bonus_amount = static_cast<uint8_t>(item->bonus_byte & 0x0Fu);
+        effect_byte = item->effect_byte;
+        die = item->damage;
+    }
+    const uint8_t plus = static_cast<uint8_t>(slot.flags & 0x3Fu);
+    const uint8_t id = slot.item_id;
+    const bool equipable = idIsWeapon(id) || idIsArmorPiece(id) || bonus_amount != 0;
+
+    char classes[24];
+    appendClassRatings(forbidden_mask, classes, sizeof(classes));
+    char bonus_desc[24];
+    char power_desc[24];
+    appendEquipBonus(item ? item->bonus_byte : 0, slot.flags, bonus_desc, sizeof(bonus_desc));
+    appendUsePower(item ? item->effect_byte : 0, power_desc, sizeof(power_desc));
+
+    if (plus != 0) {
+        std::snprintf(summary, summary_cap,
+                      "Identify - %s +%u\nClass rating(s) - %s\nEquipable - %s\nBonus - %s\nUse item - %s\nCharges = %u",
+                      name, static_cast<unsigned>(plus), classes, equipable ? "Yes" : "No",
+                      bonus_desc, power_desc, static_cast<unsigned>(slot.charges));
+    } else {
+        std::snprintf(summary, summary_cap,
+                      "Identify - %s\nClass rating(s) - %s\nEquipable - %s\nBonus - %s\nUse item - %s\nCharges = %u",
+                      name, classes, equipable ? "Yes" : "No", bonus_desc, power_desc,
+                      static_cast<unsigned>(slot.charges));
+    }
+
+    char extra[32] = "";
+    if (idIsWeapon(id)) {
+        if (plus != 0) {
+            std::snprintf(extra, sizeof(extra), "\nDamage = 1-%u+%u", static_cast<unsigned>(die),
+                          static_cast<unsigned>(plus));
+        } else {
+            std::snprintf(extra, sizeof(extra), "\nDamage = 1-%u", static_cast<unsigned>(die));
+        }
+    } else if (idIsArmorPiece(id)) {
+        if (plus != 0) {
+            std::snprintf(extra, sizeof(extra), "\nArmor bonus = %u+%u", static_cast<unsigned>(die),
+                          static_cast<unsigned>(plus));
+        } else {
+            std::snprintf(extra, sizeof(extra), "\nArmor bonus = %u", static_cast<unsigned>(die));
+        }
+    }
+    if (extra[0] && std::strlen(summary) + std::strlen(extra) + 1 < summary_cap) {
+        std::strncat(summary, extra, summary_cap - std::strlen(summary) - 1);
     }
 }
 
@@ -717,28 +857,11 @@ TownSvcIdentifyResult townSvcSmithIdentify(Mm2RosterRecord &rec, int backpack_sl
 
     if (summary && summary_cap > 0) {
         summary[0] = '\0';
-        char name[20] = "item";
-        if (items) {
-            const Mm2ItemRecord *irec = mm2_items_lookup(items, slot.item_id);
-            if (irec) {
-                mm2_item_name_to_cstr(irec, name, sizeof(name));
-                const uint8_t plus = static_cast<uint8_t>(slot.flags & 0x3Fu);
-                if (plus != 0) {
-                    std::snprintf(summary, summary_cap, "%s +%u", name, static_cast<unsigned>(plus));
-                } else {
-                    std::snprintf(summary, summary_cap, "%s", name);
-                }
-                if (slot.charges != 0) {
-                    char chg[24];
-                    std::snprintf(chg, sizeof(chg), ", %u charges", static_cast<unsigned>(slot.charges));
-                    if (std::strlen(summary) + std::strlen(chg) + 1 < summary_cap) {
-                        std::strncat(summary, chg, summary_cap - std::strlen(summary) - 1);
-                    }
-                }
-                appendIdentifyEffect(irec, summary, summary_cap);
-            } else {
-                std::snprintf(summary, summary_cap, "Item #%u", static_cast<unsigned>(slot.item_id));
-            }
+        const Mm2ItemRecord *irec = items ? mm2_items_lookup(items, slot.item_id) : nullptr;
+        if (irec) {
+            buildIdentifySummary(irec, slot, summary, summary_cap);
+        } else {
+            std::snprintf(summary, summary_cap, "Identify - Item #%u", static_cast<unsigned>(slot.item_id));
         }
     }
 
@@ -1357,6 +1480,52 @@ bool townSvcQuestBusy(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool 
         }
     }
     return false;
+}
+
+/* Resolve the A–C quest target name for the party's active quest. 0x1980A's
+ * A–C pick writes +$78 (item id for Hoardall/selector 0xC9, monster type for
+ * Slayer/selector 0xCA) on every party member, then the briefing prints the
+ * resolved item/monster name between the intro and outro strings (ASM
+ * 0x199D4 / exe strings at 0x189DE/0x18A4C). Returns false when no target. */
+bool townSvcQuestTargetName(const Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool drink,
+                            const Mm2ItemsFile *items, const Mm2MonstersFile *monsters, char *out,
+                            size_t out_cap)
+{
+    if (!roster || !launch || !out || out_cap == 0) {
+        return false;
+    }
+    out[0] = '\0';
+    uint8_t target = 0;
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        const int idx = launch->roster_slots[i];
+        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        const auto *raw = reinterpret_cast<const uint8_t *>(&roster->records[idx]);
+        if (static_cast<bool>(raw[0x7C] & 0x01) != drink) {
+            continue;
+        }
+        if (raw[0x78] != 0) {
+            target = raw[0x78];
+            break;
+        }
+    }
+    if (target == 0) {
+        return false;
+    }
+    if (drink) {
+        if (!monsters || target >= MM2_MONSTER_RECORD_COUNT) {
+            return false;
+        }
+        mm2_monster_name_to_cstr(&monsters->records[target], out, out_cap);
+    } else {
+        const Mm2ItemRecord *item = mm2_items_lookup(items, target);
+        if (!item) {
+            return false;
+        }
+        mm2_item_name_to_cstr(item, out, out_cap);
+    }
+    return out[0] != '\0';
 }
 
 int townSvcTipDayPairBase(uint16_t day_of_year)

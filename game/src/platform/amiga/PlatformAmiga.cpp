@@ -199,6 +199,14 @@ KeyState pollInput()
         keys.escape = true;
         keys.any_key = true;
     }
+    if (keyUse(KEY_HELP)) {
+        keys.dev_menu = true;
+        keys.any_key = true;
+    }
+    if (keyUse(KEY_TAB)) {
+        keys.tab = true;
+        keys.any_key = true;
+    }
     /* Level-triggered during play: held SPACE/RETURN must survive slow Corak frames. */
     keys.enter = keyCheck(KEY_RETURN) != 0;
     keys.space = keyCheck(KEY_SPACE) != 0;

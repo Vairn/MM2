@@ -308,7 +308,9 @@ def biome_for_cell(
     """Floor decor sheet for one hood cell: water ids first, then sector label."""
     tid = map_byte & 0x1F
     if tid in MAP_TERRAIN_ID_BIOME:
-        return _remap_biome(MAP_TERRAIN_ID_BIOME[tid])
+        # Already ocean.32. BIOME_SHEET_REMAP is only for inverted surface-flag
+        # names; running ocean through it yields tundra.32 (snow in water).
+        return MAP_TERRAIN_ID_BIOME[tid]
     return _remap_biome(sector_table.get(sector_label, OUTDOOR_FLOOR_SHEETS[0]))
 
 
@@ -374,7 +376,7 @@ def build_decor_blits(
                     SpriteBlit(
                         biome,
                         col + 16,
-                        OUTDOOR_DECOR_X_BDE[col] - ORIGIN_X,
+                        OUTDOOR_DECOR_X_BDE[col],
                         y,
                     )
                 )

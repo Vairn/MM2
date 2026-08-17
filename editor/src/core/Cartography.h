@@ -16,7 +16,9 @@
 // Tileset (field A4-$7A1A, loaded by the env dispatcher @0x1880):
 //     outdoor / surface   -> outb.32   (filename table entry 25)
 //     town/cavern/castle   -> townb.32  (entries 12/16/20, all townb.32)
-// Both tilesets are 36 frames of 14x11 px.
+// Both tilesets are 36 frames of 14x11 px. Cavern/castle have no separate
+// minimap sheet — Amiga shows townb.32 through the env wall palette
+// (cave.32 / castle.32). PC CGA/EGA ship CAVEB/CASTLEB as index-recolors.
 //
 // Elemental planes (screens 41..44): uniform map bytes 0x28/0x25/0x27/0x26
 // encode outb.32 terrain ids 8/5/7/6 (air / fire-lava / earth / water). The

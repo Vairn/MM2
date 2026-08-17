@@ -79,8 +79,12 @@ void renderAutomap(ScreenCompositor &c, const EnvAssets &env, const world::MapWo
     const mm2_gfx_sheet &sheet = env.automap();
     const uint8_t *visual = world.visualPage();
 
+    /* 0x2334: X starts at 0x108 (col 15) and subtracts 0xE per column so the
+     * indoor edge overlay @ X-0xE lands on the still-empty left neighbour.
+     * LTR would stamp frames 27/28 (mostly pen 3 / black) over tiles already
+     * drawn — Wizard Eye @ 0x1F7E has no overlay and stays LTR. */
     for (int cy = 0; cy < MM2_MAP_GRID_DIM; ++cy) {
-        for (int cx = 0; cx < MM2_MAP_GRID_DIM; ++cx) {
+        for (int cx = MM2_MAP_GRID_DIM - 1; cx >= 0; --cx) {
             const int disk_y = (MM2_MAP_GRID_DIM - 1) - cy;
             const int idx = (disk_y << 4) | cx;
             const int px = origin_x + cx * kTileW;
@@ -88,7 +92,7 @@ void renderAutomap(ScreenCompositor &c, const EnvAssets &env, const world::MapWo
 
             /* @0x2364: 0xFF (unvisited) cells are skipped — the black interior
              * shows through instead of a gray fill. */
-            if (!vis.isVisited(screen, cx, disk_y)) {
+            if (!params.ignore_visibility && !vis.isVisited(screen, cx, disk_y)) {
                 continue;
             }
 

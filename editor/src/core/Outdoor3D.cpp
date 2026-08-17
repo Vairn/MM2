@@ -131,7 +131,8 @@ std::unordered_map<uint8_t, OutdoorBiome> buildSectorLabelBiomes(const AttribFil
 OutdoorBiome biomeForCell(uint8_t mapByte, uint8_t sectorLabel,
                           const std::unordered_map<uint8_t, OutdoorBiome>& sectorTable) {
     const uint8_t tid = mapByte & 0x1F;
-    if (tid == 2 || tid == 3) return remapOutdoorBiome(OutdoorBiome::Ocean, sectorLabel);
+    /* Ids 2/3 already mean ocean.32; remapOutdoorBiome would rotate that to tundra. */
+    if (tid == 2 || tid == 3) return OutdoorBiome::Ocean;
     auto it = sectorTable.find(sectorLabel);
     const OutdoorBiome base =
         (it != sectorTable.end()) ? it->second : OutdoorBiome::Desert;
@@ -198,7 +199,7 @@ void buildDecorBlits(const std::array<uint8_t, kOutdoorLaneCols>& c6,
         if (mainA) {
             pushDecor(col, T::kDecorX);
             if (mainB) pushDecor(col + 12, T::kDecorX);
-            if (mainC) pushDecor(col + 16, T::kDecorXBde[col] - kView3DOriginX);
+            if (mainC) pushDecor(col + 16, T::kDecorXBde[col]);
         } else {
             if (mainB) pushDecor(col + 4, T::kDecorX);
             if (mainC) pushDecor(col + 8, T::kDecorX112);

@@ -1050,6 +1050,18 @@ function endFightLeave(fight, fled) {
   setStatus(fight, fled ? "The party flees!" : "The party has been defeated...");
 }
 
+/** Hide @ 0x13116 / Bribe @ 0x130C0: -$77BD + key 'S', no 0x11646. */
+function endFightSuccessLeave(fight) {
+  fight.session.combatVictory = true;
+  fight.session.arenaReward = null;
+  fight.session.combatActive = false;
+  fight.session.combatOutcome = "fled";
+  fight.session.scriptAbort = 0;
+  fight.state = STATE.Inactive;
+  fight.outcome = "fled";
+  setStatus(fight, "Success!");
+}
+
 function checkOutcome(fight) {
   if (firstAliveMonster(fight) < 0) {
     endFightVictory(fight);
@@ -1277,7 +1289,7 @@ function resolveBribeTry(fight) {
       sessionTryPayGems(session, fight.bribeAmount);
   }
   if (paid) {
-    endFightLeave(fight, true);
+    endFightSuccessLeave(fight);
     return;
   }
   setStatus(fight, "Your bribe is refused!");
@@ -1332,7 +1344,7 @@ function resolvePartyHide(fight) {
   let thresh = n > 0 ? (sum / n) | 0 : 0;
   if (thresh > 0xff) thresh = 0xff;
   if (roll < thresh) {
-    endFightLeave(fight, true);
+    endFightSuccessLeave(fight);
     return;
   }
   setStatus(fight, "You failed to hide!");

@@ -222,6 +222,11 @@ if(NOT AMIGA)
   target_include_directories(playsession_input_test PRIVATE include)
   target_link_libraries(playsession_input_test PRIVATE mm2_codecs mm2_audio_stub)
 
+  add_executable(dev_menu_test
+    tests/dev_menu_test.cpp)
+  target_include_directories(dev_menu_test PRIVATE include)
+  target_link_libraries(dev_menu_test PRIVATE mm2_codecs)
+
   add_executable(explore_commands_test
     tests/explore_commands_test.cpp
     src/gameplay/ExploreActions.cpp
@@ -254,6 +259,7 @@ if(NOT AMIGA)
     src/gameplay/InGameCharacterSheet.cpp
     src/gameplay/RosterSkills.cpp
     src/ui/RosterSkillDisplay.cpp
+    src/ui/AguiAtlas.cpp
     src/gfx/GfxBackend.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/PlayScreenChrome.cpp
@@ -262,6 +268,9 @@ if(NOT AMIGA)
     src/runtime/PathScratch.cpp)
   target_include_directories(character_sheet_input_test PRIVATE include)
   target_link_libraries(character_sheet_input_test PRIVATE mm2_codecs mm2_audio_stub)
+
+  add_executable(paper_doll_layout_test tests/paper_doll_layout_test.cpp)
+  target_include_directories(paper_doll_layout_test PRIVATE include ${MM2_DECOMP})
 
   add_executable(party_hp_format_test
     tests/party_hp_format_test.cpp
@@ -399,6 +408,7 @@ if(NOT AMIGA)
     src/gameplay/InGameCharacterSheet.cpp
     src/ui/RosterSkillDisplay.cpp
     src/gameplay/InGameControlsScreen.cpp
+    src/gameplay/DevMenu.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
     src/gfx/View3D.cpp
@@ -442,6 +452,7 @@ if(NOT AMIGA)
     src/gameplay/InGameCharacterSheet.cpp
     src/ui/RosterSkillDisplay.cpp
     src/gameplay/InGameControlsScreen.cpp
+    src/gameplay/DevMenu.cpp
     src/gfx/ScreenCompositor.cpp
     src/gfx/mm2_font8x8.c
     src/gfx/View3D.cpp
@@ -507,6 +518,7 @@ set(MM2_GAME_SOURCES
   src/gameplay/ExploreActions.cpp
   src/gameplay/InGameCharacterSheet.cpp
   src/gameplay/InGameControlsScreen.cpp
+  src/gameplay/DevMenu.cpp
   src/gameplay/RosterSkills.cpp
   src/TitleScreen.cpp
   src/states/mm2_state.c

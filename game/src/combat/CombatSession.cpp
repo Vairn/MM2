@@ -6,6 +6,7 @@
 #include "mm2/events/EventVmHelpers.h"
 #include "mm2/events/TownServiceTransactions.h"
 #include "mm2/gameplay/SpellBook.h"
+#include "mm2/gameplay/RosterSkills.h"
 #include "mm2/platform/Audio.h"
 #include "mm2_create_character.h"
 #include "mm2_found_items.h"
@@ -76,6 +77,12 @@ void placeIdentifyField(char *row, int cap, int screen_col, const char *s)
     }
 }
 
+/* Unlock/Search/Hide: ASM 0x4B60 / 0x20D44 read roster+$1E plus type-14 gear. */
+int rosterThieveryByte(const Mm2RosterRecord &rec, const Mm2ItemsFile *items)
+{
+    return gameplay::rosterLiveThievery(rec, items);
+}
+
 void rtrimIdentifyRow(char *row)
 {
     if (!row) {
@@ -84,6 +91,33 @@ void rtrimIdentifyRow(char *row)
     int n = static_cast<int>(std::strlen(row));
     while (n > 0 && row[n - 1] == ' ') {
         row[--n] = '\0';
+    }
+}
+
+/* 0x10F3E: "N time[s] and missed!" / "N time[s] and hit M time[s] for X Pt[s]".
+ * 0x11040 / 0xFF42 prefix with actor, verb, target. */
+void formatSwingCombatLine(char *out, size_t cap, const char *actor, const char *verb, const char *target,
+                           unsigned swings, unsigned hits, unsigned dmg, const char *suffix)
+{
+    if (!out || cap == 0) {
+        return;
+    }
+    const char *time_s = (swings > 1) ? "s" : "";
+    const char *hit_s = (hits > 1) ? "s" : "";
+    const char *pt_s = (dmg > 1) ? "s" : "";
+    char body[80];
+    if (dmg == 0) {
+        std::snprintf(body, sizeof(body), "%u time%s and missed!", swings, time_s);
+    } else {
+        std::snprintf(body, sizeof(body), "%u time%s and hit %u time%s for %u Pt%s", swings, time_s, hits,
+                      hit_s, dmg, pt_s);
+    }
+    if (suffix && suffix[0] != '\0') {
+        std::snprintf(out, cap, "%s %s %s %s - %s", actor ? actor : "", verb ? verb : "",
+                      target ? target : "", body, suffix);
+    } else {
+        std::snprintf(out, cap, "%s %s %s %s", actor ? actor : "", verb ? verb : "", target ? target : "",
+                      body);
     }
 }
 
@@ -268,31 +302,10 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
     mm2_gs_set_u8(gs.a4(), MM2_GS_POWER_SHIELD_CTR, 0);
     mm2_gs_set_u8(gs.a4(), MM2_GS_HOLY_BONUS_CTR, 0);
 
-    /* 0x521E..0x5252: 0x4476 sync current→base, then +$27→+$73 / +$15→+$70. */
-    for (int i = 0; i < party_count_ && i < MM2_GS_PARTY_SIZE; ++i) {
-        const int idx = rosterIndexForPartySlot(i);
-        if (idx < 0) {
-            continue;
-        }
-        Mm2RosterRecord &rec = roster_->records[idx];
-        auto *raw = reinterpret_cast<uint8_t *>(&rec);
-        /* Remake keeps canonical level/spell_level at +$71/+72; Amiga working
-         * copies are +$20/+23. Seed both so 0x4476's working→permanent mirror
-         * preserves them (stock roster can leave +$20 stuck at 1). */
-        raw[0x20] = rec.level;
-        raw[0x23] = rec.spell_level;
-        /* 0x4476 sync_party_secondary_stats */
-        raw[0x6B] = raw[0x10]; /* might */
-        raw[0x6F] = raw[0x14]; /* accuracy */
-        raw[0x6D] = raw[0x12]; /* personality */
-        raw[0x6C] = raw[0x11]; /* intelligence */
-        raw[0x71] = raw[0x20];
-        raw[0x72] = raw[0x23];
-        raw[0x6E] = raw[0x13]; /* speed */
-        /* 0x5244 / 0x5252 */
-        raw[0x73] = raw[0x27]; /* endurance_current → endurance_base */
-        raw[0x70] = raw[0x15]; /* luck_current → luck_base */
-    }
+    /* 0x521E..0x5252 (0x4476 current→base) is party setup @ 0x51EA, not
+     * combat_encounter_entry @ 0x51C2. Running it here — and seeding +$71→+$20
+     * first — committed Greatest Fountain's temp level 50. Fountain OP_18
+     * buffs stay for the fight; Rest jsr -$7F50 restores them. */
 
     xp_pool_ = 0;
     mm2_gs_set_u32(gs.a4(), MM2_GS_COMBAT_XP_POOL, 0); /* 0x12CB4 clr.l -$6FC6 */
@@ -307,6 +320,8 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
     mm2_gs_set_u8(gs.a4(), MM2_GS_PARTY_RAN_LATCH, 0);    /* 0x12C88 -$5E4C */
     msg_queue_len_ = 0;
     msg_queue_idx_ = 0;
+    spell_apply_active_ = false;
+    spell_apply_tail_ = 0;
     outcome_ = CombatOutcome::None;
     round_layout_active_ = false;
     active_party_slot_ = -1;
@@ -354,6 +369,7 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
         party_count_ = 0;
     }
 
+    seedHideThresh(gs);
     beginEncounterUi(gs, world);
     /* 0x51C2 combat_encounter_entry (-$7EDE): play_sound_seq id 2 @ 0x51D8/0x51DC
      * ("oh noes" — WAV 02_phrase_short.wav). */
@@ -361,23 +377,36 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
     return true;
 }
 
+void CombatSession::seedHideThresh(GameStateView &gs)
+{
+    /* 0x12D42 jsr -$7EFC → 0x4B60: sum roster thievery over -$795A slots,
+     * divu party count, cap $FF, write A4-$5E4E. No living-only skip. */
+    int sum = 0;
+    const int n = party_count_;
+    if (roster_ && n > 0) {
+        for (int i = 0; i < n && i < MM2_GS_PARTY_SIZE; ++i) {
+            const int idx = rosterIndexForPartySlot(i);
+            if (idx >= 0) {
+                sum += rosterThieveryByte(roster_->records[idx], items_);
+            }
+        }
+    }
+    int mean = (n > 0) ? (sum / n) : 0;
+    if (mean > 0xFF) {
+        mean = 0xFF;
+    }
+    mm2_gs_set_u8(gs.a4(), MM2_GS_HIDE_THRESH, static_cast<uint8_t>(mean));
+}
+
 void CombatSession::applySurpriseRoll(GameStateView &gs)
 {
-    /* Encounter-setup surprise @ 0x12EE2: rng(1,100) vs front-rank speed and
-     * levitate. ASM strings @ 0x131EA / 0x13206:
+    /* Encounter-setup surprise @ 0x12EE2: rng(1,100) vs A4-$5E4E (0x4B60 mean)
+     * and levitate (-$79A6). Strings @ 0x131EA / 0x13206:
      *   mode 2 = "You surprised the monsters!" (party advantage → options bar)
      *   mode 3 = "The monsters surprised you!" (ambush → skip options @ 0x12F70) */
     const int roll = rng_->range(1, 100);
-    int front_speed = 10;
-    for (int i = 0; i < party_count_ && i < MM2_GS_PARTY_SIZE; ++i) {
-        if (!partySlotAlive(i)) {
-            continue;
-        }
-        const int idx = rosterIndexForPartySlot(i);
-        front_speed = roster_->records[idx].speed_current;
-        break;
-    }
-    if (roll <= 40 && roll <= front_speed) {
+    const int thresh = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_HIDE_THRESH));
+    if (roll <= 40 && roll <= thresh) {
         surprise_mode_ = 2;
         mm2_gs_set_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE, 2);
     } else if (gs.levitateFlag() == 0 && roll >= 90) {
@@ -538,30 +567,15 @@ void CombatSession::resolvePartyRun(GameStateView &gs, const world::MapWorld &wo
 
 void CombatSession::resolvePartyHide(GameStateView &gs, const world::MapWorld &world)
 {
-    /* 0x13104: rng(1,100) from party-options entry vs A4-$5E4E (0x12D42 ← -$7EFC→0x4B60).
-     * 0x4B60: mean of party +$1E thievery, divu by -$795A, cap $FF. Success → leave. */
-    (void)world;
+    /* 0x13104: rng(1,100) vs A4-$5E4E. Success → -$77BD + key 'S' (leave
+     * without 0x11646). Fail → rewrite key to 'A' and fall into 0x12A22. */
     const int roll = rng_ ? rng_->range(1, 100) : 1;
-    int sum = 0;
-    int n = 0;
-    for (int i = 0; i < party_count_ && i < MM2_GS_PARTY_SIZE; ++i) {
-        if (!partySlotAlive(i)) {
-            continue;
-        }
-        sum += roster_->records[rosterIndexForPartySlot(i)].thievery_percent;
-        ++n;
-    }
-    int thresh = (n > 0) ? (sum / n) : 0;
-    if (thresh > 0xFF) {
-        thresh = 0xFF;
-    }
+    const int thresh = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_HIDE_THRESH));
     if (roll < thresh) {
-        finishLeave(gs, true);
-        setStatus("Success!");
+        finishSuccessLeave(gs);
         return;
     }
-    setStatus("You failed to hide!");
-    state_ = CombatState::AwaitingPartyOptions;
+    resolvePartyAttack(gs, world);
 }
 
 void CombatSession::beginBribeSubmenu(GameStateView &gs)
@@ -577,7 +591,8 @@ void CombatSession::beginBribeSubmenu(GameStateView &gs)
     setStatus("");
 }
 
-bool CombatSession::tickBribeSubmenu(GameStateView &gs, char key, bool escape)
+bool CombatSession::tickBribeSubmenu(GameStateView &gs, const world::MapWorld &world, char key,
+                                    bool escape)
 {
     if (state_ == CombatState::AwaitingBribeKind) {
         if (escape || key == 0x1B) {
@@ -613,24 +628,25 @@ bool CombatSession::tickBribeSubmenu(GameStateView &gs, char key, bool escape)
         return false;
     }
     if (bribe_digits_ == 0 || bribe_amount_ == 0) {
+        /* 0x1301C tst.w amount → beq $13104 with key still 1/2/3 → reprint options. */
         state_ = CombatState::AwaitingPartyOptions;
         setStatus("");
         return true;
     }
-    resolveBribeTry(gs);
+    resolveBribeTry(gs, world);
     return true;
 }
 
-void CombatSession::resolveBribeTry(GameStateView &gs)
+void CombatSession::resolveBribeTry(GameStateView &gs, const world::MapWorld &world)
 {
-    /* 0x1301C..0x130FE: pay food/gold/gems; success → leave (S / -$77BD). */
+    /* 0x1301C..0x130FE: each kind starts by writing key 'A'; success overwrites
+     * with 'S' + -$77BD. Any refuse path keeps 'A' → 0x12A22 (start the round). */
     const uint8_t amount_lo = static_cast<uint8_t>(bribe_amount_ & 0xFF);
     if (bribe_kind_ != 2) {
         /* Non-gold: amount_lo must be >= monster type at -$11DE[0]. */
         const uint8_t mon0 = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS);
         if (amount_lo < mon0) {
-            setStatus("Your bribe is refused!");
-            state_ = CombatState::AwaitingPartyOptions;
+            resolvePartyAttack(gs, world);
             return;
         }
     }
@@ -652,12 +668,10 @@ void CombatSession::resolveBribeTry(GameStateView &gs)
     }
 
     if (paid) {
-        finishLeave(gs, true);
-        setStatus("Success!");
+        finishSuccessLeave(gs);
         return;
     }
-    setStatus("Your bribe is refused!");
-    state_ = CombatState::AwaitingPartyOptions;
+    resolvePartyAttack(gs, world);
 }
 
 /* 0x132E6 → -$7E84 (0x6798): arg = DELAY*$19+1; half = max(1, arg/2);
@@ -861,7 +875,7 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
         }
         ack_until_tick_ = platform::nowTicks();
         /* 0x132E6 host: pace multi-target spell lines one ack each. */
-        if (advanceCombatMessageQueue()) {
+        if (advanceCombatMessageQueue(gs)) {
             const int frames = combatActionAckFrames(gs, auto_enabled_);
             ack_until_tick_ = platform::nowTicks() + static_cast<uint32_t>(frames);
             ack_key_skip_armed_ = false;
@@ -915,7 +929,7 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
         if (ch == 0 && !keys.escape) {
             return false;
         }
-        if (!tickBribeSubmenu(gs, ch, keys.escape)) {
+        if (!tickBribeSubmenu(gs, world, ch, keys.escape)) {
             return false;
         }
         return state_ == CombatState::Inactive;
@@ -995,7 +1009,10 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
     }
 
     if (state_ == CombatState::AwaitingPartyPick) {
-        const char ch = static_cast<char>(keys.last_ascii);
+        char ch = static_cast<char>(keys.last_ascii);
+        if (ch == 0 && keys.enter) {
+            ch = '\r'; /* 0xCCE8 / 0xD390: Return (0x0D) confirms solo target */
+        }
         if (ch == 0 && !keys.escape) {
             return false;
         }
@@ -1243,10 +1260,19 @@ bool CombatSession::checkOutcome(GameStateView &gs, const world::MapWorld & /*wo
         return false;
     }
 
-    /* 0x13282: -$795A==0 → end; 0x12C5A latch/TD → 0x11646 flee. */
+    /* 0x13282 combat_round_end_check (after each action @ 0x12C2E, and at the
+     * 0x12C3E epilogue): monster count already handled above; then -$795A==0
+     * → 1; then tst.b -$523 (Time Distortion) → 1. Nonzero return + live
+     * monsters @ 0x12C4E falls into 0x12C5A/0x12C60 → jsr 0x11646 flee.
+     * TD must end the fight here — not after remaining actors finish the round. */
+    if (mm2_gs_u8(gs.a4(), MM2_GS_TIME_DISTORT) != 0) {
+        finishLeave(gs, true);
+        return true;
+    }
+
+    /* 0x13282: -$795A==0 → end; 0x12C5A latch → 0x11646 flee. */
     if (party_count_ <= 0) {
-        const bool fled = mm2_gs_u8(gs.a4(), MM2_GS_PARTY_RAN_LATCH) != 0 ||
-                          mm2_gs_u8(gs.a4(), MM2_GS_TIME_DISTORT) != 0;
+        const bool fled = mm2_gs_u8(gs.a4(), MM2_GS_PARTY_RAN_LATCH) != 0;
         finishLeave(gs, fled);
         return true;
     }
@@ -1698,7 +1724,8 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             }
             effect = true;
         } else if (flat0 == 3) { /* C1/4 First Aid @ 0xC7D0 */
-            if (party_count_ <= 1) {
+            /* 0xCC18: solo → 0xCCE8 "'Return' to cast". -$3F0C skips that wait. */
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 applyHealCa58(gs, 0, 8, spell_name);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1706,7 +1733,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             beginPartyPickCast(gs, flat0, "On whom");
             return;
         } else if (flat0 == 5) { /* C1/6 Power Cure @ 0xC7E2 */
-            if (party_count_ <= 1) {
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 uint16_t heal = 0;
                 const int lv = caster.level > 0 ? static_cast<int>(caster.level) : 1;
                 for (int i = 0; i < lv; ++i) {
@@ -1719,7 +1746,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             beginPartyPickCast(gs, flat0, "On whom");
             return;
         } else if (flat0 == 7) { /* C2/1 Cure Wounds @ 0xC822 */
-            if (party_count_ <= 1) {
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 applyHealCa58(gs, 0, 15, spell_name);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1727,7 +1754,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             beginPartyPickCast(gs, flat0, "On whom");
             return;
         } else if (flat0 == 16) { /* C3/3 Cure Poison @ 0xC862 */
-            if (party_count_ <= 1) {
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 applyCureMaskToPartySlot(gs, 0, 0x77, false, spell_name);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1735,7 +1762,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             beginPartyPickCast(gs, flat0, "On whom");
             return;
         } else if (flat0 == 22) { /* C4/3 Cure Disease @ 0xC8BC */
-            if (party_count_ <= 1) {
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 applyCureMaskToPartySlot(gs, 0, 0x7B, false, spell_name);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1749,7 +1776,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
             effect = true;
         } else if (flat0 == 30) { /* C5/5 Remove Condition @ 0xC916 */
-            if (party_count_ <= 1) {
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 applyCureMaskToPartySlot(gs, 0, 0x00, true, spell_name);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1812,7 +1839,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             return;
         } else if (flat0 == 8) { /* C2/2 Heroism @ 0xC12A → 0xD2EA */
             const int pc = party_count_;
-            if (pc <= 1) {
+            if (pc <= 1 && skip_cast_cost_) {
                 applyHeroismToPartySlot(gs, 0);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1862,7 +1889,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 return;
             }
         } else if (flat0 == 23) { /* C4/4 Restore Alignment @ 0xB26A: +$0D → +$6A */
-            if (party_count_ <= 1) {
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 applyRestoreAlignmentToPartySlot(gs, 0);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1907,7 +1934,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 return;
             }
             const int pc = party_count_;
-            if (pc <= 1) {
+            if (pc <= 1 && skip_cast_cost_) {
                 applyFrenzyToPartySlot(gs, 0);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1915,7 +1942,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             beginPartyPickCast(gs, flat0, "On whom");
             return;
         } else if (flat0 == 32) { /* C6/2 Rejuvenate @ 0xB332 */
-            if (party_count_ <= 1) {
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 applyRejuvenateToPartySlot(gs, 0);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1923,7 +1950,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             beginPartyPickCast(gs, flat0, "On whom");
             return;
         } else if (flat0 == 39) { /* C7/4 Raise Dead @ 0xB492 */
-            if (party_count_ <= 1) {
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 applyRaiseDeadToPartySlot(gs, 0);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1931,7 +1958,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             beginPartyPickCast(gs, flat0, "On whom");
             return;
         } else if (flat0 == 33) { /* C6/3 Stone to Flesh @ 0xC96E */
-            if (party_count_ <= 1) {
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 applyStoneToFleshToPartySlot(gs, 0);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1947,7 +1974,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             beginPartyPickCast(gs, flat0, "Town (1-5)?");
             return;
         } else if (flat0 == 46) { /* C9/3 Resurrection @ 0xC9B6 */
-            if (party_count_ <= 1) {
+            if (party_count_ <= 1 && skip_cast_cost_) {
                 applyResurrectionToPartySlot(gs, 0);
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -2188,11 +2215,16 @@ bool CombatSession::tickPartyPick(GameStateView &gs, char key)
         return true;
     }
 
-    /* 0xD2EA / 0xD312: '1'..party_count → party slot index. */
-    if (key < '1' || key > static_cast<char>('0' + pc)) {
+    /* 0xD2EA / 0xD312: '1'..party_count → party slot index.
+     * 0xCCE8 solo party: Return (0x0D) confirms slot 0 (same as digit '1'). */
+    char pick = key;
+    if (pc <= 1 && (key == '\r' || key == '\n')) {
+        pick = '1';
+    }
+    if (pick < '1' || pick > static_cast<char>('0' + pc)) {
         return false;
     }
-    const int party_slot = key - '1';
+    const int party_slot = pick - '1';
     pending_cast_flat_ = -1;
     pending_cast_school_ = -1;
     mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
@@ -2252,6 +2284,7 @@ void CombatSession::beginPartyPickCast(GameStateView &gs, int flat0, const char 
         }
     }
     mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 0);
+    explore_on_whom_ = (prompt && std::strcmp(prompt, "On whom") == 0);
     /* Fly @ 0xABF8 / Lloyd / On whom: explore keeps state Inactive (modal I/O,
      * not combat AwaitingPartyPick). Combat cast uses the fight pick state. */
     if (exploration_cast_) {
@@ -2262,8 +2295,13 @@ void CombatSession::beginPartyPickCast(GameStateView &gs, int flat0, const char 
         state_ = CombatState::AwaitingPartyPick;
     }
     const int pc = launch_ ? party_count_ : 1;
-    if (prompt && std::strcmp(prompt, "On whom") == 0) {
-        std::snprintf(status_line_, sizeof(status_line_), "On whom (1-%d)?", pc);
+    if (explore_on_whom_) {
+        /* 0xCC18: party_count==1 → 0xCCE8 string at 0xCD7E; else 0xCC08. */
+        if (pc <= 1) {
+            std::snprintf(status_line_, sizeof(status_line_), "'Return' to cast");
+        } else {
+            std::snprintf(status_line_, sizeof(status_line_), "On whom (1-%d)?", pc);
+        }
     } else if (prompt) {
         std::snprintf(status_line_, sizeof(status_line_), "%s", prompt);
     }
@@ -2559,6 +2597,7 @@ void CombatSession::castSpellFromSheet(GameStateView &gs, int party_slot, int fl
         if (explore_pick_ == ExplorePick::None) {
             state_ = CombatState::Inactive;
             exploration_cast_ = false;
+            explore_on_whom_ = false;
             active_party_slot_ = -1;
         } else {
             state_ = CombatState::Inactive;
@@ -2578,6 +2617,7 @@ bool CombatSession::tickSheetCastAux(GameStateView &gs, char key)
         force_cast_school_ = -1;
         skip_cast_cost_ = false;
         explore_pick_ = ExplorePick::None;
+        explore_on_whom_ = false;
         state_ = CombatState::Inactive;
         exploration_cast_ = false;
         active_party_slot_ = -1;
@@ -2593,6 +2633,7 @@ bool CombatSession::tickSheetCastAux(GameStateView &gs, char key)
     /* Finished: tickPartyPick/ItemPick cleared pending_cast_flat_. */
     if (pending_cast_flat_ < 0) {
         explore_pick_ = ExplorePick::None;
+        explore_on_whom_ = false;
         state_ = CombatState::Inactive;
         exploration_cast_ = false;
         force_cast_school_ = -1;
@@ -3245,20 +3286,20 @@ void CombatSession::enqueueCombatMessage(const char *msg)
     ++msg_queue_len_;
 }
 
-bool CombatSession::advanceCombatMessageQueue()
+bool CombatSession::advanceCombatMessageQueue(GameStateView &gs)
 {
     /* Returns true if another queued line was shown (stay in AwaitingActionAck). */
-    if (msg_queue_len_ <= 0) {
-        return false;
-    }
-    ++msg_queue_idx_;
-    if (msg_queue_idx_ >= msg_queue_len_) {
+    if (msg_queue_len_ > 0) {
+        ++msg_queue_idx_;
+        if (msg_queue_idx_ < msg_queue_len_) {
+            std::snprintf(status_line_, sizeof(status_line_), "%s", msg_queue_[msg_queue_idx_]);
+            return true;
+        }
         msg_queue_len_ = 0;
         msg_queue_idx_ = 0;
-        return false;
     }
-    std::snprintf(status_line_, sizeof(status_line_), "%s", msg_queue_[msg_queue_idx_]);
-    return true;
+    /* 0x10B24: jsr $132e6 then loop to the next 0x10894 target. */
+    return continueSpellApply108BC(gs);
 }
 
 void CombatSession::compactMonsterSlot(GameStateView &gs, int slot)
@@ -3288,29 +3329,38 @@ void CombatSession::compactMonsterSlot(GameStateView &gs, int slot)
         audio::playSoundSeq(8, gs.soundsEnabled(), gs.walkBeepEnabled());
         return;
     }
-    /* last = min(live, 10): when live stays >= 10, the shift copies slot[10] →
-     * slot[9] (overflow reservoir promotes into the A–J list). ASM leaves
-     * slot[10] intact for the next promote — clearing it (or zeroing
-     * MONSTER_SLOTS[10] / overflow_type) stopped replacements from appearing. */
-    const int last = (live < 0x0A) ? static_cast<int>(live) : 0x0A;
-    for (int i = slot; i < last; ++i) {
-        slots_[i] = slots_[i + 1];
-        monster_acted_[i] = monster_acted_[i + 1];
-        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + i,
-                      mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + i + 1));
-        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + i,
-                      mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_ACTED + i + 1));
+    /* 0x10D16..0x10DDE slides [slot+1]→[slot] through last=min(live,10), which
+     * copies reservoir [10] into J when live stays >= 10. Packing 0..9 from
+     * the front is the same result and also closes holes if a prior kill
+     * skipped compact — 0x129CC then draws i < -$77BE starting at A. */
+    packVisibleMonsterSlots(gs);
+    /* 0x10CCE tail: play_sound_seq id 8 after compact. */
+    audio::playSoundSeq(8, gs.soundsEnabled(), gs.walkBeepEnabled());
+}
+
+void CombatSession::packVisibleMonsterSlots(GameStateView &gs)
+{
+    CombatMonster packed[10];
+    bool acted[10]{};
+    uint8_t charges[10]{};
+    int n = 0;
+    for (int i = 0; i < 10 && n < 10; ++i) {
+        if (!slots_[i].alive) {
+            continue;
+        }
+        packed[n] = slots_[i];
+        acted[n] = monster_acted_[i];
+        charges[n] = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + i);
+        ++n;
     }
-    if (last < 0x0A) {
-        /* Vacate the new end of the visible list only (live dropped below 10). */
-        slots_[last] = CombatMonster{};
-        monster_acted_[last] = false;
-        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + last, 0);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + last, 0);
-    } else if (overflow_type_ != 0 && monsters_ && overflow_type_ < MM2_MONSTER_RECORD_COUNT) {
-        /* Keep type id at [10] as the overflow alias (enter seeds it the same way). */
-        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + 0x0A, overflow_type_);
-        if (!slots_[0x0A].alive || slots_[0x0A].type != overflow_type_) {
+    const uint8_t live = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_COUNT);
+    if (n < 10 && slots_[0x0A].alive) {
+        packed[n] = slots_[0x0A];
+        acted[n] = monster_acted_[0x0A];
+        charges[n] = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + 0x0A);
+        ++n;
+        if (live > 10 && overflow_type_ != 0 && monsters_ &&
+            overflow_type_ < MM2_MONSTER_RECORD_COUNT) {
             const Mm2MonsterRecord &rec = monsters_->records[overflow_type_];
             CombatMonster &m = slots_[0x0A];
             m.type = overflow_type_;
@@ -3320,11 +3370,48 @@ void CombatSession::compactMonsterSlot(GameStateView &gs, int slot)
             m.alive = m.max_hp > 0;
             m.status = 0;
             monster_acted_[0x0A] = false;
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + 0x0A, overflow_type_);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + 0x0A, 0);
+        } else {
+            slots_[0x0A] = CombatMonster{};
+            monster_acted_[0x0A] = false;
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + 0x0A, 0);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + 0x0A, 0);
         }
+    } else if (n < 10 && live > 10 && overflow_type_ != 0 && monsters_ &&
+               overflow_type_ < MM2_MONSTER_RECORD_COUNT) {
+        const Mm2MonsterRecord &rec = monsters_->records[overflow_type_];
+        CombatMonster m{};
+        m.type = overflow_type_;
+        m.max_hp = static_cast<int>(mm2_monster_decode_hp(&rec));
+        m.hp = m.max_hp;
+        m.speed = decodeMonsterSpeed(rec);
+        m.alive = m.max_hp > 0;
+        m.status = 0;
+        packed[n] = m;
+        acted[n] = false;
+        charges[n] = 0;
+        ++n;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + 0x0A, overflow_type_);
+    }
+    for (int i = 0; i < n; ++i) {
+        slots_[i] = packed[i];
+        monster_acted_[i] = acted[i];
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + i, packed[i].type);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + i, acted[i] ? 1 : 0);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + i, charges[i]);
+    }
+    for (int i = n; i < 10; ++i) {
+        slots_[i] = CombatMonster{};
+        monster_acted_[i] = false;
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + i, 0);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_ACTED + i, 0);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SPECIAL_CHARGES + i, 0);
+    }
+    if (live > 10 && overflow_type_ != 0) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + 0x0A, overflow_type_);
     }
     syncMonsterSlotsToGs(gs);
-    /* 0x10CCE tail: play_sound_seq id 8 after compact. */
-    audio::playSoundSeq(8, gs.soundsEnabled(), gs.walkBeepEnabled());
 }
 
 void CombatSession::applyTreasure10B74(GameStateView &gs, uint8_t mon_type)
@@ -3555,61 +3642,77 @@ void CombatSession::onMonsterKilled(GameStateView &gs, int slot, uint32_t kill_x
     }
 }
 
-void CombatSession::applySpell108BC(GameStateView &gs, int start_slot, int hit_count, uint8_t mode_d)
+void CombatSession::finishSpellApply108BC(GameStateView &gs)
 {
-    /* 0x10894: per-target resist/halve/status/damage + hostable messages. */
+    mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_DAMAGE, spell_apply_saved_dmg_);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, spell_apply_status_mode_);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_CODE, spell_apply_status_code_);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_HOLY_WORD_GATE, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_SKIP_RESIST, 0);
+    syncMonsterSlotsToGs(gs);
+    spell_apply_active_ = false;
+    if (spell_apply_tail_ == 1) {
+        spell_apply_tail_ = 0;
+        applyMoonRayPartyHeal(gs);
+    } else {
+        spell_apply_tail_ = 0;
+    }
+}
+
+void CombatSession::applyMoonRayPartyHeal(GameStateView &gs)
+{
+    /* 0xC566 after 0x10894: re-roll rng(1,$5B)+9 per living party member. */
+    if (!roster_ || !launch_) {
+        return;
+    }
+    for (int p = 0; p < party_count_; ++p) {
+        const int ri = rosterIndexForPartySlot(p);
+        if (ri < 0 || ri >= MM2_ROSTER_RECORD_COUNT) {
+            continue;
+        }
+        Mm2RosterRecord &rec = roster_->records[ri];
+        const int roll = rng_ ? rng_->range(1, 0x5B) : 1;
+        const uint16_t heal = static_cast<uint16_t>(roll + 9);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_DAMAGE, heal);
+        if (rec.condition >= 0x80) {
+            continue;
+        }
+        rec.condition = static_cast<uint8_t>(rec.condition & 0x2F);
+        const unsigned sum =
+            static_cast<unsigned>(rec.hp_max) + static_cast<unsigned>(heal);
+        rec.hp_max = static_cast<uint16_t>(sum > 0xFFFFu ? 0xFFFFu : sum);
+        if (rec.hp_max > rec.hp_current) {
+            rec.hp_max = rec.hp_current;
+        }
+    }
+}
+
+bool CombatSession::applySpell108BCNext(GameStateView &gs)
+{
+    /* One living target, then return so 0x132E6 can redraw before the next. */
     static const char *kStatusNames[] = {"silenced", "weakened",  "frightened", "slept",
                                          "held",     "mindless",  "encased",    "killed"};
-    int live = 0;
-    for (int i = 0; i < MM2_GS_MONSTER_BATTLE_SLOTS; ++i) {
-        if (slots_[i].alive) {
-            ++live;
-        }
-    }
-    if (hit_count > live) {
-        hit_count = live;
-    }
-    if (hit_count < 1) {
-        hit_count = 1;
-    }
-    /* 0x108B2: Holy Word gate bumps max slot scan. */
-    int max_slot = 0x0A;
-    if (mm2_gs_u8(gs.a4(), MM2_GS_HOLY_WORD_GATE) != 0) {
-        max_slot = 0x0B;
-    }
-
-    /* 0x108BC: mode 2 → clr mode (skip cast banner) then damage path. */
-    if (mm2_gs_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE) == 2) {
-        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, 0);
-    }
-
-    const uint8_t status_mode = mm2_gs_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE);
-    uint8_t status_code = mm2_gs_u8(gs.a4(), MM2_GS_SPELL_STATUS_CODE);
-    const uint16_t saved_dmg = mm2_gs_u16(gs.a4(), MM2_GS_SPELL_DAMAGE);
-    const int caster_idx = rosterIndexForPartySlot(active_party_slot_);
-    const int caster_level =
-        (caster_idx >= 0 && roster_->records[caster_idx].level > 0)
-            ? static_cast<int>(roster_->records[caster_idx].level)
-            : 1;
-
-    char last_msg[160] = {};
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_SKIP_RESIST, spell_apply_skip_resist_);
     msg_queue_len_ = 0;
     msg_queue_idx_ = 0;
-    int applied = 0;
-    for (int s = start_slot; s < MM2_GS_MONSTER_BATTLE_SLOTS && applied < hit_count; ) {
-        if (s >= max_slot) {
+
+    while (spell_apply_slot_ < MM2_GS_MONSTER_BATTLE_SLOTS &&
+           spell_apply_applied_ < spell_apply_hit_count_) {
+        if (spell_apply_slot_ >= spell_apply_max_slot_) {
             break;
         }
+        const int s = spell_apply_slot_;
         if (!slots_[s].alive) {
-            ++s;
+            ++spell_apply_slot_;
             continue;
         }
         loadMonsterCombatGlobals(gs, s);
-        mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_DAMAGE, saved_dmg);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, status_mode);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_CODE, status_code);
+        mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_DAMAGE, spell_apply_saved_dmg_);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, spell_apply_status_mode_);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_CODE, spell_apply_status_code_);
         mm2_gs_set_u8(gs.a4(), MM2_GS_CUR_MON_SLOT, static_cast<uint8_t>(s));
 
+        char last_msg[160] = {};
         char mon_name[MM2_MONSTER_NAME_SIZE + 1] = "?";
         if (monsters_) {
             mm2_monster_name_to_cstr(&monsters_->records[slots_[s].type], mon_name, sizeof(mon_name));
@@ -3619,13 +3722,14 @@ void CombatSession::applySpell108BC(GameStateView &gs, int start_slot, int hit_c
         if (mm2_gs_u8(gs.a4(), MM2_GS_SPELL_SKIP_RESIST) == 0) {
             const uint8_t mres = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_MRES);
             if (mres != 0) {
-                const int roll = rng_ ? rng_->range(caster_level, 0x5A) : caster_level;
+                const int roll = rng_ ? rng_->range(spell_apply_caster_level_, 0x5A)
+                                      : spell_apply_caster_level_;
                 if (roll < static_cast<int>(mres)) {
                     miss = true;
                 }
             }
-            if (!miss && mode_d != 0) {
-                const uint8_t idx = static_cast<uint8_t>(mode_d - 1);
+            if (!miss && spell_apply_mode_d_ != 0) {
+                const uint8_t idx = static_cast<uint8_t>(spell_apply_mode_d_ - 1);
                 if (mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_FLAG_BASE + idx) != 0) {
                     miss = true;
                 }
@@ -3634,11 +3738,11 @@ void CombatSession::applySpell108BC(GameStateView &gs, int start_slot, int hit_c
                 const int tr = rng_ ? rng_->range(1, 0xBF) : 1;
                 const uint8_t mon_type = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + s);
                 if (tr <= static_cast<int>(mon_type)) {
-                    if (status_mode == 0) {
+                    if (spell_apply_status_mode_ == 0) {
                         uint16_t d = mm2_gs_u16(gs.a4(), MM2_GS_SPELL_DAMAGE);
                         mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_DAMAGE, static_cast<uint16_t>(d / 2));
-                    } else if (status_mode == 1) {
-                        if (status_code < 9) {
+                    } else if (spell_apply_status_mode_ == 1) {
+                        if (spell_apply_status_code_ < 9) {
                             miss = true;
                         } else {
                             mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_DAMAGE, 0x32);
@@ -3648,7 +3752,7 @@ void CombatSession::applySpell108BC(GameStateView &gs, int start_slot, int hit_c
                 }
             }
         }
-        if (miss && status_mode == 1 && status_code == 8 &&
+        if (miss && spell_apply_status_mode_ == 1 && spell_apply_status_code_ == 8 &&
             mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_UNDEAD) != 0) {
             miss = false;
         }
@@ -3657,16 +3761,12 @@ void CombatSession::applySpell108BC(GameStateView &gs, int start_slot, int hit_c
             miss = true;
         }
 
+        bool did_kill = false;
         if (miss) {
             std::snprintf(last_msg, sizeof(last_msg), "%s is not affected!", mon_name);
             enqueueCombatMessage(last_msg);
-            ++applied;
-            ++s;
-            continue;
-        }
-
-        bool did_kill = false;
-        if (mm2_gs_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE) != 0) {
+            ++spell_apply_slot_;
+        } else if (mm2_gs_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE) != 0) {
             uint8_t code = mm2_gs_u8(gs.a4(), MM2_GS_SPELL_STATUS_CODE);
             if (code > 0) {
                 --code;
@@ -3678,6 +3778,7 @@ void CombatSession::applySpell108BC(GameStateView &gs, int start_slot, int hit_c
                 const char *sn = (code < 8) ? kStatusNames[code] : "affected";
                 std::snprintf(last_msg, sizeof(last_msg), "%s is %s!", mon_name, sn);
                 enqueueCombatMessage(last_msg);
+                ++spell_apply_slot_;
             } else {
                 const uint32_t kill_xp =
                     (monsters_ && slots_[s].type < MM2_MONSTER_RECORD_COUNT)
@@ -3702,23 +3803,76 @@ void CombatSession::applySpell108BC(GameStateView &gs, int start_slot, int hit_c
             }
             enqueueCombatMessage(last_msg);
             did_kill = applyHp10ED4(gs, s, dmg);
+            if (!did_kill) {
+                ++spell_apply_slot_;
+            }
         }
-        ++applied;
-        /* After compact kill, successor is at same index — do not ++s. */
-        if (!did_kill) {
-            ++s;
+        ++spell_apply_applied_;
+        (void)did_kill;
+        if (msg_queue_len_ > 0) {
+            std::snprintf(status_line_, sizeof(status_line_), "%s", msg_queue_[0]);
+            msg_queue_idx_ = 0;
+        } else if (last_msg[0] != '\0') {
+            std::snprintf(status_line_, sizeof(status_line_), "%s", last_msg);
         }
+        return true;
     }
-    mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_DAMAGE, saved_dmg);
-    mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, status_mode);
-    mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_CODE, status_code);
-    mm2_gs_set_u8(gs.a4(), MM2_GS_HOLY_WORD_GATE, 0);
-    syncMonsterSlotsToGs(gs);
-    if (msg_queue_len_ > 0) {
-        std::snprintf(status_line_, sizeof(status_line_), "%s", msg_queue_[0]);
-        msg_queue_idx_ = 0;
-    } else if (last_msg[0] != '\0') {
-        std::snprintf(status_line_, sizeof(status_line_), "%s", last_msg);
+    finishSpellApply108BC(gs);
+    return false;
+}
+
+bool CombatSession::continueSpellApply108BC(GameStateView &gs)
+{
+    if (!spell_apply_active_) {
+        return false;
+    }
+    return applySpell108BCNext(gs);
+}
+
+void CombatSession::applySpell108BC(GameStateView &gs, int start_slot, int hit_count, uint8_t mode_d)
+{
+    /* 0x10894: per-target resist/halve/status/damage + hostable messages.
+     * 0x10B24 jsr $132e6 after each target — remake yields to AwaitingActionAck.
+     * Cap hit_count against -$77BE (full encounter total including overflow),
+     * not the on-screen slot count — "all monsters" spells (Meteor Shower,
+     * Star Burst) must reach past the visible 10 into the overflow pack. */
+    const int live = static_cast<int>(mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_COUNT));
+    if (hit_count > live) {
+        hit_count = live;
+    }
+    if (hit_count < 1) {
+        hit_count = 1;
+    }
+    /* 0x108B2: Holy Word gate bumps max slot scan. */
+    int max_slot = 0x0A;
+    if (mm2_gs_u8(gs.a4(), MM2_GS_HOLY_WORD_GATE) != 0) {
+        max_slot = 0x0B;
+    }
+
+    /* 0x108BC: mode 2 → clr mode (skip cast banner) then damage path. */
+    if (mm2_gs_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE) == 2) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, 0);
+    }
+
+    const int caster_idx = rosterIndexForPartySlot(active_party_slot_);
+    spell_apply_active_ = true;
+    spell_apply_slot_ = start_slot;
+    spell_apply_applied_ = 0;
+    spell_apply_hit_count_ = hit_count;
+    spell_apply_max_slot_ = max_slot;
+    spell_apply_mode_d_ = mode_d;
+    spell_apply_saved_dmg_ = mm2_gs_u16(gs.a4(), MM2_GS_SPELL_DAMAGE);
+    spell_apply_status_mode_ = mm2_gs_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE);
+    spell_apply_status_code_ = mm2_gs_u8(gs.a4(), MM2_GS_SPELL_STATUS_CODE);
+    spell_apply_skip_resist_ = mm2_gs_u8(gs.a4(), MM2_GS_SPELL_SKIP_RESIST);
+    spell_apply_caster_level_ =
+        (caster_idx >= 0 && roster_ && roster_->records[caster_idx].level > 0)
+            ? static_cast<int>(roster_->records[caster_idx].level)
+            : 1;
+    msg_queue_len_ = 0;
+    msg_queue_idx_ = 0;
+    if (!applySpell108BCNext(gs)) {
+        return;
     }
 }
 
@@ -3813,38 +3967,16 @@ void CombatSession::applyCastToMonsterTarget(GameStateView &gs, int slot, int fl
 
     /* Moon Ray @ D23E effect=flat+0x30=86 → ASM 0xC566: D390, rng(1,$5B)+9 →
      * monsters hit=10 from slot 0; then party loop: re-roll, cond&=$2F,
-     * +$5E += roll, clamp +$5E to +$74. */
+     * +$5E += roll, clamp +$5E to +$74. Party heal is after 0x10894 returns
+     * (all per-target 0x132E6 waits), not between kills. */
     if (school == gameplay::SpellSchool::Cleric && flat0 == 38) {
-        auto moon_roll = [this]() -> uint16_t {
-            const int roll = rng_ ? rng_->range(1, 0x5B) : 1;
-            return static_cast<uint16_t>(roll + 9);
-        };
-        const uint16_t mon_dmg = moon_roll();
+        const int roll = rng_ ? rng_->range(1, 0x5B) : 1;
+        const uint16_t mon_dmg = static_cast<uint16_t>(roll + 9);
         mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_DAMAGE, mon_dmg);
         mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, 0);
         mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_CODE, 0);
+        spell_apply_tail_ = 1;
         applySpell108BC(gs, 0, 10, 0);
-        if (roster_ && launch_) {
-            for (int p = 0; p < party_count_; ++p) {
-                const int ri = rosterIndexForPartySlot(p);
-                if (ri < 0 || ri >= MM2_ROSTER_RECORD_COUNT) {
-                    continue;
-                }
-                Mm2RosterRecord &rec = roster_->records[ri];
-                const uint16_t heal = moon_roll();
-                mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_DAMAGE, heal);
-                if (rec.condition >= 0x80) {
-                    continue;
-                }
-                rec.condition = static_cast<uint8_t>(rec.condition & 0x2F);
-                const unsigned sum =
-                    static_cast<unsigned>(rec.hp_max) + static_cast<unsigned>(heal);
-                rec.hp_max = static_cast<uint16_t>(sum > 0xFFFFu ? 0xFFFFu : sum);
-                if (rec.hp_max > rec.hp_current) {
-                    rec.hp_max = rec.hp_current;
-                }
-            }
-        }
         if (status_line_[0] == '\0') {
             std::snprintf(status_line_, sizeof(status_line_), "%s casts %s.", name, spell_name);
         }
@@ -3977,8 +4109,9 @@ void CombatSession::applyCastToMonsterTarget(GameStateView &gs, int slot, int fl
     if (hits == 0xFF) {
         hits = spellTargetPower13362(gs, level);
     } else if (hits == 0xFE) {
-        /* 0xBE78/0xBF50: hit count = live monsters -$77BE. */
-        hits = static_cast<uint8_t>(countAliveMonsters());
+        /* 0xBE78/0xBF50: hit count = live monsters from -$77BE (full
+         * encounter total including overflow, not just on-screen slots). */
+        hits = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_COUNT);
         if (hits == 0) {
             hits = 1;
         }
@@ -4070,9 +4203,13 @@ void CombatSession::beginPlayerStrike(GameStateView &gs, bool shooting, bool pic
     }
     attack_pick_shooting_ = shooting;
     state_ = CombatState::AwaitingAttackTarget;
-    /* Strings @ 0x11604 "Fight" / 0x1160A "Shoot" + which (A-x). */
+    int last = alive > 10 ? 10 : alive;
+    if (last < 1) {
+        last = 1;
+    }
+    /* Strings @ 0x11604 "Fight" / 0x1160A "Shoot" + which (A-x); x clamped to J. */
     std::snprintf(status_line_, sizeof(status_line_), "%s which (A-%c)?",
-                  shooting ? "Shoot" : "Fight", static_cast<char>('A' + alive - 1));
+                  shooting ? "Shoot" : "Fight", static_cast<char>('A' + last - 1));
 }
 
 bool CombatSession::tickAttackTarget(GameStateView &gs, char key)
@@ -4081,13 +4218,10 @@ bool CombatSession::tickAttackTarget(GameStateView &gs, char key)
     if (key < 'A' || key > 'J') {
         return false;
     }
-    const int letter = key - 'A';
-    const int alive = countAliveMonsters();
-    if (letter < 0 || letter >= alive) {
-        return false;
-    }
-    const int slot = nthAliveMonster(letter);
-    if (slot < 0) {
+    /* 0x112CA: key - 'A' is the battle slot (0x112DE → -$51D). Compact keeps
+     * living monsters in 0..min(live,10)-1, so A is always the first row. */
+    const int slot = key - 'A';
+    if (slot < 0 || slot >= 10 || !slots_[slot].alive) {
         return false;
     }
     const bool shooting = attack_pick_shooting_;
@@ -4155,7 +4289,6 @@ void CombatSession::resolvePlayerAttack(GameStateView &gs, bool shooting, int ta
 
     char mon_name[MM2_MONSTER_NAME_SIZE + 1];
     mm2_monster_name_to_cstr(&monsters_->records[slots_[target].type], mon_name, sizeof(mon_name));
-    const char *verb = shooting ? "shoots" : "attacks";
 
     int hits = 0;
     for (uint8_t s = 0; s < swings; ++s) {
@@ -4234,28 +4367,37 @@ void CombatSession::resolvePlayerAttack(GameStateView &gs, bool shooting, int ta
     }
 
     const uint16_t dmg = mm2_gs_u16(gs.a4(), MM2_GS_HP_APPLY);
-    if (hits == 0 || dmg == 0) {
-        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s - %s is not affected!", name, verb,
-                      mon_name, mon_name);
+    /* 0x11040: shoots / attacks / back stabs (-$5E2A==1) / criticals (==2). */
+    const uint8_t crit = mm2_gs_u8(gs.a4(), -0x5E2A);
+    const char *verb = "attacks";
+    if (shooting) {
+        verb = "shoots";
+    } else if (crit == 1) {
+        verb = "back stabs";
+    } else if (crit == 2) {
+        verb = "criticals";
+    }
+    const unsigned swing_n = static_cast<unsigned>(swings);
+    const unsigned hit_n = static_cast<unsigned>(hits);
+    if (dmg == 0) {
+        formatSwingCombatLine(status_line_, sizeof(status_line_), name, verb, mon_name, swing_n, hit_n, 0,
+                              nullptr);
         syncMonsterSlotsToGs(gs);
         return;
     }
     /* Connecting player swing — same alert family as monster hit (id 9). */
     audio::playSoundSeq(9, gs.soundsEnabled(), gs.walkBeepEnabled());
     const bool killed = applyHp10ED4(gs, target, dmg);
+    const char *kill_msg = nullptr;
+    if (killed && msg_queue_len_ > 0) {
+        kill_msg = msg_queue_[0];
+    }
+    formatSwingCombatLine(status_line_, sizeof(status_line_), name, verb, mon_name, swing_n, hit_n,
+                          static_cast<unsigned>(dmg), kill_msg);
     if (killed) {
-        if (msg_queue_len_ > 0) {
-            std::snprintf(status_line_, sizeof(status_line_), "%s %s %s for %u - %s", name, verb, mon_name,
-                          static_cast<unsigned>(dmg), msg_queue_[0]);
-            msg_queue_len_ = 0;
-            msg_queue_idx_ = 0;
-        } else {
-            std::snprintf(status_line_, sizeof(status_line_), "%s %s %s for %u.", name, verb, mon_name,
-                          static_cast<unsigned>(dmg));
-        }
+        msg_queue_len_ = 0;
+        msg_queue_idx_ = 0;
     } else {
-        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s for %u damage.", name, verb, mon_name,
-                      static_cast<unsigned>(dmg));
         syncMonsterSlotsToGs(gs);
     }
 }
@@ -4999,6 +5141,9 @@ bool CombatSession::partyConditionResistPass1F64E(GameStateView &gs, int party_s
 void CombatSession::applyPabilCondition1F72E(GameStateView &gs, uint8_t mask)
 {
     /* 0x1F72E: for each party slot, 0x1F796 OR mask unless resisted/dead. */
+    if (dev_invulnerable_) {
+        return;
+    }
     const int pc = launch_ ? party_count_ : 0;
     const uint8_t saved_ra = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_A);
     const uint8_t saved_rb = mm2_gs_u8(gs.a4(), MM2_GS_RESIST_FLAG_B);
@@ -5025,6 +5170,9 @@ void CombatSession::applyPabilCondition1F72E(GameStateView &gs, uint8_t mask)
 void CombatSession::applyPabilConditionRandom1F896(GameStateView &gs, uint8_t mask)
 {
     /* 0x1F896: random living (cond<$80) then 0x1F796. */
+    if (dev_invulnerable_) {
+        return;
+    }
     const int target = pickMonsterRangedTarget10332(gs);
     if (target < 0) {
         return;
@@ -5369,9 +5517,16 @@ void CombatSession::applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint
      * Port uses "attacks" for the melee table pick at -$6EF6 until that table
      * is wired; latch still gates hand-to-hand vs out-of-range archers. */
     const char *verb = (mm2_gs_u8(gs.a4(), -0x5E32) == 1) ? "shoots" : "attacks";
-    if (dmg == 0) {
-        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s and misses.", mon_name, verb,
+    const unsigned swing_n = static_cast<unsigned>(mm2_gs_u8(gs.a4(), -0x5E2D));
+    const unsigned hit_n = static_cast<unsigned>(mm2_gs_u8(gs.a4(), -0x5E31));
+    if (dev_invulnerable_) {
+        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s — no effect.", mon_name, verb,
                       victim_name);
+        return;
+    }
+    if (dmg == 0) {
+        formatSwingCombatLine(status_line_, sizeof(status_line_), mon_name, verb, victim_name, swing_n,
+                              hit_n, 0, nullptr);
         return;
     }
     /* 0x10478 → 0xFF42: play_sound_seq id 9 on a connecting hit. */
@@ -5381,26 +5536,26 @@ void CombatSession::applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint
      * eventVmApplyOp31Damage. */
     victim.condition = static_cast<uint8_t>(victim.condition & 0xEF);
     bool fell = false; /* 0x4AAA local -$3(a5): set when KO / already-KO→dead */
+    char fell_suffix[MM2_ROSTER_NAME_SIZE + 16];
+    fell_suffix[0] = '\0';
     if ((victim.condition & 0x40) != 0) {
         victim.condition = 0x81;
         victim.hp_max = 0;
         fell = true;
         audio::playSoundSeq(6, gs.soundsEnabled(), gs.walkBeepEnabled());
-        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s - %s falls!", mon_name, verb,
-                      victim_name, victim_name);
+        std::snprintf(fell_suffix, sizeof(fell_suffix), "%s falls!", victim_name);
     } else if (victim.hp_max > dmg) {
         victim.hp_max = static_cast<uint16_t>(victim.hp_max - dmg);
-        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s for %u damage.", mon_name, verb,
-                      victim_name, static_cast<unsigned>(dmg));
     } else {
         victim.condition = static_cast<uint8_t>(victim.condition | 0x40);
         victim.hp_max = 0;
         fell = true;
         /* 0xFD8C / 0xFE0C: play_sound_seq id 6 on party KO ("goes down" / "is killed"). */
         audio::playSoundSeq(6, gs.soundsEnabled(), gs.walkBeepEnabled());
-        std::snprintf(status_line_, sizeof(status_line_), "%s %s %s - %s falls!", mon_name, verb,
-                      victim_name, victim_name);
+        std::snprintf(fell_suffix, sizeof(fell_suffix), "%s falls!", victim_name);
     }
+    formatSwingCombatLine(status_line_, sizeof(status_line_), mon_name, verb, victim_name, swing_n, hit_n,
+                          static_cast<unsigned>(dmg), fell_suffix[0] ? fell_suffix : nullptr);
     /* 0xFDF4..0xFE00 (after 0x4AAA sets condition >= $40): if -$5E4D < party
      * size -$795A → addq.b #1,-$5E4D, then 0x12848 redraws the strip. Pulls
      * the next back-rank slot into hand-to-hand (checkmark / melee options). */
@@ -5490,7 +5645,8 @@ void CombatSession::finishLeave(GameStateView &gs, bool fled)
     outcome_ = fled ? CombatOutcome::Fled : CombatOutcome::Defeated;
     if (roster_ && launch_) {
         /* combat_defeat_retreat @ 0x11646 (called for party "Run" success @
-         * 0x1314E, char-flee round-end @ 0x12C66, and party wipe @ 0x12C66):
+         * 0x1314E, char-flee round-end @ 0x12C66, and party wipe @ 0x12C66).
+         * Hide/Bribe success do NOT come here — they use finishSuccessLeave.
          *   0x1164A: unpack -$560C (attrib entry_coord 0x0E via loader 0x923E)
          *     lo nibble → -$79F1 (X), hi nibble → -$79F0 (Y). This restore
          *     happens for BOTH a successful flee and a defeat — the party is
@@ -5538,6 +5694,93 @@ void CombatSession::finishLeave(GameStateView &gs, bool fled)
     auto_pending_party_slot_ = -1;
     auto_pending_monster_slot_ = -1;
     state_ = CombatState::Inactive;
+}
+
+void CombatSession::finishSuccessLeave(GameStateView &gs)
+{
+    /* Hide @ 0x13116 / Bribe @ 0x130C0: move.b #1,-$77BD then key 'S'.
+     * 0x131A4 prints "Success!" (string @ 0x13278). Common epilogue at
+     * 0x131B8 restores the panel. No jsr $11646 — coords, battles-lost,
+     * found-item clear, and cond wipe stay untouched. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 1);
+    gs.setRightPanelMode(saved_panel_mode_); /* 0x131B8 */
+    round_layout_active_ = false;
+    outcome_ = CombatOutcome::Fled;
+    restorePartyAfterCombat(gs);
+    setStatus("Success!");
+    arena_reward_ = ArenaReward{};
+    auto_enabled_ = false;
+    auto_buff_latch_ = false;
+    auto_pending_party_slot_ = -1;
+    auto_pending_monster_slot_ = -1;
+    state_ = CombatState::Inactive;
+}
+
+bool CombatSession::devForceWin(GameStateView &gs)
+{
+    if (!active() || state_ == CombatState::AwaitingVictoryDismiss) {
+        return false;
+    }
+    int guard = 256;
+    while (guard-- > 0) {
+        const int slot = firstAliveMonster();
+        if (slot < 0) {
+            break;
+        }
+        if (!applyHp10ED4(gs, slot, 0xFFFF)) {
+            slots_[slot].hp = 0;
+            slots_[slot].alive = false;
+            onMonsterKilled(gs, slot, 0);
+        }
+    }
+    if (state_ != CombatState::AwaitingVictoryDismiss) {
+        finishVictory(gs);
+    }
+    return state_ == CombatState::AwaitingVictoryDismiss;
+}
+
+bool CombatSession::devForceFlee(GameStateView &gs)
+{
+    if (!active() || state_ == CombatState::AwaitingVictoryDismiss) {
+        return false;
+    }
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PARTY_RAN_LATCH, 1);
+    finishLeave(gs, true);
+    return !active() && outcome_ == CombatOutcome::Fled;
+}
+
+int CombatSession::devSleepAll(GameStateView &gs)
+{
+    if (!active()) {
+        return 0;
+    }
+    int n = 0;
+    for (int i = 0; i < MM2_GS_MONSTER_BATTLE_SLOTS; ++i) {
+        if (!slots_[i].alive) {
+            continue;
+        }
+        /* 0x10688: status & $30 (held/asleep) skips the monster turn. */
+        slots_[i].status = static_cast<uint8_t>(slots_[i].status | 0x10);
+        ++n;
+    }
+    syncMonsterSlotsToGs(gs);
+    return n;
+}
+
+bool CombatSession::devKillSlot(GameStateView &gs, int slot)
+{
+    if (!active() || slot < 0 || slot >= MM2_GS_MONSTER_BATTLE_SLOTS || !slots_[slot].alive) {
+        return false;
+    }
+    if (!applyHp10ED4(gs, slot, 0xFFFF)) {
+        slots_[slot].hp = 0;
+        slots_[slot].alive = false;
+        onMonsterKilled(gs, slot, 0);
+    }
+    if (firstAliveMonster() < 0 && state_ != CombatState::AwaitingVictoryDismiss) {
+        finishVictory(gs);
+    }
+    return true;
 }
 
 namespace {
@@ -5613,7 +5856,9 @@ gfx::CombatPanelView CombatSession::panelView() const
     }
 
     if (view.label_monster_slots) {
-        /* 0x129CC: fixed rows slot+3 for battle slots 0..9; dead → clear. */
+        /* 0x129CC: for i in 0..10, if i < -$77BE draw slot i at row i+3 with
+         * letter 'A'+i (0x12758); else clear that row. Compact keeps 0..live-1
+         * living, so the first row is always A). */
         view.monster_line_count = 10;
         for (int i = 0; i < 10; ++i) {
             gfx::CombatMonsterLine &line = view.monster_lines[i];

@@ -63,7 +63,8 @@ public:
         std::vector<unsigned int> tex;
 
         void release(std::vector<unsigned int>* deferGl = nullptr);
-        void loadFile(const std::string& path);
+        void loadFile(const std::string& path, const uint8_t (*palette_override)[4] = nullptr);
+        uint8_t palette[32][4] = {};
     };
 
     MapFile file_;
@@ -71,7 +72,9 @@ public:
     bool attribLoaded_ = false;
 
     Sheet outb_;   // outdoor auto-map tiles
-    Sheet townb_;  // indoor auto-map tiles
+    Sheet townb_;  // indoor auto-map (townb.32 through town.32 palette)
+    Sheet townbCave_;    // townb.32 through cave.32 palette
+    Sheet townbCastle_;  // townb.32 through castle.32 palette
     Sheet sky_;    // shared ceiling/sky backdrop (sky.32, 2 frames)
     Sheet floorTown_, floorCave_, floorCastle_, floorOut_;   // per-env floor
     Sheet wallTown_, wallCave_, wallCastle_;                  // per-env walls
@@ -81,6 +84,7 @@ public:
 
     const Sheet* biomeSheet(OutdoorBiome biome) const;
     const Sheet* horizonSheet(OutdoorHorizonSheet sheet) const;
+    const Sheet& indoorCartoSheet() const;
 
     std::string dataDir_;
     bool outdoorGfxLoaded_ = false;

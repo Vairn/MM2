@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "mm2/GameState.h"
+#include "mm2/events/EventVmHelpers.h"
 #include "mm2/gameplay/ExploreActions.h"
 #include "mm2/gameplay/Movement.h"
 
@@ -187,6 +188,66 @@ int main()
         syncRosterWorkingLevelFields(knight);
         recomputeRestSpellPoints(knight);
         expect(knight.sp_max == 0, "non-caster (+$23==0) Rest leaves SP alone", fails);
+    }
+
+    /* ---- Greatest Fountain (E2 11,9): OP_18 writes sheet/base only ----------
+     * sel 0x22/26/2A/2D → +$6B might, +$71 level, +$73 endurance, +$70 luck.
+     * Rest jsr -$7F50 (0x4476) restores from +$10/+ $20 / +$27 / +$15. */
+    {
+        Mm2RosterRecord rec{};
+        rec.might_current = 18;
+        rec.might_base = 18;
+        rec.intelligence_current = 16;
+        rec.intelligence_base = 16;
+        rec.personality_current = 15;
+        rec.personality_base = 15;
+        rec.speed_current = 14;
+        rec.speed_base = 14;
+        rec.accuracy_current = 13;
+        rec.accuracy_base = 13;
+        rec.luck_current = 12;
+        rec.luck_base = 12;
+        rec.endurance_current = 17;
+        rec.endurance_base = 17;
+        rec.level = 7;
+        rec.spell_level = 2;
+        rec.unknown_1a_20[6] = 7; /* working +$20 */
+        rec.unknown_22 = static_cast<uint16_t>(2u << 8); /* +$23 */
+
+        rec.might_base = 200;
+        rec.speed_base = 200;
+        rec.accuracy_base = 200;
+        rec.level = 50;
+        rec.endurance_base = 200;
+        rec.intelligence_base = 200;
+        rec.personality_base = 200;
+        rec.luck_base = 200;
+
+        /* Do NOT copy +$71→+$20 here — that was the remake bug that made L50 stick. */
+        recomputeRestSpellPoints(rec);
+        applyRestSecondaryStatWriteback(rec);
+
+        expect(rec.level == 7, "fountain level 50 restores from working +$20 on Rest", fails);
+        expect(rec.might_base == 18, "fountain might 200 restores from +$10 on Rest", fails);
+        expect(rec.speed_base == 14, "fountain speed 200 restores from +$13 on Rest", fails);
+        expect(rec.accuracy_base == 13, "fountain accuracy 200 restores from +$14 on Rest", fails);
+        expect(rec.endurance_base == 17, "fountain endurance 200 restores from +$27 on Rest", fails);
+        expect(rec.intelligence_base == 16, "fountain int 200 restores from +$11 on Rest", fails);
+        expect(rec.personality_base == 15, "fountain per 200 restores from +$12 on Rest", fails);
+        expect(rec.luck_base == 12, "fountain luck 200 restores from +$15 on Rest", fails);
+        expect(rec.spell_level == 2, "working spell-level +$23 restored onto +$72", fails);
+    }
+
+    /* ---- Chest trap @ 0x1AA70: place cels + 0x1A8A4 damage table -------- */
+    {
+        using mm2::events::eventVmSearchTrapPlaceFrame;
+        using mm2::events::eventVmSearchTrapDamageAmount;
+        expect(eventVmSearchTrapPlaceFrame(0) == 4, "trap type 0 → place cel 4", fails);
+        expect(eventVmSearchTrapPlaceFrame(1) == 6, "trap type 1 → place cel 6", fails);
+        expect(eventVmSearchTrapPlaceFrame(2) == 8, "trap type 2 → place cel 8", fails);
+        expect(eventVmSearchTrapPlaceFrame(3) == 10, "trap type 3 → place cel 10", fails);
+        /* nullptr a4 → env row 0, attrib+0x14=0 → -$690C[0]=3. */
+        expect(eventVmSearchTrapDamageAmount(nullptr) == 3, "trap dmg env0 shift0 = 3", fails);
     }
 
     if (fails == 0) {

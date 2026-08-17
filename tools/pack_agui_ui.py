@@ -42,6 +42,11 @@ for n in (
 for i in range(8):
     EXPECTED[f"faces/face_{i:02d}"] = (28, 28)
 
+EXPECTED["doll/body"] = (32, 48)
+EXPECTED["doll/slot"] = (12, 12)
+for i in range(1, 256):
+    EXPECTED[f"items/i{i:02x}"] = (12, 12)
+
 
 def load_palette(path: Path) -> list[tuple[int, int, int]]:
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -111,15 +116,23 @@ def load_sprite(path: Path, expect: tuple[int, int], palette: list[tuple[int, in
 def pack(max_off: int) -> int:
     palette = load_palette(AGUI / "palette.json")
     sprites: list[tuple[str, int, int, list[tuple[int, int, int, int]]]] = []
+    item_missing = 0
     for name, expect in EXPECTED.items():
         path = AGUI / f"{name}.png"
         if not path.is_file():
-            print(f"WARN missing {path}", file=sys.stderr)
+            if name.startswith("items/"):
+                item_missing += 1
+            else:
+                print(f"WARN missing {path}", file=sys.stderr)
             continue
         pix, off = load_sprite(path, expect, palette, max_off)
         if off:
             print(f"  note {name}: {off} off-palette snapped")
         sprites.append((name, expect[0], expect[1], pix))
+    if item_missing:
+        print(f"note: {item_missing}/255 item icons missing — "
+              f"drop PNGs in game/data/ui/agui/items/ (see ITEM_ICON_PROMPT.md)",
+              file=sys.stderr)
 
     if not sprites:
         print("No sprites found — run tools/gen_agui_seed_art.py first", file=sys.stderr)

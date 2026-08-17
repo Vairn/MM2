@@ -79,8 +79,10 @@ struct GfxImage {
 };
 
 // Decode an image chunk. When isAnm is true the FF 00 marker is located first.
-GfxImage gfxDecode(const Bytes& bytes, bool isAnm);
-bool gfxLoad(const std::string& path, bool isAnm, GfxImage& out);
+// ``palette_override`` (optional) replaces RGB pens before rasterize; alpha is kept.
+GfxImage gfxDecode(const Bytes& bytes, bool isAnm, const uint8_t (*palette_override)[4] = nullptr);
+bool gfxLoad(const std::string& path, bool isAnm, GfxImage& out,
+             const uint8_t (*palette_override)[4] = nullptr);
 
 // --- .32 encoder (inverse of gfxDecode for chunk-at-offset-0 sheets) ----------
 //

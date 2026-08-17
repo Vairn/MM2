@@ -70,10 +70,45 @@ Formats the current date for the selected era, with inline labels `"Day="`
 
 ## Era Index Clamping
 
-`A4-$79B6` is bounded to `0..9`:
+`A4-$79B6` is bounded to `0..9` on the Nature's Gate path (`0x0B112`:
+`cmpi.w #$9`; era ≠ 9 counts as a spell fail). Setting era to **8** at
+`0x0B15E` is a different branch: when day-of-year ≥ `$96` (150) the spell
+forces the 9th century. That is **not** the Wayback return.
 
-- `0x0B112`: `cmpi.w #$9, -$79b6(a4)` (with `move.w #$8, -$79b6` fallback).
-- `0x19CF6`: `cmpi.w #$9, -$79b6(a4)` / `move.w #$9, -$79b6(a4)`.
+Walking / `advanceTimeTick` (`0x6A06`) never writes `-$79B6`.
+
+## Returning from the past (Rest snap-back)
+
+Retail does **not** count days in the past and then auto-return. The only
+snap-back is on **world Rest** (`0x19B28`), after the clock advance
+(`0x19CEC`, `+$55` sub-day ticks):
+
+```text
+019cf6  cmpi.w  #$9, -$79b6(a4)      ; already in 10th century (era 9)?
+019cfc  beq     $19d34               ;   yes -> skip
+019cfe  move.w  #$3c, -(a7)          ; rng(1, $3C)  inclusive 1..60
+019d02  move.w  #$1,  -(a7)
+019d06  jsr     -$7bb4(a4)
+019d0c  cmp.w   #$a, d0              ; roll < 10 ?
+019d10  bge     $19d34               ;   10..60 -> stay in the past
+019d12  move.w  #$9, -$79b6(a4)      ; era = 9 (year 900s / "the day you left")
+019d18  move.w  #$ff, -(a7)          ; y = $FF
+019d1c  move.w  #$ff, -(a7)          ; x = $FF  → attrib 0x0E entry_coord
+019d20  clr.w   -(a7)                ; screen = 0 (Middlegate)
+019d22  jsr     -$7fda(a4)           ; map load @ 0x1B2A
+019d28  move.b  #$1, -$7952(a4)      ; pending event latch
+019d2e  move.b  #$1, -$79e4(a4)      ; host map-reload latch
+```
+
+So: **15% per Rest** (rolls 1–9 of 1–60) while `era != 9`. On hit, era is
+forced back to **9** and the party is placed at Middlegate's spawn square
+(the `$FF,$FF` args make `0x1B2A` unpack attrib byte `0x0E`). There is no
+"pulled back through time" string — the Amiga disk-swap prompt for town
+data is what made it obvious. FAQ: *"To get out of the elemental planes, or
+any time zone, just rest a bunch… zapped to Middlegate on the day you left
+the tenth century."*
+
+Port: `GameSession::executeRest` after `advanceTimeTick(…, 0x55)`.
 
 The month mapping at `0x0B0EA` walks a 13-entry word table at `A4-$711C`
 (`cmpi.w #$d`) and tables at `A4-$7102`/`A4-$70F5` to derive the month/season
@@ -95,9 +130,15 @@ There is no per-era copy of map/attrib data. Instead:
    skip a block based on that flag.
 
 This is the same predicate→skip pattern documented for gold/ticket gates in
-`07-event-script-opcodes.md`, applied to the calendar. The Pinehurst
-time-travel hub (`"Time travel at Pinehurst"`, `str.dat`) is the in-world entry
-point that changes `-$79B6`.
+`07-event-script-opcodes.md`, applied to the calendar. The in-world switch is
+the **Wayback machine** in Castle Pinehurst (loc 57 evt 19 @ `(2,5)` facing
+north): `OP_0E` selector `0xCF` → `0x1480A`. After Lord Peabody's Sherman
+quest sets record+`$80` bit 1, the prompt is `"What era do you desire (1-8)?"`
+(code string at `0x14914`); choices 5–8 write `-$79B6`, then all eight land
+on the dest tables at A4-`$6CE4` (X) / `$6CDC` (Y) / `$6CD4` (screen). Without
+the quest bit the tile shows `"If you wish to use the wayback machine"` /
+`"see Lord Peabody."` (`0x143DE` index `$10`). The tavern rumor `"Time travel
+at Pinehurst"` (`str.dat`) is only a hint, not the machine itself.
 
 ## Direct attrib ↔ era link (`attrib.dat` byte `0x0F`)
 

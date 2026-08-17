@@ -328,6 +328,25 @@ rule CXX_EXECUTABLE_LINKER__playsession_input_test_Release
 #############################################
 # Rule for compiling CXX files.
 
+rule CXX_COMPILER__dev_menu_test_Release
+  depfile = $DEP_FILE
+  deps = gcc
+  command = C:\msys64\ucrt64\bin\c++.exe $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
+  description = Building CXX object $out
+
+
+#############################################
+# Rule for linking CXX executable.
+
+rule CXX_EXECUTABLE_LINKER__dev_menu_test_Release
+  command = cmd.exe /C "$PRE_LINK && C:\msys64\ucrt64\bin\c++.exe $FLAGS $LINK_FLAGS $in -o $TARGET_FILE -Wl,--out-implib,$TARGET_IMPLIB -Wl,--major-image-version,0,--minor-image-version,0 $LINK_PATH $LINK_LIBRARIES && $POST_BUILD"
+  description = Linking CXX executable $TARGET_FILE
+  restat = $RESTAT
+
+
+#############################################
+# Rule for compiling CXX files.
+
 rule CXX_COMPILER__explore_commands_test_Release
   depfile = $DEP_FILE
   deps = gcc
@@ -397,6 +416,25 @@ rule CXX_COMPILER__character_sheet_input_test_Release
 # Rule for linking CXX executable.
 
 rule CXX_EXECUTABLE_LINKER__character_sheet_input_test_Release
+  command = cmd.exe /C "$PRE_LINK && C:\msys64\ucrt64\bin\c++.exe $FLAGS $LINK_FLAGS $in -o $TARGET_FILE -Wl,--out-implib,$TARGET_IMPLIB -Wl,--major-image-version,0,--minor-image-version,0 $LINK_PATH $LINK_LIBRARIES && $POST_BUILD"
+  description = Linking CXX executable $TARGET_FILE
+  restat = $RESTAT
+
+
+#############################################
+# Rule for compiling CXX files.
+
+rule CXX_COMPILER__paper_doll_layout_test_Release
+  depfile = $DEP_FILE
+  deps = gcc
+  command = C:\msys64\ucrt64\bin\c++.exe $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
+  description = Building CXX object $out
+
+
+#############################################
+# Rule for linking CXX executable.
+
+rule CXX_EXECUTABLE_LINKER__paper_doll_layout_test_Release
   command = cmd.exe /C "$PRE_LINK && C:\msys64\ucrt64\bin\c++.exe $FLAGS $LINK_FLAGS $in -o $TARGET_FILE -Wl,--out-implib,$TARGET_IMPLIB -Wl,--major-image-version,0,--minor-image-version,0 $LINK_PATH $LINK_LIBRARIES && $POST_BUILD"
   description = Linking CXX executable $TARGET_FILE
   restat = $RESTAT

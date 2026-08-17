@@ -66,3 +66,5 @@ EXTRACTED/event_quiz_answers.json
 editor/build-imgui/
 
 game/build-agui/
+game/data/ui/agui/_ai_exports__/
+game/data/ui/agui/_h

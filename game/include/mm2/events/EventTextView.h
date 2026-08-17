@@ -20,6 +20,8 @@ enum class EventTextOp : uint8_t {
     Op06Signpost,
     Op0BServiceSign,
     SpacePromptRow23,
+    /** 0x198A0: two-column A–D quest difficulty (not OP_02). */
+    QuestDifficultyMenu,
 };
 
 struct EventTextLayer {
@@ -42,7 +44,12 @@ public:
 
     void showOp01(const char *text);
     void showOp02(const char *text, int base_row = 19);
+    /** 0x18204 / -$7ED8(0): party-band rows 0x13..0x16. Keeps a prior OP_01
+     *  header (preset 0 does not clear row 17). */
+    void showPartyBandText(const char *text);
     void showOp03(const char *text);
+    /** 0x198A0..0x19912: caption @ (2,18..21) + A–D @ (21,18..21) + -$7E4E ESC. */
+    void showQuestDifficultyMenu(const char *lord);
     void showOp04(const char *text);
     void showOp05(const char *text);
     void showOp06(const char *text);

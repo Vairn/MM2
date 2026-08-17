@@ -36,12 +36,13 @@ runtime — it is a packed quest/calendar/combat-state blob. The editor keeps sl
 | `$15` | 1 | Luck (current) | Copied to `$70` on party load |
 | `$16` | 1 | **Thievery %** | Robber 30% / Ninja 10% at creation; +1%/level (FAQ) — see [`32-character-mechanics.md`](32-character-mechanics.md) |
 | `$17`–`$19` | 3 | **Secondary skills** | Skill bytes (Cartographer, Pathfinder, …); sellers in [`33-skills-and-hirelings.md`](33-skills-and-hirelings.md). Often 5/5/5 or 10/10/10 in saves |
-| `$1A`–`$1F` | 6 | *Quest / progress flags* | Likely class-quest and world-quest bits; FAQ condition strings (`[PALADINS ONLY]`, `CORAK'S SOUL`, `ADMIT 8 PASS`) — **not ASM-mapped** |
+| `$1A`–`$1E` | 5 | *Resist / progress bytes* | Equip special-power types 10–14 write `$10+type` (`0xF0C0`). Types 6–9 land on `$16`–`$19` (thievery / skills). |
+| `$1F` | 1 | **Equipment AC accumulator** | Armor ids `$73`–`$9F` add items.dat byte `$10` + flags&`$3F` here (`0xF36C`/`0xF270`); special-power type 15 (AC) also adds here. |
 | `$20` | 1 | **Working level** | **ASM-confirmed** mirror of `$71` (Level). Seeded to `1` at character creation (`0x272D6`); mirrored `$20→$71` (not the reverse) by `sync_party_secondary_stats` @ `0x4476`; consumed as the SP multiplier in Rest recompute @ `0x19C9A` (`mulu.w $20(a1),d0`). **Bug/drift:** stock `roster.dat` starters (Gene Eric, Cassandra, …) ship with `$20` stuck at `1` while `$71`=4+; if `0x4476` (or Rest) runs before something re-derives `$20` from `$71`, casters rest to level-1 SP. Remake fix: `gameplay::syncRosterWorkingLevelFields()` copies `$71→$20`/`$72→$23` before any Rest/secondary-stat sync — see `game/src/gameplay/Movement.{h,cpp}` and `game/src/GameSession.cpp::executeRest`/`start`. |
 | `$21` | 1 | **Age** | Starts at 18 |
 | `$22` | 1 | *Unknown* (low byte of `$22` word) | |
 | `$23` | 1 | **Working spell-level / caster flag** | **ASM-confirmed** mirror of `$72` (Secondary/spell level); high byte of the `$22`/`$23` LE word. Gate check `tst.b $23(a0)` @ `0x19C34` — nonzero ⇒ character is a caster and Rest recomputes SP; mirrored `$23→$72` by `sync_party_secondary_stats` @ `0x4476`. Same creation/drift caveats as `$20` above. |
-| `$24` | 1 | **Armor Class** | Effective AC (temp, modified by equipment) |
+| `$24` | 1 | **Armor Class** | Displayed/combat AC. Rebuilt for the party @ `0x67E6`: `-$7F56(+$13 speed)` (0 if ≥`$F0`) **+** equipment AC `+$1F`, clamped 0..255. |
 | `$25` | 1 | **Food** | Ration count |
 | `$26` | 1 | **Condition** | Living = OR bitfield (≤`$7F`): `$01` Cursed, `$02` Silenced, `$04` Diseased, `$08` Poisoned, `$10` Asleep, `$20` Paralyzed, `$40` Unconscious. Fatal whole-byte: `$81` Dead (`0x1EEC8`), `$82` Stoned (`0x1EEDA`), `$FF` Eradicated (`0x1EEEC`); any other ≥`$80` treated as eradicated. |
 | `$27` | 1 | **Endurance** (current) | Copied to `$73` on party load |
@@ -124,13 +125,16 @@ indices @ tail `+$028` (→ `-$796A`, `0xFFFF` = empty; stream loop @ `0x8302`)
 then u16 party size @ `+$038` (→ `-$795A` @ `0x836A`); then after era/subday
 (`+$03A`/`+$03C`) three words @ `0x83D0..0x8414`: OP0E FD ctr (`+$03E` →
 `-$7972`), **battles won** (`+$040` → `-$7970`, addq @ `0x1215A`), **battles
-lost** (`+$042` → `-$796E`, addq @ `0x11664`); the event/quest bank
-(hireling A..X availability) @ `+$7CE` (→ `-$798B`, write @ `0x84A2`).
+lost** (`+$042` → `-$796E`, addq @ `0x11664`); then **automap revealed tiles**
+(`+$044`, `$780` bytes → `A4-$4F4C`, 60 screens × 16 LE row-words; save Write
+@ `0x89CA`, load Read @ `0x8418`); the event/quest bank (hireling A..X
+availability) @ `+$7CE` (→ `-$798B`, write @ `0x84A2`).
 
 ### Direct global bytes (also event-script targets)
 
 | A4 offset | Field | Notes |
 |-----------|-------|-------|
+| `-$4F4C` | **automap vis** | 60×16 u16 row bitmasks; column mask table `A4-$75EE` is `8000,4000,…,0001` (x=0 = high bit); Cartographer OR @ `0x28CE`; persisted at tail `+$044` |
 | `-$79DE` | `day[era]` | word[10] calendar day 1..180 per era |
 | `-$79CA` | `year[era]` | word[10] year per era |
 | `-$79B6` | `era` | Timeline index 0..9 |

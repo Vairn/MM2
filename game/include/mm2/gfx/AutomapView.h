@@ -1,6 +1,7 @@
 #pragma once
 // overland_map_view @0x223A — 16×16 cartography blit into the play viewport.
-// Tile size 14×11 (townb.32 / outb.32). Unexplored cells are skipped (helper @0x2182 → 0xFF).
+// Tile size 14×11 (townb.32 / outb.32). Cavern/castle reuse townb.32; Amiga
+// hardware palette is the env wall sheet. Unexplored cells are skipped (helper @0x2182 → 0xFF).
 
 #include "mm2/GameState.h"
 #include "mm2/gfx/AmigaPlayScreenLayout.h"
@@ -16,6 +17,8 @@ struct AutomapRenderParams {
     int origin_y = play_layout::kAutomapOriginY;
     bool draw_edge_overlay = true;
     bool draw_party_marker = true;
+    /** Developer overlay: draw every cell (skip Cartographer fog). */
+    bool ignore_visibility = false;
 };
 
 void renderAutomap(ScreenCompositor &c, const EnvAssets &env, const world::MapWorld &world,

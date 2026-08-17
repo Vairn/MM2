@@ -19,16 +19,22 @@ struct AguiAtlasRect {
  */
 class AguiAtlas {
 public:
+    AguiAtlas() = default;
+    ~AguiAtlas() { unload(); }
+    AguiAtlas(const AguiAtlas &) = delete;
+    AguiAtlas &operator=(const AguiAtlas &) = delete;
+
     bool load(const char *data_dir);
     void unload();
 
     bool ready() const { return rgba_ != nullptr && width_ > 0 && height_ > 0; }
 
     void blit(gfx::ScreenCompositor &c, const AguiAtlasRect &src, int dst_x, int dst_y) const;
+    void blitNamed(gfx::ScreenCompositor &c, const char *name, int dst_x, int dst_y) const;
 
     const AguiAtlasRect *find(const char *name) const;
 
-    static constexpr int kMaxRects = 64;
+    static constexpr int kMaxRects = 320;
 
 private:
     uint8_t *rgba_ = nullptr;

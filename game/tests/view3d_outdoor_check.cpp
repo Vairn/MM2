@@ -93,6 +93,70 @@ int main(int argc, char **argv)
         }
     }
 
+    /* spell_eye_cell_sample @ 0x1D9A: outdoor 5×5 peeks into attrib neighbours
+     * with the same compass as walking / the 3D hood (Y=16 → N, Y=-1 → S). */
+    {
+        mm2::world::MapWorld::SpellEyeSample s{};
+        const int south = world.neighborScreen(2);
+        const int north = world.neighborScreen(0);
+        const int west = world.neighborScreen(3);
+        const int east = world.neighborScreen(1);
+        const uint8_t *c2 = world.visualPage();
+
+        if (!world.spellEyeSample(7, 3, &s) || s.screen != 11 || s.cell != c2[(3 << 4) | 7]) {
+            std::fprintf(stderr, "FAIL: in-bounds Eagle Eye sample should stay on C2\n");
+            ++fails;
+        }
+        if (south < 0 || !world.spellEyeSample(7, -1, &s) || s.screen != south) {
+            std::fprintf(stderr, "FAIL: Y=-1 Eagle Eye should sample south neighbour (got screen %d)\n",
+                         s.screen);
+            ++fails;
+        } else {
+            const uint8_t expect = world.mapFile().screens[south].visual[(15 << 4) | 7];
+            if (s.cell != expect) {
+                std::fprintf(stderr, "FAIL: Y=-1 Eagle Eye cell=0x%02X expected 0x%02X (south y=15)\n",
+                             s.cell, expect);
+                ++fails;
+            }
+        }
+        if (north < 0 || !world.spellEyeSample(7, 16, &s) || s.screen != north) {
+            std::fprintf(stderr, "FAIL: Y=16 Eagle Eye should sample north neighbour (got screen %d)\n",
+                         s.screen);
+            ++fails;
+        } else {
+            const uint8_t expect = world.mapFile().screens[north].visual[(0 << 4) | 7];
+            if (s.cell != expect) {
+                std::fprintf(stderr, "FAIL: Y=16 Eagle Eye cell=0x%02X expected 0x%02X (north y=0)\n",
+                             s.cell, expect);
+                ++fails;
+            }
+        }
+        if (west < 0 || !world.spellEyeSample(-2, 3, &s) || s.screen != west) {
+            std::fprintf(stderr, "FAIL: X=-2 Eagle Eye should sample west neighbour (got screen %d)\n",
+                         s.screen);
+            ++fails;
+        } else {
+            const uint8_t expect = world.mapFile().screens[west].visual[(3 << 4) | 14];
+            if (s.cell != expect) {
+                std::fprintf(stderr, "FAIL: X=-2 Eagle Eye cell=0x%02X expected 0x%02X (west x=14)\n",
+                             s.cell, expect);
+                ++fails;
+            }
+        }
+        if (east < 0 || !world.spellEyeSample(17, 3, &s) || s.screen != east) {
+            std::fprintf(stderr, "FAIL: X=17 Eagle Eye should sample east neighbour (got screen %d)\n",
+                         s.screen);
+            ++fails;
+        } else {
+            const uint8_t expect = world.mapFile().screens[east].visual[(3 << 4) | 1];
+            if (s.cell != expect) {
+                std::fprintf(stderr, "FAIL: X=17 Eagle Eye cell=0x%02X expected 0x%02X (east x=1)\n",
+                             s.cell, expect);
+                ++fails;
+            }
+        }
+    }
+
     /* Night path (subday >= 0x80): 7 plotted stars, facing W. */
     std::array<mm2::gfx::OutdoorStarBlit, mm2::gfx::kOutdoorStarCount> stars{};
     const int nstars = mm2::gfx::buildOutdoorStars(cam.facing, stars);

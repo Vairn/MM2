@@ -108,7 +108,7 @@ uint32_t mm2_class_xp_for_level(uint8_t class_id, int level);
  *   mm2_attr_bonus: FAQ/doc-32 column (not the -$7F56 table walk).
  *   mm2_class_caster_stat: 0 none, 1 INT (Sorcerer/Archer), 2 PER (Cleric/Paladin).
  *   mm2_class_spell_level_for: spell level reachable at `char_level`
- *     (pure casters 2X-1; fighter-mages 2X+5, natural cap 7). */
+ *     (pure casters 2X-1, cap 10; fighter-mages 2X+5, natural cap 7). */
 int mm2_class_hp_per_level(uint8_t class_id);
 /* Training Hall HP gain @ 0x20390: ($64DA[class]*$64EE[map])/$64E4[map]
  * (+1 if rem!=0 and class not Cleric/Robber/Ninja) + -$7F56(+$27). */
@@ -128,6 +128,12 @@ int mm2_train_spell_on_levelup(Mm2RosterRecord *rec);
  * for saves where +$20 drift skipped intermediate SL rows (ASM writes only the
  * newest row because +$20 increments every visit). Idempotent. */
 void mm2_train_backfill_auto_spells(Mm2RosterRecord *rec);
+
+/* Raise spell_level to the class cap for the current character level when a
+ * save skipped the 0x200C2 window (M-train / XP dump past L19 with stale SL).
+ * Clamps overshoot at 10 (Paladin/Archer 7). Does not rewrite SP — Rest owns
+ * the (bonus+3)*working-level value. L1 casters are left at SL 0. Idempotent. */
+void mm2_train_catch_up_spell_level(Mm2RosterRecord *rec);
 
 /* ------------------------------------------------------------------------- *
  * Blacksmith static inventories (OP_0E 0x06, handler 0x1C54A; inventory

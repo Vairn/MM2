@@ -34,7 +34,7 @@ struct EnvSheetNames {
     const char *walls;   /* -$7A06 */
     const char *floor;   /* -$7A22 */
     const char *ceiling; /* -$7A1E */
-    const char *automap; /* -$7A1A */
+    const char *automap; /* -$7A1A — Amiga: townb.32 for town/cavern/castle (entries 12/16/20) */
 };
 
 const EnvSheetNames &envSheetNames(EnvKind kind);
@@ -73,7 +73,8 @@ public:
     void applyWorldPalette() const;
 
 private:
-    bool loadSheet(const char *data_dir, const char *amiga_name, mm2_gfx_sheet_role role, mm2_gfx_sheet *out);
+    bool loadSheet(const char *data_dir, const char *amiga_name, mm2_gfx_sheet_role role, mm2_gfx_sheet *out,
+                   const mm2_image32_file *palette_src = nullptr);
 
     EnvKind kind_ = EnvKind::Town;
     GfxBackend backend_ = GfxBackend::Amiga;

@@ -14,9 +14,11 @@ C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/movement_middlega
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/calendar_rollover_test.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/combat_setup_test.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/playsession_input_test.dir
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/dev_menu_test.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/explore_commands_test.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/automap_golden.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/character_sheet_input_test.dir
+C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/paper_doll_layout_test.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/party_hp_format_test.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/repro_fight_refire.dir
 C:/_20260421_/D-REC/development/MM2/game/build-agui/CMakeFiles/event_middlegate_test.dir

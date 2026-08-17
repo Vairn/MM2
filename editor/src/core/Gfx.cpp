@@ -123,7 +123,7 @@ bool tryDecryptXor32(Bytes& bytes) {
 
 }  // namespace
 
-GfxImage gfxDecode(const Bytes& bytesIn, bool isAnm) {
+GfxImage gfxDecode(const Bytes& bytesIn, bool isAnm, const uint8_t (*palette_override)[4]) {
     GfxImage img;
     Bytes bytes = bytesIn;
     if (bytes.size() < 12) {
@@ -221,6 +221,13 @@ GfxImage gfxDecode(const Bytes& bytesIn, bool isAnm) {
         img.palette[i][2] = b;
         // Pen 0 is the blit mask colour (JSR -$7C20 skips index 0).
         img.palette[i][3] = (i == 0) ? 0 : 255;
+    }
+    if (palette_override) {
+        for (int i = 0; i < kGfxPaletteColors; ++i) {
+            img.palette[i][0] = palette_override[i][0];
+            img.palette[i][1] = palette_override[i][1];
+            img.palette[i][2] = palette_override[i][2];
+        }
     }
 
     size_t cur = palOff + 64;
@@ -411,14 +418,14 @@ float gfxAnmSequenceStepDurationSec(const GfxImage& img, int seqIndex, int step,
     return base / speed;
 }
 
-bool gfxLoad(const std::string& path, bool isAnm, GfxImage& out) {
+bool gfxLoad(const std::string& path, bool isAnm, GfxImage& out, const uint8_t (*palette_override)[4]) {
     Bytes b;
     if (!readFile(path, b)) {
         out.clear();
         out.error = "read failed";
         return false;
     }
-    out = gfxDecode(b, isAnm);
+    out = gfxDecode(b, isAnm, palette_override);
     return out.ok;
 }
 

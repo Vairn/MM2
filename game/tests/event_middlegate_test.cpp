@@ -423,6 +423,98 @@ void testTownServiceTransactions(int &fails)
                "backfill keeps existing SL1/SL3 bits", fails);
     }
 
+    /* ---- Pure-caster SL caps at 10 (0x200C2) and does not keep climbing. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 18, 100000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.class_id = 3;
+        rec.condition = 0;
+        rec.experience = 4800000u; /* Group A L19 */
+        rec.personality_current = 15;
+        rec.spell_level = 9;
+        rec.unknown_22 = static_cast<uint16_t>(9u << 8);
+        rec.sp_max = 99;
+        rec.sp_current = 99;
+        const TownSvcTrainResult r = townSvcTrainLevelUp(rec, 0);
+        expect(r.leveled && rec.level == 19 && rec.spell_level == 10,
+               "Cleric L18→L19 gains SL10", fails);
+
+        rec.experience = 7104000u; /* Group A L21 */
+        rec.gold = 100000;
+        const TownSvcTrainResult r2 = townSvcTrainLevelUp(rec, 0);
+        expect(r2.leveled && rec.level == 20 && rec.spell_level == 10,
+               "Cleric L19→L20 stays at SL10", fails);
+        const TownSvcTrainResult r3 = townSvcTrainLevelUp(rec, 0);
+        expect(r3.leveled && rec.level == 21 && rec.spell_level == 10,
+               "Cleric L20→L21 stays at SL10 (no wrap/climb)", fails);
+    }
+
+    /* ---- Stale SL after an XP dump: one train catches up to the cap. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 50, 100000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.class_id = 3;
+        rec.condition = 0;
+        rec.experience = 88512000u; /* Group A L51 */
+        rec.personality_current = 15;
+        rec.spell_level = 7;
+        rec.unknown_22 = static_cast<uint16_t>(7u << 8);
+        rec.sp_max = 638;
+        rec.sp_current = 174;
+        const TownSvcTrainResult r = townSvcTrainLevelUp(rec, 0);
+        expect(r.leveled && rec.level == 51 && rec.spell_level == 10,
+               "Cleric L50 SL7 catch-up to SL10 on train", fails);
+    }
+
+    /* ---- Paladin high-level stale SL6 catches up to class cap 7. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 50, 100000);
+        Mm2RosterRecord &rec = roster.records[0];
+        rec.class_id = 1;
+        rec.condition = 0;
+        rec.experience = 118016000u; /* Group B L51 */
+        rec.personality_current = 15;
+        rec.spell_level = 6;
+        rec.unknown_22 = static_cast<uint16_t>(6u << 8);
+        const TownSvcTrainResult r = townSvcTrainLevelUp(rec, 0);
+        expect(r.leveled && rec.level == 51 && rec.spell_level == 7,
+               "Paladin L50 SL6 catch-up to SL7", fails);
+    }
+
+    /* ---- Launch catch-up raises stale party SL without rewriting Rest SP. ---- */
+    {
+        Mm2RosterRecord gene{};
+        mm2_roster_clear_record(&gene);
+        gene.class_id = 3;
+        gene.level = 58;
+        gene.spell_level = 7;
+        gene.sp_max = 638;
+        gene.sp_current = 174;
+        mm2_train_catch_up_spell_level(&gene);
+        expect(gene.spell_level == 10, "catch-up Cleric L58 SL7→SL10", fails);
+        expect(gene.sp_max == 638 && gene.sp_current == 174,
+               "catch-up does not smash Rest-sized SP", fails);
+
+        Mm2RosterRecord pal{};
+        mm2_roster_clear_record(&pal);
+        pal.class_id = 1;
+        pal.level = 53;
+        pal.spell_level = 6;
+        mm2_train_catch_up_spell_level(&pal);
+        expect(pal.spell_level == 7, "catch-up Paladin L53 SL6→SL7", fails);
+
+        Mm2RosterRecord baby{};
+        mm2_roster_clear_record(&baby);
+        baby.class_id = 4;
+        baby.level = 1;
+        baby.spell_level = 0;
+        mm2_train_catch_up_spell_level(&baby);
+        expect(baby.spell_level == 0, "catch-up leaves L1 Sorcerer at SL0", fails);
+    }
+
     /* ---- Training XP gate: under threshold -> not eligible AND no charge. ---- */
     {
         Mm2RosterFile roster{};
@@ -788,19 +880,27 @@ void testMageGuildAndTemple(int &fails)
         expect(townSvcTrainingCost(5, 0, 0) == 250u, "hero Middlegate L5 fee still 250", fails);
 
         const uint32_t gold_before = hire.gold;
+        const uint32_t fee_after_train = gold_before + gold_before / 2u; /* 0x202AC */
         const TownSvcTrainResult tr = townSvcTrainLevelUp(hire, 0, nullptr, 24);
         expect(tr.eligible && tr.paid && tr.leveled, "hireling can train when XP met", fails);
         expect(tr.cost == 0u, "hireling train charged 0 gold", fails);
-        expect(hire.gold == gold_before, "hireling gold untouched by training", fails);
+        expect(hire.gold == fee_after_train, "hireling fee +50% on level-up (0x202AC)", fails);
         expect(hire.level == 6, "hireling leveled to 6", fails);
 
+        /* Cap at #$C350 (50000): fee 40000 → 60000 → clamp. */
+        hire.gold = 40000u;
+        hire.experience = mm2_class_xp_for_level(hire.class_id, 7);
+        const TownSvcTrainResult tr_cap = townSvcTrainLevelUp(hire, 0, nullptr, 24);
+        expect(tr_cap.leveled && hire.gold == 50000u, "hireling fee caps at 50000", fails);
+
+        const uint32_t fee_at_temple = hire.gold;
         const TownSvcHirelingTempleResult hr = townSvcHirelingTempleAutoHeal(hire);
         expect(hr.condition_cleared && hr.hp_restored && hr.align_restored,
                "hireling temple auto-heal clears cond + HP + align", fails);
         expect(hire.condition == 0 && hire.hp_max == hire.hp_aux &&
                    hire.alignment_base == hire.alignment_current,
                "hireling temple auto-heal mutated fields", fails);
-        expect(hire.gold == gold_before, "hireling temple auto-heal is free", fails);
+        expect(hire.gold == fee_at_temple, "hireling temple auto-heal is free", fails);
 
         int members[2] = {0, 24};
         Mm2PartyLaunch launch{};
@@ -1152,6 +1252,10 @@ void testPlayTownServiceUi(int &fails, const Mm2ItemsFile &items)
         expect(roster.records[0].gold == 9950u, "play temple heal deducted 50 gp", fails);
         expect(roster.records[0].hp_current == 40, "play temple heal restored HP to max", fails);
         expect(roster.records[0].condition == 0, "play temple heal cleared condition", fails);
+        expect(ui.active(), "play temple stays open on 0x1D6C2 result hold", fails);
+
+        ui.handleKey('X', false); /* 0x1D6C2 key_read dismisses result, A-F redraws */
+        expect(ui.active(), "play temple returns to A-F after heal result", fails);
 
         ui.handleKey(0, true); /* Esc from top menu -> close */
         expect(!ui.active(), "play temple menu closes on Esc", fails);
@@ -1163,6 +1267,7 @@ void testPlayTownServiceUi(int &fails, const Mm2ItemsFile &items)
         Mm2RosterFile roster{};
         setupMember(roster, 0, 1, 10000);   /* L1 Knight */
         roster.records[0].experience = 2000; /* enough for L2 (1500) */
+        roster.records[0].condition = 0;     /* 0x2026E: $26 must be 0 to train */
         int member_idx[1] = {0};
         Mm2PartyLaunch launch{};
         mm2_party_launch_build(&launch, 1, member_idx, 1);
@@ -1184,9 +1289,131 @@ void testPlayTownServiceUi(int &fails, const Mm2ItemsFile &items)
         expect(roster.records[0].level == 2, "play training leveled L1->L2", fails);
         expect(roster.records[0].gold == 9950u, "play training deducted the 50 fee", fails);
         expect(ui.active(), "play training stays open after a level-up", fails);
+        ui.render(comp); /* result panel replaces the trainee prompt (0x204BA) */
+
+        ui.handleKey(0, true); /* 0x20554 keywait: Esc dismisses result, hall stays */
+        expect(ui.active(), "play training result keywait does not close the hall", fails);
 
         ui.handleKey(0, true);    /* Esc from trainee prompt -> close */
         expect(!ui.active(), "play training closes on Esc", fails);
+    }
+
+    /* ---- Training Hall 'T' still advances one level even with XP for more. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 2, 10000);
+        roster.records[0].experience = 96000; /* Group A L8 threshold */
+        roster.records[0].condition = 0;
+        int member_idx[1] = {0};
+        Mm2PartyLaunch launch{};
+        mm2_party_launch_build(&launch, 1, member_idx, 1);
+        uint8_t a4img[static_cast<size_t>(MM2_A4_ANCHOR) + 0x100u]{};
+
+        TownServiceContext ctx;
+        ctx.roster = &roster;
+        ctx.launch = &launch;
+        ctx.items = &items;
+        ctx.a4 = mm2_gs_base_from_image(a4img);
+        ctx.map_id = 0;
+
+        mm2::ui::PlayTownServiceUi ui;
+        townSvcRunTraining(ui, ctx);
+        ui.begin();
+        ui.handleKey('T', false);
+        expect(roster.records[0].level == 3, "play training T still levels once (L2->L3)", fails);
+        expect(roster.records[0].gold == 9900u, "play training T deducted one L2 fee (100)", fails);
+        ui.close();
+    }
+
+    /* ---- Training Hall 'M': L2 Knight with XP for L8 trains six times. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 2, 10000);
+        roster.records[0].experience = 96000; /* Group A L8 threshold */
+        roster.records[0].condition = 0;
+        int member_idx[1] = {0};
+        Mm2PartyLaunch launch{};
+        mm2_party_launch_build(&launch, 1, member_idx, 1);
+        uint8_t a4img[static_cast<size_t>(MM2_A4_ANCHOR) + 0x100u]{};
+
+        TownServiceContext ctx;
+        ctx.roster = &roster;
+        ctx.launch = &launch;
+        ctx.items = &items;
+        ctx.a4 = mm2_gs_base_from_image(a4img);
+        ctx.map_id = 0;
+
+        mm2::ui::PlayTownServiceUi ui;
+        townSvcRunTraining(ui, ctx);
+        ui.begin();
+        ui.handleKey('M', false);
+        expect(roster.records[0].level == 8, "play training M trains L2->L8 (6 levels)", fails);
+        /* Fees L2..L7: 100+150+200+250+300+350 = 1350; 10000-1350 = 8650. */
+        expect(roster.records[0].gold == 8650u, "play training M deducted L2..L7 fees", fails);
+        expect(roster.records[0].hp_aux == 40u + 7u * 6u,
+               "play training M added HP for all six levels", fails);
+        ui.render(comp);
+        ui.handleKey(0, true);
+        expect(ui.active(), "play training M result keywait stays in the hall", fails);
+        ui.close();
+    }
+
+    /* ---- Training Hall 'M': Cleric L2 (SL1) to L8 gains 3 spell levels. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 2, 10000);
+        roster.records[0].class_id = 3; /* Cleric — Group A XP, caster SL = (L+1)/2 */
+        roster.records[0].experience = 96000;
+        roster.records[0].condition = 0;
+        roster.records[0].spell_level = 1;
+        roster.records[0].personality_current = 15;
+        int member_idx[1] = {0};
+        Mm2PartyLaunch launch{};
+        mm2_party_launch_build(&launch, 1, member_idx, 1);
+        uint8_t a4img[static_cast<size_t>(MM2_A4_ANCHOR) + 0x100u]{};
+
+        TownServiceContext ctx;
+        ctx.roster = &roster;
+        ctx.launch = &launch;
+        ctx.items = &items;
+        ctx.a4 = mm2_gs_base_from_image(a4img);
+        ctx.map_id = 0;
+
+        mm2::ui::PlayTownServiceUi ui;
+        townSvcRunTraining(ui, ctx);
+        ui.begin();
+        ui.handleKey('M', false);
+        expect(roster.records[0].level == 8, "play training M Cleric L2->L8", fails);
+        expect(roster.records[0].spell_level == 4, "play training M Cleric gained SL1->SL4", fails);
+        ui.render(comp);
+        ui.close();
+    }
+
+    /* ---- Training Hall 'M': gold runs out mid-way; trains as far as gold allows. ---- */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 2, 250); /* pays L2 (100) + L3 (150); L4 costs 200 */
+        roster.records[0].experience = 96000;
+        roster.records[0].condition = 0;
+        int member_idx[1] = {0};
+        Mm2PartyLaunch launch{};
+        mm2_party_launch_build(&launch, 1, member_idx, 1);
+        uint8_t a4img[static_cast<size_t>(MM2_A4_ANCHOR) + 0x100u]{};
+
+        TownServiceContext ctx;
+        ctx.roster = &roster;
+        ctx.launch = &launch;
+        ctx.items = &items;
+        ctx.a4 = mm2_gs_base_from_image(a4img);
+        ctx.map_id = 0;
+
+        mm2::ui::PlayTownServiceUi ui;
+        townSvcRunTraining(ui, ctx);
+        ui.begin();
+        ui.handleKey('M', false);
+        expect(roster.records[0].level == 4, "play training M stops at L4 when gold runs out", fails);
+        expect(roster.records[0].gold == 0u, "play training M spent 250 on L2+L3 fees", fails);
+        ui.close();
     }
 
     /* ---- Blacksmith: A) Weapons -> item 1 (Dagger) buys for active member. ---- */
@@ -1220,6 +1447,9 @@ void testPlayTownServiceUi(int &fails, const Mm2ItemsFile &items)
         expect(mm2_roster_backpack(&roster.records[0], 0).item_id == 4,
                "play smith buy added Dagger to backpack", fails);
         expect(ui.active(), "play smith menu stays open after a buy", fails);
+
+        ui.handleKey('X', false); /* 0x1C432 key_read dismisses result, item list redraws */
+        expect(ui.active(), "play smith returns to item list after buy result", fails);
 
         ui.handleKey(0, true); /* Esc back to category menu */
         ui.handleKey(0, true); /* Esc from top menu -> close */
@@ -1322,7 +1552,9 @@ void testPlayTownServiceUi(int &fails, const Mm2ItemsFile &items)
         expect(roster.records[0].gold == 980u, "play tavern A feeding frenzy charges payer", fails);
         expect(roster.records[0].food == 40 && roster.records[1].food == 40,
                "play tavern A tops all members to 40 food", fails);
-        expect(ui.active(), "play tavern stays on top menu after feeding frenzy", fails);
+        expect(ui.active(), "play tavern stays open after feeding frenzy", fails);
+        ui.handleKey('X', false); /* 0x1C902 key_read dismisses result, A-E redraws */
+        expect(ui.active(), "play tavern returns to A-E menu after feeding frenzy result", fails);
     }
 
     /* ---- Temple hireling digit-select: free leaf 0x1E116 — heal text, no A–F menu. ---- */
@@ -1770,6 +2002,142 @@ int main(int argc, char **argv)
         expect(cavern_combat.active(), "cavern (1,2) OP_12 starts combat via event VM", fails);
 
         runtime.bindCombat(nullptr);
+        runtime.bindParty(nullptr, nullptr);
+        runtime.enterLocation(0, gs, world);
+        world.enterScreen(0);
+        gs.setScreenId(0);
+    }
+
+    /* B4 loc 16 evt 14 @ (1,8): OP_2B + fight + post-combat plaque + SPACE.
+     * finishCombat re-scans with COMBAT_VICTORY_LATCH set (0x16368); a held
+     * victory-dismiss key must not skip the plaque (0x15CE6 waits for a new $20). */
+    {
+        world.enterScreen(16);
+        gs.setScreenId(16);
+        runtime.enterLocation(16, gs, world);
+        gs.setCoordX(8);
+        gs.setCoordY(1);
+        gs.setFacingKey('N');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 1);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "post-combat re-scan fires natives plaque", fails);
+        expect(runtime.waitKind() == mm2::events::EventVmWait::Space,
+               "post-combat natives plaque waits for SPACE", fails);
+        expect(runtime.textView().containsText("hyperactive"),
+               "post-combat natives plaque is visible", fails);
+
+        mm2::platform::KeyState keys{};
+        keys.space = true;
+        keys.any_key = true;
+        expect(runtime.continueInput(gs, world, keys),
+               "held victory-dismiss SPACE does not skip post-combat text", fails);
+        expect(runtime.waitKind() == mm2::events::EventVmWait::Space,
+               "post-combat wait still armed after leftover SPACE", fails);
+        expect(runtime.textView().containsText("hyperactive"),
+               "post-combat plaque still readable after leftover SPACE", fails);
+
+        keys = mm2::platform::KeyState{};
+        expect(runtime.continueInput(gs, world, keys), "idle poll arms post-combat SPACE wait",
+               fails);
+        keys.last_ascii = ' ';
+        keys.space = true;
+        keys.any_key = true;
+        (void)runtime.continueInput(gs, world, keys);
+        expect(runtime.waitKind() != mm2::events::EventVmWait::Space,
+               "fresh SPACE dismisses post-combat plaque", fails);
+
+        mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 0);
+        runtime.enterLocation(0, gs, world);
+        world.enterScreen(0);
+        gs.setScreenId(0);
+    }
+
+    /* Murray's boat tour (loc 13 B3): OP_0C sets pending latch so the next
+     * west-facing water tile is scanned on the following scheduler tick
+     * (ASM 0x15EBA / 0x1280). Commentary tiles OP_01 + OP_1E must keep the
+     * "To your right is Jouster's Way." line up until a key (or delay) then
+     * hop again. Selector 0x7B → roster+$7C bit 0x08 is the on-cruise flag. */
+    {
+        Mm2RosterFile cruise_roster{};
+        setupMember(cruise_roster, 0, 5, 100);
+        cruise_roster.records[0].condition = 0;
+        reinterpret_cast<uint8_t *>(&cruise_roster.records[0])[0x7C] = 0x08;
+        Mm2PartyLaunch cruise_launch{};
+        cruise_launch.party_count = 1;
+        cruise_launch.roster_slots[0] = 0;
+        runtime.bindParty(&cruise_roster, &cruise_launch);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_DELAY, 0);
+
+        auto drainHopDwell = [&]() {
+            mm2::platform::KeyState idle{};
+            int n = 0;
+            while (runtime.waitKind() == mm2::events::EventVmWait::Delay && n < 400) {
+                (void)runtime.continueInput(gs, world, idle);
+                ++n;
+            }
+        };
+
+        world.enterScreen(13);
+        gs.setScreenId(13);
+        runtime.enterLocation(13, gs, world);
+        gs.setCoordX(15);
+        gs.setCoordY(11);
+        gs.setFacingKey('W');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "cruise silent hop at (11,15) fires", fails);
+        expect(gs.coordX() == 14 && gs.coordY() == 11,
+               "cruise OP_0C lands at (11,14)", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH) == 1,
+               "cruise OP_0C leaves pending latch for the next hop", fails);
+        expect(runtime.waitKind() == mm2::events::EventVmWait::Delay,
+               "silent cruise hop dwells before chaining", fails);
+        drainHopDwell();
+        expect(!runtime.blocksMovement(), "hop dwell expires without a key", fails);
+
+        expect(runtime.scanAndRun(gs, world), "cruise chains to (11,14) on next scan", fails);
+        expect(gs.coordX() == 13 && gs.coordY() == 11,
+               "second silent hop lands at (11,13)", fails);
+        drainHopDwell();
+        expect(runtime.scanAndRun(gs, world), "cruise chains to (11,13)", fails);
+        expect(gs.coordX() == 12 && gs.coordY() == 11,
+               "third hop lands on Jouster commentary tile (11,12)", fails);
+        drainHopDwell();
+
+        expect(runtime.scanAndRun(gs, world), "Jouster commentary tile fires", fails);
+        expect(runtime.waitKind() == mm2::events::EventVmWait::Delay,
+               "OP_01 + OP_1E pause on Jouster commentary", fails);
+        expect(runtime.textView().containsText("right"),
+               "cruise commentary shows 'To your right is...'", fails);
+        expect(runtime.textView().containsText("Jouster"),
+               "cruise commentary names Jouster's Way", fails);
+        expect(gs.coordX() == 12 && gs.coordY() == 11,
+               "OP_1E delay runs before the Jouster hop's OP_0C", fails);
+
+        mm2::platform::KeyState held{};
+        held.any_key = true;
+        held.enter = true;
+        expect(runtime.continueInput(gs, world, held),
+               "leftover Yes/Enter does not skip unarmed OP_1E", fails);
+        expect(gs.coordX() == 12 && gs.coordY() == 11,
+               "held key leaves the party on the Jouster tile", fails);
+
+        mm2::platform::KeyState idle{};
+        expect(runtime.continueInput(gs, world, idle),
+               "key-up arms OP_1E skip without hopping", fails);
+        expect(gs.coordX() == 12 && gs.coordY() == 11,
+               "idle poll does not skip OP_1E", fails);
+
+        mm2::platform::KeyState skip{};
+        skip.any_key = true;
+        skip.last_ascii = ' ';
+        (void)runtime.continueInput(gs, world, skip);
+        expect(gs.coordX() == 11 && gs.coordY() == 11,
+               "key skip of OP_1E still OP_0C to (11,11)", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH) == 1,
+               "Jouster hop re-arms latch after delay", fails);
+
+        runtime.bindParty(nullptr, nullptr);
         runtime.enterLocation(0, gs, world);
         world.enterScreen(0);
         gs.setScreenId(0);
@@ -1928,6 +2296,7 @@ int main(int argc, char **argv)
             mm2::platform::KeyState space{};
             space.space = true;
             space.any_key = true;
+            space.last_ascii = ' ';
             (void)runtime.continueInput(gs, world, space);
         };
         /* Selector 0x76 → roster+$7B (EventFieldMap), not literal +$76. */
@@ -1968,6 +2337,17 @@ int main(int argc, char **argv)
                "no XP without goblet turn-in", fails);
         expect((questByte(nordon_roster.records[0]) & 0x01) != 0,
                "Nordon accept sets roster+$7B bit0 (sel 0x76)", fails);
+        {
+            mm2::platform::KeyState held{};
+            held.space = true;
+            held.any_key = true;
+            expect(runtime.continueInput(gs, world, held),
+                   "held SPACE after Nordon Y does not skip the quest-brief wait", fails);
+            expect(runtime.waitKind() == mm2::events::EventVmWait::Space,
+                   "quest brief still waiting after leftover SPACE", fails);
+            expect(runtime.textView().containsText("magical golden"),
+                   "quest brief text still visible after leftover SPACE", fails);
+        }
         dismissSpace();
 
         /* Quest accepted (bit0) + Gold Goblet → consume + rewards (no member pick). */
@@ -2003,6 +2383,7 @@ int main(int argc, char **argv)
             mm2::platform::KeyState space{};
             space.space = true;
             space.any_key = true;
+            space.last_ascii = ' ';
             (void)runtime.continueInput(gs, world, space);
         };
         /* Selector 0x76 → roster+$7B (EventFieldMap), not literal +$76. */
@@ -2206,6 +2587,31 @@ int main(int argc, char **argv)
         expect(arena_tier_combat.active(),
                "event 38 selector 0x26 runs loc-61 OP_12 arena tier combat", fails);
 
+        /* Overlay OP_12 must restore the home location (ASM 0x176EA) even while
+         * combat is still active. Without that, the next scan skips the map
+         * triplet table and every event-flagged tile becomes ambient combat. */
+        {
+            mm2::combat::CombatSession shop_probe;
+            shop_probe.bindParty(&tier_roster, &tier_launch);
+            shop_probe.bindMonsters(&monsters);
+            shop_probe.bindRng(&tier_rng);
+            runtime.bindCombat(&shop_probe);
+
+            expect(mm2_map_collision_has_event(world.collisionAt(7, 5)),
+                   "inn tile (7,5) has collision event flag", fails);
+            gs.setCoordX(7);
+            gs.setCoordY(5);
+            gs.setFacingKey('S');
+            mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+            expect(runtime.scanAndRun(gs, world), "inn still scans after overlay fight", fails);
+            expect(!shop_probe.active(),
+                   "inn after overlay fight must not become ambient combat", fails);
+            expect(runtime.textView().containsText("Middlegate Inn"),
+                   "inn door label fires after overlay fight (home triplets restored)", fails);
+
+            runtime.bindCombat(&arena_tier_combat);
+        }
+
         /* Middlegate outdoor combat squares (events 38–41): OP_0E 0x26..0x29. */
         struct CombatTile {
             int coord_x;
@@ -2383,6 +2789,24 @@ int main(int argc, char **argv)
     mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
     expect(runtime.scanAndRun(gs, world), "Atlantium evt 17 blacksmith fires at (6,13) facing S", fails);
     expect(runtime.textView().hasServicePortrait(), "Atlantium blacksmith OP_0B loads sign overlay", fails);
+
+    /* Atlantium evt 48 sorcerer statue @ (15,10)/E: OP_0B + OP_0E 0x21 plaque.
+     * abortScript keeps OP_02 while idle; leaving the tile must wipe it. */
+    runtime.enterLocation(1, gs, world);
+    gs.setCoordX(15);
+    gs.setCoordY(10);
+    gs.setFacingKey('E');
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+    expect(runtime.scanAndRun(gs, world), "Atlantium evt 48 statue fires at (15,10) facing E", fails);
+    expect(runtime.textView().containsText("Ybmug") || runtime.textView().containsText("Yekop"),
+           "Atlantium sorcerer statue shows Ybmug/Yekop plaque", fails);
+    gs.setCoordX(14);
+    gs.setCoordY(10);
+    gs.setFacingKey('E');
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+    (void)runtime.scanAndRun(gs, world);
+    expect(!runtime.textView().containsText("Ybmug") && !runtime.textView().containsText("Yekop"),
+           "statue OP_02 plaque clears after walking away", fails);
     expect(mm2::events::ServiceSignResolver::resolveForGameState(gs.a4(), 1, &world.attrib(), 2) == 62,
            "Atlantium blacksmith synced env resolves str[2] -> 62", fails);
 
@@ -2540,6 +2964,55 @@ int main(int argc, char **argv)
         runtime.bindParty(nullptr, nullptr);
     }
 
+    /* Pinehurst loc 57 evt 19 @ (2,5)/N: OP_0E 0xCF Wayback machine @ 0x1480A. */
+    {
+        Mm2RosterFile roster{};
+        setupMember(roster, 0, 5, 100);
+        roster.records[0].condition = 0;
+        Mm2PartyLaunch wayback_launch{};
+        wayback_launch.party_count = 1;
+        wayback_launch.roster_slots[0] = 0;
+        runtime.bindParty(&roster, &wayback_launch);
+        expect(world.enterScreen(57), "Pinehurst map screen 57", fails);
+        gs.setScreenId(57);
+        runtime.enterLocation(57, gs, world);
+        gs.setCoordX(2);
+        gs.setCoordY(5);
+        gs.setFacingKey('N');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "Pinehurst Wayback tile fires at (2,5) facing N", fails);
+        expect(runtime.textView().containsText("wayback machine"),
+               "Wayback without Peabody quest shows deny text", fails);
+        expect(runtime.textView().containsText("Lord Peabody"),
+               "Wayback deny names Lord Peabody", fails);
+        expect(runtime.waitKind() == mm2::events::EventVmWait::Space,
+               "Wayback deny waits for SPACE", fails);
+
+        roster.records[0].tail_padding_7a_81[6] = 0x02; /* btst #1, $80 */
+        runtime.enterLocation(57, gs, world);
+        gs.setCoordX(2);
+        gs.setCoordY(5);
+        gs.setFacingKey('N');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "Wayback with quest bit arms era prompt", fails);
+        expect(runtime.textView().containsText("What era do you desire"),
+               "Wayback prompt is era 1-8", fails);
+        expect(runtime.waitKind() == mm2::events::EventVmWait::MemberSelect,
+               "Wayback era pick waits for digit 1-8", fails);
+
+        mm2::platform::KeyState eight{};
+        eight.last_ascii = '8';
+        runtime.continueInput(gs, world, eight);
+        expect(gs.era() == 8, "Wayback choice 8 sets era 8", fails);
+        expect(gs.screenId() == 38, "Wayback choice 8 → screen 38 (C4)", fails);
+        expect(gs.coordX() == 14 && gs.coordY() == 4, "Wayback choice 8 → (14,4)", fails);
+        runtime.bindParty(nullptr, nullptr);
+        world.enterScreen(0);
+        gs.setScreenId(0);
+        gs.initCalendarDefaults();
+        runtime.enterLocation(0, gs, world);
+    }
+
     /* OP_30 @ 0x17034: 10-byte space-padded compare (toupper via -$7B78). */
     {
         using mm2::events::eventVmCheckOp30Password;
@@ -2559,6 +3032,59 @@ int main(int argc, char **argv)
         expect(!eventVmCheckOp30Password(buf, expected, 10), "OP_30 wrong answer fails", fails);
         uint8_t empty[10] = {};
         expect(!eventVmCheckOp30Password(empty, expected, 10), "OP_30 empty buffer fails", fails);
+    }
+
+    /* OP_0E 0xE2 @ 0x18204: jester joke of the day (str.dat bank 0, day%22). */
+    {
+        char str_path[512];
+        std::snprintf(str_path, sizeof(str_path), "%s/str.dat", data_dir);
+        FILE *sfp = std::fopen(str_path, "rb");
+        expect(sfp != nullptr, "str.dat present for joke fill", fails);
+        if (sfp) {
+            uint8_t strbuf[mm2::events::kStrDatSize];
+            const size_t n = std::fread(strbuf, 1, sizeof(strbuf), sfp);
+            std::fclose(sfp);
+
+            uint8_t joke_gs_image[static_cast<size_t>(MM2_A4_ANCHOR) + 0x8000u]{};
+            mm2::GameStateView joke_gs(mm2_gs_base_from_image(joke_gs_image));
+            mm2::events::eventVmInitStrBankOffsets(joke_gs.a4());
+            mm2::events::eventVmFillJokeStrTables(joke_gs.a4(), strbuf, n);
+
+            char joke0[256];
+            mm2::events::eventVmFormatJoke(joke_gs.a4(), 0, joke0, sizeof(joke0));
+            expect(std::strstr(joke0, "flypaper") != nullptr,
+                   "joke 0 is the kite/flypaper orc joke", fails);
+
+            char joke1[256];
+            mm2::events::eventVmFormatJoke(joke_gs.a4(), 1, joke1, sizeof(joke1));
+            expect(std::strstr(joke1, "twenty hours") != nullptr,
+                   "joke 1 is the twenty-hour orc day", fails);
+
+            expect(mm2::events::eventVmJokeIndex(1) == 1, "day 1 → joke 1", fails);
+            expect(mm2::events::eventVmJokeIndex(22) == 0, "day 22 → joke 0", fails);
+            expect(mm2::events::eventVmJokeIndex(23) == 1, "day 23 → joke 1", fails);
+        }
+
+        /* Luxus loc 58 evt 20 @ (y,x)=(10,7) DIR_N: OP_01 header + OP_0E 0xE2. */
+        gs.initCalendarDefaults();
+        (void)world.enterScreen(58);
+        gs.setScreenId(58);
+        expect(runtime.enterLocation(58, gs, world), "enterLocation(58) Luxus Palace", fails);
+        gs.setCoordX(7);
+        gs.setCoordY(10);
+        gs.setFacingKey('N');
+        mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+        expect(runtime.scanAndRun(gs, world), "Luxus jester event 20 at (7,10) N", fails);
+        expect(runtime.textView().containsText("joke of the day"),
+               "jester keeps OP_01 header", fails);
+        expect(runtime.textView().containsText("twenty hours") ||
+                   runtime.textView().containsText("Orc day"),
+               "jester OP_0E 0xE2 shows day-1 joke over the party band", fails);
+        expect(runtime.blocksMovement(), "jester waits for SPACE", fails);
+
+        runtime.enterLocation(0, gs, world);
+        (void)world.enterScreen(0);
+        gs.setScreenId(0);
     }
 
     /* Castle blob locs leave anchor $FFFF (no 00 00 00 terminator). */

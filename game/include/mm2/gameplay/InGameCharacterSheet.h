@@ -6,6 +6,7 @@
 // (-$7F7A → 0x422A), same as Quick Ref $595C — not book.32 / console_box.
 
 #include "mm2/gfx/ScreenCompositor.h"
+#include "mm2/ui/AguiAtlas.h"
 
 #include "mm2_items_codec.h"
 #include "mm2_party_launch.h"
@@ -84,6 +85,10 @@ class InGameCharacterSheet {
 public:
     bool loadAssets(const char *data_dir);
 
+    /** Agui play HUD: paper-doll equipped/backpack (classic stays text lists). */
+    void setPaperDoll(bool on) { paper_doll_ = on; }
+    bool paperDoll() const { return paper_doll_; }
+
     void renderSheet(gfx::ScreenCompositor &c, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
                      int party_slot, const Mm2ItemsFile *items, const SheetSession *session,
                      bool combat_mode = false) const;
@@ -102,6 +107,14 @@ public:
     /** Sheet sub-menu @ $8EA6 (C/D/E/G/R/S/T/U). Mutates roster on equip/remove/drop. */
     SheetKeyOutcome handleKey(char key, SheetSession &session, Mm2RosterFile &roster,
                               const Mm2PartyLaunch &launch, const Mm2ItemsFile *items, bool combat_mode = false);
+
+private:
+    void renderPaperDoll(gfx::ScreenCompositor &c, const Mm2RosterRecord &rec, const Mm2ItemsFile *items,
+                         const SheetSession *session) const;
+    void blitItemIcon(gfx::ScreenCompositor &c, uint8_t item_id, int x, int y, bool highlight) const;
+
+    bool paper_doll_ = false;
+    ui::AguiAtlas atlas_;
 };
 
 }  // namespace mm2::gameplay

@@ -27,6 +27,8 @@
 
 static const mm2_image32_file *s_applied_palette_img;
 static const mm2_image32_file *s_play_world_palette_src;
+static unsigned s_play_world_palette_num = 1;
+static unsigned s_play_world_palette_den = 1;
 
 static UBYTE s_palette_dirty_world;
 static UBYTE s_palette_dirty_ui;
@@ -777,7 +779,17 @@ static void mm2_amiga_write_asset_palette(const mm2_image32_file *img)
     pPal = (ULONG *)pVp->pPalette;
     pPal[0] = 0;
     for (i = 1; i < MM2_IMAGE32_PALETTE_COLORS; ++i) {
-        pPal[i] = img->palette_pen[i];
+        ULONG c = img->palette_pen[i];
+        if (s_play_world_palette_den != 1u || s_play_world_palette_num != 1u) {
+            unsigned r = (unsigned)((c >> 16) & 0xFFu);
+            unsigned g = (unsigned)((c >> 8) & 0xFFu);
+            unsigned b = (unsigned)(c & 0xFFu);
+            r = (r * s_play_world_palette_num) / s_play_world_palette_den;
+            g = (g * s_play_world_palette_num) / s_play_world_palette_den;
+            b = (b * s_play_world_palette_num) / s_play_world_palette_den;
+            c = ((ULONG)r << 16) | ((ULONG)g << 8) | (ULONG)b;
+        }
+        pPal[i] = c;
     }
 
     s_applied_palette_img = img;
@@ -811,6 +823,24 @@ void mm2_amiga_clear_play_world_palette(void)
 {
     s_play_world_palette_src = NULL;
     s_applied_palette_img = NULL;
+    s_play_world_palette_num = 1;
+    s_play_world_palette_den = 1;
+}
+
+void mm2_amiga_set_play_world_palette_scale(unsigned num, unsigned den)
+{
+    if (den == 0u) {
+        den = 1u;
+    }
+    if (num == s_play_world_palette_num && den == s_play_world_palette_den) {
+        return;
+    }
+    s_play_world_palette_num = num;
+    s_play_world_palette_den = den;
+    s_applied_palette_img = NULL;
+    if (s_play_world_palette_src) {
+        mm2_amiga_apply_palette(s_play_world_palette_src);
+    }
 }
 
 void mm2_amiga_apply_palette(const mm2_image32_file *img)

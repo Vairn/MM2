@@ -118,6 +118,48 @@ void ScreenCompositor::fillRectPen(int x, int y, int w, int h, uint8_t pen, uint
 #endif
 }
 
+void ScreenCompositor::scaleRectRgb(int x, int y, int w, int h, int num, int den)
+{
+#if MM2_HOST_AMIGA
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
+    (void)num;
+    (void)den;
+    return;
+#else
+    if (!rgba_ || w <= 0 || h <= 0 || den <= 0) {
+        return;
+    }
+    int x0 = x;
+    int y0 = y;
+    int x1 = x + w;
+    int y1 = y + h;
+    if (x0 < 0) {
+        x0 = 0;
+    }
+    if (y0 < 0) {
+        y0 = 0;
+    }
+    if (x1 > kWidth) {
+        x1 = kWidth;
+    }
+    if (y1 > kHeight) {
+        y1 = kHeight;
+    }
+    for (int py = y0; py < y1; ++py) {
+        uint8_t *row = &rgba_[(static_cast<size_t>(py) * kWidth + x0) * 4];
+        for (int px = x0; px < x1; ++px) {
+            row[0] = static_cast<uint8_t>((row[0] * num) / den);
+            row[1] = static_cast<uint8_t>((row[1] * num) / den);
+            row[2] = static_cast<uint8_t>((row[2] * num) / den);
+            row += 4;
+        }
+    }
+#endif
+}
+
 void ScreenCompositor::blitRgba(const uint8_t *src, int src_w, int src_h, int dst_x, int dst_y,
                                 bool skip_transparent, uint8_t global_alpha)
 {

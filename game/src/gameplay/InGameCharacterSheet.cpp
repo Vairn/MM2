@@ -9,7 +9,11 @@
 #include "mm2/gfx/PartyStatusFormat.h"
 #include "mm2/gfx/PlayScreenChrome.h"
 #include "mm2/ui/AmigaCharacterUiLayout.h"
+#include "mm2/ui/AguiPaperDollLayout.h"
 #include "mm2/ui/RosterSkillDisplay.h"
+
+#include <cstddef>
+#include <cstdint>
 
 namespace mm2::gameplay {
 
@@ -140,6 +144,23 @@ void itemLabel(char *out, size_t cap, const Mm2ItemsFile *items, uint8_t item_id
     }
 }
 
+void itemCaption(char *out, size_t cap, char prefix, const Mm2ItemsFile *items, uint8_t item_id, uint8_t flags)
+{
+    if (!out || cap == 0) {
+        return;
+    }
+    char name[16];
+    itemLabel(name, sizeof(name), items, item_id);
+    const int plus = static_cast<int>(flags & 0x3F);
+    if (plus && name[0]) {
+        std::snprintf(out, cap, "%c) %s +%d", prefix, name, plus);
+    } else if (name[0]) {
+        std::snprintf(out, cap, "%c) %s", prefix, name);
+    } else {
+        out[0] = '\0';
+    }
+}
+
 int firstEmptyEquip(const Mm2RosterRecord &rec)
 {
     for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
@@ -160,12 +181,218 @@ int firstEmptyBackpack(const Mm2RosterRecord &rec)
     return -1;
 }
 
+uint8_t *recByte(Mm2RosterRecord &rec, int offset)
+{
+    return reinterpret_cast<uint8_t *>(&rec) + offset;
+}
+
+void satAddByte(uint8_t *field, uint8_t amount)
+{
+    if (!field) {
+        return;
+    }
+    const int sum = static_cast<int>(*field) + static_cast<int>(amount);
+    *field = static_cast<uint8_t>(sum > 0xFF ? 0xFF : sum);
+}
+
+void satSubByte(uint8_t *field, uint8_t amount)
+{
+    if (!field) {
+        return;
+    }
+    if (*field < amount) {
+        *field = 0;
+    } else {
+        *field = static_cast<uint8_t>(*field - amount);
+    }
+}
+
+/* -$7F56 / 0x4442 threshold walk (same table as Rest SP / training). */
+uint8_t statBonus7f56(uint8_t attr)
+{
+    static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
+                                      60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
+    uint8_t bonus = 0xFD; /* −3 */
+    for (size_t i = 0; i < sizeof(kThresh); ++i) {
+        if (attr <= kThresh[i]) {
+            break;
+        }
+        ++bonus;
+    }
+    return bonus;
+}
+
+bool itemIsOneHandedMelee(uint8_t id)
+{
+    return id >= 0x01 && id <= 0x41; /* 0xF5F4 */
+}
+
+bool itemIsTwoHandedMelee(uint8_t id)
+{
+    return id >= 0x42 && id <= 0x5B; /* 0xF612 */
+}
+
+bool itemIsMeleeWeapon(uint8_t id)
+{
+    /* 0xF6B4 = 0xF5F4 | 0xF612. */
+    return itemIsOneHandedMelee(id) || itemIsTwoHandedMelee(id);
+}
+
+bool itemIsMissileWeapon(uint8_t id)
+{
+    return id >= 0x5C && id <= 0x72; /* 0xF630 (includes keys 0x6F..0x72) */
+}
+
+bool itemIsShield(uint8_t id)
+{
+    return id >= 0x73 && id <= 0x7E; /* 0xF64E */
+}
+
+bool itemIsBodyArmor(uint8_t id)
+{
+    return id >= 0x7F && id <= 0x9A; /* 0xF66C */
+}
+
+bool itemIsHelm(uint8_t id)
+{
+    return id >= 0x9B && id <= 0x9F; /* 0xF68E */
+}
+
+bool itemAddsArmorClass(uint8_t id)
+{
+    return itemIsShield(id) || itemIsBodyArmor(id) || itemIsHelm(id);
+}
+
+bool equippedHas(const Mm2RosterRecord &rec, bool (*pred)(uint8_t))
+{
+    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
+        if (pred(rec.equipped_id[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* 0xEC02 occupancy / 2H-shield gate. Strings @ 0xE158..0xE1E8 via 0xE238. */
+const char *equipOccupancyError(const Mm2RosterRecord &rec, uint8_t id)
+{
+    if (itemIsOneHandedMelee(id)) {
+        if (equippedHas(rec, itemIsMeleeWeapon)) {
+            return "Already have weapon";
+        }
+        return nullptr;
+    }
+    if (itemIsTwoHandedMelee(id)) {
+        if (equippedHas(rec, itemIsMeleeWeapon)) {
+            return "Already have weapon";
+        }
+        if (equippedHas(rec, itemIsShield)) {
+            return "Not with shield";
+        }
+        return nullptr;
+    }
+    if (itemIsMissileWeapon(id)) {
+        if (equippedHas(rec, itemIsMissileWeapon)) {
+            return "Already have missile weapon";
+        }
+        return nullptr;
+    }
+    if (itemIsShield(id)) {
+        if (equippedHas(rec, itemIsShield)) {
+            return "Already have shield";
+        }
+        if (equippedHas(rec, itemIsTwoHandedMelee)) {
+            return "Not with 2 handed weapon";
+        }
+        return nullptr;
+    }
+    if (itemIsBodyArmor(id)) {
+        if (equippedHas(rec, itemIsBodyArmor)) {
+            return "Already wearing armor";
+        }
+        return nullptr;
+    }
+    if (itemIsHelm(id)) {
+        if (equippedHas(rec, itemIsHelm)) {
+            return "Already wearing helm";
+        }
+        return nullptr;
+    }
+    return nullptr;
+}
+
+/* 0xF1C0 (add) / 0xF110 (sub): items.dat byte 0x0E special power.
+ * Type nibble indexes rec+$10; types 0..5 also hit rec+$6B (base stats).
+ * Amount nibble 0 is a no-op; otherwise amount += flags&0x3F. */
+void applyItemSpecialPower(Mm2RosterRecord &rec, uint8_t item_id, uint8_t flags_lo, bool adding,
+                           const Mm2ItemsFile *items)
+{
+    const uint8_t packed = items->records[item_id].bonus_byte;
+    uint8_t amount = static_cast<uint8_t>(packed & 0x0F);
+    if (amount == 0) {
+        return;
+    }
+    const uint8_t type = static_cast<uint8_t>(packed >> 4);
+    if (type == 14) {
+        /* Type 14 (Thievery) lands on +$1E. Create/training persist the skill
+         * there; equipped bonuses are added by rosterLiveThievery instead of
+         * mutating +$1E, so Remove cannot subtract gear the load path never
+         * added. */
+        return;
+    }
+    amount = static_cast<uint8_t>(amount + flags_lo);
+    uint8_t *cur = recByte(rec, 0x10 + static_cast<int>(type));
+    uint8_t *base = (type <= 5) ? recByte(rec, 0x6B + static_cast<int>(type)) : nullptr;
+    if (adding) {
+        satAddByte(cur, amount);
+        satAddByte(base, amount);
+    } else {
+        satSubByte(cur, amount);
+        satSubByte(base, amount);
+    }
+}
+
+/* 0xF36C / 0xF270 armor band: add/sub flags&0x3F then items.dat byte 0x10 to +$1F. */
+void applyArmorAcAccumulator(Mm2RosterRecord &rec, uint8_t item_id, uint8_t flags_lo, bool adding,
+                             const Mm2ItemsFile *items)
+{
+    if (!itemAddsArmorClass(item_id)) {
+        return;
+    }
+    uint8_t *acc = recByte(rec, 0x1F);
+    const uint8_t die = items->records[item_id].damage;
+    if (adding) {
+        satAddByte(acc, flags_lo);
+        satAddByte(acc, die);
+    } else {
+        satSubByte(acc, flags_lo);
+        satSubByte(acc, die);
+    }
+}
+
+/* 0x67E6 per member: displayed AC +$24 = -$7F56(+$13) + equipment AC +$1F. */
+void syncDisplayedArmorClass(Mm2RosterRecord &rec)
+{
+    uint8_t spd = statBonus7f56(rec.speed_current);
+    if (spd >= 0xF0) {
+        spd = 0;
+    }
+    const int sum = static_cast<int>(spd) + static_cast<int>(*recByte(rec, 0x1F));
+    if (sum > 0xFF) {
+        rec.armor_class = 0xFF;
+    } else if (sum <= 0) {
+        rec.armor_class = 0;
+    } else {
+        rec.armor_class = static_cast<uint8_t>(sum);
+    }
+}
+
 /* Rebuild the equip-derived weapon combat fields the combat code reads for
  * player melee/missile damage: roster +$4C..+$4F (aliased as spells[0..3]).
  *   +$4C melee die   / +$4D melee bonus   ← item id 0x01..0x5B  (0xF6B4 band)
  *   +$4E missile die / +$4F missile bonus ← item id 0x5C..0x72  (0xF630 band)
  * Die = items.dat byte 0x10 (raw); bonus = equipped_flags & 0x3F (per-instance,
- * 0xF36C reads $34(a0)&0x3F). Armor ids 0x73..0x9F drive AC (+$1F), not damage.
+ * 0xF36C reads $34(a0)&0x3F). Shield/armor/helm ids 0x73..0x9F drive AC (+$1F).
  *
  * The retail engine mutates these per-slot on each equip/unequip (0xF36C set /
  * 0xF270 clear). We instead rebuild from all six equipped slots so combat always
@@ -183,19 +410,50 @@ void recomputeWeaponFields(Mm2RosterRecord &rec, const Mm2ItemsFile *items)
     rec.spells[3] = 0;
     for (int slot = 0; slot < MM2_ROSTER_ITEM_SLOTS; ++slot) {
         const uint8_t id = rec.equipped_id[slot];
-        if (id < 0x01 || id > 0x72) {
-            continue; /* empty / armor / non-weapon band */
-        }
-        const uint8_t die = items->records[id].damage;
-        const uint8_t bonus = static_cast<uint8_t>(rec.equipped_flags[slot] & 0x3F);
-        if (id <= 0x5B) {
-            rec.spells[0] = die;
-            rec.spells[1] = bonus;
-        } else {
-            rec.spells[2] = die;
-            rec.spells[3] = bonus;
+        if (itemIsMeleeWeapon(id)) {
+            rec.spells[0] = items->records[id].damage;
+            rec.spells[1] = static_cast<uint8_t>(rec.equipped_flags[slot] & 0x3F);
+        } else if (itemIsMissileWeapon(id)) {
+            rec.spells[2] = items->records[id].damage;
+            rec.spells[3] = static_cast<uint8_t>(rec.equipped_flags[slot] & 0x3F);
         }
     }
+}
+
+/* 0xF36C after the backpack→equip copy: armor AC, special power, weapons, +$24. */
+void applyEquippedSlotEffects(Mm2RosterRecord &rec, int slot, const Mm2ItemsFile *items)
+{
+    if (!items || slot < 0 || slot >= MM2_ROSTER_ITEM_SLOTS) {
+        return;
+    }
+    const uint8_t id = rec.equipped_id[slot];
+    if (id == 0) {
+        recomputeWeaponFields(rec, items);
+        syncDisplayedArmorClass(rec);
+        return;
+    }
+    const uint8_t flags_lo = static_cast<uint8_t>(rec.equipped_flags[slot] & 0x3F);
+    applyArmorAcAccumulator(rec, id, flags_lo, true, items);
+    applyItemSpecialPower(rec, id, flags_lo, true, items);
+    recomputeWeaponFields(rec, items);
+    syncDisplayedArmorClass(rec);
+}
+
+/* 0xF270 before the equip→backpack/drop copy. Slot must still hold the item.
+ * Weapons are rebuilt by the caller after the slot is emptied. */
+void reverseEquippedSlotEffects(Mm2RosterRecord &rec, int slot, const Mm2ItemsFile *items)
+{
+    if (!items || slot < 0 || slot >= MM2_ROSTER_ITEM_SLOTS) {
+        return;
+    }
+    const uint8_t id = rec.equipped_id[slot];
+    if (id == 0) {
+        return;
+    }
+    const uint8_t flags_lo = static_cast<uint8_t>(rec.equipped_flags[slot] & 0x3F);
+    applyArmorAcAccumulator(rec, id, flags_lo, false, items);
+    applyItemSpecialPower(rec, id, flags_lo, false, items);
+    syncDisplayedArmorClass(rec);
 }
 
 void setStatus(SheetSession &session, const char *msg)
@@ -230,10 +488,74 @@ void drawSheetEscFooter(gfx::ScreenCompositor &c)
 
 }  // namespace
 
-bool InGameCharacterSheet::loadAssets(const char * /*data_dir*/)
+bool InGameCharacterSheet::loadAssets(const char *data_dir)
 {
-    /* Sheet backdrop is -$7F7A outer frame only (no book.32). Kept for GameSession. */
+    /* Sheet backdrop is -$7F7A outer frame only (no book.32). Agui atlas is
+     * optional — paper-doll falls back to the text lists if it is missing. */
+    (void)atlas_.load(data_dir);
     return true;
+}
+
+void InGameCharacterSheet::blitItemIcon(gfx::ScreenCompositor &c, uint8_t item_id, int x, int y,
+                                        bool highlight) const
+{
+    using namespace mm2::ui::agui_doll;
+    atlas_.blitNamed(c, "doll/slot", x, y);
+    if (item_id != 0) {
+        char name[16];
+        std::snprintf(name, sizeof(name), "items/i%02x", item_id);
+        atlas_.blitNamed(c, name, x, y);
+    }
+    if (highlight) {
+        c.drawBoxBorder(x - 1, y - 1, kIcon + 2, kIcon + 2, 224, 224, 192, 255);
+    }
+}
+
+void InGameCharacterSheet::renderPaperDoll(gfx::ScreenCompositor &c, const Mm2RosterRecord &rec,
+                                           const Mm2ItemsFile *items, const SheetSession *session) const
+{
+    using namespace mm2::ui::agui_doll;
+    const SheetSubMode sub = session ? session->sub_mode : SheetSubMode::Normal;
+    const bool hi_pack = sub == SheetSubMode::EquipPickBackpack || sub == SheetSubMode::DropPickSlot ||
+                         sub == SheetSubMode::UsePick || sub == SheetSubMode::TradePickItemSlot;
+    const bool hi_eq = sub == SheetSubMode::RemovePickEquip || sub == SheetSubMode::DropPickSlot ||
+                       sub == SheetSubMode::UsePick;
+
+    drawCellText(c, kSheetDividerRow, kSheetEquipCol, "Equipped", 200, 200, 200);
+    drawCellText(c, kSheetDividerRow, kSheetBackpackCol, "Backpack", 200, 200, 200);
+    (void)items;
+
+    atlas_.blitNamed(c, "doll/body", kBodyX, kBodyY);
+
+    const EquipView view = assignEquip(rec.equipped_id);
+    for (int i = 0; i < 5; ++i) {
+        const int x = kBodySlots[i].x;
+        const int y = kBodySlots[i].y;
+        const uint8_t id = view.body_id[i];
+        blitItemIcon(c, id, x, y, hi_eq && id != 0);
+        if (view.body_slot[i] != 0xFF) {
+            char d[2] = {static_cast<char>('1' + view.body_slot[i]), '\0'};
+            c.drawText(x - 8, y + 2, d, 224, 224, 192, 255);
+        }
+    }
+    for (int i = 0; i < view.trinket_count; ++i) {
+        const int x = kTrinketX0 + i * kTrinketStep;
+        const int y = kTrinketY;
+        blitItemIcon(c, view.trinket_id[i], x, y, hi_eq);
+        if (view.trinket_slot[i] != 0xFF) {
+            char d[2] = {static_cast<char>('1' + view.trinket_slot[i]), '\0'};
+            c.drawText(x - 8, y + 2, d, 224, 224, 192, 255);
+        }
+    }
+
+    static const char kPackLetters[] = "ABCDEF";
+    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
+        const SlotPx p = packSlot(i);
+        const uint8_t id = rec.backpack_id[i];
+        char lab[3] = {kPackLetters[i], ')', '\0'};
+        c.drawText(kPackLabelX + (i % 2) * kPackColW, p.y + 2, lab, 200, 200, 200, 255);
+        blitItemIcon(c, id, p.x, p.y, hi_pack);
+    }
 }
 
 void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2RosterFile &roster,
@@ -294,7 +616,7 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
     drawLabeledNumber(c, 8, kSheetStatColLeft, "Spd=", rec.speed_base);
     {
         char th[24];
-        std::snprintf(th, sizeof(th), "Thievery %u%%", mm2::ui::rosterDisplayThievery(rec));
+        std::snprintf(th, sizeof(th), "Thievery %u%%", mm2::ui::rosterDisplayThievery(rec, items));
         drawCellText(c, 8, kSheetStatColMid, th);
     }
     drawLabeledNumber(c, 8, kSheetStatColCost, "Food=", rec.food);
@@ -308,28 +630,30 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
     std::snprintf(cond, sizeof(cond), "Cond= %s", conditionName(rec.condition));
     drawCellText(c, 10, kSheetStatColCond, cond);
 
-    drawCellText(c, kSheetDividerRow, kSheetEquipCol, "-----(Equipped)-------(Backpack)-----", 200, 200, 200);
+    if (paper_doll_ && atlas_.ready()) {
+        renderPaperDoll(c, rec, items, session);
+    } else {
+        drawCellText(c, kSheetDividerRow, kSheetEquipCol, "-----(Equipped)-------(Backpack)-----", 200, 200, 200);
 
-    static const char kPackLetters[] = "ABCDEF";
-    char iname[16];
-    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
-        const int row = kSheetEquipRowBase + i;
-        char eline[24];
-        if (rec.equipped_id[i]) {
-            itemLabel(iname, sizeof(iname), items, rec.equipped_id[i]);
-            std::snprintf(eline, sizeof(eline), "%d) %s", i + 1, iname);
-        } else {
-            std::snprintf(eline, sizeof(eline), "%d)", i + 1);
-        }
-        drawCellText(c, row, kSheetEquipCol, eline, 220, 220, 220);
+        static const char kPackLetters[] = "ABCDEF";
+        for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
+            const int row = kSheetEquipRowBase + i;
+            char eline[24];
+            if (rec.equipped_id[i]) {
+                itemCaption(eline, sizeof(eline), static_cast<char>('1' + i), items, rec.equipped_id[i],
+                            rec.equipped_flags[i]);
+            } else {
+                std::snprintf(eline, sizeof(eline), "%d)", i + 1);
+            }
+            drawCellText(c, row, kSheetEquipCol, eline, 220, 220, 220);
 
-        if (rec.backpack_id[i]) {
-            itemLabel(iname, sizeof(iname), items, rec.backpack_id[i]);
-            std::snprintf(eline, sizeof(eline), "%c) %s", kPackLetters[i], iname);
-        } else {
-            std::snprintf(eline, sizeof(eline), "%c)", kPackLetters[i]);
+            if (rec.backpack_id[i]) {
+                itemCaption(eline, sizeof(eline), kPackLetters[i], items, rec.backpack_id[i], rec.backpack_flags[i]);
+            } else {
+                std::snprintf(eline, sizeof(eline), "%c)", kPackLetters[i]);
+            }
+            drawCellText(c, row, kSheetBackpackCol, eline, 220, 220, 220);
         }
-        drawCellText(c, row, kSheetBackpackCol, eline, 220, 220, 220);
     }
 
     gfx::fillCellRect(c, kSheetFooterCol, kSheetFooterRow1 - 1, kPlayOverlayBorderW - 2, 4);
@@ -339,7 +663,31 @@ void InGameCharacterSheet::renderSheet(gfx::ScreenCompositor &c, const Mm2Roster
         sub == SheetSubMode::SpellBook || sub == SheetSubMode::CastPicker || aux_pending;
     if (session && session->status_line[0] && sub != SheetSubMode::SpellBook &&
         sub != SheetSubMode::CastPicker) {
-        drawCellText(c, kSheetFooterRow1 - 1, kSheetFooterCol, session->status_line, 255, 255, 128);
+        /* 0xCCE8 locate(col $16, row $15) "'Return' to cast"; other aux on the footer. */
+        if (std::strcmp(session->status_line, "'Return' to cast") == 0) {
+            drawCellText(c, 0x15, 0x16, session->status_line, 255, 255, 128);
+        } else {
+            drawCellText(c, kSheetFooterRow1 - 1, kSheetFooterCol, session->status_line, 255, 255, 128);
+        }
+    } else if (paper_doll_ && atlas_.ready() && sub != SheetSubMode::SpellBook &&
+               sub != SheetSubMode::CastPicker) {
+        char cap[48];
+        cap[0] = '\0';
+        static const char kPackLetters[] = "ABCDEF";
+        for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS && !cap[0]; ++i) {
+            if (rec.equipped_id[i]) {
+                itemCaption(cap, sizeof(cap), static_cast<char>('1' + i), items, rec.equipped_id[i],
+                            rec.equipped_flags[i]);
+            }
+        }
+        for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS && !cap[0]; ++i) {
+            if (rec.backpack_id[i]) {
+                itemCaption(cap, sizeof(cap), kPackLetters[i], items, rec.backpack_id[i], rec.backpack_flags[i]);
+            }
+        }
+        if (cap[0]) {
+            drawCellText(c, kSheetFooterRow1 - 1, kSheetFooterCol, cap, 255, 255, 128);
+        }
     }
     if (!hide_commands) {
         if (combat_mode) {
@@ -502,7 +850,11 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
             }
             const Mm2ItemRecord *item = items ? mm2_items_lookup(items, src.item_id) : nullptr;
             if (item && !mm2_item_class_can_use(item, rec->class_id)) {
-                setStatus(session, "Class cannot use.");
+                setStatus(session, "Wrong class");
+                return SheetKeyOutcome::None;
+            }
+            if (const char *occ = equipOccupancyError(*rec, src.item_id)) {
+                setStatus(session, occ);
                 return SheetKeyOutcome::None;
             }
             const int eq = firstEmptyEquip(*rec);
@@ -512,7 +864,7 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
             }
             mm2_roster_set_equipped(rec, eq, src);
             mm2_roster_set_backpack(rec, bp, Mm2RosterItemSlot{});
-            recomputeWeaponFields(*rec, items);
+            applyEquippedSlotEffects(*rec, eq, items);
             setStatus(session, "Equipped.");
             return SheetKeyOutcome::None;
         }
@@ -552,6 +904,7 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
                 setStatus(session, "Backpack full.");
                 return SheetKeyOutcome::None;
             }
+            reverseEquippedSlotEffects(*rec, eq, items);
             mm2_roster_set_backpack(rec, bp, src);
             mm2_roster_set_equipped(rec, eq, Mm2RosterItemSlot{});
             recomputeWeaponFields(*rec, items);
@@ -569,6 +922,7 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
             if (rec->equipped_id[eq] == 0) {
                 setStatus(session, "Empty slot.");
             } else {
+                reverseEquippedSlotEffects(*rec, eq, items);
                 mm2_roster_set_equipped(rec, eq, Mm2RosterItemSlot{});
                 recomputeWeaponFields(*rec, items);
                 setStatus(session, "Dropped.");
@@ -621,13 +975,22 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         return SheetKeyOutcome::None;
     }
 
-    /* Gather ($8050): '1' pools all party gold ($7F68), '2' pools gems ($7FF8) into
-       the current character. Each member's amount is summed then zeroed, total -> rec. */
+    /* Gather ($8050): '1' → $7F68 gold, '2' → $7FF8 gems into the current character.
+       Gold: only roster indices < $18 (heroes); hireling +$66 is their daily fee.
+       Initiator must also be a hero ($7F68 slt vs #$18) or the gather is a no-op. */
     if (session.sub_mode == SheetSubMode::GatherPick) {
         session.sub_mode = SheetSubMode::Normal;
         if (key == '1') {
+            if (rosterIndexForPartySlot(launch, session.party_slot) >= 0x18) {
+                setStatus(session, "Cannot gather gold.");
+                return SheetKeyOutcome::None;
+            }
             uint32_t total = 0;
             for (int i = 0; i < launch.party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                const int ri = rosterIndexForPartySlot(launch, i);
+                if (ri < 0 || ri >= 0x18) {
+                    continue;
+                }
                 Mm2RosterRecord *m = rosterMut(roster, launch, i);
                 if (!m) {
                     continue;
@@ -640,6 +1003,7 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
             return SheetKeyOutcome::None;
         }
         if (key == '2') {
+            /* $7FF8: gems pool every party slot (no $18 gate). */
             uint32_t total = 0;
             for (int i = 0; i < launch.party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
                 Mm2RosterRecord *m = rosterMut(roster, launch, i);

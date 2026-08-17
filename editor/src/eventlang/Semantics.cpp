@@ -194,7 +194,7 @@ const char* selectorHandlerLabel(int sel) {
         case 0xCC: return "quest handler 0xCC";
         case 0xCD: return "quest handler 0xCD";
         case 0xCE: return "quest handler 0xCE";
-        case 0xCF: return "quest handler 0xCF";
+        case 0xCF: return "Wayback machine (Pinehurst)";
         case 0xE2: return "special 0xE2";
         case 0xFD: return "special 0xFD";
         default: return nullptr;

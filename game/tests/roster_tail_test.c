@@ -83,6 +83,19 @@ int main(void)
                raw2[MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_TAIL_ERA + 1] == 0,
            "era LE on disk");
 
+    /* Automap vis words (LE) sit in the $780-byte hole after battles-lost. */
+    expect(MM2_ROSTER_TAIL_AUTOMAP == 0x044, "automap tail offset");
+    expect(MM2_ROSTER_TAIL_AUTOMAP + MM2_ROSTER_TAIL_AUTOMAP_SIZE == MM2_ROSTER_TAIL_GATE_BANK,
+           "automap abuts gate bank");
+    mm2_roster_tail_set_u16(&roster, MM2_ROSTER_TAIL_AUTOMAP + (3 * 16 + 5) * 2, 0x8001);
+    expect(mm2_roster_tail_u16(&roster, MM2_ROSTER_TAIL_AUTOMAP + (3 * 16 + 5) * 2) == 0x8001,
+           "automap row readback");
+    expect(mm2_roster_encode(&roster, raw2, sizeof(raw2)) == MM2_ROSTER_OK, "encode automap");
+    expect(raw2[MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_TAIL_AUTOMAP + (3 * 16 + 5) * 2] == 0x01 &&
+               raw2[MM2_ROSTER_CHAR_SECTION_SIZE + MM2_ROSTER_TAIL_AUTOMAP + (3 * 16 + 5) * 2 + 1] ==
+                   0x80,
+           "automap row LE on disk");
+
     /* Untouched tail bytes round-trip unchanged. */
     expect(raw2[MM2_ROSTER_CHAR_SECTION_SIZE + 0x100] == (uint8_t)(0x100 * 7 + 3),
            "untouched tail byte preserved");

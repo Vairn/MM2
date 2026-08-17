@@ -10,9 +10,11 @@
 #include "mm2/gameplay/SpellBook.h"
 #include "mm2_gamestate.h"
 #include "mm2_items_codec.h"
+#include "mm2_monsters_codec.h"
 #include "mm2_party_launch.h"
 #include "mm2_roster_codec.h"
 
+#include <cstddef>
 #include <cstdint>
 
 namespace mm2::events {
@@ -108,7 +110,8 @@ struct TownSvcTrainResult {
 /* Level-up HP @ 0x20390: ($64DA[class]*$64EE[map])/$64E4[map] + -$7F56(+$27).
  * 0x9BCA is bash-door — do not use it here.
  * `roster_index`: party table value (launch.roster_slots[slot]). When >= $18
- * (hireling), training fee is forced to 0 (ASM cost builder 0x2073A). Pass -1
+ * (hireling), training fee is forced to 0 (ASM cost builder 0x2073A) and
+ * daily fee +$66 is raised +50% (floor) capped at 50000 (0x202AC). Pass -1
  * when the caller has no party context (tests / non-hireling default). */
 TownSvcTrainResult townSvcTrainLevelUp(Mm2RosterRecord &rec, int map_id,
                                        gameplay::Rng *rng = nullptr,
@@ -367,6 +370,14 @@ TownSvcQuestCompleteResult townSvcQuestCompleteReward(Mm2RosterFile *roster,
 
 /* 0x1961E gate: any party member with bit2 or +$78 matching drink mode → busy. */
 bool townSvcQuestBusy(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool drink);
+
+/* Resolve the A–C quest target (item for Hoardall/food, monster for
+ * Slayer/drink) to its display name for the 0x1980A briefing strings.
+ * Requires the matching data file (items for food, monsters for drink).
+ * Returns false when no active target or the backing data is missing. */
+bool townSvcQuestTargetName(const Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool drink,
+                            const Mm2ItemsFile *items, const Mm2MonstersFile *monsters, char *out,
+                            size_t out_cap);
 
 /* Combat attack phase @ 0x10C66: if +$78 == monster type and +$7C bit0 (drink),
  * bset +$7C bit1 (armed for gold apply). */

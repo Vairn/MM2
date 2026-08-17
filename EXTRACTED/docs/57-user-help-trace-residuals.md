@@ -49,10 +49,10 @@ engine depth, not a short playtest ask.
 | **ASM leaf / A4** | `combat_defeat_retreat` **`0x11646`**; reads **`A4-$560C`**, unpacks lo nibble → `-$79F1` (`coord_b` / X), hi nibble → `-$79F0` (`coord_a` / Y), then funeral audio `-$7E96`. Same unpack pattern at `0x123A`, `0x1C6A`, `0x6F32`, `0x918E`. |
 | **Engine** | On party wipe (and related retreat paths), party XY is restored from the **current screen’s attrib entry/safe square**, not from a combat-saved “last step”. |
 | **ASM note (2026-07-10)** | **Not a missing combat writer.** `-$560C` = **`attrib.dat` byte `0x0E`** (`entry_coord`) inside the current-screen buffer at `A4-$561A` (loader **`0x923E`** bulk-copies 64 bytes). Mapping: buffer+`0x0E` → `-$560C` (see [`12-attrib-dat-format.md`](12-attrib-dat-format.md)). |
-| **How to hit** | Any combat that ends in wipe: random step fight outdoors, arena ticket fight, or scripted `OP_12`/`OP_13`. **Also successful Run** — the party “Run” @ `0x1312A` success, the per-character Run latch @ round-end `0x12C66`, and the wipe path all `jsr $11646`, so a successful flee restores the entry/safe square exactly like a wipe. Known entry squares (attrib `0x0E`): Middlegate `(7,5)`, Atlantium `(15,15)`, Tundara `(8,11)`, Vulcania `(7,2)`, Sandsobar `(1,8)`, Middlegate Cavern `(15,8)`. |
+| **How to hit** | Any combat that ends in wipe: random step fight outdoors, arena ticket fight, or scripted `OP_12`/`OP_13`. **Also successful Run** — the party “Run” @ `0x1312A` success, the per-character Run latch @ round-end `0x12C66`, and the wipe path all `jsr $11646`, so a successful flee restores the entry/safe square exactly like a wipe. **Not Hide/Bribe** — those set `-$77BD` + key `'S'` at `0x13116`/`0x130C0` and skip `0x11646`, so the party stays on the encounter square. Known entry squares (attrib `0x0E`): Middlegate `(7,5)`, Atlantium `(15,15)`, Tundara `(8,11)`, Vulcania `(7,2)`, Sandsobar `(1,8)`, Middlegate Cavern `(15,8)`. |
 | **Watch / dump** | After wipe **or successful Run**: do you snap to that map’s entry square? If remake dumps A4: `-$560C`, `-$79F0`, `-$79F1`, `-$79F2` (screen id). |
 | **Priority** | **High** — wrong respawn breaks exploration after death (and a fleeing party must land on the safe square, not stay in combat). |
-| **Remake (2026-07-10)** | **Wired.** `materializeScreenAttrib` copies attrib → `A4-$561A`; `finishLeave()` unpacks `-$560C` → coords for **both** flee and wipe (`fled` only selects the outcome/message). Verified Middlegate `(7,5)` etc. from `attrib.dat`. |
+| **Remake (2026-07-10)** | **Wired.** `materializeScreenAttrib` copies attrib → `A4-$561A`; `finishLeave()` unpacks `-$560C` → coords for **both** flee and wipe (`fled` only selects the outcome/message). Verified Middlegate `(7,5)` etc. from `attrib.dat`. Hide/Bribe use `finishSuccessLeave()` (no coord restore). |
 
 ### 2. `-$79E1` darkness / can’t-see gate — `0x53C0`
 
@@ -94,7 +94,7 @@ engine depth, not a short playtest ask.
 | | |
 |--|--|
 | **ASM leaf / A4** | Search **`S`** / auto-Search when `-$794C == $FE` → **`-$7D1C` → `0x1B19C`**. Strings include “The Party Has found:”, “Treasure!”, “Identify”, “(rating)”. |
-| **Engine** | Presents pending found-item buffer (OP_2A / OP_19 overflow) and runs Identify/rating chrome before/while distributing loot. |
+| **Engine** | Presents pending found-item buffer (OP_2A / OP_19 overflow) and runs Identify/rating chrome before/while distributing loot. Trap spring @ `0x1AA70`: `trap_victim_pick` type 0..3, `sign_sprite_place` cels `type*2+4` / `+1` / `0` three times (`-$7BC0` 100/300), then `0x1A90E` → `0x1A8A4` HP. Ported in `GameSession` + `eventVmSearchOpenOrFind`. |
 | **How to hit** | Any **OP_2A** tile (inventory: Tundara, A1, B1, D1, Middlegate Cavern, Ice Cavern, Sarakin’s Mine, Murray’s Cave, Dragon’s Dominion, …). Temple elemental-orb path that queues `$FE` then auto-Search. Fill all backpacks then overflow via OP_19. |
 | **Watch / dump** | Full UI sequence; Identify key behavior; rating numbers; gold/gems/item assignment order; full-backpack refusal. |
 | **Priority** | **Low–Medium** — state distribute already ported; this is presentation. |

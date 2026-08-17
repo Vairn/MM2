@@ -39,8 +39,9 @@ constexpr int kEscPromptCol = 0x0B;
 constexpr int kEscPromptRow = 0x17;
 
 /* A4-$56E6: 7 str.dat ptrs loaded @ 0x1E962 (after -$56F6 chrome).
- * Temple paints [0..5] @ 0x1DE60; guild paints [3..6] @ 0x1E5FA.
- * Spell rows also get L-N at col $1F from the offer-gate id path. */
+ * Temple paints [0..5] @ 0x1DE60 after 0x1E2AE patches [3..5] to D/E/F + "Spell C".
+ * Guild paints [3..6] @ 0x1E5FA after 0x1E43C patches [3..5] first-byte to A/B/C
+ * and byte 9 to 'S' ("Spell S"); [6] is already "D) Spell S". */
 constexpr const char *kTownSpellMenuCaptions[7] = {
     "A) Restore Cond", "B) Restore Algn", "C) Donations", "D) Spell C",
     "E) Spell C",      "F) Spell C",      "D) Spell S",
@@ -61,6 +62,18 @@ void drawEscFooter(gfx::ScreenCompositor &c)
 {
     /* prompt_esc @ 0x6DA6 — "( 'ESC' to go back )" at (11,23), pen 1. */
     drawCell(c, kEscPromptRow, kEscPromptCol, "( 'ESC' to go back )");
+}
+
+/* XP gate that arms 'T' @ 0x20BD0 (tst -$8(a5) from the 0x20AD2 scc). */
+bool trainingXpEligible(const mm2::events::TownServiceContext &ctx, int slot)
+{
+    Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx, slot);
+    if (!rec) {
+        return false;
+    }
+    const int next_level = static_cast<int>(rec->level) + 1;
+    const uint32_t threshold = mm2_class_xp_for_level(rec->class_id, next_level);
+    return threshold != 0 && threshold != 0xffffffffu && rec->experience >= threshold;
 }
 
 /* Offer-gate id print (0x1DAC6 / 0x1D97A): ASCII level, '-', number at col $1F. */
@@ -168,7 +181,50 @@ bool trySelectMemberByDigit(int &slot, const mm2::events::TownServiceContext &ct
     return true;
 }
 
-/** Draw a str.dat line that may contain embedded `\n` (pub food names). Returns next row. */
+/** Draw one already-`\n`-free line, greedily word-wrapping at the screen's right
+ *  edge (320px / 8px cells = 40 cols, minus the border column) instead of running
+ *  text off-screen — e.g. "Gene Eric learned Mass Distortion for 1000 gp." at a
+ *  ~24-col option column needs 2-3 rows. Returns the row after the last one drawn. */
+int drawWrappedLine(gfx::ScreenCompositor &c, int row, int col, const char *text, uint8_t r, uint8_t g,
+                    uint8_t b)
+{
+    constexpr int kScreenCols = gfx::ScreenCompositor::kWidth / 8;
+    const int max_w = kScreenCols - 1 - col;
+    if (!text || max_w <= 0) {
+        return row;
+    }
+    if (*text == '\0') {
+        drawCell(c, row++, col, "", r, g, b);
+        return row;
+    }
+    while (*text) {
+        int take = static_cast<int>(std::strlen(text));
+        if (take > max_w) {
+            take = max_w;
+            while (take > 0 && text[take] != ' ') {
+                --take;
+            }
+            if (take == 0) {
+                take = max_w; /* single word longer than the line: hard-break it */
+            }
+        }
+        char buf[80];
+        const std::size_t copy =
+            static_cast<std::size_t>(take) < sizeof(buf) - 1 ? static_cast<std::size_t>(take) : sizeof(buf) - 1;
+        __builtin_memcpy(buf, text, copy);
+        buf[copy] = '\0';
+        drawCell(c, row++, col, buf, r, g, b);
+        text += take;
+        while (*text == ' ') {
+            ++text;
+        }
+    }
+    return row;
+}
+
+/** Draw a str.dat line that may contain embedded `\n` (pub food names); each
+ *  `\n`-delimited segment is further word-wrapped by drawWrappedLine. Returns
+ *  the row after the last line drawn. */
 int drawMultiline(gfx::ScreenCompositor &c, int row, int col, const char *text, uint8_t r = 255,
                     uint8_t g = 255, uint8_t b = 255)
 {
@@ -178,18 +234,16 @@ int drawMultiline(gfx::ScreenCompositor &c, int row, int col, const char *text, 
     const char *p = text;
     while (*p) {
         const char *nl = ::strchr(p, '\n');
-        if (nl) {
-            char buf[48];
-            const std::size_t n = static_cast<std::size_t>(nl - p);
-            const std::size_t copy = (n < sizeof(buf) - 1) ? n : sizeof(buf) - 1;
-            __builtin_memcpy(buf, p, copy);
-            buf[copy] = '\0';
-            drawCell(c, row++, col, buf, r, g, b);
-            p = nl + 1;
-        } else {
-            drawCell(c, row++, col, p, r, g, b);
+        char buf[200];
+        const std::size_t n = nl ? static_cast<std::size_t>(nl - p) : std::strlen(p);
+        const std::size_t copy = (n < sizeof(buf) - 1) ? n : sizeof(buf) - 1;
+        __builtin_memcpy(buf, p, copy);
+        buf[copy] = '\0';
+        row = drawWrappedLine(c, row, col, buf, r, g, b);
+        if (!nl) {
             break;
         }
+        p = nl + 1;
     }
     return row;
 }
@@ -268,6 +322,7 @@ void PlayTownServiceUi::begin()
     smith_slot_ = -1;
     smith_mode_ = SmithMode::Buy;
     smith_identify_pending_ = false;
+    result_return_phase_ = Phase::Menu;
     temple_spell_slot_ = -1;
     guild_slot_ = -1;
     /* ASM open skip: first non-hireling for temple/smith/guild/tavern; training
@@ -281,6 +336,12 @@ void PlayTownServiceUi::begin()
     }
     status_[0] = '\0';
     hireling_heal_msg_[0] = '\0';
+    training_feedback_ = TrainingFeedback::None;
+    training_hp_gain_ = 0;
+    training_gained_spells_ = false;
+    training_max_summary_ = false;
+    training_levels_gained_ = 0;
+    training_spell_levels_gained_ = 0;
     if (kind_ == Kind::Temple) {
         mm2_temple_spell_stock(ctx_.map_id, temple_spell_stock_);
         /* Outer temple loop @ 0x1E396: hireling slot opens free leaf 0x1E116. */
@@ -307,8 +368,15 @@ void PlayTownServiceUi::close()
     active_member_ = 0;
     smith_mode_ = SmithMode::Buy;
     smith_identify_pending_ = false;
+    result_return_phase_ = Phase::Menu;
     status_[0] = '\0';
     hireling_heal_msg_[0] = '\0';
+    training_feedback_ = TrainingFeedback::None;
+    training_hp_gain_ = 0;
+    training_gained_spells_ = false;
+    training_max_summary_ = false;
+    training_levels_gained_ = 0;
+    training_spell_levels_gained_ = 0;
 }
 
 const char *PlayTownServiceUi::serviceTitle() const
@@ -366,6 +434,13 @@ void PlayTownServiceUi::showActiveMemberGold()
     mm2_roster_name_to_cstr(rec, name, sizeof(name));
     std::snprintf(status_, sizeof(status_), "%s: %u gold", name,
                   static_cast<unsigned>(rec->gold));
+    holdShopResult(phase_);
+}
+
+void PlayTownServiceUi::holdShopResult(Phase return_to)
+{
+    result_return_phase_ = return_to;
+    phase_ = Phase::ShopResult;
 }
 
 void PlayTownServiceUi::applyHirelingTempleAutoHeal(int party_slot)
@@ -442,8 +517,7 @@ void PlayTownServiceUi::drawTrainingPrompt(gfx::ScreenCompositor &c) const
 
     const int next_level = static_cast<int>(rec->level) + 1;
     const uint32_t threshold = mm2_class_xp_for_level(rec->class_id, next_level);
-    const bool eligible =
-        threshold != 0 && threshold != 0xffffffffu && rec->experience >= threshold;
+    const bool eligible = trainingXpEligible(ctx_, active_member_);
     const int ridx = mm2::events::townSvcRosterIndex(ctx_, active_member_);
     const uint32_t fee = mm2::events::townSvcTrainingCost(rec->level, ctx_.map_id, ridx);
 
@@ -459,6 +533,7 @@ void PlayTownServiceUi::drawTrainingPrompt(gfx::ScreenCompositor &c) const
             drawCell(c, kBandRowFirst + 1, kOptCol, line);
         }
         drawCell(c, kBandRowFirst + 2, kOptCol, "Press 'T' to train");
+        drawCell(c, kBandRowFirst + 3, kOptCol, "Press 'M' to max");
     } else if (threshold == 0 || threshold == 0xffffffffu) {
         drawCell(c, kBandRowFirst + 1, kOptCol, " to level up.");
         drawCell(c, kBandRowFirst + 2, kOptCol, "You need more experience.");
@@ -470,6 +545,70 @@ void PlayTownServiceUi::drawTrainingPrompt(gfx::ScreenCompositor &c) const
         std::snprintf(line, sizeof(line), "Need %u XP", static_cast<unsigned>(remaining));
         drawCell(c, kBandRowFirst + 2, kOptCol, line);
     }
+}
+
+/** Train result panel @ 0x204BA..0x20518 (and the 0x20278 / 0x202EE rejects).
+ *  0x2023A clear_rect_preset(7) has already wiped (15,17)-(38,22), so this
+ *  replaces the trainee prompt rather than overlaying it. */
+void PlayTownServiceUi::drawTrainingResult(gfx::ScreenCompositor &c) const
+{
+    switch (training_feedback_) {
+    case TrainingFeedback::Gained: {
+        char line[32];
+        if (training_max_summary_) {
+            /* Remake 'M': "You gained N levels / X spell levels / and Y hit points". */
+            std::snprintf(line, sizeof(line), "You gained %u level%s",
+                          static_cast<unsigned>(training_levels_gained_),
+                          training_levels_gained_ == 1 ? "" : "s");
+            drawCell(c, 0x13, 0x12, line);
+            int row = 0x14;
+            if (training_spell_levels_gained_ > 0) {
+                std::snprintf(line, sizeof(line), "%u spell level%s",
+                              static_cast<unsigned>(training_spell_levels_gained_),
+                              training_spell_levels_gained_ == 1 ? "" : "s");
+                drawCell(c, row++, 0x12, line);
+            }
+            std::snprintf(line, sizeof(line), "and %u hit points",
+                          static_cast<unsigned>(training_hp_gain_));
+            drawCell(c, row, 0x12, line);
+            break;
+        }
+        /* Cursor (col $14, row $13) "You gained " + N; (col $14, row $14)
+         * " hit points"; optional (col $14, row $15) "and new spells". */
+        std::snprintf(line, sizeof(line), "You gained %u",
+                      static_cast<unsigned>(training_hp_gain_));
+        drawCell(c, 0x13, 0x14, line);
+        drawCell(c, 0x14, 0x14, " hit points");
+        if (training_gained_spells_) {
+            drawCell(c, 0x15, 0x14, "and new spells");
+        }
+        break;
+    }
+    case TrainingFeedback::NeedGold:
+        /* 0x202EE: (col $12, row $13) / (col $12, row $14). */
+        drawCell(c, 0x13, 0x12, "Sorry - you need");
+        drawCell(c, 0x14, 0x12, "more gold.");
+        break;
+    case TrainingFeedback::NotWell:
+        /* 0x20278: condition $26 != 0. */
+        drawCell(c, 0x13, 0x12, "You have to be well");
+        drawCell(c, 0x14, 0x12, "to train here.");
+        break;
+    case TrainingFeedback::None:
+        break;
+    }
+}
+
+void PlayTownServiceUi::dismissTrainingResult()
+{
+    phase_ = Phase::Menu;
+    training_feedback_ = TrainingFeedback::None;
+    training_hp_gain_ = 0;
+    training_gained_spells_ = false;
+    training_max_summary_ = false;
+    training_levels_gained_ = 0;
+    training_spell_levels_gained_ = 0;
+    status_[0] = '\0';
 }
 
 void PlayTownServiceUi::buildGuildStock()
@@ -625,7 +764,7 @@ void PlayTownServiceUi::applyTempleAndReturn(int party_slot)
     default:
         break;
     }
-    phase_ = Phase::Menu;
+    holdShopResult(Phase::Menu); /* 0x1D6C2: hold until key_read, then A-F redraws */
 }
 
 void PlayTownServiceUi::applyGuildBuyAndReturn(int party_slot)
@@ -655,43 +794,69 @@ void PlayTownServiceUi::applyGuildBuyAndReturn(int party_slot)
     } else {
         std::snprintf(status_, sizeof(status_), "Not for sale.");
     }
-    phase_ = Phase::Menu;
     guild_slot_ = -1;
+    holdShopResult(Phase::Menu); /* 0x1D6C2 result hold — same as temple spell buy */
 }
 
-void PlayTownServiceUi::applyTrainingAndReturn(int party_slot)
+void PlayTownServiceUi::applyTrainingAndReturn(int party_slot, bool to_max)
 {
     Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, party_slot);
     if (!rec) {
         return;
     }
-    char name[20];
-    mm2_roster_name_to_cstr(rec, name, sizeof(name));
-    const int ridx = mm2::events::townSvcRosterIndex(ctx_, party_slot);
-    const mm2::events::TownSvcTrainResult r =
-        mm2::events::townSvcTrainLevelUp(*rec, ctx_.map_id, ctx_.rng, ridx);
-    if (!r.eligible) {
-        /* XP gate (no charge): faithful to the engine charging nothing when the
-         * character lacks the experience for the next level. */
-        std::snprintf(status_, sizeof(status_), "%s lacks experience to advance.", name);
-    } else if (!r.paid) {
-        const uint32_t fee = mm2::events::townSvcTrainingCost(rec->level, ctx_.map_id, ridx);
-        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(fee));
-    } else {
-        /* ASM 0x204C8..0x20518: "You gained " + N + " hit points" [, "and new spells"]. */
-        if (r.gained_spells) {
-            std::snprintf(status_, sizeof(status_),
-                          "You gained %u hit points and new spells.",
-                          static_cast<unsigned>(r.hp_gain));
-        } else {
-            std::snprintf(status_, sizeof(status_), "You gained %u hit points.",
-                          static_cast<unsigned>(r.hp_gain));
-        }
-        (void)name;
-        (void)r.cost;
+    status_[0] = '\0';
+    /* 0x2026E tst.b $26: afflicted chars never reach the gold/level-up path. */
+    if (rec->condition != 0) {
+        training_feedback_ = TrainingFeedback::NotWell;
+        phase_ = Phase::TrainingResult;
+        return;
     }
-    /* Training has no sub-menu: stay on the trainee prompt. */
-    phase_ = Phase::Menu;
+    const int ridx = mm2::events::townSvcRosterIndex(ctx_, party_slot);
+    const uint8_t old_spell_level = rec->spell_level;
+    uint16_t hp_total = 0;
+    int levels = 0;
+    bool gained_spells = false;
+    /* 'T' is one ASM level-up. 'M' repeats the same leaf until XP or gold stops. */
+    const int max_steps = to_max ? 80 : 1;
+    for (int step = 0; step < max_steps; ++step) {
+        const mm2::events::TownSvcTrainResult r =
+            mm2::events::townSvcTrainLevelUp(*rec, ctx_.map_id, ctx_.rng, ridx);
+        if (!r.eligible) {
+            /* First key ignored unless XP-eligible (0x20BD0); keep the trainee prompt. */
+            if (step == 0) {
+                return;
+            }
+            break;
+        }
+        if (!r.paid) {
+            if (step == 0) {
+                training_feedback_ = TrainingFeedback::NeedGold;
+                phase_ = Phase::TrainingResult;
+                return;
+            }
+            break;
+        }
+        ++levels;
+        hp_total = static_cast<uint16_t>(hp_total + r.hp_gain);
+        if (r.gained_spells) {
+            gained_spells = true;
+        }
+    }
+    if (levels == 0) {
+        return;
+    }
+    /* 0x204C8..0x20518: "You gained " + N, then " hit points", then optionally
+     * "and new spells" when the 0x20064 leaf returned 1. 'M' uses a cumulative
+     * summary (levels / spell levels / HP) instead. */
+    training_feedback_ = TrainingFeedback::Gained;
+    training_hp_gain_ = hp_total;
+    training_gained_spells_ = gained_spells;
+    training_max_summary_ = to_max;
+    training_levels_gained_ = static_cast<uint8_t>(levels);
+    training_spell_levels_gained_ = (rec->spell_level > old_spell_level)
+                                        ? static_cast<uint8_t>(rec->spell_level - old_spell_level)
+                                        : 0;
+    phase_ = Phase::TrainingResult;
 }
 
 void PlayTownServiceUi::applySmithBuyAndReturn(int party_slot)
@@ -731,8 +896,8 @@ void PlayTownServiceUi::applySmithBuyAndReturn(int party_slot)
             break;
         }
     }
-    phase_ = Phase::SmithItems;
     smith_slot_ = -1;
+    holdShopResult(Phase::SmithItems); /* 0x1C432: preset 7 + pair text + key_read */
 }
 
 void PlayTownServiceUi::applySmithSellAndReturn(int party_slot)
@@ -769,8 +934,8 @@ void PlayTownServiceUi::applySmithSellAndReturn(int party_slot)
             break;
         }
     }
-    phase_ = Phase::SmithItems;
     smith_slot_ = -1;
+    holdShopResult(Phase::SmithItems); /* 0x1C432 result hold — same as buy */
 }
 
 void PlayTownServiceUi::applySmithIdentifyAndReturn(int party_slot)
@@ -782,12 +947,14 @@ void PlayTownServiceUi::applySmithIdentifyAndReturn(int party_slot)
     const mm2::events::SmithItemView &v = smith_view_[smith_slot_];
     char name[20];
     mm2_roster_name_to_cstr(rec, name, sizeof(name));
-    char summary[96];
+    char summary[sizeof(status_)];
     const mm2::events::TownSvcIdentifyResult r = mm2::events::townSvcSmithIdentify(
         *rec, smith_slot_, ctx_.items, v.price, summary, sizeof(summary));
     if (r.identified) {
-        std::snprintf(status_, sizeof(status_), "%s: %s (%u gp).", name, summary, u32(r.cost));
-        smith_identify_pending_ = true; /* 0x1BBD6: hold on backpack list until dismissed */
+        /* Real screen shows only the report (name/gp aren't part of it — see
+         * the WinUAE reference capture); Gold= in the left chrome already
+         * reflects the cost. */
+        std::snprintf(status_, sizeof(status_), "%s", summary);
     } else {
         switch (r.reject) {
         case mm2::events::TownSvcIdentifyReject::Condition:
@@ -804,6 +971,9 @@ void PlayTownServiceUi::applySmithIdentifyAndReturn(int party_slot)
             break;
         }
     }
+    /* 0x1BBD6: hold on backpack list until the next key dismisses it — applies
+     * to rejects too, else "not enough gold" etc. never reaches the screen. */
+    smith_identify_pending_ = true;
     phase_ = Phase::SmithItems;
     smith_slot_ = -1;
 }
@@ -824,7 +994,10 @@ void PlayTownServiceUi::applyTavernFeedingFrenzy()
     } else {
         std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(r.cost));
     }
-    phase_ = Phase::Menu;
+    /* 0x1C902: clear_rect_preset(7) + pair text + key_read, then the A-E menu
+     * redraws. Holding here (not Menu) so status cannot paint over captions. */
+    tavern_tipped_ = false;
+    phase_ = Phase::TavernRumor;
 }
 
 void PlayTownServiceUi::applyTavernStatBoost(int slot)
@@ -851,7 +1024,8 @@ void PlayTownServiceUi::applyTavernStatBoost(int slot)
         std::snprintf(status_, sizeof(status_), "%s bought %s (%u gp).", name,
                       label ? label : "boost", u32(r.cost));
     }
-    phase_ = Phase::Menu;
+    tavern_tipped_ = false;
+    phase_ = Phase::TavernRumor; /* 0x1C902 result hold — see feeding frenzy */
 }
 
 void PlayTownServiceUi::applyTavernTip()
@@ -943,12 +1117,30 @@ void PlayTownServiceUi::applyTavernSpecialty(int food_idx)
         std::snprintf(status_, sizeof(status_), "%s ordered %s (%u gp).", name,
                       food ? food : "meal", u32(r.cost));
     }
-    phase_ = Phase::Menu;
+    tavern_tipped_ = false;
+    phase_ = Phase::TavernRumor; /* 0x1C902 result hold — see feeding frenzy */
 }
 
 void PlayTownServiceUi::handleKey(char ch, bool escape)
 {
     if (!active_) {
+        return;
+    }
+
+    /* 0x20554 / 0x1D6C2 key_read: any key (including Esc) dismisses the result
+     * and returns to the shop prompt — it does not leave the hall. */
+    if (phase_ == Phase::TrainingResult) {
+        if (escape || ch != 0) {
+            dismissTrainingResult();
+        }
+        return;
+    }
+    if (phase_ == Phase::ShopResult) {
+        if (escape || ch != 0) {
+            status_[0] = '\0';
+            phase_ = result_return_phase_;
+            result_return_phase_ = Phase::Menu;
+        }
         return;
     }
 
@@ -966,6 +1158,7 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
             }
             phase_ = Phase::Menu;
             smith_mode_ = SmithMode::Buy;
+            status_[0] = '\0';
             break;
         case Phase::Denied:
             close();
@@ -976,6 +1169,8 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
             phase_ = Phase::Menu;
             status_[0] = '\0';
             tavern_tipped_ = false;
+            break;
+        default:
             break;
         }
         return;
@@ -1026,8 +1221,12 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
 
     switch (phase_) {
     case Phase::Menu:
-        if (kind_ == Kind::Training && ch == 'T') {
-            applyTrainingAndReturn(active_member_);
+        if (kind_ == Kind::Training && (ch == 'T' || ch == 'M')) {
+            /* 0x20BD0: T is accepted only when the XP scc armed -$8(a5).
+             * M is remake QoL: same gate, then train until XP or gold runs out. */
+            if (trainingXpEligible(ctx_, active_member_)) {
+                applyTrainingAndReturn(active_member_, ch == 'M');
+            }
             break;
         }
         if (kind_ == Kind::Temple) {
@@ -1156,6 +1355,10 @@ void PlayTownServiceUi::handleKey(char ch, bool escape)
     case Phase::HirelingTemple:
         /* Digits / # / Esc handled above; A–F / G are not accepted (0x1E21C). */
         break;
+
+    case Phase::ShopResult:
+    case Phase::TrainingResult:
+        break;
     }
 }
 
@@ -1179,6 +1382,20 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
     /* Hireling temple leaf @ 0x1E116: heal/healthy text only — no A–F paid menu. */
     if (phase_ == Phase::HirelingTemple) {
         drawHirelingTempleHeal(c);
+        drawEscFooter(c);
+        return;
+    }
+
+    /* 0x2023A / 0x1D6C2 preset 7: right panel only. Left chrome (name/gold) stays. */
+    if (phase_ == Phase::TrainingResult) {
+        drawLeftChrome(c);
+        drawTrainingResult(c);
+        drawEscFooter(c);
+        return;
+    }
+    if (phase_ == Phase::ShopResult) {
+        drawLeftChrome(c);
+        drawMultiline(c, kBandRowFirst, kOptCol, status_, 160, 255, 160);
         drawEscFooter(c);
         return;
     }
@@ -1229,6 +1446,18 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
     }
 
     if (phase_ == Phase::SmithItems) {
+        /* 0x1BBD6: the identify result holds over the backpack list until the
+         * next keypress dismisses it. The list fills all six option rows, and
+         * the report lines (e.g. "Class rating(s) - ( K P A C S R N B )") are
+         * wider than the option column leaves room for, so this drops the
+         * left member/gold chrome and uses the full band width — otherwise
+         * (as it was) the identify summary is computed and the gold is spent
+         * but nothing ever reaches the screen, or the longer lines clip. */
+        if (smith_identify_pending_ && status_[0]) {
+            drawMultiline(c, kBandRowFirst, kLeftCol, status_, 255, 255, 128);
+            drawEscFooter(c);
+            return;
+        }
         drawLeftChrome(c);
         int row = kBandRowFirst;
         Mm2RosterRecord *buyer = mm2::events::townSvcMemberRecord(ctx_, active_member_);
@@ -1287,6 +1516,14 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
         drawLeftChrome(c);
         if (kind_ == Kind::Training) {
             drawTrainingPrompt(c);
+        } else if ((kind_ == Kind::Temple || kind_ == Kind::Tavern || kind_ == Kind::Smith) &&
+                   status_[0]) {
+            /* Temple A-F, tavern A-E, and smith A-F all fill the six option rows
+             * (0x11..0x16), the same row the common status_ footer below
+             * normally uses — drawing both garbled the last caption together
+             * with the feedback text. Show the result in place of the menu
+             * instead, same as the hireling-heal leaf already does. */
+            drawMultiline(c, kBandRowFirst, kOptCol, status_, 160, 255, 160);
         } else if (kind_ == Kind::Temple) {
             int row = kBandRowFirst;
             Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
@@ -1328,7 +1565,8 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
             drawCell(c, kBandRowFirst + 4, kOptCol, "E) Sell Items");
             drawCell(c, kBandRowFirst + 5, kOptCol, "F) Identify Items");
         } else if (kind_ == Kind::MageGuild) {
-            /* Captions A4-$56E6[3..6] @ col $14, rows $12..$15 (index+0xF @ 0x1E5E2);
+            /* Captions A4-$56E6[3..6] @ col $14, rows $12..$15 (index+0xF @ 0x1E5E2)
+             * after 0x1E43C patches [3..5] to "A/B/C) Spell S"; [6] is "D) Spell S".
              * L-N @ $1F; cost @ $23 (0x1E5FA+). */
             constexpr int kGuildRow0 = 0x12;
             Mm2RosterRecord *rec = mm2::events::townSvcMemberRecord(ctx_, active_member_);
@@ -1338,7 +1576,9 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
                     rec ? mm2::events::townSvcSpellOfferGold(
                               *rec, mm2::gameplay::SpellSchool::Sorcerer, s.spell_index, s.gold)
                         : 0u;
-                drawCell(c, kGuildRow0 + i, kGuildOptCol, kTownSpellMenuCaptions[3 + i]);
+                char cap[16];
+                std::snprintf(cap, sizeof(cap), "%c) Spell S", char('A' + i));
+                drawCell(c, kGuildRow0 + i, kGuildOptCol, cap);
                 char id_txt[8];
                 formatSpellIdLn(id_txt, sizeof(id_txt), mm2::gameplay::SpellSchool::Sorcerer,
                                 s.spell_index);
@@ -1360,7 +1600,11 @@ void PlayTownServiceUi::render(gfx::ScreenCompositor &c) const
         drawEscFooter(c);
     }
 
-    if (status_[0] && phase_ != Phase::TavernRumor) {
+    /* Temple / tavern / smith already drew status_ in place of their six-row
+     * menus — the common footer here would redraw it a second time at
+     * kBandRowLast. */
+    if (status_[0] && phase_ != Phase::TavernRumor && kind_ != Kind::Temple &&
+        kind_ != Kind::Tavern && kind_ != Kind::Smith) {
         drawMultiline(c, kBandRowLast, kOptCol, status_, 160, 255, 160);
     }
 }

@@ -122,6 +122,20 @@ int firstSeqBlock(const mm2_anm_sequence_table *seq)
     return nextSeqBlock(seq, -1);
 }
 
+int lastSeqBlock(const mm2_anm_sequence_table *seq)
+{
+    int last = firstSeqBlock(seq);
+    if (!seq) {
+        return last;
+    }
+    for (int b = 0; b < seq->block_count; ++b) {
+        if (seqBlockHasPairs(seq, b)) {
+            last = b;
+        }
+    }
+    return last;
+}
+
 }  // namespace
 
 void ViewportAnmOverlay::freePcState()
@@ -959,6 +973,59 @@ void ViewportAnmOverlay::blitCanvasAt(gfx::ScreenCompositor &c, int dst_x, int d
     blitAt(c, dst_x, dst_y);
 }
 
+bool ViewportAnmOverlay::placeOverlayFrame(int frame_idx)
+{
+    /* 0x23C8C: tst.w pos; ble → simple path (cel 0). pos >= object+$4 → same. */
+    animating_ = false;
+    int frame = frame_idx;
+    if (frame <= 0) {
+        frame = 0;
+    }
+    if (pc_mode_) {
+        if (frame >= pc_pic_.frame_count) {
+            frame = 0;
+        }
+        return setPcComposedFrame(frame);
+    }
+    const mm2_anm_file *anm = anmFile();
+    if (!anm_loaded_ || !anm) {
+        return false;
+    }
+    if (frame >= static_cast<int>(anm->frame_count)) {
+        frame = 0;
+    }
+    return setComposedFrame(frame);
+}
+
+void ViewportAnmOverlay::playLastSequenceHold()
+{
+    if (!anm_loaded_ && !pc_mode_) {
+        return;
+    }
+    resetPlayback(AnmLoopMode::HoldLast);
+    if (!use_sequence_) {
+        const mm2_anm_file *anm = anmFile();
+        if (anm && anm->frame_count > 1) {
+            (void)placeOverlayFrame(mm2_anm_default_overlay_composed_frame(anm));
+        }
+        return;
+    }
+    seq_block_ = lastSeqBlock(&seq_);
+    const int n = mm2_anm_seq_block_pair_count(&seq_, seq_block_);
+    if (n <= 0) {
+        return;
+    }
+    seq_step_ = n - 1;
+    delay_remaining_ = 0;
+    animating_ = false;
+    const int frame = wrapAnmFrame(anmFile(), mm2_anm_seq_frame_at(&seq_, seq_block_, seq_step_));
+    if (pc_mode_) {
+        (void)setPcComposedFrame(frame);
+    } else {
+        (void)setComposedFrame(frame);
+    }
+}
+
 void ViewportAnmOverlay::blitCentered(gfx::ScreenCompositor &c, int placement_index) const
 {
     constexpr int kView3DViewportBottomY = 127;
@@ -1009,29 +1076,13 @@ void ViewportAnmOverlay::blitCenteredInViewport(gfx::ScreenCompositor &c, int pl
         return;
     }
 
-    const int raw_x = dst_x;
-    const int raw_y = dst_y;
-    if (dst_x < slot_x) {
-        dst_x = slot_x;
-    }
-    if (dst_x + w_ > slot_x + slot_w) {
-        dst_x = slot_x + slot_w - w_;
-    }
-    if (dst_y < slot_y) {
-        dst_y = slot_y;
-    }
-    if (dst_y + h_ > slot_y + slot_h) {
-        dst_y = slot_y + slot_h - h_;
-    }
-    // #region agent log
-    if (pc_mode_ && (dst_x != raw_x || dst_y != raw_y)) {
-        char data[160];
-        std::snprintf(data, sizeof(data),
-                      "{\"raw_x\":%d,\"raw_y\":%d,\"dst_x\":%d,\"dst_y\":%d,\"w\":%d,\"h\":%d}", raw_x,
-                      raw_y, dst_x, dst_y, w_, h_);
-        agentDbgLog("B", "ViewportAnmOverlay.cpp:blitCenteredInViewport", "blit_clamped", data);
-    }
-    // #endregion
+    /* The retail simple-path coords (64, 40) were sized for the full explore
+     * viewport (kViewW×kViewH); combat's round hood box is narrower/shorter,
+     * so clamping those raw coords into the box pinned the sprite to one
+     * edge instead of centering it (feet/side flush, gap opposite side).
+     * Center the composed canvas in the box instead. */
+    dst_x = slot_x + (slot_w - w_) / 2;
+    dst_y = slot_y + (slot_h - h_) / 2;
     blitAt(c, dst_x, dst_y);
 }
 

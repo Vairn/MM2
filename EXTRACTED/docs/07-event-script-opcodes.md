@@ -53,7 +53,7 @@ When this doc and the C++ port disagree, **update the doc** (or document a delib
 | `11` | `0x162DC` | var | if !`cond_flag` → skip N tokens |
 | `12` | `0x16300` | **12** | fixed encounter: 10 monster ids + 2 tail bytes → combat setup. See §OP_12/13 |
 | `13` | `0x16386` | **10** | seeded-random encounter (10 ids; mode 0 + random picker) |
-| `14` | `0x16398` | 0 | clear tile event bit7 (`-$54BA` + `-$55D6`) |
+| `14` | `0x16398` | 0 | ASM: clear collision bit7 (`-$54BA` + `-$55D6`, ambient gate). **Port deviation:** also sets a per-visit resolved flag the triplet walk checks; reset on `enterLocation` |
 | `15` | `0x16426` | **3** | party field **test**: member-spec, selector, val → OR into `cond_flag` (`EventFieldMap`) |
 | `16` | `0x16520` | 2 | **party item scan** (arg1 discarded; arg2 = item id): equipped `+0x28` + backpack `+0x3A`; cond = match count on first hit member |
 | `17` | `0x165A4` | 2 | `cond_flag = *var(id)` **raw byte** (2nd arg discarded); `eventVmLoadVar` |
@@ -268,13 +268,13 @@ static pc-relative calls (statically resolvable):
 | `129` (`0x81`) | `jsr -$7DA0(0)` | special (arg 0) |
 | `130` (`0x82`) | `jsr -$7DA0(1)` | special (arg 1) |
 | `131` (`0x83`) | `jsr -$7DA0(2)` | special (arg 2) |
-| `201` (`0xC9`) | `jsr 0x19ab4` | (static) quest handler |
-| `202` (`0xCA`) | `jsr 0x19ac4` | (static) quest handler |
+| `201` (`0xC9`) | `jsr 0x19ab4` | **Hoardall quest handler** → `0x1980A` A–D loop. D "Lord's Quest" arms +`$7C` bit2 (mask `$08`, mode bit0 clear) then prints exe briefing `0x189DE`: *"Your party must bring me the three hidden swords of chivalry:  Valor,  Honor, and Nobility.  Good luck!"* (`-$6B6E` 4-line block, rows `$12..$15`). Reward gate = items `0xE2/0xE3/0xE4` (@ `0x18FBA`) |
+| `202` (`0xCA`) | `jsr 0x19ac4` | **Lord Slayer trophy handler** (Hillstone; Woodhaven `loc 56` uses `0xC9`). Same `0x4000A` A–D loop with drink mode (`mask $10`, bit0 set); prints exe briefing `0x18A4C`: *"Your party must defeat the three royal envoys of evil that wreak havoc to the north.  One flies, one slithers, and one crawls.  Good luck!"* |
 | `203` (`0xCB`) | `jsr 0x1445a` | (static) |
 | `204` (`0xCC`) | `jsr 0x1456e` | (static) |
 | `205` (`0xCD`) | `jsr 0x145e2` | (static) |
 | `206` (`0xCE`) | `jsr 0x146e4` | (static) |
-| `207` (`0xCF`) | `jsr 0x1480a` | (static) |
+| `207` (`0xCF`) | `jsr 0x1480a` | **Wayback machine** (Pinehurst loc 57 evt 19 @ `(2,5)`/N). Party walk `btst #1,$80`; deny → `"If you wish to use the wayback machine"` / `"see Lord Peabody."`; else `"What era do you desire (1-8)?"` then teleport via A4-`$6CE4`/`$6CDC`/`$6CD4`. **PORTED** |
 | `226` (`0xE2`) | `jsr 0x18204` | (static) |
 | `253` (`0xFD`) | `jsr 0x1493c`; then if `-$79EA==2` copy `-$79AC`→`-$79F2`, `-$7946=1`, `jsr 0x1a1f8`; elif `==3` `jsr -$7ED2`; else `-$79EA=1` | endgame/transition |
 | *default* | `jsr 0x15EDC` (selector→category binner, table below) | shops/temple/training engine |
@@ -302,6 +302,7 @@ from `str.dat`** (`11-str-decoded.txt`) and either opens the ported menu (when
 | `0x08` arena | **PORTED** ticket-check/combat engine (`0x9D76`) | "Sorry, but you must have a ticket…" / "The games master accepts…" | **Arena ticket** items `0xD0`–`0xD3`; Middlegate `(2,13)`. **Not** farthings. |
 | `0x0A` fountain | NPC y/n intro ("Fanciful Feldecarb Fountain…") | shared string bank (loc 60) str[23] | **Mislabel in older notes** — Feldecarb is selector **`0x0E`**, not `0x0A`. `0x0A` is Nordon goblet. |
 | `0x0D` enroll | NPC y/n intro ("A sleepy conjurer yawns…") | shared string bank (loc 60) str[21] | 20gp deduct + roster+$0B write transaction (`-$7DA0` → `0xD89C` → `0x1A1B2`) deferred |
+| `0xE2` jester | **PORTED** joke-of-the-day (`0x18204`) | str.dat bank 0, 22×4 lines | `day[era] % 22`; prints rows `$13..$16` over the party band; SPACE. Hillstone / Woodhaven / Luxus. **Not** arena (that is `0x08`). |
 
 **Intro y/n → menu (2026-07):** pub (`0x03`) and temple (`0x04`) always show the
 str.dat greet and wait for y/n before `townSvcRunTavern` / `townSvcRunTemple`
@@ -609,7 +610,7 @@ pending-event latch via `-$7F1A` → `A4-$7952` (combat-engine territory).
 exactly and sets `MM2_GS_SCRIPT_ABORT`. The combat run (`-$7EDE`) and its
 post-latch (`-$7F1A`→`-$7952`) are the **unported combat engine**; combat
 victory (`A4-$77BD`, read by `OP_2B`) is set by `combat_victory_rewards`
-@ `0x12438`, **not** by this handler — so the old MVP that faked
+@ `0x12438` (and also Hide/Bribe success at `0x13116`/`0x130C0`), **not** by this handler — so the old MVP that faked
 "You are attacked!/Victory!" text and set the victory latch was a fabrication
 and was removed. GS field constants: `MM2_GS_MONSTER_SLOTS` /
 `MM2_GS_ENCOUNTER_OVERFLOW_TYPE` / `MM2_GS_ENCOUNTER_MODE` /
@@ -882,7 +883,7 @@ incomplete; **Unknown** = behaviour not traced.
 | `10`/`11` | Verified | Conditional token skip; full `-$6CC8` length table now extracted byte-exact and ported (`eventVmTokenDelta`, includes the `OP_00`/`OP_25` ROM quirks — see §Notes on `*_SKIPTOK` Opcodes) |
 | `12` | Verified* | 10 monster ids → `A4-$11DE`; mode=0x80; **tail1=`-$11D4` overflow/breed type, tail2=`-$77BE` live count**. Setup + `CombatSession::enter` ported; *fight-depth Partial (doc 35 / doc 56 §4) |
 | `13` | Verified* | Same setup, mode=0 (seeded-random); clears tail fields; random picker `0x1213E` ported in `encounterRunRandomPicker`. *Same fight-depth gap as OP_12 |
-| `14` | Verified | Clear tile event / visited bit7 |
+| `14` | Verified* | ASM: clear tile event / visited bit7 (ambient). *Port: also marks the tile resolved for the triplet walk until map reload (deliberate deviation; collision bit7 is not a scripted-event latch) |
 | `15` | Verified | Party field test @ `0x16426`: member-spec 0=all (N..1), 1..8=one, 9=selected (`-$5D42`/`-$5D3F`); cond \|= (val? field&val : field). Field map via `0x17766` |
 | `16` | Verified | Party item-presence scan (arg1 discarded, arg2 = item id). Behavior byte-exact; port now scans `rec[0x28+m]`/`rec[0x3A+m]` (m=0..5) over party. NOTE: the 6-byte stride-1 read implies equipped/backpack store **6 item-ids contiguously** (SoA), not the interleaved id/bonus/flags the roster struct currently models — flagged for the roster team |
 | `17` | Verified | Load script variable group → cond (2nd byte discarded); raw byte |
@@ -903,7 +904,7 @@ incomplete; **Unknown** = behaviour not traced.
 | `28` | Verified | Backpack-only consume (`+$3A`); 1st arg discarded; always consumes on hit → cond |
 | `29` | Verified | Force script abort |
 | `2A` | Verified | 14-byte treasure/reward block (u24 gold/exp, u16 gems, 3× id/charges/flags triplets). Fills the found-item buffer (`A4-$3F10` gold / `-$3F12` gems / `-$3F1C`-`-$3F19`-`-$3F16` items) + sentinel `A4-$794C=$FF`, byte-exact via `mm2_found_items_op2a_fill`. Does NOT distribute to the party (that is the deferred Search payoff `0x1B19C`); the old port's immediate member-0 deposit was a fabrication and was removed. See §Found-item / treasure buffer |
-| `2B` | Verified | Token skip only when `A4-$77BD` (combat-victory latch) set; ASM-traced byte-exact @ `0x16D74`. Latch set by `CombatSession::finishVictory` @ `0x12438` (not by the opcode itself) |
+| `2B` | Verified | Token skip only when `A4-$77BD` (combat-victory latch) set; ASM-traced byte-exact @ `0x16D74`. Latch set by `CombatSession::finishVictory` @ `0x12438`, and also by Hide (`0x13116`) / Bribe (`0x130C0`) success (not by the opcode itself) |
 | `2C` | Verified | Add `u8` to word `-$79B8`; `EXIT_FLAGS \|= 1` |
 | `2D` | Verified | Match party class/sex/race nibble (any/all mode); 2-value variant when arg1 has no high bits |
 | `2E` | Verified | OR arg2 into member `+(arg1-0x6E)+0x51` for two specific classes ({4,2}/{3,1}) |
@@ -1045,6 +1046,12 @@ overlay", not "always Arena". See `game/src/events/EventTownServices.cpp`
 `EventTownServices.cpp` case `0x64`. "Poorman's Portal" is a **default-range**
 selector (`0x11`), dispatched through the `0x15EDC` bin → `event_dat_loader`
 overlay path (see §5 correction above), not an explicit high selector.
+
+**Correction (2026-08):** `0xE2` is **not** the arena. Arena is explicit
+selector `0x08` (`0x9D76`). `0xE2` is the castle-jester joke engine
+(`jsr 0x18204`): str.dat bank 0, 22 jokes × 4 lines, `day % 22`. The
+default-range bin `{0xE3..0xF3, cat 0x45, −0xE2}` starts at **`0xE3`**, so
+`0xE2` must not fall through to overlay dispatch.
 
 **Your answer:** ___
 

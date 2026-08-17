@@ -855,7 +855,9 @@ async function runTownService(ctx, sel, title, sprite) {
         if (drink) svcDrinkEncodePurchase(party, ch.charCodeAt(0) - 65);
         else svcFoodEncodePurchase(party, ch.charCodeAt(0) - 65);
         await waitForSpace(
-          "The quest I have decided upon for your\nparty, is to seek the target.",
+          drink
+            ? "The quest I have decided upon for your\nparty, is to seek the foe."
+            : "The quest I have decided upon for your\nparty, is to seek the item.",
           sprite,
           0x0e
         );
@@ -869,7 +871,21 @@ async function runTownService(ctx, sel, title, sprite) {
           note("OP_0E lord arm (none) — re-prompt");
           continue;
         }
-        await waitForSpace("Lord's Quest accepted.", sprite, 0x0e);
+        /* 0x199ca → 0x191a6 Lord's Quest arm; briefing table $6B6E prints the
+         * named objective (0x189DE Hoardall "hidden swords" / 0x18A4C Slayer
+         * "royal envoys"), not the generic A–C "seek the target" line. */
+        await waitForSpace(
+          drink
+            ? "Your party must defeat the three royal\n" +
+              "envoys of evil that wreak havoc to the\n" +
+              "north.  One flies, one slithers, and one\n" +
+              "crawls.  Good luck!"
+            : "Your party must bring me the three\n" +
+              "hidden swords of chivalry:  Valor,\n" +
+              "Honor, and Nobility.  Good luck!",
+          sprite,
+          0x0e
+        );
         note(`OP_0E lord arm (${armed})`);
         break;
       }

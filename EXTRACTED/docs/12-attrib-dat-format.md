@@ -39,13 +39,13 @@ environment, world-adjacency, and roof data for each of the 60 map screens.
 | `0x11` | 1 | sublayout param | observed | Read/compared during screen setup (`0x12F58`). |
 | `0x12` | 1 | `door_strength` | **asm-confirmed** | Materialized to `A4-$5608`; consumed by the **bash** handler @ `0x9C2A`. See `MM2_ATTRIB_OFF_DOOR_STRENGTH` / `mm2_attrib_door_strength()` in `mm2_attrib_codec.h`. |
 | `0x13` | 1 | `door_trap` | **asm-confirmed** | Materialized to `A4-$5607`; consumed by the **unlock** handler @ `0x20D6E`. Not a second coordinate pair — was mislabeled "sublayout params" in older notes. See `MM2_ATTRIB_OFF_DOOR_TRAP` / `mm2_attrib_door_trap_byte()`. |
-| `0x14` | 1 | sublayout param | observed | Read/compared during screen setup (`0x1A8B4`). |
+| `0x14` | 1 | `trap_shift` | **asm-confirmed** | Materialized to `A4-$5606`. Chest trap HP @ `0x1A8A4` doubles `-$690C[env]` this many times. |
 | `0x15` | 1 | label / transition hi | strong | Outside: legacy "Outside Area: XX" label byte. Interior: high byte of the town↔cavern `complex_id`. |
 | `0x16` | 1 | `recall_coord` | **asm-confirmed** | Packed `(Y<<4)|X` destination position. Unpacked at `0xB2DC` → `-$79F0`/`-$79F1`, paired with `0x18`. (Forms the low byte of `complex_id` for interiors.) |
 | `0x17` | 1 | `level/floor` (interior) | strong | `0x01` for town/upper level, `0x02` for its cavern; higher for deeper castle floors. `0x00` outside. |
 | `0x18` | 1 | `recall_screen` | **asm-confirmed** | Destination screen id: copied into the current-screen index `-$79F2` at `0xB2F2` by a command handler (family at `0xA816`–`0xB3B6`) gated by flag bit 6. Interior screens point to their overland location (Surface / Town-Portal style recall); outside: equals own `area_id`. |
 | `0x19` | 1 | pad | confirmed-zero | `0x00` in every record. |
-| `0x1A` | 1 | `flags` | **asm-confirmed** | Screen behaviour bitfield; bits individually `btst`-tested: bit0 (`0xBCCA`), bit3 (`0xBB98`), bit4 (`0xADE8`), bit5 (`0xB006`), bit6 (`0xB2C2`/`0xAAEE`/`0xB102`). Bit 6 gates the `0x18` transition. Often `0x80` in caverns/castles. |
+| `0x1A` | 1 | `flags` | **asm-confirmed** | Screen behaviour bitfield; bits individually `btst`-tested: bit0 (`0xBCCA` Entrapment fail), bit3 (`0xBB98` Time Distortion fail), bit4 (`0xADE8` Teleport fail), bit5 (`0xB006` Jump/Etherealize fail), bit6 (`0xB2C2`/`0xAAEE`/`0xB102`). Bit 6 gates the `0x18` transition. Often `0x80` in caverns/castles. |
 | `0x1B` | 1 | flags2 | observed | Nonzero on a few screens (`0xB0`,`0xD0`,`0xE0`). |
 | `0x1C`..`0x1F` | 4 | tail | mostly-zero | Set only on elemental planes (41..44: `0x1E/0x1F`) and a few others. |
 | `0x20`..`0x3F` | 32 | `roof_bits` | confirmed | 256-bit roof bitmap, 1 bit per tile of the 16×16 screen. Bit order: tile `t` ⇒ byte `0x20 + (t>>3)`, bit `t&7`. (`mm2ed.bb` reads LSB-first per byte and reverses tile order.) |

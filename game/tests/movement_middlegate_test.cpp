@@ -134,6 +134,35 @@ void testOutdoorTerrainSkills(mm2::world::MapWorld &world, mm2::GameStateView &g
            "Walk on Water allows water step", fails);
 }
 
+void testCantSeeGate(mm2::world::MapWorld &world, mm2::GameStateView &gs, int &fails)
+{
+    /* session_interaction_gate @ 0x53C0: light suppresses; else flags>=$80 or S-dark. */
+    expect(world.enterScreen(0), "re-enter Middlegate for can't-see", fails);
+    gs.setScreenId(0);
+    gs.setCoordX(7);
+    gs.setCoordY(3);
+    mm2::gameplay::materializeScreenAttrib(gs, world);
+    mm2::gameplay::syncCurrentCellFlags(gs, world);
+    gs.setLightFactor(0);
+    mm2::gameplay::sessionInteractionGate(gs);
+    expect(mm2_gs_u8(gs.a4(), MM2_GS_CANT_SEE_FLAG) == 0,
+           "town flags<$80 and no S-dark → can see without light", fails);
+
+    expect(world.enterScreen(17), "enter Middlegate Cavern (loc 17)", fails);
+    gs.setScreenId(17);
+    mm2::gameplay::materializeScreenAttrib(gs, world);
+    mm2::gameplay::syncCurrentCellFlags(gs, world);
+    gs.setLightFactor(0);
+    mm2::gameplay::sessionInteractionGate(gs);
+    expect(mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) >= 0x80, "cavern 17 attrib flags >= $80", fails);
+    expect(mm2_gs_u8(gs.a4(), MM2_GS_CANT_SEE_FLAG) != 0,
+           "cavern flags>=$80 and no light → can't see", fails);
+
+    gs.setLightFactor(1);
+    mm2::gameplay::sessionInteractionGate(gs);
+    expect(mm2_gs_u8(gs.a4(), MM2_GS_CANT_SEE_FLAG) == 0, "light factor suppresses can't-see", fails);
+}
+
 }  // namespace
 
 int main(int argc, char **argv)
@@ -167,6 +196,15 @@ int main(int argc, char **argv)
     const mm2::gameplay::MoveResult s_block = mm2::gameplay::step(world, gs, true);
     expect(s_block.blocked && !s_block.moved, "step S from (7,3) blocked", fails);
     expect(gs.coordX() == 7 && gs.coordY() == 3, "blocked step unchanged", fails);
+
+    /* Remake no-clip: ignore the 0x9424 wall gate, still stay on the map. */
+    const mm2::gameplay::MoveResult s_clip =
+        mm2::gameplay::step(world, gs, true, nullptr, nullptr, true);
+    expect(s_clip.moved && !s_clip.blocked, "noclip steps S through wall", fails);
+    expect(gs.coordX() == 7 && gs.coordY() == 2, "noclip S from (7,3) -> (7,2)", fails);
+    gs.setCoordY(3);
+    gs.setFacingKey('S');
+    expect(gs.coordX() == 7 && gs.coordY() == 3, "restore (7,3) after noclip", fails);
 
     /* Forward N: first gate open -> (7,4). */
     gs.setFacingKey('N');
@@ -205,6 +243,7 @@ int main(int argc, char **argv)
 
     testDoorLockRotation(fails);
     testOutdoorTerrainSkills(world, gs, fails);
+    testCantSeeGate(world, gs, fails);
 
     if (fails == 0) {
         std::printf("OK: movement_middlegate_test (outdoor skills + water)\n");

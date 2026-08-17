@@ -52,6 +52,7 @@ int mm2_create_endurance_hp_bonus(uint8_t endurance);
 int mm2_create_speed_ac_bonus(uint8_t speed);
 int mm2_create_primary_sp_per_level(int class_id, const Mm2CreateStats *modified);
 int mm2_create_class_hp_base(int class_id);
+/** Class table A4-$777A → roster+$1E: Robber 30, Ninja 10, else 0. */
 uint8_t mm2_create_starting_thievery(int class_id);
 
 void mm2_create_build_record(const Mm2PendingCharacter *pending, Mm2RosterRecord *out);

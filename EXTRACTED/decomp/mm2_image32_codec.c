@@ -396,7 +396,8 @@ void mm2_image32_free(mm2_image32_file *img)
     memset(img, 0, sizeof(*img));
 }
 
-mm2_image32_error mm2_image32_decode_buffer(const uint8_t *data, size_t size, mm2_image32_file *out)
+static mm2_image32_error decode_buffer_ex(const uint8_t *data, size_t size,
+                                          const uint8_t (*palette_rgb)[4], mm2_image32_file *out)
 {
     size_t off = 0;
     size_t info_off;
@@ -438,6 +439,18 @@ mm2_image32_error mm2_image32_decode_buffer(const uint8_t *data, size_t size, mm
     if (err != MM2_IMAGE32_OK) {
         mm2_image32_free(out);
         return err;
+    }
+    if (palette_rgb) {
+        int pi;
+        for (pi = 0; pi < MM2_IMAGE32_PALETTE_COLORS; ++pi) {
+            out->palette_rgba[pi][0] = palette_rgb[pi][0];
+            out->palette_rgba[pi][1] = palette_rgb[pi][1];
+            out->palette_rgba[pi][2] = palette_rgb[pi][2];
+#if defined(MM2_CODEC_AMIGA)
+            out->palette_pen[pi] = ((uint32_t)palette_rgb[pi][0] << 16) |
+                                   ((uint32_t)palette_rgb[pi][1] << 8) | (uint32_t)palette_rgb[pi][2];
+#endif
+        }
     }
 
     cur = pal_off + 64u;
@@ -481,7 +494,13 @@ mm2_image32_error mm2_image32_decode_buffer(const uint8_t *data, size_t size, mm
     return MM2_IMAGE32_OK;
 }
 
-mm2_image32_error mm2_image32_load_file(const char *path, mm2_image32_file *out)
+mm2_image32_error mm2_image32_decode_buffer(const uint8_t *data, size_t size, mm2_image32_file *out)
+{
+    return decode_buffer_ex(data, size, NULL, out);
+}
+
+static mm2_image32_error load_file_ex(const char *path, const uint8_t (*palette_rgb)[4],
+                                      mm2_image32_file *out)
 {
     FILE *fp;
     long fsize_l;
@@ -546,10 +565,21 @@ mm2_image32_error mm2_image32_load_file(const char *path, mm2_image32_file *out)
         return MM2_IMAGE32_ERR_IO;
     }
 
-    err = mm2_image32_decode_buffer(buf, fsize, out);
+    err = decode_buffer_ex(buf, fsize, palette_rgb, out);
     free(buf);
     if (err == MM2_IMAGE32_OK) {
         image32_set_debug_label(out, path);
     }
     return err;
+}
+
+mm2_image32_error mm2_image32_load_file(const char *path, mm2_image32_file *out)
+{
+    return load_file_ex(path, NULL, out);
+}
+
+mm2_image32_error mm2_image32_load_file_with_palette(
+    const char *path, const uint8_t palette_rgba[MM2_IMAGE32_PALETTE_COLORS][4], mm2_image32_file *out)
+{
+    return load_file_ex(path, palette_rgba, out);
 }

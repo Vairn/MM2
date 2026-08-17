@@ -5,8 +5,7 @@
 //   0x1213E/.. 0x11F0A random picker (mm2/combat/EncounterPicker.h)
 //   0x12A22            round loop / initiative scan
 //   0x12430            combat_victory_rewards (XP split, victory latch)
-//   0x11646            combat_defeat_retreat (ends the fight when the whole
-//                       party is down; also used by a successful Run)
+//   0x11646            combat_defeat_retreat (wipe + successful Run; NOT Hide/Bribe)
 //
 // Per-hit to-hit/damage dice math is ported from 0x10478 / 0x112DE (see
 // CombatSession.cpp). Party HP: combat damages roster +$5E (codec hp_max =
@@ -66,6 +65,7 @@ public:
         launch_ = launch;
     }
     void bindMonsters(const Mm2MonstersFile *monsters) { monsters_ = monsters; }
+    const Mm2MonstersFile *monsters() const { return monsters_; }
     void bindItems(const Mm2ItemsFile *items) { items_ = items; }
     void bindRng(gameplay::Rng *rng) { rng_ = rng; }
 
@@ -159,6 +159,15 @@ public:
     /** Monster slot (0..10) currently acting in the round loop (A4-$4F7), or -1. */
     int activeMonsterSlot() const { return active_monster_slot_; }
 
+    /** Live battle slot for developer overlay (nullptr if out of range). */
+    const CombatMonster *monsterSlot(int i) const
+    {
+        if (i < 0 || i >= MM2_GS_MONSTER_BATTLE_SLOTS) {
+            return nullptr;
+        }
+        return &slots_[i];
+    }
+
     /** Picture disk index (monsters.dat PIC&$7F) for the first alive battle slot —
      *  combat hood BOB leader. -1 if none. */
     int leaderSpriteDiskIndex() const;
@@ -173,9 +182,20 @@ public:
     bool tickSheetCastAux(GameStateView &gs, char key);
     /** True while sheet cast awaits party/item/monster pick outside combat. */
     bool sheetCastPending() const { return exploration_cast_; }
+    /** 0xCC18 On whom / 0xCCE8 "'Return' to cast" stay on the character sheet. */
+    bool sheetCastKeepsSheet() const { return exploration_cast_ && explore_on_whom_; }
 
     /** 0x4AAA (+ 0xFD8C/0xFE00 front-rank expand on fall). */
     void applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint16_t dmg, const char *mon_name);
+
+    /** Remake-only combat cheats (F11 Monsters page). Not retail. */
+    bool devForceWin(GameStateView &gs);
+    bool devForceFlee(GameStateView &gs);
+    int devSleepAll(GameStateView &gs);
+    bool devKillSlot(GameStateView &gs, int slot);
+    int devFirstAliveSlot() const { return firstAliveMonster(); }
+    void setDevInvulnerable(bool on) { dev_invulnerable_ = on; }
+    bool devInvulnerable() const { return dev_invulnerable_; }
 
 private:
     struct ArenaReward {
@@ -193,11 +213,13 @@ private:
     /** Command capability flags @ 0x11866 for the active character. */
     void commandFlagsForActiveSlot(bool &melee, bool &shoot, bool &cast) const;
     void applySurpriseRoll(GameStateView &gs);
+    /** 0x12D42 jsr -$7EFC → 0x4B60: mean party thievery → A4-$5E4E. */
+    void seedHideThresh(GameStateView &gs);
     void startRoundLoop(GameStateView &gs, const world::MapWorld &world);
     void resolvePartyAttack(GameStateView &gs, const world::MapWorld &world);
     void beginBribeSubmenu(GameStateView &gs);
-    bool tickBribeSubmenu(GameStateView &gs, char key, bool escape);
-    void resolveBribeTry(GameStateView &gs);
+    bool tickBribeSubmenu(GameStateView &gs, const world::MapWorld &world, char key, bool escape);
+    void resolveBribeTry(GameStateView &gs, const world::MapWorld &world);
     void resolvePartyHide(GameStateView &gs, const world::MapWorld &world);
     void resolvePartyRun(GameStateView &gs, const world::MapWorld &world);
     void runUntilDecisionOrEnd(GameStateView &gs, const world::MapWorld &world);
@@ -272,12 +294,21 @@ private:
     void seedCombatStaticTables(GameStateView &gs);
     /** Fly sector table @ A4-$7130 / data 0xECE — also needed for explore cast. */
     void seedFlyScreenTable(GameStateView &gs);
-    /** 0x10894: resist/halve/status/damage; messages + 0x10ED4 HP apply. */
+    /** 0x10894: resist/halve/status/damage; messages + 0x10ED4 HP apply.
+     *  Retail jsr $132e6 after each target (0x10B24) before the next hit, so
+     *  AoE kills compact one slot per ack instead of wiping the pack at once. */
     void applySpell108BC(GameStateView &gs, int start_slot, int hit_count, uint8_t mode_d);
+    bool applySpell108BCNext(GameStateView &gs);
+    bool continueSpellApply108BC(GameStateView &gs);
+    void finishSpellApply108BC(GameStateView &gs);
+    /** Moon Ray party heal after 0x10894 (0xC566), not between targets. */
+    void applyMoonRayPartyHeal(GameStateView &gs);
     /** 0x10ED4: status wake + HP subtract / kill; returns true if killed. */
     bool applyHp10ED4(GameStateView &gs, int slot, uint16_t dmg);
     /** 0x10CCE: shift parallel monster arrays left from slot; dec live. */
     void compactMonsterSlot(GameStateView &gs, int slot);
+    /** Dense-pack A–J (slots 0..9) after a kill so the list always starts at A. */
+    void packVisibleMonsterSlots(GameStateView &gs);
     /** 0x10E5E: drink-match + 0x10B74 treasure/XP + compact + overflow fold. */
     void onMonsterKilled(GameStateView &gs, int slot, uint32_t kill_xp);
     /** 0x10B74: gems/gold into found buffer; item-tier scratch -$5E28/-$5E29. */
@@ -291,7 +322,7 @@ private:
     void fillFoundItemSlot12212(GameStateView &gs, int slot_index);
     /** 0x132E6 host: queue per-target combat messages for ack pacing. */
     void enqueueCombatMessage(const char *msg);
-    bool advanceCombatMessageQueue();
+    bool advanceCombatMessageQueue(GameStateView &gs);
     /** Enter AwaitingActionAck; latch 0x132E6 delay frames from -$79AD. */
     void beginActionAck(GameStateView &gs);
     /** 0x105B6: special-attack gate vs -$503 charges + -$11BB. */
@@ -337,6 +368,9 @@ private:
     void resolveMonsterTurn(GameStateView &gs, int slot);
     void finishVictory(GameStateView &gs);
     void finishLeave(GameStateView &gs, bool fled);
+    /** Hide @ 0x13116 / Bribe @ 0x130C0: set -$77BD, key 'S', print Success!.
+     *  Does not jsr $11646 — party stays on the encounter square. */
+    void finishSuccessLeave(GameStateView &gs);
     void syncMonsterSlotsToGs(GameStateView &gs) const;
     int firstAliveMonster() const;
     int rosterIndexForPartySlot(int party_slot) const;
@@ -377,6 +411,7 @@ private:
     int force_cast_school_ = -1; /* item-use CD90 school override; -1=from class */
     bool skip_cast_cost_ = false; /* F470 -$3F0C item-cast: skip SP/gem deduct */
     bool exploration_cast_ = false; /* sheet/explore cast @ 0x6E30 — not a fight */
+    bool explore_on_whom_ = false;  /* 0xCC18 party-target (not Fly/Lloyd/Portal) */
     /** Explore-only modal pick (Fly/Lloyd/On whom). state_ stays Inactive. */
     enum class ExplorePick : uint8_t { None, Party, Item };
     ExplorePick explore_pick_ = ExplorePick::None;
@@ -398,6 +433,8 @@ private:
     bool round_layout_active_ = false;
     /** Remake Full Auto latch — cleared on fight exit. */
     bool auto_enabled_ = false;
+    /** Remake invuln — persists across fights until toggled off. */
+    bool dev_invulnerable_ = false;
     bool auto_buff_latch_ = false;
     /** Pending Auto party-pick / monster letter after resolvePlayerCast. */
     int auto_pending_party_slot_ = -1;
@@ -410,6 +447,19 @@ private:
     char msg_queue_[kMsgQueueCap][160]{};
     int msg_queue_len_ = 0;
     int msg_queue_idx_ = 0;
+    /* 0x10894 loop state: one living target per 0x132E6, then resume. */
+    bool spell_apply_active_ = false;
+    int spell_apply_slot_ = 0;
+    int spell_apply_applied_ = 0;
+    int spell_apply_hit_count_ = 0;
+    int spell_apply_max_slot_ = 0;
+    int spell_apply_caster_level_ = 1;
+    uint8_t spell_apply_mode_d_ = 0;
+    uint16_t spell_apply_saved_dmg_ = 0;
+    uint8_t spell_apply_status_mode_ = 0;
+    uint8_t spell_apply_status_code_ = 0;
+    uint8_t spell_apply_skip_resist_ = 0;
+    uint8_t spell_apply_tail_ = 0; /* 1 = Moon Ray party heal after 0x10894 */
     /** 0x132E6: deadline on platform::nowTicks() (Delay units ≈ VBlank ticks). */
     uint32_t ack_until_tick_ = 0;
     /** SPACE/ENTER must release once after ack starts before they can skip (held

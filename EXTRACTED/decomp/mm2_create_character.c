@@ -370,7 +370,9 @@ void mm2_create_build_record(const Mm2PendingCharacter *pending, Mm2RosterRecord
     out->accuracy_base = pending->modified.accuracy;
     out->luck_base = pending->modified.luck;
 
-    out->thievery_percent = mm2_create_starting_thievery(pending->class_id);
+    /* ASM 0x2737C: A4-$777A[class] → roster+$1E (Robber 30 / Ninja 10 / else 0).
+     * +$16 is a race resist seed, not thievery. */
+    out->unknown_1a_20[4] = mm2_create_starting_thievery(pending->class_id);
     out->age = MM2_CREATE_START_AGE;
     out->food = MM2_CREATE_START_FOOD;
     out->condition = 0;

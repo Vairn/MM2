@@ -191,7 +191,7 @@ Typical combat spell stub pattern:
 |--------|---------|------|
 | `$D464` | `0xD464` | Target selection UI; sets `A4-$7958`; `'A'..'J'` monster slots |
 | `$133B6` | `0x133B6` | Effect applier: uses caster level `$71(A0)`, RNG `-7BB4`, loops targets |
-| `$108BC` | `0x108BC` | Combat-side apply (monster count `-77BE`, party `-524`) |
+| `$108BC` | `0x108BC` | Combat-side apply (monster count `-77BE`, party `-524`). After each target, `jsr $132e6` at `0x10B24` waits, then the loop at `0x108F2` hits the next slot. Compact + `0x129CC` redraw run *before* that wait, so AoE kills drop one monster at a time. |
 | `$6DEE` | `0x06DEE` | Deduct SP/gems from caster at `A4-$B834` after cast |
 
 ## `spells.dat` usage

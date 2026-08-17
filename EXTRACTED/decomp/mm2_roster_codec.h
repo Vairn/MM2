@@ -49,11 +49,46 @@ enum {
     MM2_ROSTER_TAIL_OP0E_FD_CTR = 0x03E,
     MM2_ROSTER_TAIL_BATTLES_WON = 0x040,
     MM2_ROSTER_TAIL_BATTLES_LOST = 0x042,
+    /* Revealed automap: 60 screens × 16 row-words (LE) -> A4-$4F4C.
+     * save @0x89CA (swap, Write #$780, swap back); load @0x8418. */
+    MM2_ROSTER_TAIL_AUTOMAP = 0x044,
+    MM2_ROSTER_TAIL_AUTOMAP_SIZE = 0x780,
+    /* 10 bytes -> A4-$7995..-$798C (g=0x80..0x83, unnamed -$7991, Tundara,
+     * Xabran, Dawn, period B/A). Write @0x8A38. */
+    MM2_ROSTER_TAIL_GATE_BANK = 0x7C4,
+    MM2_ROSTER_TAIL_GATE_BANK_LEN = 0x0A,
     /* 24-byte event/quest bank -> A4-$798B (write @0x84A2). The roster/party
      * UI gates hireling-page entries (letters A..X) on bank[letter] != 0
      * (tst.b -$798B(a4,d0) @0x586 / 0x7B6 / 0xB68) — hireling availability. */
     MM2_ROSTER_TAIL_EVENT_BANK = 0x7CE,
-    MM2_ROSTER_TAIL_EVENT_BANK_LEN = 0x18
+    MM2_ROSTER_TAIL_EVENT_BANK_LEN = 0x18,
+    /* 4 elemental talismans -> A4-$79A4 (g=0x27..0x2A). Write @0x8A60. */
+    MM2_ROSTER_TAIL_TALISMANS = 0x7E6,
+    MM2_ROSTER_TAIL_TALISMAN_LEN = 4,
+    /* Single-byte GS fields, save_game_state write order @0x8A74..0x8C74. */
+    MM2_ROSTER_TAIL_NEW_GAME_FLAG = 0x7EA,   /* -$79B2 */
+    MM2_ROSTER_TAIL_SOUNDS = 0x7EB,          /* -$79B0 */
+    MM2_ROSTER_TAIL_WALK_BEEP = 0x7EC,       /* -$79AF */
+    MM2_ROSTER_TAIL_DISPOSITION = 0x7ED,     /* -$79AE */
+    MM2_ROSTER_TAIL_DELAY = 0x7EE,           /* -$79AD */
+    MM2_ROSTER_TAIL_SAVED_TOWN = 0x7EF,      /* -$79AC */
+    MM2_ROSTER_TAIL_LIGHT_FACTOR = 0x7F0,    /* -$79AB */
+    MM2_ROSTER_TAIL_MAGIC_PROTECT = 0x7F1,   /* -$79AA */
+    MM2_ROSTER_TAIL_FORCES_PROTECT = 0x7F2,  /* -$79A9 */
+    MM2_ROSTER_TAIL_LEVITATE = 0x7F3,        /* -$79A8 */
+    MM2_ROSTER_TAIL_WALK_WATER = 0x7F4,      /* -$79A7 */
+    MM2_ROSTER_TAIL_GUARD_DOG = 0x7F5,       /* -$79A6 */
+    MM2_ROSTER_TAIL_BUFF_79A5 = 0x7F6,       /* -$79A5 */
+    MM2_ROSTER_TAIL_EAGLE_EYE = 0x7F7,       /* -$79A0 */
+    MM2_ROSTER_TAIL_WIZARD_EYE = 0x7F8,      /* -$799F */
+    MM2_ROSTER_TAIL_TEMPLE_DONATION = 0x7F9, /* -$799E */
+    MM2_ROSTER_TAIL_INPUT_STATE = 0x7FA,     /* -$799D..-$7999 (5) */
+    MM2_ROSTER_TAIL_INPUT_STATE_LEN = 5,
+    MM2_ROSTER_TAIL_LLOYD_SCREEN = 0x7FF,    /* -$7998 */
+    MM2_ROSTER_TAIL_LLOYD_COORD = 0x800,     /* -$7997 */
+    MM2_ROSTER_TAIL_GUARDIAN_GATE = 0x801,   /* -$7996 */
+    MM2_ROSTER_TAIL_SHELTER = 0x802,         /* -$796C */
+    MM2_ROSTER_TAIL_ENCOUNTER_MODE = 0x803   /* -$796B */
 };
 
 /* A single equipped/backpack item, as a convenience aggregate. The ON-DISK and

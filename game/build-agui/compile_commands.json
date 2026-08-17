@@ -336,6 +336,11 @@
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\dev_menu_test.dir\\tests\\dev_menu_test.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\dev_menu_test.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\dev_menu_test.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\explore_commands_test.dir\\tests\\explore_commands_test.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\explore_commands_test.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\explore_commands_test.cpp"
 },
@@ -461,6 +466,11 @@
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\character_sheet_input_test.dir\\src\\ui\\AguiAtlas.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\AguiAtlas.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\ui\\AguiAtlas.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\character_sheet_input_test.dir\\src\\gfx\\GfxBackend.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\GfxBackend.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\GfxBackend.cpp"
 },
@@ -488,6 +498,11 @@
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\character_sheet_input_test.dir\\src\\runtime\\PathScratch.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\runtime\\PathScratch.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\runtime\\PathScratch.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\paper_doll_layout_test.dir\\tests\\paper_doll_layout_test.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\paper_doll_layout_test.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\tests\\paper_doll_layout_test.cpp"
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
@@ -1096,6 +1111,11 @@
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\playscreen_golden.dir\\src\\gameplay\\DevMenu.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\DevMenu.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\DevMenu.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\playscreen_golden.dir\\src\\gfx\\ScreenCompositor.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\ScreenCompositor.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\ScreenCompositor.cpp"
 },
@@ -1326,6 +1346,11 @@
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_golden.dir\\src\\gameplay\\DevMenu.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\DevMenu.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\DevMenu.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\combat_golden.dir\\src\\gfx\\ScreenCompositor.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\ScreenCompositor.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gfx\\ScreenCompositor.cpp"
 },
@@ -1493,6 +1518,11 @@
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
   "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\mm2.dir\\src\\gameplay\\InGameControlsScreen.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\InGameControlsScreen.cpp",
   "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\InGameControlsScreen.cpp"
+},
+{
+  "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DMM2_HOST_SDL -DMM2_UI_CLASSIC -IC:/_20260421_/D-REC/development/MM2/game/include -IC:/_20260421_/D-REC/development/MM2/EXTRACTED/decomp -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include/SDL2 -IC:/_20260421_/D-REC/development/MM2/game/build-agui/_deps/sdl2-build/include-config-release/SDL2 -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\mm2.dir\\src\\gameplay\\DevMenu.cpp.obj -c C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\DevMenu.cpp",
+  "file": "C:\\_20260421_\\D-REC\\development\\MM2\\game\\src\\gameplay\\DevMenu.cpp"
 },
 {
   "directory": "C:/_20260421_/D-REC/development/MM2/game/build-agui",

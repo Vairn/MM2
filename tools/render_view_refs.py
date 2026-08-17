@@ -316,7 +316,7 @@ def _decor_branch_c_main() -> list[tuple[str, int, int, int]]:
         (
             OUTDOOR_FLOOR_SHEET,
             col + 16,
-            OUTDOOR_DECOR_X_BDE[col] - ORIGIN_X,
+            OUTDOOR_DECOR_X_BDE[col],
             OUTDOOR_DECOR_Y[col],
         )
         for col in range(4)

@@ -25,6 +25,10 @@ struct KeyState {
     bool key_p = false;
     bool key_q = false;
     bool backspace = false;
+    /** Edge: PC F11 / Amiga Help — open developer overlay. */
+    bool dev_menu = false;
+    /** Edge: Tab — cycle developer overlay pages. */
+    bool tab = false;
   /** Printable ASCII letter/digit from last KEYDOWN, else 0 (preserves case). */
     char last_ascii = 0;
 };

@@ -4,6 +4,7 @@
 
 #include "mm2/combat/CombatSession.h"
 #include "mm2/gameplay/ExploreActions.h"
+#include "mm2/gameplay/DevMenu.h"
 #include "mm2/gameplay/InGameCharacterSheet.h"
 #include "mm2/gameplay/InGameControlsScreen.h"
 #include "mm2/gameplay/PlaySessionInput.h"
@@ -35,6 +36,10 @@ namespace mm2 {
 
 namespace gameplay {
 struct MoveResult;
+}
+
+namespace events {
+struct SearchOpenResult;
 }
 
 class GameSession {
@@ -108,6 +113,7 @@ private:
         GameOver,       /* unused wipe path — combat/all-dead uses DeathStrikes @ 0x14106 */
         DeathStrikes,   /* 0x14106 blue panel; ENTER → Goto Town (last inn) */
         FdPrintChrome,  /* 0x1493C PTR0 / post-fight pages / WAFE name entry */
+        DevMenu,        /* remake F11 / Amiga Help — not retail */
     };
 
     static const char *townName(uint8_t town_filter);
@@ -124,11 +130,16 @@ private:
     void renderFrameTextOnly();
 #endif
     void renderView3D();
+    /** ASM 0x53EE draws a black hood + "Darkness"; remake dims the 3D view instead. */
+    void applyCantSeeViewportDim();
     void renderCombatBackdrop();
-    void renderIndoorView3D();
+    /** x_shift re-centers the hood horizontally when the caller's box is
+     *  narrower than the 208px explore viewport the wall tables assume
+     *  (combat's round hood — see renderCombatBackdrop). */
+    void renderIndoorView3D(int x_shift = 0);
     /** Floor/sky/walls only — torch cels are blitted after viewport-cache save. */
-    void renderIndoorView3DBase();
-    void blitIndoorTorches();
+    void renderIndoorView3DBase(int x_shift = 0);
+    void blitIndoorTorches(int x_shift = 0);
     void refreshHoodTorchCache();
     void renderOutdoorView();
     void renderPartyPanel();
@@ -157,6 +168,8 @@ private:
     bool removeHirelingFromParty(int16_t roster_index);
     /** 0x171AC / -$7D40 GS: clear -$7950 after explore modal epilogue. */
     void applyExitFlagCleanup();
+    /** Scheduler $12D6: on explore key, EXIT_FLAGS → applyExitFlagCleanup. */
+    void maybeApplyExitFlagCleanupOnExploreKey(const platform::KeyState &keys);
     /** 0x20D26+: finish unlock after 0x1AE2E party-slot pick. */
     void finishUnlockWithPartySlot(int party_slot);
     /* Rest execution @ 0x19E20 -> 0x19AD6 (pay) / 0x19D64 (encounter) / 0x19B28
@@ -166,9 +179,10 @@ private:
      * same-screen forward step; rate byte = attrib.dat 0x09 (doc 35). */
     void maybeTriggerStepEncounter();
     void finishCombat();
-    /** save_game_state @ 0x823C mirror: sync live GS words into the roster.dat
-     *  global tail (calendar -$79DE/-$79CA/-$79B6/-$79B4, party -$796A/-$795A,
-     *  event bank -$798B = hireling A..X unlocks) and write the file. */
+    /** save @ 0x86F6 / load @ 0x823C: sync live GS + automap into the roster.dat
+     *  global tail (calendar, party -$796A/-$795A, automap -$4F4C, quest/gate
+     *  banks, protect flags, event bank -$798B = hireling A..X unlocks) and
+     *  write the file. */
     void saveRosterWithGlobalTail();
     /** True when every party slot has (condition & 0xE0) != 0 — roster_count_living @ 0x47A2. */
     bool partyAllDead() const;
@@ -206,6 +220,12 @@ private:
     void ensureEndgameArtLoaded();
     void armSearchContainerArt();
     void clearSearchContainerArt();
+    /** After Open/Find: hold the open-lid cel until SearchReward is dismissed. */
+    void revealSearchContainerOpen();
+    void playSearchTrapSounds();
+    void beginSearchTrapAnim(const events::SearchOpenResult &open, int opener_slot);
+    void tickSearchTrapAnim(int steps);
+    void finishSearchTrapAnim();
     void showStatusMessage(const char *msg);
     /** Chest/search loot @ 0x1ACFA — replaces party name rows 0x13..0x16. */
     void showSearchReward(const char *msg);
@@ -258,9 +278,13 @@ private:
     gfx::EnvAssets env_;
     gameplay::InGameCharacterSheet ingame_sheet_;
     gameplay::InGameControlsScreen controls_screen_;
+    gameplay::DevMenu dev_menu_;
+    gameplay::DevMenuState dev_menu_state_{};
     gameplay::SheetSession sheet_session_{};
 
     PlayOverlay overlay_ = PlayOverlay::None;
+    /** Overlay restored when F11/ESC closes DevMenu (e.g. spell book). */
+    PlayOverlay dev_menu_return_overlay_ = PlayOverlay::None;
     char status_message_[320] = {};
     /* 0x1493C stages: 0=PTR0 1=await combat 2=vacuum+PTR1 3=WAFE entry
      * 4=thank-you 5=PTR2+3 6=PTR4+5 → Goto Town. */
@@ -273,6 +297,16 @@ private:
     char search_identify_container_[24]{};
     bool search_identify_pick_member_ = false;
     bool search_identify_find_traps_ = false;
+    /** 0x1AA8E: 3× place(type*2+4), place(+1), place(0) with -$7BC0(100/300). */
+    bool search_trap_anim_ = false;
+    uint8_t search_trap_loop_ = 0;
+    uint8_t search_trap_phase_ = 0;
+    int search_trap_delay_ = 0;
+    uint8_t search_trap_place_ = 0;
+    uint8_t search_trap_type_ = 0;
+    int search_trap_slot_ = 0;
+    char search_trap_line0_[48]{};
+    char search_trap_line1_[48]{};
     /** 0x1B2CE -$7FC2: container sign sprite (70..74.anm) over viewport.
      *  Placed via -$7FBC(0,$40,$20) → (64,40); held static during Identify. */
     gfx::ViewportAnmOverlay search_container_{};

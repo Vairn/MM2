@@ -50,6 +50,37 @@ void applyPartyProgressOp(GameStateView &gs, Mm2RosterFile *roster, const Mm2Par
     (void)eventVmApplyPartyByteOp(gs.a4(), roster, launch, count, op, val, masked, and_m, or_m);
 }
 
+uint8_t controlsDelayClamped(const GameStateView &gs)
+{
+    const uint8_t d = mm2_gs_u8(gs.a4(), MM2_GS_DELAY);
+    return d > 9 ? 9 : d;
+}
+
+/* ASM 0x16780: arg × 0x22B4A(10). 0x22B4A clamps to 20, /20 → dos Delay(1) =
+ * 1/50 s, so arg=200 ≈ 4.0 s. Host continueInput is ~60 Hz:
+ * polls = (arg * 6 + 2) / 5. Retail OP_1E ignores Controls Delay (-$79AD);
+ * the remake scales so Delay 5 = 1.0× (0 snappier, 9 slower). */
+uint16_t op1eHostPolls(uint8_t arg, uint8_t delay)
+{
+    const uint32_t base = (static_cast<uint32_t>(arg) * 6u + 2u) / 5u;
+    uint32_t scaled = base * (static_cast<uint32_t>(delay) + 3u) / 8u;
+    if (scaled < 1u) {
+        scaled = 1u;
+    }
+    if (scaled > 0xFFFFu) {
+        scaled = 0xFFFFu;
+    }
+    return static_cast<uint16_t>(scaled);
+}
+
+/* PORT DEVIATION: Amiga OP_0C is paced by map load + 3D rebuild; the remake
+ * hop is instant. Silent cruise tiles (OP_0D 0x09 then OP_0C, no prior wait)
+ * dwell so the ocean is visible. (delay+1)*8 frames: Delay 0≈133 ms, 5≈800 ms. */
+uint16_t hopDwellPolls(uint8_t delay)
+{
+    return static_cast<uint16_t>((static_cast<uint16_t>(delay) + 1u) * 8u);
+}
+
 }  // namespace
 
 void EventRuntime::bindParty(Mm2RosterFile *roster, const Mm2PartyLaunch *launch)
@@ -86,6 +117,11 @@ void EventRuntime::unload()
     loc_ = nullptr;
     script_active_ = false;
     wait_ = EventVmWait::None;
+    space_wait_armed_ = true;
+    space_wait_active_ = false;
+    resetDelayState();
+    op0d_09_this_script_ = false;
+    script_had_wait_ = false;
     screen_changed_ = false;
     service_title_[0] = '\0';
     text_.reset();
@@ -96,11 +132,13 @@ void EventRuntime::unload()
     pending_skill_buy_member_ = false;
     pending_general_store_member_ = false;
     pending_circus_attr_ = false;
+    pending_time_machine_ = false;
     pending_quest_encode_stage_ = 0;
     pending_quest_drink_ = false;
     pending_skill_id_ = 0;
     pending_skill_cost_ = 0;
     ::memset(work_buf_, 0, sizeof(work_buf_));
+    ::memset(tile_event_resolved_, 0, sizeof(tile_event_resolved_));
 }
 
 bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world::MapWorld &world)
@@ -128,8 +166,19 @@ bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world
     mm2_gs_set_u8(gs.a4(), MM2_GS_ERA_LOW, static_cast<uint8_t>(gs.era() & 0xFF));
     initParsed(gs);
 
+    /* refreshWorldAfterEventTransition re-enters the dest location after OP_0C.
+     * Keep a silent-hop dwell so the ocean tile stays on screen. */
+    const bool keep_hop_dwell =
+        wait_ == EventVmWait::Delay && !delay_key_skippable_ && delay_remaining_ > 0;
+    const uint16_t saved_delay = delay_remaining_;
+
     script_active_ = false;
     wait_ = EventVmWait::None;
+    space_wait_armed_ = true;
+    space_wait_active_ = false;
+    resetDelayState();
+    op0d_09_this_script_ = false;
+    script_had_wait_ = false;
     inline_script_end_ = -1;
     saved_location_id_ = -1;
     saved_loc_ = nullptr;
@@ -142,11 +191,29 @@ bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world
     pending_skill_buy_member_ = false;
     pending_general_store_member_ = false;
     pending_circus_attr_ = false;
+    pending_time_machine_ = false;
     pending_quest_encode_stage_ = 0;
     pending_quest_drink_ = false;
     pending_skill_id_ = 0;
     pending_skill_cost_ = 0;
+    /* PORT DEVIATION: scripted-tile resolved flags last for this map visit
+     * only. Collision bit7 is the ambient-encounter gate, not a triplet latch. */
+    ::memset(tile_event_resolved_, 0, sizeof(tile_event_resolved_));
+    if (keep_hop_dwell) {
+        delay_remaining_ = saved_delay;
+        delay_skip_armed_ = false;
+        delay_key_skippable_ = false;
+        wait_ = EventVmWait::Delay;
+    }
     return true;
+}
+
+void EventRuntime::markTileEventResolved(int y, int x)
+{
+    if (y < 0 || x < 0 || y >= MM2_MAP_GRID_DIM || x >= MM2_MAP_GRID_DIM) {
+        return;
+    }
+    tile_event_resolved_[((y & 0x0F) << 4) | (x & 0x0F)] = 1;
 }
 
 void EventRuntime::initParsed(GameStateView &gs)
@@ -472,9 +539,12 @@ void EventRuntime::restoreOverlayIfIdle(GameStateView &gs)
     if (mm2_gs_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID) != 0xFF) {
         return;
     }
-    if (combat_ && combat_->active()) {
-        return;
-    }
+    /* Do not wait for combat to finish. ROM OP_12 is a synchronous jsr -$7EDE
+     * inside the overlay VM; scanner epilogue @ 0x176EA then reloads the home
+     * location via -$7DFA before the next tile scan. The port's combat is async,
+     * so a combat-active guard left loc_ on the overlay bank: the next scan
+     * skipped the map triplet table and every event-flagged tile fell through
+     * to ambient -$7EDE ("all events turn into combat"). */
     location_id_ = saved_location_id_;
     loc_ = saved_loc_;
     ::memcpy(work_buf_, saved_work_buf_, sizeof(work_buf_));
@@ -497,6 +567,11 @@ void EventRuntime::endScript(GameStateView &gs)
     mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
     script_active_ = false;
     wait_ = EventVmWait::None;
+    space_wait_armed_ = true;
+    space_wait_active_ = false;
+    resetDelayState();
+    op0d_09_this_script_ = false;
+    script_had_wait_ = false;
     inline_script_end_ = -1;
     restoreOverlayIfIdle(gs);
 }
@@ -507,8 +582,20 @@ void EventRuntime::abortScript(GameStateView &gs)
     mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
     script_active_ = false;
     wait_ = EventVmWait::None;
+    space_wait_armed_ = true;
+    space_wait_active_ = false;
+    resetDelayState();
+    op0d_09_this_script_ = false;
+    script_had_wait_ = false;
     inline_script_end_ = -1;
     restoreOverlayIfIdle(gs);
+}
+
+void EventRuntime::resetDelayState()
+{
+    delay_remaining_ = 0;
+    delay_skip_armed_ = false;
+    delay_key_skippable_ = false;
 }
 
 void EventRuntime::haltUiForHostOverlay(GameStateView &gs)
@@ -628,8 +715,17 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
          * applyMapTransition; then OP_0F cleanup via endScript. */
         const uint8_t dest_screen = readU8(gs);
         const uint8_t dest_tile = readU8(gs);
+        /* Silent cruise hops: OP_0D 0x09 then OP_0C with no prior wait. Save
+         * before applyMapTransition → enterLocation clears the script flags. */
+        const bool chain_dwell = op0d_09_this_script_ && !script_had_wait_;
         applyMapTransition(gs, world, dest_screen, dest_tile);
         endScript(gs);
+        if (chain_dwell && mm2_gs_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH) != 0) {
+            delay_remaining_ = hopDwellPolls(controlsDelayClamped(gs));
+            delay_skip_armed_ = false;
+            delay_key_skippable_ = false;
+            wait_ = EventVmWait::Delay;
+        }
         break;
     }
     case 0x0E: {
@@ -694,11 +790,21 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
     case 0x0D: {
         /* OP_0D @ 0x15EC4 -> thunk -$7E42 -> play_sound_seq @ 0x6FB8 (ids 0..9). */
         const uint8_t idx = readU8(gs);
+        if (idx == 0x09) {
+            op0d_09_this_script_ = true;
+        }
         eventVmExecEngineCall(gs.a4(), idx, &world);
         break;
     }
     case 0x14:
         eventVmClearTileEventFlag(gs.a4(), world, gs.coordY(), gs.coordX());
+        /* PORT DEVIATION (ASM unclear): OP_14's collision-page andi #$7F does
+         * not stop the triplet walk (cavern (1,2) is already 0x41). A separate
+         * per-visit flag, checked by scanAndRun, is what actually suppresses
+         * re-trigger until enterLocation. Typical dungeon fights are
+         * OP_2B / OP_12 / OP_14 — post-combat re-scan skips OP_12 via OP_2B
+         * and lands here. */
+        markTileEventResolved(static_cast<int>(gs.coordY()), static_cast<int>(gs.coordX()));
         break;
     case 0x16: {
         /* event_op16_scan_party_items @ 0x16520: reads 2 bytes (arg1 read then
@@ -822,12 +928,21 @@ void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t
          * -$7B42. Presentation/audio only — no cond/GS write. Consume argc=1. */
         readU8(gs);
         break;
-    case 0x1E:
-        /* event_op1e_timed_wait @ 0x16780: busy-wait `arg1` iterations, each
-         * delay(10) via -$7BC0→0x22B4A then poll -$7BD2→0x22586, break on key.
-         * Presentation/timing only — no game-state effect. Headless no-op. */
-        readU8(gs);
+    case 0x1E: {
+        /* event_op1e_timed_wait @ 0x16780: `arg` iterations of delay(10) via
+         * -$7BC0→0x22B4A then poll -$7BD2→0x22586, break on key. Host maps that
+         * onto ~60 Hz frames (arg=200 ≈ 4 s at Delay 5), skippable after the
+         * Yes/Enter key is released so boarding does not need a second press.
+         * arg==0 is a no-op. */
+        const uint8_t ticks = readU8(gs);
+        if (ticks != 0) {
+            delay_remaining_ = op1eHostPolls(ticks, controlsDelayClamped(gs));
+            delay_skip_armed_ = false;
+            delay_key_skippable_ = true;
+            wait_ = EventVmWait::Delay;
+        }
         break;
+    }
     case 0x1F:
     case 0x20: {
         uint8_t args[5];
@@ -1153,7 +1268,11 @@ bool EventRuntime::runVmLoop(GameStateView &gs, world::MapWorld &world)
          * sets abort at entry so the script ends after the selector returns; in
          * the remake selectors are async, so abort is deferred until the wait
          * completes and runVmLoop resumes. */
-        if (wait_ != EventVmWait::None || !script_active_) {
+        if (wait_ != EventVmWait::None) {
+            script_had_wait_ = true;
+            break;
+        }
+        if (!script_active_) {
             break;
         }
         if (mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT)) {
@@ -1269,6 +1388,8 @@ bool EventRuntime::runQueuedDispatch(GameStateView &gs, world::MapWorld &world)
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, static_cast<uint16_t>(script_off));
     script_active_ = true;
     wait_ = EventVmWait::None;
+    op0d_09_this_script_ = false;
+    script_had_wait_ = false;
     runVmLoop(gs, world);
     /* Keep inline_script_end_ while waiting (Y/N / SPACE) so continueInput
      * resumes inside the same FF-delimited overlay segment. Clearing it early
@@ -1297,6 +1418,20 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
         return false;
     }
 
+    /* Mid-script waits (OP_1E cruise delay, Y/N, SPACE) keep the VM paused.
+     * Do not consume a latch OP_0C armed for the destination tile. */
+    if (script_active_ || wait_ != EventVmWait::None) {
+        return true;
+    }
+
+    /* ASM @ 0x176EA: after overlay dispatch the scanner reloads the home
+     * location before the next triplet walk. Restore here when idle so a
+     * post-combat re-scan cannot walk an overlay bank (no triplets → ambient
+     * combat on every event-flagged tile). Mid-overlay waits keep saved_loc_. */
+    if (!script_active_ && wait_ == EventVmWait::None) {
+        restoreOverlayIfIdle(gs);
+    }
+
     /* ASM @ 0x175EE–0x175F2: clear saved_cond and reset queued id to $FF at
      * scanner entry. Queued id set during a prior OP_0E default-range path must
      * survive until *after* that script's scanner epilogue — so we only clear
@@ -1317,6 +1452,12 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
     mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
     mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 0);
 
+    /* ASM scheduler @ 0x1280 clears -$7952 *before* the scanner. OP_0C @
+     * 0x15EBA then sets it so the destination tile is scanned on the next
+     * tick — cruise hops (Murray's boat) chain this way. Clearing at the
+     * end of scanAndRun wiped that latch and stalled the tour. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 0);
+
     const uint8_t party_tile =
         static_cast<uint8_t>(((gs.coordY() & 0x0F) << 4) | (gs.coordX() & 0x0F));
     const uint8_t ctx = contextMask(gs);
@@ -1324,7 +1465,13 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
     bool matched_tile = false;
 
     if (!script_active_ && wait_ == EventVmWait::None) {
+        /* Viewport OP_04/05/06/0B drop on the next tile scan. Console OP_01/02/03
+         * are the plaque/message band: ASM $12D6 → 0x171AC roster/status redraw
+         * wipes them on the key that leaves the tile. Drop them here too so a
+         * scan that missed that key cannot keep stale event text. Mid-wait
+         * prompts stay until continueInput finishes. */
         text_.clearPersistentOverlays();
+        text_.clearConsoleMessageLayers();
     }
 
     /* Castle/overlay banks have no map triplet table — skip the walk. */
@@ -1342,7 +1489,10 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
 
             if (a == party_tile) {
                 matched_tile = true;
-                if (eventCondMatches(c, ctx)) {
+                if (tile_event_resolved_[a]) {
+                    /* PORT DEVIATION: resolved this visit (OP_14). Keep
+                     * matched_tile so 0x176F2 ambient combat does not arm. */
+                } else if (eventCondMatches(c, ctx)) {
                     const int script_off = poolSeek(b);
                     if (script_off >= 0 && script_off < loc_->string_table_offset) {
                         const uint8_t first_op = work_buf_[script_off];
@@ -1351,6 +1501,8 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
                                            static_cast<uint16_t>(script_off));
                             script_active_ = true;
                             wait_ = EventVmWait::None;
+                            op0d_09_this_script_ = false;
+                            script_had_wait_ = false;
                             runVmLoop(gs, world);
                             fired = true;
                             break;
@@ -1387,7 +1539,6 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
         }
     }
 
-    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 0);
     return fired;
 }
 
@@ -1395,6 +1546,46 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
 {
     if (!script_active_ && wait_ == EventVmWait::None) {
         return false;
+    }
+
+    if (wait_ == EventVmWait::Delay) {
+        /* OP_1E @ 0x16780: wall-clock wait, break on a *fresh* key (poll -$7BD2).
+         * Hop-dwell after silent OP_0C is not skippable — leftover Yes/arrows
+         * must not fast-forward the whole cruise. Timer expiry needs no key. */
+        const bool key_down = keys.any_key || keys.space || keys.enter || keys.escape ||
+                              keys.last_ascii != 0;
+        if (delay_key_skippable_) {
+            if (!delay_skip_armed_) {
+                if (!key_down) {
+                    delay_skip_armed_ = true;
+                }
+            } else if (key_down) {
+                delay_remaining_ = 0;
+            }
+        }
+        if (delay_remaining_ > 0) {
+            --delay_remaining_;
+        }
+        if (delay_remaining_ > 0) {
+            return true;
+        }
+        wait_ = EventVmWait::None;
+        resetDelayState();
+        if (script_active_) {
+            runVmLoop(gs, world);
+        }
+        return script_active_ || wait_ != EventVmWait::None;
+    }
+
+    if (wait_ == EventVmWait::Space) {
+        if (!space_wait_active_) {
+            /* First poll of this SPACE wait. Combat victory (any key) and SDL/Amiga
+             * SPACE are level-sampled; 0x15CE6 waits for a new $20, not a held key. */
+            space_wait_armed_ = false;
+            space_wait_active_ = true;
+        }
+    } else {
+        space_wait_active_ = false;
     }
 
     if (wait_ == EventVmWait::Space) {
@@ -1409,7 +1600,13 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
             }
         }
         const bool scripted_space = (sk == ' ' || sk == '\r' || sk == '\n');
-        if (!scripted_space && !keys.space && !keys.enter && !keys.any_key) {
+        const char ascii = keys.last_ascii;
+        const bool edge_continue = ascii == ' ' || ascii == '\r' || ascii == '\n';
+        const bool level_held = keys.space || keys.enter || keys.any_key;
+        if (!level_held && ascii == 0) {
+            space_wait_armed_ = true;
+        }
+        if (!scripted_space && !edge_continue && !(space_wait_armed_ && level_held)) {
             return true;
         }
         text_.clearSpacePrompt();
@@ -1444,6 +1641,12 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
         if (script_active_) {
             runVmLoop(gs, world);
         }
+        if (wait_ == EventVmWait::Space) {
+            space_wait_armed_ = false;
+            space_wait_active_ = true;
+        } else {
+            space_wait_active_ = false;
+        }
         return script_active_ || wait_ != EventVmWait::None;
     }
 
@@ -1468,19 +1671,8 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
         if (pending_quest_encode_stage_ == 1) {
             if (ch == 'Y') {
                 pending_quest_encode_stage_ = 2;
-                /* 0x198A0..0x19912: difficulty caption + A–D labels (exe 0x18B5A..). */
-                const char *lord = pending_quest_drink_ ? "Slayer" : "Hoardall";
-                char buf[320];
-                std::snprintf(buf, sizeof(buf),
-                              "At what level of difficulty do you\n"
-                              "wish to aid Lord %s?\n"
-                              "A) Page's Quest\n"
-                              "B) Squire's Quest\n"
-                              "C) Knight's Quest\n"
-                              "D) Lord's Quest\n"
-                              "%s (A-D)?",
-                              lord, lord);
-                text_.showOp02(buf, 19);
+                /* 0x198A0..0x19912: two-column caption + A–D (exe 0x18B5A..). */
+                text_.showQuestDifficultyMenu(pending_quest_drink_ ? "Slayer" : "Hoardall");
                 wait_ = EventVmWait::LetterSelect;
             } else {
                 pending_quest_encode_stage_ = 0;
@@ -1514,12 +1706,31 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
     if (wait_ == EventVmWait::MemberSelect) {
         const char ch = keys.last_ascii;
         if (ch == 27) {
+            pending_time_machine_ = false;
             mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
             abortScript(gs);
             return false;
         }
         if (ch >= '1' && ch <= '8') {
             const int slot = ch - '0';
+            if (pending_time_machine_) {
+                /* 0x1480A: ESC already handled; digit − $30; if >=5 write era;
+                 * then −1 indexes A4-$6CE4 (X) / -$6CDC (Y) / -$6CD4 (screen)
+                 * into -$7FDA map load @ 0x1B2A. */
+                pending_time_machine_ = false;
+                wait_ = EventVmWait::None;
+                if (slot >= 5) {
+                    mm2_gs_set_u16(gs.a4(), MM2_GS_ERA, static_cast<uint16_t>(slot));
+                }
+                static const uint8_t kWaybackX[8] = {0x00, 0x00, 0x0F, 0x0F, 0x07, 0x05, 0x08, 0x0E};
+                static const uint8_t kWaybackY[8] = {0x00, 0x0F, 0x0F, 0x00, 0x06, 0x05, 0x03, 0x04};
+                static const uint8_t kWaybackScr[8] = {0x0F, 0x05, 0x21, 0x28, 0x0B, 0x25, 0x06, 0x26};
+                const int idx = slot - 1;
+                const uint8_t dest_tile =
+                    static_cast<uint8_t>((kWaybackY[idx] << 4) | kWaybackX[idx]);
+                applyMapTransition(gs, world, kWaybackScr[idx], dest_tile);
+                return script_active_ || wait_ != EventVmWait::None;
+            }
             const int party_n = launch_ ? launch_->party_count : 8;
             if (slot < 1 || slot > party_n) {
                 return true; /* re-prompt */
@@ -1672,9 +1883,34 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
                     (void)townSvcFoodEncodePurchase(roster_, launch_, choice, rng_);
                 }
             }
-            text_.showOp02("The quest I have decided upon for your\n"
-                           "party, is to seek the target.",
-                           19);
+            /* 0x1980A A–C: the pick wrote the item id (Hoardall/0xC9) or
+             * monster type (Slayer/0xCA) into +$78, then the briefing prints
+             * intro + resolved item/monster name + outro (exe strings beside
+             * the 0x189DE/0x18A4C Lord's briefings). Falls back to the
+             * previous generic wording only when the backing data is absent. */
+            char quest_target[32];
+            const bool has_target =
+                townSvcQuestTargetName(roster_, launch_, pending_quest_drink_, items_,
+                                       combat_ ? combat_->monsters() : nullptr, quest_target,
+                                       sizeof(quest_target));
+            if (has_target) {
+                std::snprintf(quest_msg_, sizeof(quest_msg_),
+                              "The quest I have decided upon for your\n"
+                              "party, is to seek the %s%s",
+                              quest_target, pending_quest_drink_
+                                  ? " and destroy it.  I wish you luck,\n"
+                                    "fair travelers!"
+                                  : " and return it to me.  I wish you\n"
+                                    "luck, fair travelers!");
+            } else {
+                std::snprintf(quest_msg_, sizeof(quest_msg_),
+                              pending_quest_drink_
+                                  ? "The quest I have decided upon for your\n"
+                                    "party, is to seek the foe."
+                                  : "The quest I have decided upon for your\n"
+                                    "party, is to seek the item.");
+            }
+            text_.showOp02(quest_msg_, 19);
         } else {
             const int armed = townSvcQuestLordArm(roster_, launch_, pending_quest_drink_);
             if (armed < 0) {
@@ -1683,7 +1919,24 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
                 wait_ = EventVmWait::LetterSelect;
                 return true;
             }
-            text_.showOp02("Lord's Quest accepted.", 19);
+            /* 0x199ca → 0x191a6: Lord's Quest arm. The D pick then prints the
+             * Lord's briefing table $6B6E (drink selector 0xCA = Slayer "trophies";
+             * food 0xC9 = Hoardall "items"), not the generic "seek the target":
+             *   0x189DE "Your party must bring me the three hidden swords of
+             *   chivalry:  Valor,  Honor, and Nobility.  Good luck!"   (<- ret.)
+             *   0x18A4C "Your party must defeat the three royal envoys of evil
+             *   that wreak havoc to the north.  One flies, one slithers, and one
+             *   crawls.  Good luck!"                                 (<- destroy)
+             * Faithful port of those exe-only strings. */
+            text_.showOp02(pending_quest_drink_
+                               ? "Your party must defeat the three royal\n"
+                                 "envoys of evil that wreak havoc to the\n"
+                                 "north.  One flies, one slithers, and one\n"
+                                 "crawls.  Good luck!"
+                               : "Your party must bring me the three\n"
+                                 "hidden swords of chivalry:  Valor,\n"
+                                 "Honor, and Nobility.  Good luck!",
+                           19);
         }
         text_.showSpacePrompt();
         wait_ = EventVmWait::Space;
@@ -1739,6 +1992,14 @@ void EventRuntime::armFreeTeleportUi()
     pending_free_teleport_x_ = 0;
     text_.showOp02("What is the magical location:\n       X ( 0-15 ) ?", 19);
     wait_ = EventVmWait::HexDigit;
+}
+
+void EventRuntime::armWaybackMachineUi()
+{
+    /* 0x1480A: pea "What era do you desire (1-8)?" → -$7BE4; then -$7F68 key. */
+    pending_time_machine_ = true;
+    text_.showOp02("What era do you desire (1-8)?", 19);
+    wait_ = EventVmWait::MemberSelect;
 }
 
 void EventRuntime::armQuestEncodeUi(bool drink)

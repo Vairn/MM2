@@ -54,7 +54,8 @@ Chained subtraction on the selector byte:
 | `0x08`                                               | `open_arena_shop`      | `-$7DBE` → `0x9D76`              | **Arena Games ticket-combat-reward engine** (byte-verified 2026-07 — see correction below; this is the ONLY path into `0x9D76`) |
 | `0x0A`                                               | Nordon (default-range) | `0x15EDC` → loc 60            | **Nordon goblet** @ `(10,2)/W` (event 30, loc 60 str[9–15]). **Not** `-$7DAC`→`0xD634` (that is sel `0x7F` combat) |
 | `0x0D`                                               | `enroll_mages_guild`   | `-$7DA0` → `0xD89C` (+ `$1A1F8`?) | Guild membership (20gp, shared string bank str[21]) |
-| `0x64`, `0x7E`–`0x83`, `0xC9`–`0xCF`, `0xE2`, `0xFD` | specials               | various                          | Portals / quests                          |
+| `0x64`, `0x7E`–`0x83`, `0xC9`–`0xCF`, `0xFD` | specials               | various                          | Circus / portals / quests / endgame |
+| `0xE2`                                               | jester joke of the day | `0x18204`                        | str.dat bank 0; `day[era] % 22`; 4 lines over party rows `$13..$16` |
 | *default*                                            | (event-loader reinvoke) | `0x15EDC` → `-$7DFA` → `0x92F2`  | Selector binned to category `0x3C`–`0x46`, then re-enters `event_dat_loader` (NOT the arena engine — see correction below) |
 
 **Correction (2026-07, revised):** a first pass separated `0x07`/`0x08` from the
@@ -183,9 +184,11 @@ spells) match this temple dispatch.
 **Menu caption bank `A4-$56E6` (str.dat, filled @ `0x1E962`):** seven pointers after
 left-chrome `-$56F6` (`Gold=` / `G-Gather Gold` / `#-Other Char` / `Select (A-F)`):
 `A) Restore Cond`, `B) Restore Algn`, `C) Donations`, `D) Spell C`, `E) Spell C`,
-`F) Spell C`, `D) Spell S`. Temple paints `[0..5]` at col `$13` (`0x1DE60`); mage
-guild paints `[3..6]` at col `$14` (`0x1E5FA`). Offer gates `0x1DAC6` / `0x1D97A`
-also print spell **L-N** at col `$1F`; costs / `---` at col `$23` (`0x1E111`).
+`F) Spell C`, `D) Spell S`. Temple paints `[0..5]` at col `$13` (`0x1DE60`) after
+`0x1E2AE` writes D/E/F + `'C'` at byte 9; mage guild paints `[3..6]` at col `$14`
+(`0x1E5FA`) after `0x1E43C` writes A/B/C + `'S'` at byte 9 (`A–D) Spell S`).
+Offer gates `0x1DAC6` / `0x1D97A` also print spell **L-N** at col `$1F`; costs /
+`---` at col `$23` (`0x1E111`).
 
 #### Tavern (`OP_0E 0x03` → `0x1D208` / jump table `0x1D650`)
 

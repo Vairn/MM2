@@ -36,9 +36,11 @@ MoveResult turn(world::MapWorld &world, GameStateView &gs, bool right_cw);
 /* Step forward/back (0x5816 → 0x56FC / 0x5762). Applies 0x69DC when forward/back
  * succeeds. Screen edge uses attrib neighbours @ 0x1D0A. Call
  * latchExploreEventsAfterMove after the step encounter check (doc 43 loop order).
- * Optional roster/launch feed day-rollover aging @ 0x6988. */
+ * Optional roster/launch feed day-rollover aging @ 0x6988.
+ * `ignore_walls` is remake-only (F11 Movement / no clip). */
 MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward,
-                Mm2RosterFile *roster = nullptr, const Mm2PartyLaunch *launch = nullptr);
+                Mm2RosterFile *roster = nullptr, const Mm2PartyLaunch *launch = nullptr,
+                bool ignore_walls = false);
 
 /* After movement: set -$4F4E, clear -$77BD, latch tile events (0x5748 tail). */
 void latchExploreEventsAfterMove(GameStateView &gs);
@@ -75,11 +77,21 @@ uint8_t restSpellBonusFactor(uint8_t attr);
 
 /* Align Amiga working level (+$20) / spell-level (+$23) with remake-canonical
  * +$71/+72. Stock roster starters ship +$20=1 while +$71=4; Rest @ 0x19C9A
- * multiplies by +$20, so a stale working byte leaves casters at creation SP. */
+ * multiplies by +$20, so a stale working byte leaves casters at creation SP.
+ * Call at party load only — not before Rest 0x4476, which copies +$20→+$71
+ * and would commit a fountain temp level written only to +$71. */
 void syncRosterWorkingLevelFields(Mm2RosterRecord &rec);
 
 /* Rest SP recompute @ 0x19C30: if +$23!=0, SP = (bonus+3)*+$20 → +$5A/+ $58.
- * Call syncRosterWorkingLevelFields first when canonical fields may have drifted. */
+ * Uses working +$20 (permanent level), not displayed +$71 (fountain buff). */
 void recomputeRestSpellPoints(Mm2RosterRecord &rec);
+
+/* sync_party_secondary_stats @ 0x4476 (Rest jsr -$7F50 @ 0x19CA8): copy
+ * current/working bytes onto the sheet/base fields. Fountain OP_18 writes the
+ * destinations (+$6B..+$6F / +$71); this restores them from +$10..+$14 / +$20. */
+void syncPartySecondaryStats(Mm2RosterRecord &rec);
+
+/* Rest writeback after SP recompute: 0x4476 then +$27→+$73 / +$15→+$70 @ 0x19CB6. */
+void applyRestSecondaryStatWriteback(Mm2RosterRecord &rec);
 
 }  // namespace mm2::gameplay

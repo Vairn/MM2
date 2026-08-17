@@ -17,8 +17,8 @@ namespace {
 
 const EnvSheetNames kEnvSheets[4] = {
     /* Town    */ {"town.32" /*13*/, "townf.32" /*10*/, "townt.32" /*11*/, "townb.32" /*12*/},
-    /* Cavern  */ {"cave.32" /*17*/, "cavef.32" /*14*/, "cavet.32" /*15*/, "caveb.32" /*16*/},
-    /* Castle  */ {"castle.32" /*21*/, "castlef.32" /*18*/, "castlet.32" /*19*/, "castleb.32" /*20*/},
+    /* Cavern  */ {"cave.32" /*17*/, "cavef.32" /*14*/, "cavet.32" /*15*/, "townb.32" /*16 reuse*/},
+    /* Castle  */ {"castle.32" /*21*/, "castlef.32" /*18*/, "castlet.32" /*19*/, "townb.32" /*20 reuse*/},
     /* Outdoor */ {nullptr, "outf.32" /*26*/, nullptr, "outb.32" /*25*/},
 };
 
@@ -58,7 +58,7 @@ EnvKind envKindFromAttrib(const Mm2AttribRecord &rec)
 }
 
 bool EnvAssets::loadSheet(const char *data_dir, const char *amiga_name, mm2_gfx_sheet_role role,
-                          mm2_gfx_sheet *out)
+                          mm2_gfx_sheet *out, const mm2_image32_file *palette_src)
 {
     char *const path = mm2_path_scratch_a();
     char *const sil_path = mm2_path_scratch_b();
@@ -103,7 +103,13 @@ bool EnvAssets::loadSheet(const char *data_dir, const char *amiga_name, mm2_gfx_
             return false;
         }
         mm2_image32_file img{};
-        if (mm2_image32_load_file(path, &img) != MM2_IMAGE32_OK || img.frame_count == 0) {
+        mm2_image32_error err = MM2_IMAGE32_ERR_IO;
+        if (palette_src) {
+            err = mm2_image32_load_file_with_palette(path, palette_src->palette_rgba, &img);
+        } else {
+            err = mm2_image32_load_file(path, &img);
+        }
+        if (err != MM2_IMAGE32_OK || img.frame_count == 0) {
             return false;
         }
         if (mm2_gfx_sheet_adopt_image32(&img, MM2_GFX_BACKEND_AMIGA32, role, out) != MM2_IMAGE32_OK) {
@@ -182,7 +188,25 @@ bool EnvAssets::loadEnv(const char *data_dir, EnvKind kind)
     if (names.ceiling) {
         loadSheet(data_dir, names.ceiling, MM2_GFX_ROLE_TORCH, &torches_);
     }
-    automap_ok_ = names.automap && loadSheet(data_dir, names.automap, MM2_GFX_ROLE_AUTOMAP, &automap_);
+    /* Amiga filename table entries 16/20 are townb.32 reused; hardware palette
+     * is the env wall sheet (cave.32 / castle.32). PC CGA/EGA cannot swap the
+     * global palette, so retail ships CAVEB.* / CASTLEB.* as index-recolors. */
+    const char *automap_name = names.automap;
+    if (backend_ == GfxBackend::Cga || backend_ == GfxBackend::Ega) {
+        if (kind == EnvKind::Cavern) {
+            automap_name = "caveb.32";
+        } else if (kind == EnvKind::Castle) {
+            automap_name = "castleb.32";
+        }
+    }
+    const mm2_image32_file *automap_pal = nullptr;
+#if !MM2_HOST_AMIGA
+    if (backend_ == GfxBackend::Amiga && has_walls) {
+        automap_pal = &walls_.img;
+    }
+#endif
+    automap_ok_ = automap_name &&
+                  loadSheet(data_dir, automap_name, MM2_GFX_ROLE_AUTOMAP, &automap_, automap_pal);
     env_ok_ = has_walls && has_floor;
 #if MM2_HOST_AMIGA
     if (env_ok_) {

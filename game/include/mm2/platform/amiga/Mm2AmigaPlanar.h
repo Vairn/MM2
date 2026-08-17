@@ -35,6 +35,8 @@ void mm2_amiga_apply_palette(const mm2_image32_file *img);
 void mm2_amiga_apply_play_world_palette(const mm2_image32_file *img);
 void mm2_amiga_restore_play_world_palette(void);
 void mm2_amiga_clear_play_world_palette(void);
+/** Scale world pens 0-31 from the play env palette (1/10 = can't-see darkness). */
+void mm2_amiga_set_play_world_palette_scale(unsigned num, unsigned den);
 /** Load asset pens into vport RAM only (fade prep — no hardware push). */
 void mm2_amiga_stage_asset_palette(const mm2_image32_file *img);
 void mm2_amiga_blit_frame(const mm2_image32_file *img, uint16_t frame_index, UWORD uwDstX, UWORD uwDstY,

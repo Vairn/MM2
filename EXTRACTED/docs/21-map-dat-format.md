@@ -51,7 +51,7 @@ Wall-only decode for auto-map: `byte & 0x7F` before `kCartoTile[byte >> 2]` (int
 |------|------|
 | `attrib.dat` | Per-screen env, neighbours, roof bits, outdoor flag — selects tileset / carto mode |
 | `event.dat` | Scripts; triggers align with collision `0x80` |
-| `townb.32` / `outb.32` | Auto-map tile sprites (cartography) |
+| `townb.32` / `outb.32` | Auto-map tiles (cavern/castle reuse `townb.32` + env wall palette) |
 
 ## Editor / codec
 

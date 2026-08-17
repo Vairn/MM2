@@ -47,6 +47,10 @@ typedef enum mm2_image32_error {
 size_t mm2_image32_rassize(uint16_t width, uint16_t height);
 void mm2_image32_set_preview_opaque(int enabled);
 mm2_image32_error mm2_image32_load_file(const char *path, mm2_image32_file *out);
+/** Load ``path`` but rasterize RGB from ``palette_rgba`` (alpha kept from the file).
+ *  Amiga cavern/castle auto-map: townb.32 pixels through cave.32 / castle.32 pens. */
+mm2_image32_error mm2_image32_load_file_with_palette(
+    const char *path, const uint8_t palette_rgba[MM2_IMAGE32_PALETTE_COLORS][4], mm2_image32_file *out);
 mm2_image32_error mm2_image32_decode_buffer(const uint8_t *data, size_t size, mm2_image32_file *out);
 void mm2_image32_free(mm2_image32_file *img);
 

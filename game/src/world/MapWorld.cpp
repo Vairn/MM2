@@ -96,47 +96,51 @@ bool MapWorld::spellEyeSample(int mx, int my, SpellEyeSample *out) const
         return true;
     }
 
-    /* Outdoor: neighbour page pick @ 0x1DEA (E/W then S/N, same order as ASM). */
+    /* Outdoor neighbour page pick @ 0x1DEA, same compass as map copy @ 0x2606:
+     *   X in 0x10..0x12 → -$51BA from attrib 0x06 (E)
+     *   X > 0xFC        → -$50BA from attrib 0x08 (W)
+     *   Y in 0x10..0x12 → -$53BA from attrib 0x05 (N)  — Y=16 is north of the map
+     *   Y > 0xFC        → -$52BA from attrib 0x07 (S)  — Y=-1 is south of Y=0
+     * Signed 5×5 offsets (-2..+2) never leave those windows, so this matches
+     * the byte compares and the 3D hood resolve (OutdoorView3D::resolveCell). */
     const uint8_t *page = visualPage();
     int lx = mx;
     int ly = my;
-    const unsigned xb = static_cast<unsigned>(mx) & 0xFFu;
-    const unsigned yb = static_cast<unsigned>(my) & 0xFFu;
 
-    if (xb > 0x0Fu && xb < 0x13u) {
-        const int n = neighborScreen(1); /* E → A4-$51BA */
-        if (n < 0) {
-            return false;
-        }
-        out->screen = n;
-        page = map_.screens[n].visual;
-        lx = static_cast<int>(xb & 0x0Fu);
-    } else if (xb >= 0xFCu) {
+    if (lx < 0) {
         const int n = neighborScreen(3); /* W → A4-$50BA */
         if (n < 0) {
             return false;
         }
         out->screen = n;
         page = map_.screens[n].visual;
-        lx = static_cast<int>(xb & 0x0Fu);
+        lx += MM2_MAP_GRID_DIM;
+    } else if (lx >= MM2_MAP_GRID_DIM) {
+        const int n = neighborScreen(1); /* E → A4-$51BA */
+        if (n < 0) {
+            return false;
+        }
+        out->screen = n;
+        page = map_.screens[n].visual;
+        lx -= MM2_MAP_GRID_DIM;
     }
 
-    if (yb > 0x0Fu && yb < 0x13u) {
-        const int n = neighborScreen(2); /* S → A4-$53BA */
+    if (ly < 0) {
+        const int n = neighborScreen(2); /* S → A4-$52BA */
         if (n < 0) {
             return false;
         }
         out->screen = n;
         page = map_.screens[n].visual;
-        ly = static_cast<int>(yb & 0x0Fu);
-    } else if (yb >= 0xFCu) {
-        const int n = neighborScreen(0); /* N → A4-$52BA */
+        ly += MM2_MAP_GRID_DIM;
+    } else if (ly >= MM2_MAP_GRID_DIM) {
+        const int n = neighborScreen(0); /* N → A4-$53BA */
         if (n < 0) {
             return false;
         }
         out->screen = n;
         page = map_.screens[n].visual;
-        ly = static_cast<int>(yb & 0x0Fu);
+        ly -= MM2_MAP_GRID_DIM;
     }
 
     if (lx < 0 || ly < 0 || lx >= MM2_MAP_GRID_DIM || ly >= MM2_MAP_GRID_DIM) {

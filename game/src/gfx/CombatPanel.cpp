@@ -253,7 +253,9 @@ void drawCombatRightColumn(ScreenCompositor &c, const CombatPanelView &view)
         const CombatMonsterLine &line = view.monster_lines[i];
         const int row = kCombatMonsterRow0 + i;
         if (!line.occupied) {
-            /* 0x129CC: empty/dead battle slot → clear row (fill above already did). */
+            /* 0x129CC: empty/dead battle slot → clear row (fill above already did).
+             * After 0x10CCE compact these are only trailing rows (G–J empty), never
+             * holes above a later letter. */
             continue;
         }
 
@@ -361,8 +363,10 @@ void drawCombatOptionsBar(ScreenCompositor &c, const CombatPanelView &view)
         return;
     }
     if (view.show_party_pick) {
-        /* 0xD2EA patches "On whom (1-N)?" — message already in view.message. */
-        if (view.message[0] != '\0') {
+        /* 0xD2EA "On whom (1-N)?"; solo 0xCCE8 / 0xD390 "'Return' to cast" at col $16. */
+        if (std::strcmp(view.message, "'Return' to cast") == 0) {
+            textAt(c, 0x16, msg_row, view.message);
+        } else if (view.message[0] != '\0') {
             textAtWrapped(c, 1, msg_row, view.message, 0x26, round_layout ? 3 : 1);
         }
         return;

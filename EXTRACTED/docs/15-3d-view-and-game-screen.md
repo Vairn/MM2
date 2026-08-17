@@ -23,9 +23,15 @@ types) resolves filename pointers (filename-pointer table at DATA `0x7B0`,
 | `-$7A0E` ($85F2)  | outdoor sheet **2** | —               | —               | —                | outdoor3.32 (24) |
 
 (`townb.32`/`outb.32` are the small 36-frame 14×11 auto-map tiles documented in
-the cartography notes; `town.32`/`cave.32`/`castle.32` are the big ~57 KB wall
+the cartography notes. Cavern and castle **do not** have their own auto-map
+sheets — filename-table entries 16 and 20 are `townb.32` reused. Indexed pixels
+are shown through the active env wall palette (`cave.32` / `castle.32`), which
+is what tints the minimap. PC CGA/EGA cannot swap that hardware palette, so
+retail ships `CAVEB.*` / `CASTLEB.*` as index-recolors of `TOWNB`.)
+
+`town.32`/`cave.32`/`castle.32` are the big ~57 KB wall
 sets whose frames are stored at decreasing sizes for depth scaling, e.g.
-`town.32` frame dims 160×92, 96×55, 48×27, 16×10.)
+`town.32` frame dims 160×92, 96×55, 48×27, 16×10.
 
 `-$7A02` ($85FE) is a separate sky/backdrop sheet used by the ceiling fill.
 
@@ -284,13 +290,13 @@ branches (push y, x, frame, sheet):
 |--------|-----------|-------|---|---|
 | A | map flag `-$55C6` | `col` (f0-3) | **8** | `$80−6BD6` |
 | B | flag `-$55C2` | `col+4` (f4-7) alt, **`col+12` (f12-15)** main | **8** | `$80−6BD6` |
-| C | flag `-$55BE` | **`col+8` (f8-11)** alt, **`col+16` (f16-19)** main | **112** / **6BDE−8** | `$80−6BD6` |
+| C | flag `-$55BE` | **`col+8` (f8-11)** alt, **`col+16` (f16-19)** main | **112** / **6BDE** | `$80−6BD6` |
 
 **Frame art (`desert.32`, 20 frames):** **f0-3** centre path; **f4-7** left wedge
 sprites (B alt, x=8); **f8-11** separate right wedge sprites (C alt, x=`$70`) —
 not mirrored copies of f4-7, distinct triangles/trapezoids in the sheet. **f12-15**
 / **f16-19** narrower stepped strips when `-$55C6` is also set (main `@18344`:
-B+12 left, C+16 at `6BDE−8`).
+B+12 left, C+16 at `6BDE` = **[184, 160, 136, 112]**, same screen space as x=8).
 
 `6BDE` on disk = **[184, 160, 136, 112]**. `ref-outdoor-floors.png` **decor C** =
 **f8-11**; **C main** = f16-19.

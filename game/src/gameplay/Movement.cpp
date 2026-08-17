@@ -8,6 +8,7 @@
 #include "mm2_roster_codec.h"
 
 #include <cstddef>
+#include <cstdint>
 
 namespace mm2::gameplay {
 
@@ -396,6 +397,26 @@ void syncRosterWorkingLevelFields(Mm2RosterRecord &rec)
                                            (static_cast<uint16_t>(rec.spell_level) << 8)); /* +$23 ← +$72 */
 }
 
+void syncPartySecondaryStats(Mm2RosterRecord &rec)
+{
+    /* 0x4476: MOVE.B $10→$6B, $14→$6F, $12→$6D, $11→$6C, $20→$71, $23→$72, $13→$6E. */
+    auto *raw = reinterpret_cast<uint8_t *>(&rec);
+    raw[0x6B] = raw[0x10];
+    raw[0x6F] = raw[0x14];
+    raw[0x6D] = raw[0x12];
+    raw[0x6C] = raw[0x11];
+    raw[0x71] = raw[0x20];
+    raw[0x72] = raw[0x23];
+    raw[0x6E] = raw[0x13];
+}
+
+void applyRestSecondaryStatWriteback(Mm2RosterRecord &rec)
+{
+    syncPartySecondaryStats(rec);
+    rec.endurance_base = rec.endurance_current; /* 0x19CB6 +$27→+$73 */
+    rec.luck_base = rec.luck_current;           /* 0x19CC4 +$15→+$70 */
+}
+
 void recomputeRestSpellPoints(Mm2RosterRecord &rec)
 {
     /* 0x19C30: if +$23==0 → skip; else INT for Sorc/Archer, PER otherwise. */
@@ -436,7 +457,7 @@ MoveResult turn(world::MapWorld &world, GameStateView &gs, bool right_cw)
 }
 
 MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward, Mm2RosterFile *roster,
-                const Mm2PartyLaunch *launch)
+                const Mm2PartyLaunch *launch, bool ignore_walls)
 {
     MoveResult r{};
     if (!gs.valid()) {
@@ -452,12 +473,14 @@ MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward, Mm2Rost
     const int sx = static_cast<int>(gs.coordX());
     const int sy = static_cast<int>(gs.coordY());
 
-    const ObstructionMsg obstruct =
-        passabilityObstruction(world, gs, sx, sy, step_facing, roster, launch);
-    if (obstruct != ObstructionMsg::None) {
-        r.blocked = true;
-        r.obstruction = obstruct;
-        return r;
+    if (!ignore_walls) {
+        const ObstructionMsg obstruct =
+            passabilityObstruction(world, gs, sx, sy, step_facing, roster, launch);
+        if (obstruct != ObstructionMsg::None) {
+            r.blocked = true;
+            r.obstruction = obstruct;
+            return r;
+        }
     }
 
     int8_t dx = 0;

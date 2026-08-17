@@ -271,9 +271,15 @@ int mm2_class_spell_level_for(uint8_t class_id, int char_level)
     }
     switch (class_id) {
     case 3: /* Cleric   */
-    case 4: /* Sorcerer */
-        /* pure casters: gain spell level X at char level 2X-1 -> X = (L+1)/2. */
-        return (char_level + 1) / 2;
+    case 4: /* Sorcerer */ {
+        /* pure casters: gain spell level X at char level 2X-1 -> X = (L+1)/2.
+         * 0x200C2 cmpi.w #$a / bgt: SL 10 is the last accepted value. */
+        int x = (char_level + 1) / 2;
+        if (x > 10) {
+            x = 10;
+        }
+        return x;
+    }
     case 1: /* Paladin  */
     case 2: /* Archer   */ {
         /* fighter-mages: gain X at char level 2X+5; natural cap 7. */
@@ -345,7 +351,7 @@ static void mm2_train_grant_auto_spell_row(Mm2RosterRecord *rec, int sl, uint8_t
 {
     const uint8_t(*table)[4];
     int slot;
-    if (!rec || sl < 1 || sl > 10) {
+    if (!rec || sl < 1 || sl > 9) {
         return;
     }
     table = (class_id == 3 || class_id == 1) ? kTrainAutoCleric : kTrainAutoSorc;
@@ -367,12 +373,57 @@ void mm2_train_backfill_auto_spells(Mm2RosterRecord *rec)
         return;
     }
     max_sl = (int)rec->spell_level;
-    if (max_sl > 10) {
-        max_sl = 10;
+    if (max_sl > 9) {
+        max_sl = 9;
     }
     for (sl = 1; sl <= max_sl; ++sl) {
         mm2_train_grant_auto_spell_row(rec, sl, class_id);
     }
+}
+
+static void mm2_train_set_spell_level(Mm2RosterRecord *rec, uint8_t new_sl)
+{
+    rec->spell_level = new_sl;
+    rec->unknown_22 = (uint16_t)((rec->unknown_22 & 0x00FFu) | ((uint16_t)new_sl << 8));
+}
+
+void mm2_train_catch_up_spell_level(Mm2RosterRecord *rec)
+{
+    uint8_t class_id;
+    int cap;
+    int old_sl;
+    int target;
+    int sl;
+    int grant_to;
+
+    if (!rec) {
+        return;
+    }
+    class_id = rec->class_id;
+    if (class_id != 1 && class_id != 2 && class_id != 3 && class_id != 4) {
+        return;
+    }
+    cap = (class_id == 1 || class_id == 2) ? 7 : 10;
+    old_sl = (int)rec->spell_level;
+    if (old_sl > cap) {
+        mm2_train_set_spell_level(rec, (uint8_t)cap);
+        old_sl = cap;
+    }
+    /* L1 casters have not trained yet — formula would grant SL1 too early. */
+    if (rec->level >= 2) {
+        target = mm2_class_spell_level_for(class_id, (int)rec->level);
+        if (target > cap) {
+            target = cap;
+        }
+        if (target > old_sl) {
+            mm2_train_set_spell_level(rec, (uint8_t)target);
+            grant_to = target > 9 ? 9 : target;
+            for (sl = old_sl + 1; sl <= grant_to; ++sl) {
+                mm2_train_grant_auto_spell_row(rec, sl, class_id);
+            }
+        }
+    }
+    mm2_train_backfill_auto_spells(rec);
 }
 
 int mm2_train_spell_on_levelup(Mm2RosterRecord *rec)
@@ -401,8 +452,15 @@ int mm2_train_spell_on_levelup(Mm2RosterRecord *rec)
     if (level > 0) {
         level >>= 1; /* 0x200B6 asr */
     }
-    if (level < 1 || level > 10) { /* 0x200BA..0x200C8 */
+    if (level < 1) { /* 0x200BA */
         return 0;
+    }
+    /* 0x200C2 cmpi.w #$a / bgt rts. Sequential trains never skip this window;
+     * M-train / XP dumps can arrive with SL still below the cap after the
+     * formula has gone past 10. Clamp so SL stops at 10 instead of staying
+     * stuck — or writing 11, 12, … until the byte wraps. */
+    if (level > 10) {
+        level = 10;
     }
     new_sl = level;
     if (new_sl <= (int)old_sl) { /* 0x200D0 */
@@ -416,15 +474,17 @@ int mm2_train_spell_on_levelup(Mm2RosterRecord *rec)
         return 0;
     }
 
-    rec->spell_level = (uint8_t)new_sl;
-    /* Sync +$23 (high byte of unknown_22 LE) and keep +$72 via spell_level. */
-    rec->unknown_22 = (uint16_t)((rec->unknown_22 & 0x00FFu) | ((uint16_t)new_sl << 8));
+    mm2_train_set_spell_level(rec, (uint8_t)new_sl);
 
     /* ASM ORs only table[new_sl-1] (one visit, +$20 steps by 1). When +$20
      * drift skips SL increases, a later train can jump SL by 2+ — grant every
-     * skipped $64A2/$64C2 row so SL2 autos are not lost. */
-    for (sl = (int)old_sl + 1; sl <= new_sl; ++sl) {
-        mm2_train_grant_auto_spell_row(rec, sl, class_id);
+     * skipped $64A2/$64C2 row so SL2 autos are not lost. Rows 10+ spill into
+     * the other school's table; SL 10 is real but has no auto-spell row. */
+    {
+        int grant_to = new_sl > 9 ? 9 : new_sl;
+        for (sl = (int)old_sl + 1; sl <= grant_to; ++sl) {
+            mm2_train_grant_auto_spell_row(rec, sl, class_id);
+        }
     }
 
     /* SP @ 0x201C2..0x20228: (-$7F56(INT|PER)+3) * new_sl → +$58/+ $5A. */

@@ -85,10 +85,14 @@ bool eventVmPartyHasItem(const uint8_t *a4, const Mm2RosterFile *roster,
 bool eventVmPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                                      uint8_t item_id);
 
+/** OP_14 @ 0x16398: andi #$7F on collision-page copy -$54BA[(y<<4)|x] and the
+ *  current-cell latch -$55D6. Collision bit7 gates the ambient random-encounter
+ *  roll, not scripted triplets — callers that need "don't re-fire this tile
+ *  event until map reload" must also EventRuntime::markTileEventResolved. */
 void eventVmClearTileEventFlag(uint8_t *a4, world::MapWorld &world, int y, int x);
 
 /** event_tile_scanner post-fight @ 0x1773A/0x17756: clear runtime + map collision
- *  event bits so the tile does not re-arm until map reload. */
+ *  event bits so the ambient path does not re-arm until map reload. */
 void eventVmConsumeTileEncounterFlag(uint8_t *a4, world::MapWorld &world, int y, int x);
 
 void eventVmPatchMapTile(world::MapWorld &world, int y, int x, uint8_t visual,
@@ -146,17 +150,33 @@ bool eventVmSearchPayoff(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunc
 
 /** Open / Find Traps thievery leaf @ 0x1AEC2 / 0x1AF6E.
  *  `party_slot` 0-based; `find_traps` selects Find path (always opens after roll).
- *  On trap spring: damage = rating*2+4 to that member (0x1AA70 → 0x1A90E simplified). */
+ *  Trap spring @ 0x1AA70: trap_type = rng(1,100)%4; place frames type*2+4 / +1 / 0
+ *  (host animates); HP via 0x1A8A4 → 0x4952 after the cel loop. */
 struct SearchOpenResult {
     bool opened = false;     /* distribute should run */
     bool trapped = false;    /* thievery failed and trap sprung */
     bool aborted = false;    /* ESC on member pick */
-    uint16_t trap_damage = 0;
+    uint8_t trap_type = 0;   /* 0..3 from trap_victim_pick @ 0x1A9A6 */
+    uint8_t trap_place_frame = 0; /* type*2+4 — first sign_sprite_place cel */
+    uint16_t trap_damage = 0; /* 0x1A8A4 pre-resist amount (table << attrib+0x14) */
+    char trap_line0[48]{};    /* -$69B4[env][type*2] @ rows 0x13 */
+    char trap_line1[48]{};    /* -$69B4[env][type*2+1] @ row 0x14 */
 };
 
 SearchOpenResult eventVmSearchOpenOrFind(uint8_t *a4, Mm2RosterFile *roster,
                                          const Mm2PartyLaunch *launch, int party_slot,
-                                         uint8_t rating, bool find_traps, gameplay::Rng *rng);
+                                         uint8_t rating, bool find_traps, gameplay::Rng *rng,
+                                         const Mm2ItemsFile *items = nullptr);
+
+/** 0x1AA8E: first place() cel for trap_type 0..3. */
+uint8_t eventVmSearchTrapPlaceFrame(uint8_t trap_type);
+
+/** 0x1A8A4 pre-resist HP: -$690C[env_row] doubled attrib+0x14 times. */
+uint16_t eventVmSearchTrapDamageAmount(const uint8_t *a4);
+
+/** trap_damage_apply @ 0x1A90E after the 0x1AA8E cel loop. */
+void eventVmSearchApplyTrapDamage(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                  int opener_slot, uint8_t trap_type, gameplay::Rng *rng);
 
 /** Detect Magic @ 0x1AFE8 — "Contents magical (Yes|No), has trap (Yes|No)". */
 void eventVmSearchDetectMagic(uint8_t *a4, uint8_t rating, char *msg, size_t msg_cap);
@@ -315,6 +335,15 @@ void eventVmFillOp0eFdStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_
 
 /** 0x1D208 GS: decode bank 1, fill tavern rumor/tip/food ptr tables, set -$71DC=$FD. */
 void eventVmFillTavernStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_len);
+
+/** 0x18204 GS: decode bank 0, fill A4-$5C42 with 22×4 joke line ptrs via 0x976E. */
+void eventVmFillJokeStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_len);
+
+/** 0x18254: joke index = day[era] % 22 (divs.w #$16; swap remainder). */
+int eventVmJokeIndex(uint16_t day);
+
+/** Join the 4 C-strings for `joke_index` (0..21) from A4-$5C42. */
+int eventVmFormatJoke(const uint8_t *a4, int joke_index, char *out, size_t out_cap);
 
 /** Resolve A4-relative C-string ptr stored by fill helpers. */
 const char *eventVmGsRelCString(const uint8_t *a4, uint32_t rel_u32);

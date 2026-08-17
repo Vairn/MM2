@@ -1,6 +1,6 @@
 {
   "width": 256,
-  "height": 172,
+  "height": 224,
   "format": "rgba8",
   "palette": "palette.json",
   "aga_pen_base": 32,
@@ -215,6 +215,20 @@
       "y": 143,
       "w": 28,
       "h": 28
+    },
+    {
+      "name": "doll/body",
+      "x": 1,
+      "y": 172,
+      "w": 32,
+      "h": 48
+    },
+    {
+      "name": "doll/slot",
+      "x": 34,
+      "y": 172,
+      "w": 12,
+      "h": 12
     }
   ]
 }

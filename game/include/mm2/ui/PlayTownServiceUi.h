@@ -99,16 +99,26 @@ private:
         Denied,
         TavernFood,
         TavernBoost,
+        /* D/E rumor/tip text, and 0x1C902 result hold after A/B/C (preset 7
+         * + pair text + key_read, then the A-E menu redraws). */
         TavernRumor,
-        HirelingTemple /* free auto-heal leaf 0x1E116 — no A–F captions */
+        HirelingTemple, /* free auto-heal leaf 0x1E116 — no A–F captions */
+        /* 0x1D6C2 / 0x1C432: preset 7 + pair text + key_read, then the caller
+         * menu redraws (temple/guild A-F, smith item list after buy/sell). */
+        ShopResult,
+        /* 0x20232: clear_rect_preset(7) wipes the trainee prompt; result text
+         * holds until key_read @ 0x20554, then the hall redraws. */
+        TrainingResult
     };
     enum class SmithMode : uint8_t { Buy, Sell, Identify };
+    /* Right-panel copy after T @ 0x20232 (strings 0x2055C / 0x20582 / 0x205A1). */
+    enum class TrainingFeedback : uint8_t { None, Gained, NeedGold, NotWell };
 
     void applyTempleAndReturn(int party_slot);
     void applyHirelingTempleAutoHeal(int party_slot);
     void enterTempleMemberView(int party_slot);
     void drawHirelingTempleHeal(gfx::ScreenCompositor &c) const;
-    void applyTrainingAndReturn(int party_slot);
+    void applyTrainingAndReturn(int party_slot, bool to_max = false);
     void applySmithBuyAndReturn(int party_slot);
     void applySmithSellAndReturn(int party_slot);
     void applySmithIdentifyAndReturn(int party_slot);
@@ -119,6 +129,7 @@ private:
     void applyTavernRumor();
     void applyGuildBuyAndReturn(int party_slot);
     void showActiveMemberGold();
+    void holdShopResult(Phase return_to);
     void buildSmithView();
     void buildSmithBackpackView();
     void buildGuildStock();
@@ -128,6 +139,8 @@ private:
     bool showGatherGoldLine() const;
     void drawLeftChrome(gfx::ScreenCompositor &c) const;
     void drawTrainingPrompt(gfx::ScreenCompositor &c) const;
+    void drawTrainingResult(gfx::ScreenCompositor &c) const;
+    void dismissTrainingResult();
 
     bool pending_ = false;
     bool active_ = false;
@@ -143,6 +156,7 @@ private:
     SmithMode smith_mode_ = SmithMode::Buy;
     int smith_slot_ = -1;         /* smith: chosen shop slot 0..5 */
     bool smith_identify_pending_ = false; /* 0x1BBD6: dismiss identify text before next pick */
+    Phase result_return_phase_ = Phase::Menu; /* ShopResult pops back to this phase */
     mm2::events::SmithItemView smith_view_[MM2_SMITH_SLOTS]{};
     Mm2SpellShopSlot guild_stock_[MM2_MAGE_GUILD_SLOTS]{};
     int guild_slot_ = -1;         /* mage guild: chosen A-D spell slot 0..3 */
@@ -157,9 +171,17 @@ private:
     bool tavern_tipped_ = false; /* true when current TavernRumor phase was triggered by D */
     int active_member_ = 0;         /* A4-$5A3A shop member index; digits 1..8 or # */
 
-    char status_[96] = {};        /* last transaction feedback line */
+    char status_[256] = {};       /* last transaction feedback line (identify is multi-line) */
     /* Hireling temple leaf message: "has been healed." or "  is healthy." (0x1E26A/0x1E27B). */
     char hireling_heal_msg_[24] = {};
+
+    TrainingFeedback training_feedback_ = TrainingFeedback::None;
+    uint16_t training_hp_gain_ = 0;
+    bool training_gained_spells_ = false;
+    /* Remake 'M' (train-to-max): cumulative summary instead of the ASM 1-level copy. */
+    bool training_max_summary_ = false;
+    uint8_t training_levels_gained_ = 0;
+    uint8_t training_spell_levels_gained_ = 0;
 };
 
 }  // namespace mm2::ui

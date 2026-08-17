@@ -488,6 +488,36 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         /* Free teleport UI -$7DB2 → 0xD576: hex X/Y → set coords + latch. */
         rt.armFreeTeleportUi();
         break;
+    case 0xE2: {
+        /* Jester "joke of the day" @ 0x18204 (Luxus/Hillstone/Woodhaven).
+         * -$7DE8(#0) fills A4-$5C42 with 22×4 str.dat bank-0 lines; index =
+         * day[era] % 22; -$7ED8(0) prints them at rows $13..$16 col 1; wait
+         * SPACE (0x20). Preset 0 does not clear the OP_01 header at row 17. */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
+                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 6));
+        char joke[256];
+        joke[0] = '\0';
+        if (rt.dataDir() && gs.a4()) {
+            char *path = mm2_path_scratch_a();
+            if (mm2::joinDataPath(path, MM2_PATH_SCRATCH_CAP, rt.dataDir(), "str.dat")) {
+                FILE *fp = std::fopen(path, "rb");
+                if (fp) {
+                    uint8_t strbuf[kStrDatSize];
+                    const size_t n = std::fread(strbuf, 1, sizeof(strbuf), fp);
+                    std::fclose(fp);
+                    eventVmInitStrBankOffsets(gs.a4());
+                    eventVmFillJokeStrTables(gs.a4(), strbuf, n);
+                    const uint16_t era = mm2_gs_u16(gs.a4(), MM2_GS_ERA);
+                    const uint16_t day = mm2_gs_day(gs.a4(), static_cast<int>(era));
+                    eventVmFormatJoke(gs.a4(), eventVmJokeIndex(day), joke, sizeof(joke));
+                }
+            }
+        }
+        text.showPartyBandText(joke);
+        text.showSpacePrompt();
+        wait = EventVmWait::Space;
+        break;
+    }
     case 0x7F: {
         /* Combat seed -$7DAC → 0xD634: type = (rng(1,16)-1)+(Y<<4); fill party. */
         uint8_t block[12] = {0};
@@ -516,6 +546,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
             break;
         }
         eventVmClearTileEventFlag(gs.a4(), world, static_cast<int>(cy), static_cast<int>(cx));
+        rt.markTileEventResolved(static_cast<int>(cy), static_cast<int>(cx));
         gs.setCoordX(kPortalDstX[hit]);
         gs.setCoordY(kPortalDstY[hit]);
         mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
@@ -550,11 +581,44 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         if (eventVmPartyGiveItem(gs.a4(), roster, launch, item_id, 0, 0)) {
             eventVmClearTileEventFlag(gs.a4(), world, static_cast<int>(gs.coordY()),
                                       static_cast<int>(gs.coordX()));
+            rt.markTileEventResolved(static_cast<int>(gs.coordY()),
+                                     static_cast<int>(gs.coordX()));
             mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
                           static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
             std::snprintf(buf, sizeof(buf), "You have found a %s", iname);
             showServiceTitle(text, wait, buf);
         }
+        break;
+    }
+    case 0xCF: {
+        /* Wayback machine @ 0x1480A (Pinehurst loc 57 evt 19 @ (2,5)/N).
+         * ori.b #$3, -$7950; walk party via -$7F20; btst #1,$80(record).
+         * None set → 0x143DE($10) "If you wish to use the wayback machine" /
+         * "see Lord Peabody." Else "What era do you desire (1-8)?" + 1-8
+         * teleport (tables A4-$6CE4/CDC/CD4). */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
+                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 3));
+        bool allowed = false;
+        if (roster && launch) {
+            for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+                const int ridx = launch->roster_slots[i];
+                if (ridx < 0 || ridx >= MM2_ROSTER_RECORD_COUNT) {
+                    continue;
+                }
+                const auto *raw = reinterpret_cast<const uint8_t *>(&roster->records[ridx]);
+                if ((raw[0x80] & 0x02) != 0) {
+                    allowed = true;
+                    break;
+                }
+            }
+        }
+        if (!allowed) {
+            showServiceTitle(text, wait,
+                             "If you wish to use the wayback machine\nsee Lord Peabody.");
+            break;
+        }
+        rt.armWaybackMachineUi();
+        wait = rt.waitKind();
         break;
     }
     case 0xC9:
@@ -579,9 +643,23 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
             break;
         }
         if (townSvcQuestBusy(roster, launch, drink)) {
-            showServiceTitle(text, wait,
-                             drink ? "Your party has already been quested\nto seek out the foe."
-                                   : "Your party has already been quested\nto seek out the item.");
+            /* 0x1961E busy text resolves the active +$78 target (item for
+             * Hoardall, monster for Slayer) so the player knows what they are
+             * still out to collect/slay. Falls back to the generic wording
+             * only when the name cannot be resolved. */
+            char busy_target[32];
+            if (townSvcQuestTargetName(roster, launch, drink, items,
+                                       rt.combat() ? rt.combat()->monsters() : nullptr,
+                                       busy_target, sizeof(busy_target))) {
+                std::snprintf(buf, sizeof(buf),
+                              "Your party has already been quested\nto seek out the %s.",
+                              busy_target);
+            } else {
+                std::snprintf(buf, sizeof(buf),
+                              drink ? "Your party has already been quested\nto seek out the foe."
+                                    : "Your party has already been quested\nto seek out the item.");
+            }
+            showServiceTitle(text, wait, buf);
             break;
         }
         rt.armQuestEncodeUi(drink);

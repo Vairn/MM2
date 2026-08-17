@@ -19,6 +19,7 @@
 #include "mm2_create_character.h"
 #include "mm2_gfx_sheet.h"
 #include "mm2_image32_codec.h"
+#include "mm2_items_codec.h"
 #include "mm2_pc_gfx_codec.h"
 #include "mm2_party_launch.h"
 
@@ -102,44 +103,6 @@ const char *conditionName(uint8_t c)
 }
 
 // FAQ save-state note: skill nibbles 1..15 — see RosterSkillDisplay.cpp.
-
-struct HirelingMeta {
-    uint32_t base_cost;
-    uint8_t start_level;
-    const char *skills; // space-separated FAQ abbreviations, or nullptr
-};
-
-// FAQ §3-4-1: hireling base cost, starting level, and preset skills (A–X).
-static const HirelingMeta kHirelingMeta[] = {
-    {2, 1, nullptr},       {2, 1, nullptr},       {2, 1, nullptr},
-    {10, 3, "Cru"},        {12, 3, "Car"},        {35, 5, "Lin"},
-    {35, 5, "Ath"},        {25, 6, "Arm"},        {55, 6, "Cru"},
-    {55, 7, "Mou Pat"},    {45, 7, "Gam Pic"},    {200, 9, "Dip Nav"},
-    {250, 9, "Lin Mer"},   {500, 11, "Cru Sol"},  {600, 11, "Arm Pat"},
-    {700, 13, "Dip Her"},  {1200, 13, "Cru Mer"},  {2000, 14, "Gla Sol"},
-    {2000, 16, "Ath Gam"}, {4000, 15, "Arm Gla"}, {6000, 15, "Arm Mou"},
-    {15000, 19, "Dip Gam"}, {25000, 25, "Gam Nav"},     {50000, 21, "Lin Mer"},
-};
-
-static uint32_t hirelingDailyCost(int hireling_index, uint8_t level)
-{
-    if (hireling_index < 0 || hireling_index >= static_cast<int>(sizeof(kHirelingMeta) / sizeof(kHirelingMeta[0]))) {
-        return 0;
-    }
-    const HirelingMeta &meta = kHirelingMeta[hireling_index];
-    uint32_t cost = meta.base_cost;
-    int gained = static_cast<int>(level) - static_cast<int>(meta.start_level);
-    if (gained < 0) {
-        gained = 0;
-    }
-    for (int i = 0; i < gained; ++i) {
-        cost += cost / 2;
-        if (cost >= 50000u) {
-            return 50000u;
-        }
-    }
-    return cost;
-}
 
 void drawCellText(gfx::ScreenCompositor &c, int row, int col, const char *text, uint8_t r = 255, uint8_t g = 255,
                   uint8_t b = 255)
@@ -724,7 +687,7 @@ private:
         MM2_DBG("MM2 DBG: Loading items.dat ok (%lu bytes)\n", (unsigned long)size);
     }
 
-    void itemName(uint8_t id, char *out, std::size_t out_cap) const
+    void itemName(uint8_t id, char *out, std::size_t out_cap, uint8_t flags = 0) const
     {
         if (id == 0) {
             out[0] = '\0';
@@ -746,6 +709,11 @@ private:
         out[n] = '\0';
         if (n == 0) {
             std::snprintf(out, out_cap, "#%u", id);
+            return;
+        }
+        const int plus = flags & 0x3F;
+        if (plus != 0) {
+            std::snprintf(out + n, out_cap - n, " +%d", plus);
         }
     }
 
@@ -1516,7 +1484,6 @@ private:
 
         const Mm2RosterRecord &rec = roster_->records[sheet_roster_index_];
         const bool hireling = isHirelingSlot(sheet_roster_index_);
-        const int hireling_index = hireling ? (sheet_roster_index_ - kRosterHirelingPageOffset) : -1;
         drawRedBorder(c, kSheetBorderRow, kSheetBorderCol, kSheetBorderW, kSheetBorderH);
         char name[16];
         size_t nlen = 0;
@@ -1567,7 +1534,16 @@ private:
         drawCellText(c, 6, kSheetStatColMid, buf);
         std::snprintf(buf, sizeof(buf), "SL=%u", rec.spell_level);
         drawCellText(c, 6, kSheetStatColSlash, buf);
-        std::snprintf(buf, sizeof(buf), "Thievery %u%%", rosterDisplayThievery(rec));
+        Mm2ItemsFile sheet_items{};
+        const Mm2ItemsFile *sheet_items_ptr = nullptr;
+        if (has_items_ && item_names_) {
+            if (mm2_items_decode(item_names_,
+                                 static_cast<std::size_t>(kItemRecordSize * kItemCount),
+                                 &sheet_items) == MM2_ITEMS_OK) {
+                sheet_items_ptr = &sheet_items;
+            }
+        }
+        std::snprintf(buf, sizeof(buf), "Thievery %u%%", rosterDisplayThievery(rec, sheet_items_ptr));
         drawCellText(c, 8, kSheetStatColMid, buf);
         drawCellText(c, 9, kSheetStatColMid, rosterSheetSkillName(static_cast<uint8_t>(packed & 0x0F)));
         drawCellText(c, 10, kSheetStatColMid, rosterSheetSkillName(static_cast<uint8_t>((packed >> 4) & 0x0F)));
@@ -1578,8 +1554,8 @@ private:
         std::snprintf(buf, sizeof(buf), "Exp=%lu", static_cast<unsigned long>(rec.experience));
         drawCellText(c, 4, kSheetStatColRight, buf);
         if (hireling) {
-            const uint32_t cost = hirelingDailyCost(hireling_index, rec.level);
-            std::snprintf(buf, sizeof(buf), "Cost=%lu", static_cast<unsigned long>(cost));
+            /* Live daily fee is roster +$66 (same field rest pay uses @ 0x19AE4). */
+            std::snprintf(buf, sizeof(buf), "Cost=%lu", static_cast<unsigned long>(rec.gold));
             drawCellText(c, 6, kSheetStatColCost, buf);
             drawCellText(c, 6, kSheetStatColCostDay, "/Day");
         } else {
@@ -1596,14 +1572,14 @@ private:
             const int row = kSheetEquipRowBase + i;
             char iname[20];
             char eline[24];
-            itemName(rec.equipped_id[i], iname, sizeof(iname));
+            itemName(rec.equipped_id[i], iname, sizeof(iname), rec.equipped_flags[i]);
             if (iname[0]) {
                 std::snprintf(eline, sizeof(eline), "%d) %s", i + 1, iname);
             } else {
                 std::snprintf(eline, sizeof(eline), "%d)", i + 1);
             }
             drawCellText(c, row, kSheetEquipCol, eline, 220, 220, 220);
-            itemName(rec.backpack_id[i], iname, sizeof(iname));
+            itemName(rec.backpack_id[i], iname, sizeof(iname), rec.backpack_flags[i]);
             if (iname[0]) {
                 std::snprintf(eline, sizeof(eline), "%c) %s", kPackLetters[i], iname);
             } else {

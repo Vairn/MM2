@@ -84,7 +84,7 @@ for each triplet (pos, event_id, cond):
     if pos != party_tile → continue
     if (cond & context) == 0 → continue
     pool_seek(event_id) → optional era gate → interpreter
-    clear triplet bytes (one-shot)
+    ; (C++ does not zero the triplet bytes)
 if queued_event_id != $FF:
     rebuild anchor from work_buf[0..1] as LE u16 (buf[1]<<8|buf[0]); parse_pos=2;
     pool_seek(queued_id) → interpreter;
@@ -96,6 +96,15 @@ the overlay category, calls `-$7DFA` (loader), restores `screen_mode_id`, stores
 the adjusted index in `queued_event_id` (`A4-$5D46`), then returns. The **scanner
 epilogue** (not the OP_0E handler) runs that queued script. Port:
 `eventVmBinExecSelector` + `runDefaultRangeOverlay` / `runQueuedDispatch`.
+
+**PORT DEVIATION (ASM unclear, 2026-08):** dungeon `OP_12` fights are typically
+`OP_2B` (skip fight on victory latch) / `OP_12` / `OP_14`. Collision-page bit7
+is the ambient-encounter gate (`0x176F2` / `0x1258`), not a "this tile still has
+a live scripted event" marker — Middlegate Cavern `(1,2)` is already `0x41`
+before any fight, yet the triplet still matches. The remake therefore gives
+`OP_14` a separate per-tile resolved flag (`EventRuntime::tile_event_resolved_`),
+checked by the triplet walk, reset only on `enterLocation` (leave and come back).
+A resolved tile still counts as `matched_tile` so the ambient path does not arm.
 
 **Castle blobs** (locs 63/65/68): no `00 00 00` terminator — `0x1754A` never
 completes; leave `event_script_anchor=$FFFF` and use queued dispatch only.

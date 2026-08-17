@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mm2_items_codec.h"
 #include "mm2_roster_codec.h"
 
 namespace mm2::ui {
@@ -7,8 +8,8 @@ namespace mm2::ui {
 /** A4-$8720[0] empty-skill glyph run printed by LAB_38EA fields $14/$15. */
 inline constexpr char kRosterEmptySkillSlot[] = "............";
 
-/** Thievery % for character-sheet draw (roster+$1E @ character_sheet_draw). */
-uint8_t rosterDisplayThievery(const Mm2RosterRecord &rec);
+/** Thievery % for character-sheet draw: roster+$1E plus equipped type-14. */
+uint8_t rosterDisplayThievery(const Mm2RosterRecord &rec, const Mm2ItemsFile *items = nullptr);
 
 /** A4-$8720[id] for LAB_38EA — id 0 is the 12-dot empty slot. */
 const char *rosterSheetSkillName(uint8_t id);

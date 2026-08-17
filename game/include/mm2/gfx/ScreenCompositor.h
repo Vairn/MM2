@@ -25,6 +25,9 @@ public:
     void blitRgba(const uint8_t *src, int src_w, int src_h, int dst_x, int dst_y, bool skip_transparent = true,
                   uint8_t global_alpha = 255);
 
+    /** Multiply RGB in a rectangle by num/den (PC host; Amiga uses the world palette). */
+    void scaleRectRgb(int x, int y, int w, int h, int num, int den);
+
     /** Draw one font-8 glyph by codepoint (0..127). */
     void drawGlyph(int x, int y, uint8_t codepoint, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255,
                    uint8_t a = 255);

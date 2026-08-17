@@ -7,7 +7,12 @@ The field engine ``event_member_field_ptr`` @ 0x17766 maps a *selector byte*
 0x17FEA: ``target = 0x180FE + int16(table[selector])``. Each target stub does
 ``movea.l $8(a5),a0; adda.l #N,a0; move.l a0,-$4A8(a4)`` (N = field offset; the
 ``move.l $8(a5),-$4A8`` form means N=0), or jumps to the computed getters
-($177E4 base-HP, $177F2 base-SP @ $181B0).
+($177E4 selector 0, $177F2 selector 1 @ $181B0). $181B0 is a record-pointer
+-> roster-array-index cache lookup, not a stat formula — confirmed via
+roster.dat cross-check against event.dat loc 69 slot 17 (Lord Peabody's
+"Don't come back without Sherman!" gate brackets each party member's
+selector-0 value between 0x28/0x29; Sherman's fixed hireling slot is roster
+index 0x28). Selector 1's computed value is still unconfirmed.
 
 Width comes from the 0x17766 prologue:
   - long  (4): selectors 0x31, 0x3E
@@ -151,8 +156,10 @@ def write_header(entries: list[dict]) -> None:
     lines.append("// Maps an event/spell *field selector* byte (0x00..0x7F) to a byte offset")
     lines.append("// inside a 0x82-byte character record (Mm2RosterRecord) plus the natural")
     lines.append("// access width (1/2/4). offset == kEventFieldComputed marks the two")
-    lines.append("// computed getters (selector 0x00 = base max HP, 0x01 = base max SP @ 0x181B0)")
-    lines.append("// which are not a simple record offset.")
+    lines.append("// computed getters (selector 0x00/0x01 @ 0x181B0), which are not a simple")
+    lines.append("// record offset. Selector 0x00 is confirmed (roster.dat cross-check, see")
+    lines.append("// eventVmApplyPartyByteOp) to resolve the character's roster array index,")
+    lines.append("// not a stat. Selector 0x01's computed value is still unconfirmed.")
     lines.append("")
     lines.append("#include <cstdint>")
     lines.append("")

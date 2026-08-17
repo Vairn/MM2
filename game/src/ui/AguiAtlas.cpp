@@ -215,6 +215,14 @@ const AguiAtlasRect *AguiAtlas::find(const char *name) const
     return nullptr;
 }
 
+void AguiAtlas::blitNamed(gfx::ScreenCompositor &c, const char *name, int dst_x, int dst_y) const
+{
+    const AguiAtlasRect *r = find(name);
+    if (r) {
+        blit(c, *r, dst_x, dst_y);
+    }
+}
+
 void AguiAtlas::blit(gfx::ScreenCompositor &c, const AguiAtlasRect &src, int dst_x, int dst_y) const
 {
     if (!ready() || src.w <= 0 || src.h <= 0) {

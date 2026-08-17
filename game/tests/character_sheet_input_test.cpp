@@ -5,7 +5,11 @@
 #include <cstring>
 
 #include "mm2/gameplay/InGameCharacterSheet.h"
+#include "mm2/gameplay/RosterSkills.h"
 #include "mm2/gameplay/SpellBook.h"
+#include "mm2/ui/RosterSkillDisplay.h"
+#include "mm2_create_character.h"
+#include "mm2_items_codec.h"
 #include "mm2_party_launch.h"
 #include "mm2_roster_codec.h"
 
@@ -81,6 +85,34 @@ int main()
     sheet.handleKey('1', session, roster, launch, nullptr);
     expect(roster.records[0].gold == 75, "gather gold pools party", fails);
     expect(roster.records[1].gold == 0, "other member gold cleared", fails);
+
+    /* $7F68: hireling roster index >= $18 — fee at +$66 must not be pooled. */
+    mm2_roster_clear_record(&roster.records[24]);
+    mm2_roster_set_name(&roster.records[24], "HireA");
+    roster.records[24].gold = 55; /* daily fee */
+    roster.records[0].gold = 100;
+    roster.records[1].gold = 40;
+    launch.party_count = 3;
+    launch.roster_slots[0] = 0;
+    launch.roster_slots[1] = 1;
+    launch.roster_slots[2] = 24;
+    session = {};
+    session.party_slot = 0;
+    sheet.handleKey('G', session, roster, launch, nullptr);
+    sheet.handleKey('1', session, roster, launch, nullptr);
+    expect(roster.records[0].gold == 140, "gather gold skips hireling fee", fails);
+    expect(roster.records[1].gold == 0, "hero gold cleared by gather", fails);
+    expect(roster.records[24].gold == 55, "hireling fee untouched by gather", fails);
+
+    session = {};
+    session.party_slot = 2; /* hireling initiator */
+    sheet.handleKey('G', session, roster, launch, nullptr);
+    sheet.handleKey('1', session, roster, launch, nullptr);
+    expect(roster.records[24].gold == 55, "hireling cannot gather gold", fails);
+    expect(roster.records[0].gold == 140, "heroes unchanged when hireling gathers", fails);
+
+    launch.party_count = 2;
+    launch.roster_slots[2] = -1;
 
     roster.records[0].gold = 40;
     roster.records[1].gold = 0;
@@ -272,8 +304,187 @@ int main()
         expect(ssession.sub_mode == mm2::gameplay::SheetSubMode::Normal, "non-caster 'C' stays normal", fails);
     }
 
+    /* Equip @ 0xF36C / unequip @ 0xF270: weapon dice, armor +$1F→+$24, special power. */
+    {
+        Mm2ItemsFile items{};
+        items.records[1].damage = 6;          /* melee die */
+        items.records[1].bonus_byte = 0x03;   /* Might +3 */
+        items.records[0x73].damage = 4;       /* armor AC */
+        items.records[0x73].bonus_byte = 0x00;
+
+        Mm2RosterFile eroster{};
+        Mm2PartyLaunch elaunch{};
+        mm2_roster_clear_record(&eroster.records[0]);
+        mm2_roster_set_name(&eroster.records[0], "Equip");
+        eroster.records[0].class_id = 0;
+        eroster.records[0].speed_current = 1; /* -$7F56 → $FD ≥ $F0 → speed AC 0 */
+        eroster.records[0].might_current = 15;
+        eroster.records[0].might_base = 15;
+        eroster.records[0].backpack_id[0] = 1;
+        eroster.records[0].backpack_flags[0] = 2; /* +2 instance bonus */
+        eroster.records[0].backpack_id[1] = 0x73;
+        elaunch.party_count = 1;
+        elaunch.roster_slots[0] = 0;
+
+        mm2::gameplay::InGameCharacterSheet esheet;
+        mm2::gameplay::SheetSession esession{};
+        esession.party_slot = 0;
+
+        esheet.handleKey('E', esession, eroster, elaunch, &items);
+        esheet.handleKey('A', esession, eroster, elaunch, &items);
+        expect(eroster.records[0].equipped_id[0] == 1, "club moved to equip", fails);
+        expect(eroster.records[0].spells[0] == 6, "melee die from items.dat $10", fails);
+        expect(eroster.records[0].spells[1] == 2, "melee bonus from flags&0x3F", fails);
+        expect(eroster.records[0].might_current == 20, "Might +3 plus flags +2", fails);
+        expect(eroster.records[0].might_base == 20, "base Might also boosted (type<=5)", fails);
+
+        esheet.handleKey('E', esession, eroster, elaunch, &items);
+        esheet.handleKey('B', esession, eroster, elaunch, &items);
+        expect(eroster.records[0].equipped_id[1] == 0x73, "shield moved to equip", fails);
+        expect(eroster.records[0].unknown_1a_20[5] == 4, "equipment AC accumulator +$1F", fails);
+        expect(eroster.records[0].armor_class == 4, "displayed AC +$24 from +$1F", fails);
+
+        esheet.handleKey('R', esession, eroster, elaunch, &items);
+        esheet.handleKey('1', esession, eroster, elaunch, &items);
+        expect(eroster.records[0].spells[0] == 0, "melee fields cleared after unequip", fails);
+        expect(eroster.records[0].might_current == 15, "Might restored on unequip", fails);
+        expect(eroster.records[0].might_base == 15, "base Might restored on unequip", fails);
+        expect(eroster.records[0].armor_class == 4, "shield AC remains after weapon remove", fails);
+
+        esheet.handleKey('R', esession, eroster, elaunch, &items);
+        esheet.handleKey('2', esession, eroster, elaunch, &items);
+        expect(eroster.records[0].unknown_1a_20[5] == 0, "+$1F cleared after shield remove", fails);
+        expect(eroster.records[0].armor_class == 0, "displayed AC cleared after shield remove", fails);
+    }
+
+    /* Occupancy @ 0xEC02: one melee, missile, shield, armor, helm; 2H vs shield. */
+    {
+        Mm2ItemsFile items{};
+        Mm2RosterFile oroster{};
+        Mm2PartyLaunch olaunch{};
+        mm2_roster_clear_record(&oroster.records[0]);
+        mm2_roster_set_name(&oroster.records[0], "Slots");
+        oroster.records[0].class_id = 0;
+        oroster.records[0].equipped_id[0] = 1;    /* 1H club */
+        oroster.records[0].backpack_id[0] = 0x0C; /* 1H sword */
+        oroster.records[0].backpack_id[1] = 0x42; /* 2H staff */
+        oroster.records[0].backpack_id[2] = 0x5E; /* short bow */
+        oroster.records[0].backpack_id[3] = 0x73; /* small shield */
+        oroster.records[0].backpack_id[4] = 0x7F; /* padded armor */
+        oroster.records[0].backpack_id[5] = 0x7F; /* second armor */
+        olaunch.party_count = 1;
+        olaunch.roster_slots[0] = 0;
+
+        mm2::gameplay::InGameCharacterSheet osheet;
+        mm2::gameplay::SheetSession osession{};
+        osession.party_slot = 0;
+
+        osheet.handleKey('E', osession, oroster, olaunch, &items);
+        osheet.handleKey('A', osession, oroster, olaunch, &items);
+        expect(oroster.records[0].backpack_id[0] == 0x0C, "second melee stays in pack", fails);
+        expect(std::strcmp(osession.status_line, "Already have weapon") == 0, "1H vs 1H blocked", fails);
+
+        osheet.handleKey('E', osession, oroster, olaunch, &items);
+        osheet.handleKey('B', osession, oroster, olaunch, &items);
+        expect(oroster.records[0].backpack_id[1] == 0x42, "2H stays in pack with 1H on", fails);
+        expect(std::strcmp(osession.status_line, "Already have weapon") == 0, "1H vs 2H blocked", fails);
+
+        osheet.handleKey('E', osession, oroster, olaunch, &items);
+        osheet.handleKey('C', osession, oroster, olaunch, &items);
+        expect(oroster.records[0].equipped_id[1] == 0x5E, "missile allowed with melee", fails);
+
+        osheet.handleKey('E', osession, oroster, olaunch, &items);
+        osheet.handleKey('D', osession, oroster, olaunch, &items);
+        expect(oroster.records[0].equipped_id[2] == 0x73, "shield allowed with 1H", fails);
+
+        osheet.handleKey('E', osession, oroster, olaunch, &items);
+        osheet.handleKey('E', osession, oroster, olaunch, &items);
+        expect(oroster.records[0].equipped_id[3] == 0x7F, "first armor equipped", fails);
+
+        osheet.handleKey('E', osession, oroster, olaunch, &items);
+        osheet.handleKey('F', osession, oroster, olaunch, &items);
+        expect(oroster.records[0].backpack_id[5] == 0x7F, "second armor stays in pack", fails);
+        expect(std::strcmp(osession.status_line, "Already wearing armor") == 0, "two armors blocked",
+               fails);
+
+        /* 2H vs shield: clear melee, leave shield, try staff. */
+        oroster.records[0].equipped_id[0] = 0;
+        oroster.records[0].backpack_id[1] = 0x42;
+        osheet.handleKey('E', osession, oroster, olaunch, &items);
+        osheet.handleKey('B', osession, oroster, olaunch, &items);
+        expect(oroster.records[0].backpack_id[1] == 0x42, "2H stays in pack with shield", fails);
+        expect(std::strcmp(osession.status_line, "Not with shield") == 0, "2H vs shield blocked", fails);
+    }
+
+    /* Thievery: +$1E is the persistent skill; type-14 gear is added live and
+     * must not mutate +$1E (pre-worn Hermit kit was dropping below 30 on Remove). */
+    {
+        Mm2ItemsFile items{};
+        items.records[0xA3].bonus_byte = 0xEF; /* Thief's Pick: type 14 amount 15 */
+        items.records[0xD5].bonus_byte = 0xE5; /* Castle Key: type 14 amount 5 */
+
+        Mm2RosterFile troster{};
+        Mm2PartyLaunch tlaunch{};
+        mm2_roster_clear_record(&troster.records[0]);
+        mm2_roster_set_name(&troster.records[0], "Hermit");
+        troster.records[0].class_id = 5;
+        troster.records[0].unknown_1a_20[4] = 30;
+        troster.records[0].equipped_id[0] = 0xD5;
+        troster.records[0].equipped_id[1] = 0xA3;
+        troster.records[0].equipped_flags[1] = 4;
+        troster.records[0].equipped_id[2] = 0xA3;
+        troster.records[0].equipped_flags[2] = 4;
+        tlaunch.party_count = 1;
+        tlaunch.roster_slots[0] = 0;
+
+        expect(mm2::ui::rosterDisplayThievery(troster.records[0], &items) == 73,
+               "live thievery 30+5+19+19", fails);
+        expect(troster.records[0].unknown_1a_20[4] == 30, "base +$1E unchanged with gear on", fails);
+
+        mm2::gameplay::InGameCharacterSheet tsheet;
+        mm2::gameplay::SheetSession tsession{};
+        tsession.party_slot = 0;
+        tsheet.handleKey('R', tsession, troster, tlaunch, &items);
+        tsheet.handleKey('1', tsession, troster, tlaunch, &items);
+        expect(troster.records[0].unknown_1a_20[4] == 30, "removing Castle Key keeps +$1E at 30", fails);
+        expect(mm2::ui::rosterDisplayThievery(troster.records[0], &items) == 68,
+               "live 30+19+19 after key remove", fails);
+
+        tsheet.handleKey('R', tsession, troster, tlaunch, &items);
+        tsheet.handleKey('2', tsession, troster, tlaunch, &items);
+        tsheet.handleKey('R', tsession, troster, tlaunch, &items);
+        tsheet.handleKey('3', tsession, troster, tlaunch, &items);
+        expect(troster.records[0].unknown_1a_20[4] == 30, "naked robber still 30", fails);
+        expect(mm2::ui::rosterDisplayThievery(troster.records[0], &items) == 30,
+               "live thievery returns to class start", fails);
+
+        Mm2PendingCharacter pending{};
+        mm2_create_pending_init(&pending);
+        pending.class_id = 5;
+        pending.race = 1;
+        pending.alignment = 1;
+        pending.sex = 0;
+        pending.modified.might = 15;
+        pending.modified.intelligence = 15;
+        pending.modified.personality = 15;
+        pending.modified.endurance = 15;
+        pending.modified.speed = 15;
+        pending.modified.accuracy = 15;
+        pending.modified.luck = 15;
+        Mm2RosterRecord created{};
+        mm2_create_build_record(&pending, &created);
+        expect(created.unknown_1a_20[4] == 30, "create robber writes 30 to +$1E", fails);
+        expect(created.thievery_percent == 0, "create does not write thievery to +$16", fails);
+        pending.class_id = 6;
+        mm2_create_build_record(&pending, &created);
+        expect(created.unknown_1a_20[4] == 10, "create ninja writes 10 to +$1E", fails);
+        pending.class_id = 0;
+        mm2_create_build_record(&pending, &created);
+        expect(created.unknown_1a_20[4] == 0, "create knight writes 0 to +$1E", fails);
+    }
+
     if (fails == 0) {
-        std::printf("OK: character_sheet_input_test (58 checks)\n");
+        std::printf("OK: character_sheet_input_test\n");
         return 0;
     }
     return 1;

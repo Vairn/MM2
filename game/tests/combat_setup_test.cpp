@@ -289,6 +289,58 @@ int main()
         expect(combat.active(), "overflow: fight continues with remaining pack", fails);
     }
 
+    /* ---- 0x10CCE / 0x129CC: after kills the visible list starts at A, no holes. */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x00); /* 1 HP */
+        setMonsterField(mon, MM2_MON_OFF_XP, 0x10);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(mon, MM2_MON_OFF_DAMAGE, 0x00);
+        std::memcpy(mon.name, "Orc\0\0\0\0\0\0\0\0\0\0\0\0", MM2_MONSTER_NAME_SIZE);
+
+        setupParty(roster, launch, /*might=*/99, /*speed=*/99, /*hp=*/999);
+        seedOverflowEncounter(gs, 7, /*overflow_extras=*/5);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "pack-list: enter", fails);
+
+        platform::KeyState keys{};
+        keys.last_ascii = 'A';
+        combat.tick(gs, world, keys);
+        for (int i = 0; i < 32 && combat.active() && combat.state() != CombatState::AwaitingCommand; ++i) {
+            keys.last_ascii = ' ';
+            combat.tick(gs, world, keys);
+        }
+        expect(combat.state() == CombatState::AwaitingCommand, "pack-list: command turn", fails);
+
+        for (int k = 0; k < 4; ++k) {
+            expect(combat.devKillSlot(gs, 0), "pack-list: kill front slot", fails);
+        }
+        const gfx::CombatPanelView v = combat.panelView();
+        expect(v.monster_lines[0].occupied && v.monster_lines[0].letter == 'A',
+               "pack-list: first row is A) after four kills", fails);
+        int first_empty = -1;
+        int occ = 0;
+        for (int i = 0; i < 10; ++i) {
+            if (v.monster_lines[i].occupied) {
+                ++occ;
+                expect(first_empty < 0, "pack-list: no hole before a later letter", fails);
+                expect(v.monster_lines[i].letter == static_cast<char>('A' + i),
+                       "pack-list: letter matches packed slot", fails);
+            } else if (first_empty < 0) {
+                first_empty = i;
+            }
+        }
+        expect(occ == 10, "pack-list: overflow still fills A–J", fails);
+        expect(v.overflow_more == 1, "pack-list: +5 extras minus 4 kills → +1", fails);
+    }
+
     /* ---- XP split @ 0x12430: unconscious (0 HP, condition < $80) gets a share. */
     {
         rng.reseed(1);
@@ -1213,6 +1265,36 @@ int main()
                    "explore-cast: Bless does not bump -$799D", fails);
         }
 
+        /* 0xCC18 party_count==1 → 0xCCE8 "'Return' to cast"; Return (0x0D) applies. */
+        {
+            Mm2RosterFile aidroster{};
+            Mm2PartyLaunch aidlaunch{};
+            mm2_roster_clear_record(&aidroster.records[0]);
+            mm2_roster_set_name(&aidroster.records[0], "Priest");
+            aidroster.records[0].class_id = 3;
+            aidroster.records[0].level = 4;
+            aidroster.records[0].spell_level = 1;
+            aidroster.records[0].sp_current = 20;
+            aidroster.records[0].sp_max = 20;
+            aidroster.records[0].hp_current = 20;
+            aidroster.records[0].hp_max = 10;
+            gameplay::spellLearnInBook(aidroster.records[0], 3);
+            aidlaunch.party_count = 1;
+            aidlaunch.roster_slots[0] = 0;
+            CombatSession aidcast;
+            aidcast.bindParty(&aidroster, &aidlaunch);
+            aidcast.bindRng(&rng);
+            aidcast.castSpellFromSheet(gs, 0, 3);
+            expect(aidcast.sheetCastPending(), "explore-cast: First Aid waits Return", fails);
+            expect(aidcast.sheetCastKeepsSheet(), "explore-cast: First Aid stays on sheet", fails);
+            expect(std::strcmp(aidcast.statusLine(), "'Return' to cast") == 0,
+                   "explore-cast: 0xCCE8 Return prompt", fails);
+            expect(aidroster.records[0].hp_max == 10, "explore-cast: First Aid not yet applied", fails);
+            expect(aidcast.tickSheetCastAux(gs, '\r'), "explore-cast: Return confirms First Aid", fails);
+            expect(!aidcast.sheetCastPending(), "explore-cast: First Aid completes", fails);
+            expect(aidroster.records[0].hp_max == 18, "explore-cast: First Aid heals +8", fails);
+        }
+
         mm2_gs_set_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS, 0);
         scast.castSpellFromSheet(gs, 0, 15);
         expect(scast.sheetCastPending(), "explore-cast: Fly waits for A-E", fails);
@@ -1234,6 +1316,444 @@ int main()
         mm2_gs_set_u8(gs.a4(), MM2_GS_ENTRY_COORD, 0xA3); /* (3,10) */
         expect(gameplay::applyEntryCoordIfSentinel(gs), "explore-cast: $FF → entry_coord", fails);
         expect(gs.coordX() == 3 && gs.coordY() == 10, "explore-cast: entry unpack (3,10)", fails);
+    }
+
+    /* ---- Remake F11 Monsters cheats: instant win / sleep / flee. */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x1E); /* not a 1-HP punch-kill */
+        setMonsterField(mon, MM2_MON_OFF_XP, 0x2E); /* 150 XP */
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(mon, MM2_MON_OFF_DAMAGE, 0x00);
+
+        setupParty(roster, launch, /*might=*/1, /*speed=*/1, /*hp=*/50);
+        seedFixedEncounter(gs, 7);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "dev cheat: enter", fails);
+        expect(combat.active(), "dev cheat: fight running", fails);
+
+        const int slept = combat.devSleepAll(gs);
+        expect(slept >= 1, "dev cheat: sleep all hits at least one", fails);
+        const CombatMonster *m0 = combat.monsterSlot(0);
+        expect(m0 && (m0->status & 0x10) != 0, "dev cheat: asleep bit $10", fails);
+
+        expect(combat.devForceWin(gs), "dev cheat: instant win", fails);
+        expect(combat.state() == CombatState::AwaitingVictoryDismiss, "dev cheat: victory panel",
+               fails);
+        expect(combat.lastOutcome() == CombatOutcome::Victory, "dev cheat: outcome Victory", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 1, "dev cheat: victory latch",
+               fails);
+        expect(roster.records[0].experience == 150, "dev cheat: kill XP credited", fails);
+
+        platform::KeyState keys{};
+        keys.any_key = true;
+        expect(combat.tick(gs, world, keys), "dev cheat: dismiss victory", fails);
+        expect(!combat.active(), "dev cheat: inactive after dismiss", fails);
+    }
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x1E);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setupParty(roster, launch, /*might=*/1, /*speed=*/1, /*hp=*/50);
+        seedFixedEncounter(gs, 7);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENTRY_COORD, 0x21); /* restore (1,2) on flee */
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "dev flee: enter", fails);
+        expect(combat.devForceFlee(gs), "dev flee: instant flee", fails);
+        expect(!combat.active(), "dev flee: fight ended", fails);
+        expect(combat.lastOutcome() == CombatOutcome::Fled, "dev flee: outcome Fled", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 0, "dev flee: no victory latch",
+               fails);
+    }
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x00);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setupParty(roster, launch, /*might=*/1, /*speed=*/1, /*hp=*/40);
+        seedFixedEncounter(gs, 7);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "invuln: enter", fails);
+        combat.setDevInvulnerable(true);
+        expect(combat.devInvulnerable(), "invuln: flag on", fails);
+        combat.applyPartyDamage4AAA(gs, 0, 40, "Orc");
+        expect(roster.records[0].hp_max == 40 && roster.records[0].condition == 0,
+               "invuln: hit does not change HP/cond", fails);
+        combat.setDevInvulnerable(false);
+        combat.applyPartyDamage4AAA(gs, 0, 40, "Orc");
+        expect(roster.records[0].hp_max == 0 && (roster.records[0].condition & 0x40) != 0,
+               "invuln: off restores damage", fails);
+    }
+
+    /* ---- 0x12F74 party options: Hide / Bribe (broken before Auto). Mode $82
+     * lands on A/B/H/R without the 0x12EE2 surprise roll. ---- */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x1E);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setupParty(roster, launch, /*might=*/1, /*speed=*/1, /*hp=*/50);
+        roster.records[0].unknown_1a_20[4] = 0;
+        seedFixedEncounter(gs, 7);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE, 0x82);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "hide-fail: enter", fails);
+        expect(combat.state() == CombatState::AwaitingPartyOptions, "hide-fail: party options", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_HIDE_THRESH) == 0, "hide-fail: $5E4E is 0", fails);
+
+        platform::KeyState keys{};
+        keys.last_ascii = 'H';
+        combat.tick(gs, world, keys);
+        expect(combat.active(), "hide-fail: fight continues", fails);
+        expect(combat.state() != CombatState::AwaitingPartyOptions,
+               "hide-fail: 0x13124 rewrite to Attack starts the round", fails);
+        expect(combat.roundLayoutActive(), "hide-fail: round loop chrome", fails);
+    }
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x1E);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setupParty(roster, launch, /*might=*/1, /*speed=*/1, /*hp=*/50);
+        roster.records[0].unknown_1a_20[4] = 0xFF;
+        seedFixedEncounter(gs, 7);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE, 0x82);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENTRY_COORD, 0x12); /* (2,1) — must not snap here */
+        gs.setCoordX(5);
+        gs.setCoordY(7);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "hide-ok: enter", fails);
+        expect(combat.state() == CombatState::AwaitingPartyOptions, "hide-ok: party options", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_HIDE_THRESH) == 0xFF, "hide-ok: $5E4E is 255", fails);
+
+        platform::KeyState keys{};
+        keys.last_ascii = 'H';
+        const bool ended = combat.tick(gs, world, keys);
+        expect(ended || !combat.active(), "hide-ok: leave combat", fails);
+        expect(combat.lastOutcome() == CombatOutcome::Fled, "hide-ok: outcome Fled", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 1,
+               "hide-ok: -$77BD set (0x13116)", fails);
+        expect(gs.coordX() == 5 && gs.coordY() == 7,
+               "hide-ok: stay on encounter square (no 0x11646)", fails);
+        expect(mm2_gs_u16(gs.a4(), MM2_GS_BATTLES_LOST) == 0,
+               "hide-ok: battles lost not incremented", fails);
+        expect(std::strcmp(combat.statusLine(), "Success!") == 0, "hide-ok: Success!", fails);
+    }
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x1E);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(mon, MM2_MON_OFF_TREASURE, 0); /* no food/gold/gems gates */
+        setupParty(roster, launch, /*might=*/1, /*speed=*/1, /*hp=*/50);
+        roster.records[0].gold = 500;
+        seedFixedEncounter(gs, 7);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE, 0x82);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "bribe: enter", fails);
+        expect(combat.state() == CombatState::AwaitingPartyOptions, "bribe: party options", fails);
+
+        platform::KeyState keys{};
+        keys.last_ascii = 'B';
+        combat.tick(gs, world, keys);
+        expect(combat.state() == CombatState::AwaitingBribeKind, "bribe: B opens kind prompt", fails);
+
+        keys.last_ascii = '2';
+        combat.tick(gs, world, keys);
+        expect(combat.state() == CombatState::AwaitingBribeAmount, "bribe: 2-Gold amount prompt", fails);
+
+        keys.last_ascii = '1';
+        combat.tick(gs, world, keys);
+        keys.last_ascii = '\r';
+        combat.tick(gs, world, keys);
+        expect(combat.active(), "bribe-refuse: fight continues", fails);
+        expect(combat.state() != CombatState::AwaitingPartyOptions,
+               "bribe-refuse: 0x13098 key 'A' starts the round", fails);
+        expect(combat.roundLayoutActive(), "bribe-refuse: round loop chrome", fails);
+    }
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &mon = monsters.records[7];
+        setMonsterField(mon, MM2_MON_OFF_HP, 0x1E);
+        setMonsterField(mon, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(mon, MM2_MON_OFF_TREASURE, 0x40); /* gold bribe gate */
+        setupParty(roster, launch, /*might=*/1, /*speed=*/1, /*hp=*/50);
+        roster.records[0].gold = 500;
+        seedFixedEncounter(gs, 7);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENCOUNTER_MODE, 0x82);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ATTRIB_BUF + 0x11, 0); /* demand 0 → any roll passes */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENTRY_COORD, 0x12); /* (2,1) — must not snap here */
+        gs.setCoordX(5);
+        gs.setCoordY(7);
+
+        CombatSession combat;
+        combat.bindParty(&roster, &launch);
+        combat.bindMonsters(&monsters);
+        combat.bindRng(&rng);
+        expect(combat.enter(gs, world), "bribe-ok: enter", fails);
+
+        platform::KeyState keys{};
+        keys.last_ascii = 'B';
+        combat.tick(gs, world, keys);
+        keys.last_ascii = '2';
+        combat.tick(gs, world, keys);
+        keys.last_ascii = '1';
+        combat.tick(gs, world, keys);
+        keys.last_ascii = '0';
+        combat.tick(gs, world, keys);
+        keys.last_ascii = '\r';
+        const bool ended = combat.tick(gs, world, keys);
+        expect(ended || !combat.active(), "bribe-ok: leave combat", fails);
+        expect(combat.lastOutcome() == CombatOutcome::Fled, "bribe-ok: outcome Fled", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH) == 1,
+               "bribe-ok: -$77BD set (0x130C6)", fails);
+        expect(gs.coordX() == 5 && gs.coordY() == 7,
+               "bribe-ok: stay on encounter square (no 0x11646)", fails);
+    }
+
+    /* 0x10894 / 0x10B24: AoE damage compact+redraws one slot, then jsr $132e6.
+     * High-damage Inferno must not wipe the whole pack before the first ack. */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &rat = monsters.records[1];
+        std::memcpy(rat.name, "Rat", 3);
+        setMonsterField(rat, MM2_MON_OFF_HP, 0x00); /* 1 HP */
+        setMonsterField(rat, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(rat, MM2_MON_OFF_DAMAGE, 0x01);
+        setMonsterField(rat, MM2_MON_OFF_PICTURE, 10);
+
+        Mm2RosterFile iroster{};
+        Mm2PartyLaunch ilaunch{};
+        setupParty(iroster, ilaunch, /*might=*/50, /*speed=*/99, /*hp=*/200);
+        iroster.records[0].class_id = 4; /* Sorcerer */
+        iroster.records[0].level = 20;
+        iroster.records[0].spell_level = 9;
+        iroster.records[0].sp_current = 200;
+        iroster.records[0].sp_max = 200;
+        iroster.records[0].gems = 30;
+        gameplay::spellLearnInBook(iroster.records[0], 45); /* S9/2 Inferno */
+
+        uint8_t *a4 = gs.a4();
+        mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_MODE, 0x80);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 0, 1);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 1, 1);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + 2, 1);
+        for (int i = 3; i < MM2_GS_MONSTER_SLOT_COUNT; ++i) {
+            mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, 0);
+        }
+        mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_OVERFLOW_TYPE, 0);
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 3);
+
+        CombatSession icombat;
+        icombat.bindParty(&iroster, &ilaunch);
+        icombat.bindMonsters(&monsters);
+        icombat.bindRng(&rng);
+        expect(icombat.enter(gs, world), "aoe-pace: enter", fails);
+
+        platform::KeyState keys{};
+        keys.last_ascii = ' ';
+        icombat.tick(gs, world, keys);
+        if (icombat.state() == CombatState::AwaitingPartyOptions) {
+            keys.last_ascii = 'A';
+            icombat.tick(gs, world, keys);
+        }
+        for (int i = 0; i < 32 && icombat.active() &&
+             icombat.state() != CombatState::AwaitingCommand; ++i) {
+            keys.last_ascii = ' ';
+            icombat.tick(gs, world, keys);
+        }
+        expect(icombat.state() == CombatState::AwaitingCommand, "aoe-pace: command", fails);
+        expect(icombat.autoAliveMonsterCount() == 3, "aoe-pace: three rats before cast", fails);
+
+        keys.last_ascii = 'C';
+        icombat.tick(gs, world, keys);
+        keys.last_ascii = '9';
+        icombat.tick(gs, world, keys);
+        keys.last_ascii = '2';
+        icombat.tick(gs, world, keys);
+        expect(icombat.state() == CombatState::AwaitingActionAck, "aoe-pace: Inferno acks", fails);
+        expect(icombat.autoAliveMonsterCount() == 2,
+               "aoe-pace: first 0x10894 target only — two still standing", fails);
+        int occupied = 0;
+        const gfx::CombatPanelView view = icombat.panelView();
+        for (int i = 0; i < view.monster_line_count; ++i) {
+            if (view.monster_lines[i].occupied) {
+                ++occupied;
+            }
+        }
+        expect(occupied == 2, "aoe-pace: list still shows two after first kill", fails);
+        expect(view.sprite_slot_count > 0 && view.sprite_slots[0].stack_count == 2,
+               "aoe-pace: sprite stack drops by one, not all", fails);
+
+        expect(fightToEnd(icombat, gs, world, ' ', 64), "aoe-pace: remaining kills finish", fails);
+        expect(icombat.lastOutcome() == CombatOutcome::Victory, "aoe-pace: victory after paced kills",
+               fails);
+    }
+
+    /* S4/6 Time Distortion @ 0xBB86: addq -$523; 0x13282 returns 1 immediately
+     * so 0x12C60 → 0x11646 flee before remaining actors take a turn. */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &tdmon = monsters.records[5];
+        setMonsterField(tdmon, MM2_MON_OFF_HP, 0x3F); /* survives any leftover hit */
+        setMonsterField(tdmon, MM2_MON_OFF_SPEED, 0x01);
+        setMonsterField(tdmon, MM2_MON_OFF_DAMAGE, 0x01);
+
+        Mm2RosterFile tdroster{};
+        Mm2PartyLaunch tdlaunch{};
+        setupTwoMemberParty(tdroster, tdlaunch);
+        tdroster.records[0].class_id = 4; /* Sorcerer — acts first (speed 99) */
+        tdroster.records[0].spell_level = 4;
+        tdroster.records[0].sp_current = 20;
+        tdroster.records[0].sp_max = 20;
+        tdroster.records[0].gems = 10;
+        tdroster.records[0].hp_current = 999;
+        tdroster.records[0].hp_max = 999;
+        tdroster.records[1].might_current = 1;
+        tdroster.records[1].speed_current = 50; /* would act after caster if TD waited */
+        tdroster.records[1].hp_current = 999;
+        tdroster.records[1].hp_max = 999;
+        tdroster.records[1].condition = 0;
+        gameplay::spellLearnInBook(tdroster.records[0], 25); /* S4/6 */
+
+        seedFixedEncounter(gs, 5);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS, 0);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ENTRY_COORD, 0x12); /* (2,1) */
+
+        CombatSession tdcombat;
+        tdcombat.bindParty(&tdroster, &tdlaunch);
+        tdcombat.bindMonsters(&monsters);
+        tdcombat.bindRng(&rng);
+        expect(tdcombat.enter(gs, world), "td: enter fight", fails);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS, 0);
+
+        platform::KeyState keys{};
+        keys.last_ascii = ' ';
+        tdcombat.tick(gs, world, keys);
+        if (tdcombat.state() == CombatState::AwaitingPartyOptions) {
+            keys.last_ascii = 'A';
+            tdcombat.tick(gs, world, keys);
+        }
+        for (int i = 0; i < 32 && tdcombat.active() &&
+             tdcombat.state() != CombatState::AwaitingCommand; ++i) {
+            keys.last_ascii = ' ';
+            tdcombat.tick(gs, world, keys);
+        }
+        expect(tdcombat.state() == CombatState::AwaitingCommand, "td: sorcerer command", fails);
+
+        keys.last_ascii = 'C';
+        tdcombat.tick(gs, world, keys);
+        keys.last_ascii = '4';
+        tdcombat.tick(gs, world, keys);
+        keys.last_ascii = '6';
+        tdcombat.tick(gs, world, keys);
+        expect(tdcombat.state() == CombatState::AwaitingActionAck, "td: cast acks", fails);
+        expect(std::strstr(tdcombat.statusLine(), "Time Distortion") != nullptr,
+               "td: status names spell", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_TIME_DISTORT) != 0, "td: -$523 set", fails);
+        expect(tdroster.records[0].sp_current == 16, "td: spent 4 SP", fails);
+        expect(tdroster.records[0].gems == 7, "td: spent 3 gems", fails);
+
+        keys.last_ascii = ' ';
+        const bool td_ended = tdcombat.tick(gs, world, keys);
+        expect(td_ended || !tdcombat.active(), "td: 0x13282 ends fight after ack", fails);
+        expect(tdcombat.lastOutcome() == CombatOutcome::Fled, "td: outcome Fled", fails);
+        expect(gs.coordX() == 2 && gs.coordY() == 1, "td: flee restores entry_coord", fails);
+        expect(tdcombat.state() != CombatState::AwaitingCommand,
+               "td: second party member does not get a turn", fails);
+    }
+
+    /* 0xBB98 btst #3,-$5600: attrib bit3 fails Time Distortion (no -$523). */
+    {
+        rng.reseed(1);
+        std::memset(&gs_image, 0, sizeof(gs_image));
+        std::memset(&monsters, 0, sizeof(monsters));
+        Mm2MonsterRecord &tdmon = monsters.records[5];
+        setMonsterField(tdmon, MM2_MON_OFF_HP, 0x3F);
+        setMonsterField(tdmon, MM2_MON_OFF_SPEED, 0x00);
+        setMonsterField(tdmon, MM2_MON_OFF_DAMAGE, 0x01);
+
+        setupParty(roster, launch, /*might=*/50, /*speed=*/99, /*hp=*/100);
+        roster.records[0].class_id = 4;
+        roster.records[0].spell_level = 4;
+        roster.records[0].sp_current = 20;
+        roster.records[0].gems = 10;
+        gameplay::spellLearnInBook(roster.records[0], 25);
+
+        seedFixedEncounter(gs, 5);
+        CombatSession tdfail;
+        tdfail.bindParty(&roster, &launch);
+        tdfail.bindMonsters(&monsters);
+        tdfail.bindRng(&rng);
+        expect(tdfail.enter(gs, world), "td-bit3: enter", fails);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS, 0x08);
+
+        platform::KeyState keys{};
+        keys.last_ascii = ' ';
+        tdfail.tick(gs, world, keys);
+        if (tdfail.state() == CombatState::AwaitingPartyOptions) {
+            keys.last_ascii = 'A';
+            tdfail.tick(gs, world, keys);
+        }
+        for (int i = 0; i < 32 && tdfail.active() &&
+             tdfail.state() != CombatState::AwaitingCommand; ++i) {
+            keys.last_ascii = ' ';
+            tdfail.tick(gs, world, keys);
+        }
+        keys.last_ascii = 'C';
+        tdfail.tick(gs, world, keys);
+        keys.last_ascii = '4';
+        tdfail.tick(gs, world, keys);
+        keys.last_ascii = '6';
+        tdfail.tick(gs, world, keys);
+        expect(std::strstr(tdfail.statusLine(), "Spell Failed") != nullptr,
+               "td-bit3: * Spell Failed *", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_TIME_DISTORT) == 0, "td-bit3: -$523 stays 0", fails);
+        expect(tdfail.active(), "td-bit3: fight continues", fails);
     }
 
     if (fails == 0) {

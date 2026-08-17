@@ -3,6 +3,7 @@
 #include "mm2/CppStdCompat.h"
 #include "mm2/events/EventFieldMap.h"
 #include "mm2/gameplay/ExploreActions.h"
+#include "mm2/gameplay/RosterSkills.h"
 #include "mm2/platform/Audio.h"
 #include "mm2_found_items.h"
 #include "mm2_map_codec.h"
@@ -739,11 +740,10 @@ void eventVmClearTileEventFlag(uint8_t *a4, world::MapWorld &world, int y, int x
 {
     /* OP_14 @ 0x16398: andi #$7F on collision page -$54BA[(y<<4)|x] AND on
      * the current-cell latch -$55D6 (single byte — not an indexed array).
-     * Mirrors the ROM: it is the persistent map collision page that makes the
-     * main-loop gate (0x1258: -$55D6 bit7) stop re-firing a cleared fight tile.
-     * The port's runtime GS flags are the -$55D6 / -$54BA analog; the map's
-     * collision page must ALSO have the event bit cleared so the tile does not
-     * re-match a triplet on a later return (revisit-after-move re-fire bug). */
+     * Collision bit7 is the ambient-encounter gate (scanner 0x176F2 / main
+     * loop 0x1258), not a "scripted triplet is live" marker — cavern (1,2)
+     * is already 0x41 before any fight. Scripted one-shot until map reload
+     * is EventRuntime::markTileEventResolved, checked by the triplet walk. */
     const int idx = tileIndex(y, x);
     if (!a4 || idx < 0) {
         return;
@@ -793,9 +793,20 @@ uint8_t eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2Par
         return 0;
     }
 
+    /* Selector 0x00 is the "computed" field EventFieldMap.h flags as
+     * kEventFieldComputed rather than a stored byte. 0x181B0 (called from the
+     * selector-0/1 jump cases @ 0x1777E4/0x1777F2) resolves the record
+     * pointer to its roster array index — confirmed against roster.dat: Lord
+     * Peabody's "Don't come back without Sherman!" gate (event.dat loc 69
+     * slot 17) brackets each party member's selector-0 value between 0x28
+     * and 0x29, and Sherman's fixed hireling slot is roster index 0x28 —
+     * i.e. it's testing "is this party member Sherman", not a stat. Selector
+     * 0x01's computed value is unconfirmed; leave it stubbed. */
+    const bool selector_is_roster_index = (selector == 0x00);
+
     int field_off = -1;
     int field_w = 1;
-    if (!eventVmResolveMemberField(selector, &field_off, &field_w)) {
+    if (!selector_is_roster_index && !eventVmResolveMemberField(selector, &field_off, &field_w)) {
         return 0;
     }
     (void)field_w;
@@ -859,6 +870,15 @@ uint8_t eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2Par
             roster_idx = partyRosterIndex(a4, party_idx);
         }
         if (roster_idx < 0) {
+            continue;
+        }
+
+        if (selector_is_roster_index) {
+            /* No record offset to write; masked (OP_18) mode is a no-op here. */
+            if (!masked) {
+                const uint8_t piece = static_cast<uint8_t>(roster_idx);
+                cond = static_cast<uint8_t>(cond | (val != 0 ? (piece & val) : piece));
+            }
             continue;
         }
 
@@ -1079,6 +1099,33 @@ static const char *const kSearchContainerNames[5][8] = {
      "Gold Trunk", "Statis Box"},
 };
 
+/* -$69B4: 5 env rows × 4 trap types × 2 strings (trap_victim_pick @ 0x1A9A6). */
+static const char *const kSearchTrapFlavor[5][4][2] = {
+    {{"White-hot arcs of electricity explode", "from the trap!"},
+     {"Flames leap from the trap, scorching", "the party!"},
+     {"Noxious gas asphyxiates the party!", ""},
+     {"A barrage of spikes rips through the", "party!"}},
+    {{"A ball of lightning engulfs the party!", ""},
+     {"A fireball engulfs the party!", ""},
+     {"Toxic gas issues from tiny vents", ""},
+     {"A barrage of molten metal explodes!", ""}},
+    {{"A rushing torrent of pure energy tears", "through the party!"},
+     {"A roaring inferno engulfs the party!", ""},
+     {"A cloud of noxious gas boils out of a", "hidden grill!"},
+     {"The trap sends razor-sharp metal", "slivers into the party!"}},
+    {{"Forks of lightning leap from the", "trap into the party!"},
+     {"A ball of flame roasts the party!", ""},
+     {"A dark cloud of choking gas issues", "from the trap!"},
+     {"Deadly quarrels burst from the trap", "and slam into the party!"}},
+    {{"A generator within the trap unleashes", "a barrage of energy bolts!"},
+     {"Flame erupts from the trap broiling", "the party!"},
+     {"A haze of volatile gas settles on the", "party!"},
+     {"Iron quarrels hurtle from the trap", "and cut the party down!"}},
+};
+
+/* -$690C words indexed by 0x1B112 env row. */
+static const uint16_t kSearchTrapBaseDmg[5] = {3, 4, 4, 5, 6};
+
 int searchContainerEnvRow(const uint8_t *a4)
 {
     /* 0x1B112: map A4-$79E3 → row 0..4. */
@@ -1159,11 +1206,114 @@ uint8_t searchApplyRatingRng(uint8_t score, gameplay::Rng *rng)
     return score;
 }
 
-int searchThievery(const Mm2RosterRecord &rec)
+int searchThievery(const Mm2RosterRecord &rec, const Mm2ItemsFile *items)
 {
-    /* +$1E preferred; else +$16 thievery_percent (same as Unlock). */
-    const int at_1e = rec.unknown_1a_20[4];
-    return at_1e != 0 ? at_1e : static_cast<int>(rec.thievery_percent);
+    return gameplay::rosterLiveThievery(rec, items);
+}
+
+void searchFillTrapFlavor(const uint8_t *a4, uint8_t trap_type, char *line0, size_t line0_cap,
+                          char *line1, size_t line1_cap)
+{
+    uint8_t t = trap_type;
+    if (t > 3) {
+        t = 3;
+    }
+    const int row = searchContainerEnvRow(a4);
+    if (line0 && line0_cap > 0) {
+        std::snprintf(line0, line0_cap, "%s", kSearchTrapFlavor[row][t][0]);
+    }
+    if (line1 && line1_cap > 0) {
+        std::snprintf(line1, line1_cap, "%s", kSearchTrapFlavor[row][t][1]);
+    }
+}
+
+int searchTrapLuckResist(const uint8_t *a4, const Mm2RosterRecord &rec, gameplay::Rng *rng)
+{
+    /* 0x48BA / -$7F0E: rng(1,100); ≤5→0; ≥$5F→1; else luck-bonus+level vs roll. */
+    const int roll = rng ? rng->range(1, 0x64) : 0x64;
+    if (roll <= 5) {
+        return 0;
+    }
+    if (roll >= 0x5F) {
+        return 1;
+    }
+    const uint8_t level = rec.level > 0 ? rec.level : 1;
+    int bonus = 0xFD;
+    if (a4) {
+        for (int i = 0; i < 23; ++i) {
+            const uint8_t thr = mm2_gs_u8(a4, MM2_GS_LUCK_THRESH_TBL + i);
+            if (rec.luck_current <= thr) {
+                break;
+            }
+            ++bonus;
+        }
+    }
+    int thr = bonus + static_cast<int>(level);
+    if (thr < static_cast<int>(level)) {
+        thr = 2;
+    }
+    return thr >= roll ? 1 : 0;
+}
+
+void searchTrapApply4952(uint8_t *a4, Mm2RosterRecord *member, uint16_t damage, uint8_t flag_c,
+                         gameplay::Rng *rng)
+{
+    /* 0x1A8A4 → 0x4952 with out-flags A=1 B=1 C=trap_type-1. */
+    if (!member) {
+        return;
+    }
+    auto *raw = reinterpret_cast<uint8_t *>(member);
+    if (raw[0x26] >= 0x80) {
+        return;
+    }
+
+    uint8_t flag_b = 1;
+    uint8_t flag_a = 1;
+    uint8_t c = flag_c;
+
+    if (flag_b != 0) {
+        const int roll = rng ? rng->range(1, 0x64) : 0x64;
+        int thr = static_cast<int>(member->thievery_percent);
+        if (a4) {
+            thr += static_cast<int>(mm2_gs_u8(a4, MM2_GS_RESIST_BUFF_A));
+        }
+        if (thr >= roll) {
+            return; /* 0x49A2 RTS — full immunity */
+        }
+        flag_b = 0;
+    }
+
+    if (flag_a != 0) {
+        if (searchTrapLuckResist(a4, *member, rng) != 0) {
+            damage = static_cast<uint16_t>(damage / 2u);
+        } else {
+            flag_a = 0;
+        }
+    }
+    (void)flag_a;
+    (void)flag_b;
+
+    if (c != 3 && c != 0xFF) {
+        int thr = a4 ? static_cast<int>(mm2_gs_u8(a4, MM2_GS_RESIST_BUFF_C)) : 0;
+        if (c == 1) {
+            thr += member->secondary_skills[0];
+        } else if (c == 2) {
+            thr += member->unknown_1a_20[2];
+        } else if (c == 0) {
+            thr += member->secondary_skills[1];
+        } else {
+            const int off = static_cast<int>(c) + 0x11;
+            if (off >= 0 && off < static_cast<int>(sizeof(Mm2RosterRecord))) {
+                thr += raw[off];
+            }
+        }
+        const int roll = rng ? rng->range(1, 0x64) : 0x64;
+        if (thr >= roll) {
+            damage = static_cast<uint16_t>(damage / 4u);
+        }
+    }
+
+    eventVmApplyOp31Damage(member, damage);
 }
 
 }  // namespace
@@ -1313,10 +1463,16 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
             used = static_cast<size_t>(std::snprintf(msg, msg_cap, "Each share = %u Gold",
                                                      static_cast<unsigned>(gold_each)));
         }
+        /* 0x1ADAE: play_sound_seq(9) after the gold share line. */
+        const bool sounds = (mm2_gs_u8(a4, MM2_GS_SOUNDS_FLAG) & 1) != 0;
+        const bool walk = (mm2_gs_u8(a4, MM2_GS_WALK_BEEP_FLAG) & 1) != 0;
+        audio::playSoundSeq(9, sounds, walk);
         for (int i = 0; i < finder_n && used + 1 < msg_cap; ++i) {
             used += static_cast<size_t>(
                 std::snprintf(msg + used, msg_cap - used, "\n%s", finder_lines[i]));
         }
+        /* 0x1ADDA: play_sound_seq(9) after finder lines (treasure jingle). */
+        audio::playSoundSeq(9, sounds, walk);
         if (packs_full && used + 1 < msg_cap) {
             std::snprintf(msg + used, msg_cap - used, "\nBackpacks full!");
         }
@@ -1400,15 +1556,13 @@ bool eventVmSearchPayoff(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunc
 
 SearchOpenResult eventVmSearchOpenOrFind(uint8_t *a4, Mm2RosterFile *roster,
                                          const Mm2PartyLaunch *launch, int party_slot,
-                                         uint8_t rating, bool find_traps, gameplay::Rng *rng)
+                                         uint8_t rating, bool find_traps, gameplay::Rng *rng,
+                                         const Mm2ItemsFile *items)
 {
     /* 0x1AEC2 (Open) / 0x1AF6E (Find): member pick already done by host.
      * Thievery +$1E vs rng(1,100): fail if roll<=$60 AND roll>thievery.
-     * Trap spring @ 0x1AA70 → trap_damage_apply @ 0x1A90E:
-     *   - Class 5 (Robber) or 6 (Ninja): single-target only
-     *   - All others: loop over ALL party members
-     *   - Per-member resistance: thievery + RESIST_BUFF_A vs rng(1,100)
-     *     (full immunity if threshold >= roll, via 0x4952). */
+     * Trap spring @ 0x1AA70: trap_victim_pick returns type 0..3; place() cels
+     * type*2+4 / +1 / 0 (host); HP is 0x1A8A4 after that loop. */
     SearchOpenResult r;
     if (!roster || !launch || party_slot < 0 || party_slot >= launch->party_count) {
         r.aborted = true;
@@ -1425,56 +1579,89 @@ SearchOpenResult eventVmSearchOpenOrFind(uint8_t *a4, Mm2RosterFile *roster,
         return r;
     }
 
-    const int thievery = searchThievery(*rec);
+    const int thievery = searchThievery(*rec, items);
     const int roll = rng ? rng->range(1, 100) : 1;
     const bool fail = (roll <= 0x60) && (roll > thievery);
     if (fail && rating != 0) {
         r.trapped = true;
-        /* Trap: damage = rating*2+4 (0x1AA7C..0x1AA86) applied party-wide. */
-        const uint16_t trap_damage = static_cast<uint16_t>(static_cast<uint16_t>(rating) * 2u + 4u);
-        r.trap_damage = trap_damage;
-
-        /* ASM checks the FIRST party member's class for targeting. */
-        const int first_idx = launch->roster_slots[0];
-        bool single_target = false;
-        if (first_idx >= 0 && first_idx < MM2_ROSTER_RECORD_COUNT) {
-            const uint8_t cid = roster->records[first_idx].class_id;
-            single_target = (cid == 5 || cid == 6);
-        }
-
-        for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
-            if (single_target && i != party_slot) {
-                continue;
-            }
-            const int mem_idx = launch->roster_slots[i];
-            if (mem_idx < 0 || mem_idx >= MM2_ROSTER_RECORD_COUNT) {
-                continue;
-            }
-            Mm2RosterRecord *member = &roster->records[mem_idx];
-
-            if (member->condition >= 0x80) {
-                continue; /* already dead — skip (from 0x4952) */
-            }
-
-            /* Per-member resistance: thievery + RESIST_BUFF_A vs rng(1,100) @ 0x4952. */
-            int resist = static_cast<int>(member->thievery_percent);
-            if (a4) {
-                resist += static_cast<int>(mm2_gs_u8(a4, MM2_GS_RESIST_BUFF_A));
-            }
-            const int resist_roll = rng ? rng->range(1, 100) : 1;
-            if (resist >= resist_roll) {
-                continue; /* full immunity */
-            }
-
-            eventVmApplyOp31Damage(member, trap_damage);
-        }
+        /* 0x1A9BC: rng(1,100) % 4. */
+        const int type_roll = rng ? rng->range(1, 100) : 1;
+        r.trap_type = static_cast<uint8_t>(type_roll % 4);
+        r.trap_place_frame = eventVmSearchTrapPlaceFrame(r.trap_type);
+        r.trap_damage = eventVmSearchTrapDamageAmount(a4);
+        searchFillTrapFlavor(a4, r.trap_type, r.trap_line0, sizeof(r.trap_line0), r.trap_line1,
+                             sizeof(r.trap_line1));
     }
     /* Find Traps always opens after the roll (0x1AFDA → Open with rating $FF skip).
-     * Open opens unless we treat fail as still opening after trap — ASM Open
-     * continues to distribute after trap (0x1AF40 → 0x1AC94). */
+     * Open continues to distribute after trap (0x1AF40 → 0x1AC94). */
     (void)find_traps;
     r.opened = true;
     return r;
+}
+
+uint8_t eventVmSearchTrapPlaceFrame(uint8_t trap_type)
+{
+    /* 0x1AA7C: asl #1 + addq #4. Types 0..3 → cels 4,6,8,10. */
+    return static_cast<uint8_t>(static_cast<unsigned>(trap_type) * 2u + 4u);
+}
+
+uint16_t eventVmSearchTrapDamageAmount(const uint8_t *a4)
+{
+    /* 0x1A8BA: -$690C[env_row]; 0x1A8CC: mulu #2, attrib+0x14 times. */
+    int row = searchContainerEnvRow(a4);
+    if (row < 0) {
+        row = 0;
+    }
+    if (row > 4) {
+        row = 4;
+    }
+    uint32_t dmg = kSearchTrapBaseDmg[row];
+    unsigned shift = a4 ? mm2_gs_u8(a4, MM2_GS_ATTRIB_TRAP_SHIFT) : 0;
+    while (shift-- > 0) {
+        dmg *= 2u;
+        if (dmg > 0xFFFFu) {
+            dmg = 0xFFFFu;
+            break;
+        }
+    }
+    return static_cast<uint16_t>(dmg);
+}
+
+void eventVmSearchApplyTrapDamage(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                                  int opener_slot, uint8_t trap_type, gameplay::Rng *rng)
+{
+    /* trap_damage_apply @ 0x1A90E: subq type; 0x1A8A4(opener) if class 5/6;
+     * then 0x1A8A4(i) for every party slot. */
+    if (!roster || !launch) {
+        return;
+    }
+    const uint16_t damage = eventVmSearchTrapDamageAmount(a4);
+    const uint8_t flag_c = static_cast<uint8_t>(trap_type - 1u); /* subq.b $9(a5) */
+
+    auto apply_slot = [&](int slot) {
+        if (slot < 0 || slot >= launch->party_count || slot >= MM2_PARTY_LAUNCH_SLOTS) {
+            return;
+        }
+        const int mem_idx = launch->roster_slots[slot];
+        if (mem_idx < 0 || mem_idx >= MM2_ROSTER_RECORD_COUNT) {
+            return;
+        }
+        searchTrapApply4952(a4, &roster->records[mem_idx], damage, flag_c, rng);
+    };
+
+    if (opener_slot >= 0 && opener_slot < launch->party_count &&
+        opener_slot < MM2_PARTY_LAUNCH_SLOTS) {
+        const int oi = launch->roster_slots[opener_slot];
+        if (oi >= 0 && oi < MM2_ROSTER_RECORD_COUNT) {
+            const uint8_t cid = roster->records[oi].class_id;
+            if (cid == 5 || cid == 6) {
+                apply_slot(opener_slot);
+            }
+        }
+    }
+    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+        apply_slot(i);
+    }
 }
 
 void eventVmSearchDetectMagic(uint8_t *a4, uint8_t rating, char *msg, size_t msg_cap)
@@ -2008,6 +2195,44 @@ void eventVmFillTavernStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_
         }
     }
     mm2_gs_set_u8(a4, MM2_GS_OP0E_FD_MODE, 0xFD);
+}
+
+void eventVmFillJokeStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_len)
+{
+    /* 0x18204: -$7DE8(#0) then 22×4 linear 0x976E into A4-$5C42 (stride $10). */
+    if (!a4 || !str_dat) {
+        return;
+    }
+    eventVmDecodeStrBank(a4, 0, str_dat, str_len);
+
+    auto store = [a4](int32_t slot, const char *s) {
+        int32_t rel = 0;
+        if (s) {
+            rel = static_cast<int32_t>(reinterpret_cast<const uint8_t *>(s) - a4);
+        }
+        mm2_gs_set_u32(a4, slot, static_cast<uint32_t>(rel));
+    };
+
+    for (int joke = 0; joke < MM2_GS_JOKE_COUNT; ++joke) {
+        for (int line = 0; line < MM2_GS_JOKE_LINES; ++line) {
+            store(MM2_GS_JOKE_PTR + joke * 0x10 + line * 4, eventVmNextStrBankCString(a4));
+        }
+    }
+}
+
+int eventVmJokeIndex(uint16_t day)
+{
+    return static_cast<int>(day % static_cast<uint16_t>(MM2_GS_JOKE_COUNT));
+}
+
+int eventVmFormatJoke(const uint8_t *a4, int joke_index, char *out, size_t out_cap)
+{
+    if (joke_index < 0) {
+        joke_index = 0;
+    }
+    joke_index %= MM2_GS_JOKE_COUNT;
+    return eventVmFormatOp0eFdPtrTable(a4, MM2_GS_JOKE_PTR + joke_index * 0x10, MM2_GS_JOKE_LINES,
+                                       out, out_cap);
 }
 
 const char *eventVmGsRelCString(const uint8_t *a4, uint32_t rel_u32)

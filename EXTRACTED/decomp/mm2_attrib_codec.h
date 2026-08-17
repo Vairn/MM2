@@ -52,7 +52,8 @@ enum {
     MM2_ATTRIB_OFF_LINK_AREA = 0x18,    /* a.k.a. transition_screen */
     MM2_ATTRIB_OFF_FLAGS = 0x1A,        /* btst bitfield (bits 0,3,4,5,6) */
     MM2_ATTRIB_OFF_DOOR_STRENGTH = 0x12, /* materialized A4-$5608; bash @ 0x9C2A */
-    MM2_ATTRIB_OFF_DOOR_TRAP = 0x13     /* materialized A4-$5607; unlock @ 0x20D6E */
+    MM2_ATTRIB_OFF_DOOR_TRAP = 0x13,    /* materialized A4-$5607; unlock @ 0x20D6E */
+    MM2_ATTRIB_OFF_TRAP_SHIFT = 0x14    /* materialized A4-$5606; 0x1A8A4 doubling count */
 };
 
 /* attrib byte 0x1A flag bits (asm btst sites). */

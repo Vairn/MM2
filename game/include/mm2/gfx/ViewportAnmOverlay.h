@@ -64,6 +64,15 @@ public:
     /** Advance one VBlank-tick of sequence delay; true when the visible cel changed. */
     bool tick();
 
+    /** sign_sprite_place(frame, $40, $20) @ 0x3266 / 0x23C8C: show composed cel
+     *  `frame`. frame<=0 or frame>=count → cel 0 (simple path @ 0x23E24).
+     *  Stops sequence playback so the host can step cels (chest trap @ 0x1AA8E). */
+    bool placeOverlayFrame(int frame_idx);
+
+    /** After Open: hold the last cel of the last FF sequence block (open lid).
+     *  Identify uses place(0); trap spring steps explicit cels then returns here. */
+    void playLastSequenceHold();
+
     /** OP_0B / mode $17 @ 0x23C8C. Simple path @ 0x23E24 → dst (64, 40). */
     void blitCentered(gfx::ScreenCompositor &c, int placement_index = 0) const;
     /** apply_content_offset=true: retail place, no slot clamp (service signs).

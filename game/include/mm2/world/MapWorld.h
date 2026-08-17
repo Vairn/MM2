@@ -38,7 +38,9 @@ public:
     const Mm2MapFile &mapFile() const { return map_; }
     Mm2MapFile &mapFileMut() { return map_; }
     const Mm2AttribFile &attribFile() const { return attrib_; }
+    Mm2AttribFile &attribFileMut() { return attrib_; }
     const Mm2AttribRecord &attrib() const { return attrib_.records[screen_]; }
+    Mm2AttribRecord &attribMut() { return attrib_.records[screen_]; }
 
     const uint8_t *visualPage() const { return map_.screens[screen_].visual; }
     const uint8_t *collisionPage() const { return map_.screens[screen_].collision; }
@@ -82,7 +84,8 @@ public:
     };
 
     /* spell_eye_cell_sample @ 0x1D9A — map byte for Eagle/Wizard Eye 5×5 grid.
-     * Outdoor (-$79E2): wraps into neighbour visual pages (attrib 0x05..0x08).
+     * Outdoor (-$79E2): peeks into neighbour visual pages (attrib 0x05..0x08),
+     * same N/E/S/W as the 3D hood — not a torus wrap of the current 16×16.
      * Indoor: centre page only; out-of-range returns false. */
     bool spellEyeSample(int mx, int my, SpellEyeSample *out) const;
 

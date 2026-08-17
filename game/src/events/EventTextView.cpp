@@ -69,6 +69,26 @@ constexpr uint8_t kPenServiceBoardR = 170;
 constexpr uint8_t kPenServiceBoardG = 102;
 constexpr uint8_t kPenServiceBoardB = 34;
 
+/* 0x198B2..0x19960: A4-$6B3E caption (3 lines) + 0x19A82/0x19A92 lord + A4-$6B32 A–D. */
+constexpr const char *kQuestDiffCaption[] = {
+    "At what level of",
+    "difficulty do you",
+    "wish to aid Lord",
+};
+constexpr const char *kQuestDiffChoices[] = {
+    "A) Page's Quest",
+    "B) Squire's Quest",
+    "C) Knight's Quest",
+    "D) Lord's Quest",
+};
+/* -$7E4E @ 0x6DA6: locate(0x0B, 0x17). Same string as PlayTownServiceUi. */
+constexpr const char *kQuestDiffEsc = "( 'ESC' to go back )";
+constexpr int kQuestDiffCaptionCol = 2;
+constexpr int kQuestDiffChoiceCol = 0x15;
+constexpr int kQuestDiffFirstRow = 0x12;
+constexpr int kQuestDiffEscCol = 0x0B;
+constexpr int kQuestDiffEscRow = 0x17;
+
 void glyphAt(gfx::ScreenCompositor &c, int col, int row, uint8_t glyph, uint8_t r = 255, uint8_t g = 255,
              uint8_t b = 255)
 {
@@ -382,10 +402,43 @@ void EventTextView::showOp02(const char *text, int base_row)
     setExitFlagBit1();
 }
 
+void EventTextView::showPartyBandText(const char *text)
+{
+    /* -$7ED8(0) @ 0x18270: clear rows 0x13..0x16 only. OP_01 row 17 stays. */
+    EventTextLayer *layer = nullptr;
+    for (int i = 0; i < layer_count_; ++i) {
+        if (layers_[i].op == EventTextOp::Op02BlockRows19_22) {
+            layer = &layers_[i];
+            break;
+        }
+    }
+    if (!layer) {
+        if (layer_count_ >= static_cast<int>(sizeof(layers_) / sizeof(layers_[0]))) {
+            setExitFlagBit1();
+            return;
+        }
+        layer = &layers_[layer_count_++];
+        layer->op = EventTextOp::Op02BlockRows19_22;
+    }
+    copyResolvedText(layer->text, sizeof(layer->text), text);
+    layer->base_row = 19;
+    setExitFlagBit1();
+}
+
 void EventTextView::showOp03(const char *text)
 {
     if (EventTextLayer *layer = pushConsoleLayer(EventTextOp::Op03TallBlock)) {
         copyResolvedText(layer->text, sizeof(layer->text), text);
+        layer->base_row = 17;
+    }
+    setExitFlagBit0();
+    setExitFlagBit1();
+}
+
+void EventTextView::showQuestDifficultyMenu(const char *lord)
+{
+    if (EventTextLayer *layer = pushConsoleLayer(EventTextOp::QuestDifficultyMenu)) {
+        copyResolvedText(layer->text, sizeof(layer->text), lord);
         layer->base_row = 17;
     }
     setExitFlagBit0();
@@ -736,6 +789,34 @@ void EventTextView::draw(gfx::ScreenCompositor &c) const
             clearCells(c, 1, 17, 38, 22);
             printWrapped(c, 1, 17, 38, 22, layer.text, false, kPenTextR, kPenTextG, kPenTextB);
             break;
+        case EventTextOp::QuestDifficultyMenu: {
+            /* 0x198A0: -$7ED8(2) then caption @ (2,18+i), lord @ (2,21),
+             * -$7F62(21,18,38,21), A–D @ (21,18+i), -$7E4E ESC footer. */
+            chromeMsgTop(c);
+            clearCells(c, 1, 17, 38, 22);
+            for (int i = 0; i < 3; ++i) {
+                textAt(c, kQuestDiffCaptionCol, kQuestDiffFirstRow + i, kQuestDiffCaption[i], kPenTextR,
+                       kPenTextG, kPenTextB);
+            }
+            char lord_line[24];
+            int n = 0;
+            for (const char *p = layer.text; *p && n + 8 < static_cast<int>(sizeof(lord_line)); ++p) {
+                lord_line[n++] = *p;
+            }
+            const char *suf = " (A-D)?";
+            while (*suf && n + 1 < static_cast<int>(sizeof(lord_line))) {
+                lord_line[n++] = *suf++;
+            }
+            lord_line[n] = '\0';
+            textAt(c, kQuestDiffCaptionCol, kQuestDiffFirstRow + 3, lord_line, kPenTextR, kPenTextG,
+                   kPenTextB);
+            for (int i = 0; i < 4; ++i) {
+                textAt(c, kQuestDiffChoiceCol, kQuestDiffFirstRow + i, kQuestDiffChoices[i], kPenTextR,
+                       kPenTextG, kPenTextB);
+            }
+            textAt(c, kQuestDiffEscCol, kQuestDiffEscRow, kQuestDiffEsc, kPenTextR, kPenTextG, kPenTextB);
+            break;
+        }
         default:
             break;
         }
@@ -772,6 +853,21 @@ bool EventTextView::containsText(const char *needle) const
     for (int i = 0; i < layer_count_; ++i) {
         if (textContains(layers_[i].text, needle)) {
             return true;
+        }
+        if (layers_[i].op == EventTextOp::QuestDifficultyMenu) {
+            for (int j = 0; j < 3; ++j) {
+                if (textContains(kQuestDiffCaption[j], needle)) {
+                    return true;
+                }
+            }
+            for (int j = 0; j < 4; ++j) {
+                if (textContains(kQuestDiffChoices[j], needle)) {
+                    return true;
+                }
+            }
+            if (textContains(" (A-D)?", needle) || textContains(kQuestDiffEsc, needle)) {
+                return true;
+            }
         }
     }
     return false;

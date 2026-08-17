@@ -98,6 +98,10 @@ flowchart TB
    (`-$79B2`), Protect panel Light/Magic/Forces from `-$79AB..-$79A6` (`0x5E28`),
    **C** Controls modal (`0x13CCE`), sheet sub-keys **E/R/D** equip/remove/drop
    (class mask from `items.dat`), **C/U/G/S/T** stubbed toward ASM handlers.
+   `--play-ui=agui` swaps the equipped/backpack **text block** for a paper-doll
+   (typed body slots + backpack 2×3 icons). Equip storage and E/R/D/U + 1–6/A–F
+   keys are unchanged; classic HUD keeps the original two-column list. Item
+   icons are user-supplied 12×12 PNGs (`game/data/ui/agui/ITEM_ICON_PROMPT.md`).
    Play HUD chrome (`PlayScreenChrome`): black viewport/status/party fills,
    red `-809E` console box around the bottom party band (`0x5600`), and full-screen
    black + red border for **Q** Quick Ref / digit character sheet overlays.
@@ -110,7 +114,7 @@ flowchart TB
    **Corak intro** (viewport ghost overlay + loc 60 `str[8]` + OPTIONS panel) and
    **Guardian Pegasus C2** (`intro.32` full-sheet blit — not `introclips` title cels —
    + loc 11 `str[5]` + Protect panel). Wired into `GameSession` (auto-queue on new-game
-   Middlegate / first enter map 11; debug **Ctrl+G** / **Ctrl+P**). Offline demos:
+   Middlegate / first enter map 11). Offline demos:
    `scripted_corak.png`, `scripted_pegasus.png` via `event_op_demo`. **OP_0B** wired:
    `ServiceSignResolver` + `ViewportAnmOverlay` (`62.anm` blacksmith demo). **GAP:**
    Corak ghost castle-bytecode confirm (remake uses **51.anm** candidate), mode `$17`

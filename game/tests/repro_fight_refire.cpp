@@ -153,16 +153,26 @@ int main(int argc, char **argv)
     expect(!combat.active(), "re-scan must NOT re-start combat after victory (no re-fire)");
 
     /* --- Revisit-after-move: the victory latch is cleared on the next step
-     * (Movement.cpp latchExploreEventsAfterMove). If the persistent collision
-     * event bit on the fight tile is NOT cleared (OP_14 gap), returning to the
-     * tile re-matches the triplet and re-fires. This models "monsters keep
-     * spawning at the same spot after I won". --- */
+     * (Movement.cpp latchExploreEventsAfterMove). Post-combat re-scan runs
+     * OP_2B (skips OP_12) then OP_14, which marks the tile resolved for this
+     * map visit. Returning to the tile must not re-match the triplet. --- */
     mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 0); /* next move away+back */
     mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
     const bool fired3 = runtime.scanAndRun(gs, world);
     std::printf("  revisit re-scan fired=%d combat_active=%d\n",
                 (int)fired3, (int)combat.active());
     expect(!combat.active(), "revisit after win must NOT re-fire the fight");
+
+    /* Leave and re-enter the map: resolved flags reset with enterLocation. */
+    if (!expect(runtime.enterLocation(17, gs, world), "re-enter location 17")) {
+        std::printf(fails == 0 ? "\nPASS: repro_fight_refire\n" : "\nFAILS: %d\n", fails);
+        return fails == 0 ? 0 : 1;
+    }
+    mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+    const bool fired4 = runtime.scanAndRun(gs, world);
+    std::printf("  re-enter fired=%d combat_active=%d\n", (int)fired4, (int)combat.active());
+    expect(combat.active(), "leaving and returning to the map allows the fight again");
 
     std::printf(fails == 0 ? "\nPASS: repro_fight_refire\n" : "\nFAILS: %d\n", fails);
     return fails == 0 ? 0 : 1;

@@ -71,6 +71,7 @@ struct PcWallsetDef {
 
 constexpr PcWallsetDef kPcWallsets[] = {
     {"Town", "TOWN", "TOWNF", "TOWNT", "TOWNB"},
+    /* CAVEB/CASTLEB are index-recolors of TOWNB (Amiga reuses townb.32 + wall palette). */
     {"Cavern", "CAVE", "CAVEF", "CAVET", "CAVEB"},
     {"Castle", "CASTLE", "CASTLEF", "CASTLET", "CASTLEB"},
     {"Desert (outdoor)", "DESERT", nullptr, nullptr, nullptr},

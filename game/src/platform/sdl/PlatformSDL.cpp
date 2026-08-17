@@ -297,14 +297,22 @@ KeyState pollInput()
     static bool s_prev_enter = false;
     static bool s_prev_space = false;
     static bool s_prev_backspace = false;
+    static bool s_prev_dev_menu = false;
+    static bool s_prev_tab = false;
     const bool esc_edge = k.escape && !s_prev_escape;
     const bool enter_edge = k.enter && !s_prev_enter;
     const bool space_edge = k.space && !s_prev_space;
     const bool bs_edge = k.backspace && !s_prev_backspace;
+    const bool f11_down = kb[SDL_SCANCODE_F11] != 0;
+    const bool tab_down = kb[SDL_SCANCODE_TAB] != 0;
+    k.dev_menu = f11_down && !s_prev_dev_menu;
+    k.tab = tab_down && !s_prev_tab;
     s_prev_escape = k.escape;
     s_prev_enter = k.enter;
     s_prev_space = k.space;
     s_prev_backspace = k.backspace;
+    s_prev_dev_menu = f11_down;
+    s_prev_tab = tab_down;
     /* Keep level for space/enter (continue prompts); edge-only for escape/backspace. */
     k.escape = esc_edge;
     k.backspace = bs_edge;
@@ -313,7 +321,7 @@ KeyState pollInput()
 
     k.any_key = k.escape || k.enter || k.space || k.backspace || k.last_ascii != 0 || k.up || k.down ||
                 k.left || k.right || k.key_c || k.key_d || k.key_m || k.key_n || k.key_o || k.key_p ||
-                k.key_q;
+                k.key_q || k.dev_menu || k.tab;
     return k;
 }
 
