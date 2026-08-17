@@ -279,6 +279,8 @@ static pc-relative calls (statically resolvable):
 | `253` (`0xFD`) | `jsr 0x1493c`; then if `-$79EA==2` copy `-$79AC`→`-$79F2`, `-$7946=1`, `jsr 0x1a1f8`; elif `==3` `jsr -$7ED2`; else `-$79EA=1` | endgame/transition |
 | *default* | `jsr 0x15EDC` (selector→category binner, table below) | shops/temple/training engine |
 
+**Quest target/completion behavior:** For Hoardall (`0xC9`), A–C briefings name the selected item; for Slayer (`0xCA`), they name the selected monster/trophy. The target ID is stored in roster `raw[0x78]`. On a partial turn-in, the Amiga reward/apply path (`0x193AC`, apply loop `0x19516`) displays the `0x18C00` template documented in doc 29, including the turned-in target and XP. The port captures the target before applying because the apply leaf clears `+$78`; it reports the summed XP from the encodings rather than the full-quest `xp_each` value.
+
 The static `$1xxxx` handlers are tractable to port; the `-$7Dxx` vtable thunks are
 the town shops/temple/training/guild engine (doc 28), **not yet ported**.
 

@@ -1441,14 +1441,20 @@ TownSvcQuestCompleteResult townSvcQuestCompleteReward(Mm2RosterFile *roster,
         }
         Mm2RosterRecord &rec = roster->records[idx];
         bool hit = false;
+        uint32_t gained = 0;
         if (drink) {
-            hit = townSvcApplyDrinkEncoding(rec).applied;
+            const TownSvcDrinkApplyResult dr = townSvcApplyDrinkEncoding(rec);
+            hit = dr.applied;
+            gained = dr.gold;
         } else {
-            hit = townSvcApplyFoodEncoding(items, rec).applied;
+            const TownSvcFoodApplyResult fr = townSvcApplyFoodEncoding(items, rec);
+            hit = fr.applied;
+            gained = fr.xp;
         }
         if (hit) {
             ++r.encodings_applied;
             ++activity;
+            r.xp_turned_in += gained;
         }
     }
 

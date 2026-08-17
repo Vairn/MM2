@@ -1096,6 +1096,16 @@ the pluggable A–E menu when a backend is bound (§1.4.3). Food/drink **effects
 (RNG tiers, roster `+$78` encoding, sick roll) remain deferred — no invented
 stat bonuses in the C++ port.
 
+### 13.3.1 Hoardall / Slayer quest turn-ins (`OP_0E 0xC9` / `0xCA`)
+
+The quest handlers share the `0x1980A` A–D choice loop, but their targets differ:
+- `0xC9` (Lord Hoardall) stores an item target in roster `raw[0x78]`.
+- `0xCA` (Lord Slayer) stores a monster/trophy target in roster `raw[0x78]`.
+- A–C briefings concatenate the static intro/outro with the resolved item or monster name; D uses the fixed three-swords or three-envoys briefing.
+- The Amiga apply loop at `0x19516` displays the `0x18C00` completion template for each partial encoding:
+  `Congratulations! You have completed my quest for the %s ... %u experience points!`
+- The remake resolves the target before the reward/apply pass because applying the encoding clears `+$78`, and aggregates the XP awarded by the applied encodings for this message. A full quest completion uses the separate all-members reward message.
+
 ### 13.4 Blacksmith / guild / temple spells
 
 

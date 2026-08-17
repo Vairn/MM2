@@ -362,6 +362,7 @@ struct TownSvcQuestCompleteResult {
     int members_rewarded = 0;
     int encodings_applied = 0;
     uint32_t xp_each = 0;
+    uint32_t xp_turned_in = 0; /* summed per-item apply XP (0x19516 apply leaves) */
 };
 
 TownSvcQuestCompleteResult townSvcQuestCompleteReward(Mm2RosterFile *roster,

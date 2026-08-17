@@ -115,6 +115,20 @@ Pub-adjacent quest NPCs (Lord Hoardall etc.). **27** strings.
 - `0x18BD2` [exe-only] Your party has already been quested
 - `0x18BF6` [exe-only] to seek out the
 
+Turn-in template at `0x18C00` (decoded from the quest reward/apply path):
+```text
+Congratulations!
+  You have completed
+my quest for the %s
+All who are worthy have increased
+    their experience by
+  %u experience points!
+```
+
+This is the partial Hoardall/Slayer turn-in template. `%s` is the item or monster
+name resolved from the turned-in roster `+$78` encoding, and `%u` is the XP awarded
+by that encoding. The name must be captured before the apply leaf clears `+$78`.
+
 ### `town_chests_traps` — `0x1A280`..`0x1A800`
 Chest labels + trap messages. **66** strings.
 

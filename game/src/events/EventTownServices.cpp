@@ -626,6 +626,14 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         /* 0x19AB4/0x19AC4 → 0x1980A: 0x193AC reward+apply, 0x1961E busy gate,
          * else Y/N + A–D (encode 0x19030 / lord arm 0x191A6). */
         const bool drink = (sel == 0xCA);
+        /* Resolve the turned-in +$78 target *before* the reward/apply pass: the
+         * apply leaves (0x18DE0 food / 0x18D3A drink) clear +$78, so the name
+         * the player just handed over must be captured up front. */
+        char turned_target[32];
+        const bool have_turned_target =
+            townSvcQuestTargetName(roster, launch, drink, items,
+                                   rt.combat() ? rt.combat()->monsters() : nullptr,
+                                   turned_target, sizeof(turned_target));
         const TownSvcQuestCompleteResult done =
             townSvcQuestCompleteReward(roster, launch, drink, items);
         if (done.activity > 0) {
@@ -637,7 +645,29 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
                               "  %u experience points!",
                               static_cast<unsigned>(done.xp_each));
             } else {
-                std::snprintf(msg, sizeof(msg), "Quest progress applied.");
+                /* 0x19318 turn-in block (exe strings @ 0x18C00): "Congratulations!
+                 * /   You have completed / my quest for the <target> / All who are
+                 * worthy have increased /     their experience by <xp>". Resolve the
+                 * item/monster name; fall back only when it cannot be resolved. */
+                if (have_turned_target) {
+                    std::snprintf(msg, sizeof(msg),
+                                  "Congratulations!\n"
+                                  "  You have completed\n"
+                                  "my quest for the %s\n"
+                                  "All who are worthy have increased\n"
+                                  "    their experience by\n"
+                                  "  %u experience points!",
+                                  turned_target,
+                                  static_cast<unsigned>(done.xp_turned_in));
+                } else {
+                    std::snprintf(msg, sizeof(msg),
+                                  "Congratulations!\n"
+                                  "  You have completed my quest.\n"
+                                  "All who are worthy have increased\n"
+                                  "    their experience by\n"
+                                  "  %u experience points!",
+                                  static_cast<unsigned>(done.xp_turned_in));
+                }
             }
             showServiceTitle(text, wait, msg);
             break;
