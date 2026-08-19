@@ -231,7 +231,7 @@ int main()
         expect(spellKnownInBook(sorc, 47), "spell 47 reads back known", fails);
         expect(knownSpellCount(sorc, SpellSchool::Sorcerer) == 3, "known spell count == 3", fails);
 
-        // Decoded bits map to the faithful Sorcerer names/levels.
+        // Decoded bits map to Sorcerer names/levels.
         expect(std::strcmp(kSorcererSpells[0].name, "Awaken") == 0 && kSorcererSpells[0].level == 1,
                "Sorcerer 0 = Awaken (L1)", fails);
         expect(std::strcmp(kSorcererSpells[8].name, "Electric Arrow") == 0 && kSorcererSpells[8].level == 2,

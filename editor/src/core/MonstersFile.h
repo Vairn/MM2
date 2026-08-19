@@ -3,9 +3,8 @@
 //   accessor at asm 0x99C8 uses index * 0x1A.
 //
 // Field map originally came from b3dmm2 (proto.bb / mm2ed.bb), then was
-// validated against the MM2 68k unpacker at asm 0x4C8E. Names are decoded as
-// Chr(byte - 128) in the legacy tools. We keep the full record as raw bytes
-// plus named accessors so unknown bytes are never lost on round-trip.
+// checked against the 0x4C8E unpacker. Names: Chr(byte - 128) in the old tools.
+// Full record as raw bytes + named accessors so unknown bytes survive round-trip.
 //
 //   0x00-0x0D name (14 bytes, each byte = char + 128)
 //   0x0E      hp code
@@ -19,9 +18,8 @@
 //   0x13      Oabil (low nibble+1, x10 if bit4 = "adds friends" reinforcement
 //                    count; bits 5-6 = flee/run chance tier; bit7 = multiplies)
 //
-// THIS DECODE IS ASM-CONFIRMED (not b3d-guessed). The authoritative monster
-// unpacker is at asm 0x4C8E (called via accessor 0x99C4, `mulu.w #$1a`). Combat
-// reads: party verb dispatch 0x10002 (indexes verb table by Pabil low-5, e.g.
+// Decode is the 0x4C8E unpacker (accessor 0x99C4, mulu.w #$1a), not the Blitz tools.
+// Combat reads: party verb dispatch 0x10002 (indexes verb table by Pabil low-5, e.g.
 // idx 29 = "frenzies"), single-attack 0xFEEA, flee ("runs") 0x10DFC gated by
 // Oabil bits 5-6, "adds friends" 0x11F0A gated by Oabil low nibble, multiply
 // 0x100B0 gated by Oabil bit7. All bits are preserved on round-trip.

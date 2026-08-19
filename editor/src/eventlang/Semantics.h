@@ -43,9 +43,7 @@ std::optional<std::pair<int, int>> binExecSelector(int sel);
 /** Inverse of binExecSelector; -1 if out of range. */
 int selectorFromOverlayBin(int overlayLoc, int eventIndex);
 
-/** Human DSL line body for an OP_0E selector (no indent). */
 std::string formatSelectorDsl(int sel);
-/** Short comment for inspector / outline. */
 std::string formatSelectorSummary(int sel);
 
 }  // namespace mm2::eventlang

@@ -26,9 +26,9 @@ const SkillBuyOffer *skillBuyOfferForExecSelector(uint8_t sel);
 /** Start y/n + member-select flow for an overlay skill vendor. Returns true when handled. */
 bool eventStartSkillBuyOverlay(EventTextView &text, EventVmWait &wait, const SkillBuyOffer &offer);
 
-/** Grant skill after member pick (or immediately when member_already_selected).
- * Mirrors inline event.dat skill scripts: slot test, party gold check (OP_24),
- * apply_party_masked on roster+0x50 — no gold deduct in those bytecodes. */
+/** Grant after member pick (or immediately when member_already_selected).
+ * Inline skill scripts: slot test, OP_24 gold check, apply_party_masked on
+ * roster+0x50 — those bytecodes never deduct gold. */
 bool eventApplySkillBuy(GameStateView &gs, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                         EventTextView &text, EventVmWait &wait, uint8_t skill_id, uint32_t gold_cost);
 

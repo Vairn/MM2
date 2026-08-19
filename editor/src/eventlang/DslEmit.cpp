@@ -729,7 +729,6 @@ std::string emitLocation(const Location& loc, const std::string& areaComment,
                     std::snprintf(buf, sizeof(buf), " %02x", b);
                     hex << buf;
                 }
-                // Human-readable hint (comment only).
                 std::string shown = s.text;
                 for (char& c : shown)
                     if (c == '\n') c = '@';

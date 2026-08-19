@@ -1,25 +1,7 @@
 #pragma once
-// Interactive, multi-frame town-service menu backend (OP_0E temple/training/smith).
-//
-// This is the playable presentation+input layer for the ASM-canonical transaction
-// engine (mm2::events::TownServiceTransactions / TownServiceMenu). CLAUDE.md allows a
-// swappable UI backend (ITownServiceUi); the transaction LOGIC stays in the events
-// layer and is unchanged here.
-//
-// Integration model (why this is not the blocking townSvcRun* driver):
-//   The event VM runs the town-service selector synchronously while a tile event is
-//   firing, but the game loop polls input once per frame and cannot block. So this
-//   backend does NOT answer the blocking driver's choose/select calls inline; instead
-//   the ITownServiceUi hooks (chooseTempleOption / chooseTrainingOption /
-//   chooseSmithCategory) merely RECORD which service was triggered + the live
-//   TownServiceContext, then return false so townSvcRun* exits immediately. The host
-//   (GameSession) sees pending(), opens a modal overlay, and drives the real menu
-//   across frames via handleKey()/render(), applying the faithful transaction leaves
-//   (townSvcHeal / townSvcTrain / townSvcTempleDonate / townSvcSmithBuy) directly.
-//
-// This mirrors the original engine, which itself is a modal menu loop that takes over
-// the screen with its own keyread loop (A4 vtable thunks) — the host just pumps it
-// frame-by-frame instead of busy-waiting.
+// OP_0E temple/training/smith/guild/tavern menus, one frame at a time.
+// Capture hooks stash the request and return false so townSvcRun* exits;
+// GameSession then pumps handleKey()/render() and the transaction leaves.
 
 #include "mm2/events/TownServiceMenu.h"
 #include "mm2/events/TownServiceTransactions.h"
@@ -35,9 +17,7 @@ namespace mm2::ui {
 
 class PlayTownServiceUi : public mm2::events::ITownServiceUi {
 public:
-    /* ---- ITownServiceUi capture hooks (called by townSvcRun* during the event VM).
-     * Record the requested service + context, return false so the blocking driver
-     * exits; the interactive menu then runs as a multi-frame overlay. ---- */
+    /* Capture hooks: stash request, return false so townSvcRun* exits. */
     bool chooseTempleOption(const mm2::events::TownServiceContext &ctx,
                             mm2::events::TempleOption &out, int &out_spell_slot) override;
     bool chooseTrainingOption(const mm2::events::TownServiceContext &ctx,
@@ -63,23 +43,16 @@ public:
                             const mm2::events::TavernMenuData &data,
                             mm2::events::TavernOption &out) override;
 
-    /* ---- Multi-frame overlay lifecycle (owned + driven by the host). ---- */
-
-    /** True when the event VM requested a service menu that has not been opened yet. */
     bool pending() const { return pending_; }
-
-    /** Promote the captured request to an active, on-screen modal menu. */
     void begin();
 
     bool active() const { return active_; }
     void close();
 
-    /** Advance the menu state machine for one frame's input. ascii is uppercased by
-     *  the caller; escape backs out one level (and closes from the top menu). */
+    /** ascii is uppercased by the caller; escape backs out (closes from the top). */
     void handleKey(char ascii, bool escape);
 
-    /** Render the menu in the LOWER CONSOLE band only (rows ~16..23), leaving the
-     *  3D view + party panel visible — faithful, non-fullscreen (doc 15 §4). */
+    /** Lower console band (rows ~16..23); 3D view + party stay up (doc 15 §4). */
     void render(gfx::ScreenCompositor &c) const;
 
     /** Temple hireling leaf @ 0x1E116 — paid A–F menu suppressed; heal text only. */

@@ -15,25 +15,9 @@
 
 namespace mm2::events {
 
-/* ---------------------------------------------------------------------------
- * OP_0E town/building service selectors (dispatch @ 0x160C2, doc 07 §OP_0E).
- *
- * Selectors 1..8 each `jsr` into the town shop / temple / training / guild
- * engine. Those handlers are the runtime A4 vtable thunks (`-$7Dxx`) and the
- * static pub/temple/smith handlers (0x1A132 / 0x1D208 / 0x1C54A). That engine
- * is an INTERACTIVE multi-option menu UI (NPC intro y/n → A–F menu loop →
- * per-character heal / train / buy with gold deduction) and is NOT yet ported.
- *
- * To stay faithful to the ASM (CLAUDE.md: no invented behavior), each selector
- * below presents the REAL on-screen entry text transcribed byte-for-byte from
- * str.dat (EXTRACTED/docs/11-str-decoded.txt) and then DEFERS the interactive
- * transaction to the unported engine, documenting the precise handler address.
- * The earlier MVP placeholder prose + auto heal/train/rest/gold-deduction were
- * fabrications (the engine never auto-applies a whole-party transaction without
- * the player's menu selection) and have been removed. Cost formulas live as
- * documented helpers in EventVmHelpers (eventVmTrainingCostPerChar /
- * eventVmHealingCostPerChar) for the future engine port + tests.
- * ------------------------------------------------------------------------- */
+/* OP_0E town/building selectors (dispatch @ 0x160C2, doc 07).
+ * 1..8 jsr shop/temple/training/guild (A4 -$7Dxx, plus 0x1A132 / 0x1D208 /
+ * 0x1C54A). Intro copy is str.dat; A–F menus are TownServiceMenu. */
 
 namespace {
 
@@ -251,10 +235,8 @@ void showServiceTitle(EventTextView &text, EventVmWait &wait, const char *title)
     wait = EventVmWait::Space;
 }
 
-/* When a town-service UI backend is bound and the party is present, run the
- * faithful interactive menu (logic = ASM, presentation = backend) and return
- * true. Otherwise return false so the caller falls back to the str.dat intro +
- * deferral (no fabricated transaction). `kind` selects temple vs training. */
+/* Bound ITownServiceUi + party: run the menu and return true.
+ * Else false → str.dat intro, no transaction. */
 enum class MenuKind { Temple, Training, Smith, MageGuild, Tavern };
 
 bool runBoundMenu(EventRuntime &rt, GameStateView &gs, Mm2RosterFile *roster,
@@ -396,7 +378,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
          * That byte is earned via event-script field selector 0x74
          * (OP_15/18/1F/20, already ported) or the unported, buggy 0x9D76
          * class-quest reward loop (doc 36-class-quest-hp-bug.md). No backend
-         * -> faithful hall intro + y/n. */
+         * → hall intro + y/n. */
         if (runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::MageGuild)) {
             break;
         }
@@ -422,26 +404,10 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         break;
     }
     case 0x08: {
-        /* Arena Games ticket engine (0x08 -> thunk -$7DBE -> 0x9D76). CORRECTED
-         * 2026-07: byte-verified against EXTRACTED/ghidra/mm2_data_00.bin (the
-         * A4 vtable trampoline table) — the earlier claim that the DEFAULT-range
-         * dispatch thunk -$7DFA lands on 0x9D76 was backwards. Direct read of
-         * the trampoline slots:
-         *   -$7DFA (file off 0x0204): 4EF9 000092F2  -> 0x092F2 event_dat_loader
-         *   -$7DBE (file off 0x0240): 4EF9 00009D76  -> 0x09D76 Arena Games
-         * i.e. explicit selector 0x08 (this case) is the SOLE path into the
-         * Arena Games ticket-combat-reward engine; the OP_0E default-range bin
-         * (0x15EDC categories 0x3C-0x46) instead re-enters the EVENT LOADER
-         * with a synthetic index — almost certainly to run one of event.dat's
-         * non-map "string bank" pseudo-records (e.g. loc 60 "Nordon/Nordonna/
-         * Corak", a pure string pool with no script segments of its own) for
-         * whatever cross-town quest/reward text that category represents. That
-         * reinvocation mechanism is NOT reverse-engineered yet, so the default
-         * case below no longer fabricates ticket-check text for it (that was
-         * the direct cause of unrelated events — e.g. the game-start Corak
-         * monologue and other default-range quest/reward tiles — incorrectly
-         * showing "you must have a ticket to compete"). See doc 07 §OP_0E and
-         * doc 28 §1.2 for the corrected trace. */
+        /* Arena Games: 0x08 → -$7DBE → 0x9D76 (file 0x0240: 4EF9 00009D76).
+         * -$7DFA (0x0204) is event_dat_loader 0x092F2 — OP_0E default-range
+         * bin (0x15EDC, cats 0x3C-0x46), not this engine. Overlay reinvoke
+         * is still a gap (doc 07 §OP_0E, doc 28 §1.2). */
         const Mm2ArenaTicket ticket = eventVmFindArenaTicket(gs.a4(), roster, launch);
         if (!ticket.found) {
             /* asm 0x9DF6-0x9E2E, str @ code 0xA082/0xA0A7 (byte-exact). */

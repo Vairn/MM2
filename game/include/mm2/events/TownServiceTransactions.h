@@ -1,10 +1,7 @@
 #pragma once
-// OP_0E town-service transaction primitives — faithful leaf operations traced
-// byte-exact from EXTRACTED/mm2.capstone.annotated.asm. NO presentation here:
-// these are the pure state mutations the interactive shop/temple/training engine
-// performs once the player has selected an option + character. The interactive
-// menu loop (A4 vtable UI thunks -$7be4/-$7bfc/-$7ddc, RNG caption tables) is the
-// swappable UI backend (see TownServiceMenu.h); the LOGIC below is ASM-canonical.
+// OP_0E town-service leaves, from EXTRACTED/mm2.capstone.annotated.asm.
+// No presentation — menus are TownServiceMenu + ITownServiceUi
+// (A4 -$7be4/-$7bfc/-$7ddc, RNG caption tables).
 
 #include "mm2/gameplay/ExploreActions.h"
 #include "mm2/gameplay/SpellBook.h"
@@ -152,7 +149,7 @@ struct TownSvcBuyResult {
     int slot = -1; /* backpack slot 0..5 the item landed in */
 };
 
-/* Blacksmith buy leaf (0x1BE44). Faithful ordering of the ASM guards:
+/* Blacksmith buy leaf (0x1BE44). Guard order:
  *   1) reject if rec.condition ($26) != 0 (0x1BE4C tst.b $26).
  *   2) scan the backpack id-run (+$3A) for the first empty slot; reject as
  *      BackpackFull when all six are used (0x1BE82 cmpi #6).

@@ -4076,8 +4076,8 @@ void GameSession::renderFrame(bool overlay_anim_only)
             overlay_ == PlayOverlay::ExchangeOrder || overlay_ == PlayOverlay::DismissHireling ||
             overlay_ == PlayOverlay::UnlockWho || overlay_ == PlayOverlay::DeathStrikes ||
             overlay_ == PlayOverlay::FdPrintChrome) {
-            /* Status-line prompts and town services draw in the lower console band
-             * only (faithful, not fullscreen modals) — keep 3D view + right column. */
+            /* Status-line prompts and town services draw in the lower console
+             * band only — keep 3D view + right column. */
             const bool protect_panel = panel == gfx::PlayRightPanel::Protect;
             const gfx::PlayProtectValues prot = protectValues();
             hud().drawRightColumn(compositor_, panel, protect_panel ? &prot : nullptr);
@@ -4116,8 +4116,7 @@ bool GameSession::viewportHiddenByOverlay() const
     case PlayOverlay::Automap:
     case PlayOverlay::DevMenu:
         return true;
-    /* TownService is NOT here: its menu draws only in the lower console band, so
-     * the 3D viewport stays visible (faithful non-fullscreen presentation). */
+    /* TownService stays off this list: menu is the lower console band. */
     default:
         return false;
     }

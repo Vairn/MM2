@@ -105,7 +105,7 @@ int writebackBytes(uint8_t width_op)
     return (width_op == 3) ? 4 : static_cast<int>(width_op);
 }
 
-// One member's arithmetic, faithfully replicating event_party_effect_apply @
+// One member's arithmetic — event_party_effect_apply @
 // 0x167B0: add (mode 0) saturates at the field-width max; subtract (mode 1)
 // fails atomically when the field can't cover the amount — it clears cond_flag
 // and writes nothing. The caller pre-sets cond_flag=1; the writeback is gated on

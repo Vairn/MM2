@@ -1,8 +1,6 @@
 #pragma once
-// Location-level opcode graph: one horizontal chain per script.
-// Flow is left → right: trigger → header → opcodes. If-branches drop the
-// else arm below (then continues on the main row). Scripts stack vertically.
-// Cross-script overlay/selector edges connect nodes across chains.
+// Opcode graph: trigger → header → ops, left to right. Else arms drop below.
+// Scripts stack vertically; overlay/selector edges cross chains.
 
 #include <functional>
 #include <string>
@@ -81,7 +79,6 @@ struct EventGraph {
     void clear();
     void rebuild(const eventlang::Location& loc, int locId, int focusEvent,
                  const std::vector<int>& scriptOrder, App* app);
-    /** Re-pack node positions using measured/estimated `GraphNode::size`. */
     void reflow(const eventlang::Location& loc);
     const GraphNode* findNode(int id) const;
     GraphNode* findNode(int id);
@@ -96,12 +93,9 @@ struct EventGraph {
     static bool insertAfter(eventlang::Script& sc, const StmtPath& path,
                             const eventlang::Stmt& stub);
     static bool deleteAt(eventlang::Script& sc, const StmtPath& path);
-    /** Append a statement to the end of the script body. */
     static bool appendStmt(eventlang::Script& sc, const eventlang::Stmt& stub);
-    /** Build a default stub for the Add Node menu. */
     static eventlang::Stmt makeStub(const char* kind);
 
-    /** Pending cross-UI action set by the context menu (cleared by EventSection). */
     enum class PendingAction {
         None = 0,
         ShowOnMap,
@@ -114,10 +108,6 @@ struct EventGraph {
     int pendingTileY = -1;
     int pendingTileX = -1;
 
-    /** Draw the imnodes canvas.
-     *  selectionChanged / astMutated report what happened this frame.
-     *  focusedEvent is updated on click so Properties follows.
-     *  loc non-const because the context menu mutates scripts. */
     void draw(App& app, eventlang::Location& loc, eventlang::Script* focusScript,
               bool readOnly, bool allowMutate, int* focusedEvent, bool* selectionChanged,
               bool* astMutated);
@@ -127,16 +117,12 @@ GraphNodeCategory categorizeStmt(const std::string& kind);
 ImU32 categoryTitleColor(GraphNodeCategory c);
 ImU32 categoryBgColor(GraphNodeCategory c);
 
-/** Human label + resolved subtitle (item names, string previews). */
 void describeStmt(const eventlang::Stmt& st, const eventlang::Location& loc, App* app,
                   std::string* titleOut, std::string* subtitleOut);
 
-/** One-line summary of a whole script for header nodes (title + subtitle). */
 void summarizeScript(const eventlang::Script& sc, const eventlang::Location& loc, App* app,
                      std::string* titleOut, std::string* subtitleOut);
 
-/** Decode fight / fight_b spawn list into human title + detail.
- *  Title is "Fixed fight" or "Random pool"; detail lists counts × names. */
 void describeFightEncounter(const eventlang::Stmt& st, App* app, std::string* titleOut,
                             std::string* detailOut);
 

@@ -1,13 +1,6 @@
 #pragma once
-// Faithful, headless-testable town-service menu driver. The transaction LOGIC is
-// ASM-canonical (TownServiceTransactions.h); the interactive prompt/selection is
-// the swappable UI backend (ITownServiceUi) per CLAUDE.md's pluggable-UI rule.
-//
-// The original engine drives these menus through A4 vtable thunks (-$7be4 print,
-// -$7bfc gotoxy, -$7ddc keyread, member-select -$7e0c, RNG caption tables) which
-// are presentation; an ITownServiceUi implementation supplies that interaction
-// (real Amiga UI, or a scripted test double) while the driver enforces the real
-// option set, costs, and state mutations.
+// Town-service menu driver. Leaves are in TownServiceTransactions.h;
+// ITownServiceUi is print/gotoxy/keyread (A4 -$7be4/-$7bfc/-$7ddc/-$7e0c).
 
 #include "mm2/events/TownServiceTransactions.h"
 
@@ -128,8 +121,7 @@ struct TavernMenuData {
     TavernStatBoostView boosts[kPubStatBoostCount];
 };
 
-/* Swappable interaction backend. Return false from a choose/select call to leave
- * the service (matches the engine's ESC/exit key in the menu loop). */
+/* Print / keyread / member-select. Return false from choose/select to leave (ESC). */
 class ITownServiceUi {
 public:
     virtual ~ITownServiceUi() = default;
@@ -222,8 +214,7 @@ bool townSvcPartySlotIsHireling(const TownServiceContext &ctx, int party_slot);
 /* First living non-hireling party slot, or -1 (ASM shop open skip loop). */
 int townSvcFirstNonHirelingSlot(const TownServiceContext &ctx);
 
-/* Run the temple / training menu loop until the UI backend exits. Each accepted
- * option applies the faithful transaction and reports the result via the UI. */
+/* Temple / training loop until the UI exits. */
 void townSvcRunTemple(ITownServiceUi &ui, const TownServiceContext &ctx);
 void townSvcRunTraining(ITownServiceUi &ui, const TownServiceContext &ctx);
 

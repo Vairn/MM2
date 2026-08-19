@@ -1,7 +1,5 @@
 #pragma once
-// A Section is a self-contained editor for one MM2 data file (or topic).
-// To add a new data type: subclass Section, implement the virtuals, and
-// register it in App::registerSections().
+// One panel per MM2 data file (or topic). Registered in App::registerSections().
 
 #include <string>
 

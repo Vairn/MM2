@@ -1,7 +1,6 @@
 #pragma once
-// Remake-only Full Auto combat policy (Tier 3). Not present in retail ASM —
-// Ctrl-A @ 0x11A2A is the only quick path. Taxonomy mirrors CombatSession's
-// resolvePlayerCast / kSorcCombat / kClerAutoAoE routing lists.
+// Full Auto (remake). Retail only has Ctrl-A @ 0x11A2A.
+// Spell routing uses CombatSession's resolvePlayerCast / kSorcCombat / kClerAutoAoE.
 
 #include "mm2/GameState.h"
 #include "mm2/gameplay/SpellBook.h"

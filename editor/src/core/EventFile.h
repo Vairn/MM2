@@ -1,7 +1,7 @@
 #pragma once
-// Structured decoder for event.dat (Might & Magic II, Amiga).
+// event.dat decoder (Amiga MM2).
 //
-// Layout (see EXTRACTED/docs/06-event-dat-format.md, tools/decode_event.py):
+// Layout (docs/06-event-dat-format.md, tools/decode_event.py):
 //   [header]  71 entries x 6 bytes  (u32 abs offset BE, u16 length BE)
 //   per location:
 //     tile-event triplets (pos, event, cond) until 00 00 00
@@ -9,9 +9,8 @@
 //     script bytecodes (0xFF-delimited records, indexed by event id)
 //     0xFF-terminated strings
 //
-// We keep the original bytes in `raw` and decode views into it. Opcode argument
-// bytes and triplet bytes carry absolute file offsets so the GUI can edit them
-// in place (length-preserving) and re-save the file faithfully.
+// `raw` is the original bytes; views point into it. Opcode/triplet bytes
+// keep absolute file offsets for in-place length-preserving edits.
 
 #include <cstdint>
 #include <string>

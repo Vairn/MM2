@@ -5,8 +5,7 @@
 //   Multibyte fields are little-endian on disk.
 //   See EXTRACTED/docs/06-roster-format.md and decomp/mm2_roster_codec.h.
 //
-// We keep the full 130-byte record as raw bytes and expose typed accessors
-// for the confirmed fields, so unknown spans round-trip losslessly.
+// Full 130-byte record with typed accessors; unknown bytes survive round-trip.
 
 #include <array>
 #include <string>

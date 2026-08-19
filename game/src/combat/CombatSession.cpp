@@ -1458,7 +1458,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
     }
 
     /* Cost staging → 0x6DC6: A4-$3F0A SP, A4-$3F08 gems; clr both; may set -$79E8.
-     * Item-use F470 sets -$3F0C and skips the deduct (host mirrors via skip_cast_cost_). */
+     * Item-use F470 sets -$3F0C and skips the deduct (skip_cast_cost_). */
     uint16_t sp_cost = 0;
     uint16_t gem_cost = 0;
     if (meta && !skip_cast_cost_) {

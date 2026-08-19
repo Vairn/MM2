@@ -130,6 +130,7 @@ Remake: `game/src/TitleScreen.cpp` — **320×200**, `Mm2Font8x8.inc`, menu on *
 
 | Doc | Description |
 |-----|-------------|
+| **[`60-event-system-guide.md`](60-event-system-guide.md)** | **Plain-language guide** — how the event system works end to end (start here) |
 | **[`events/README.md`](events/README.md)** | **Index of all 71 locations** — triggers, scripts, strings per map |
 | [`40-events-by-location.md`](40-events-by-location.md) | Hub link into `events/` + format cross-refs |
 | [`06-event-dat-format.md`](06-event-dat-format.md) | Location header, triplets, string banks |

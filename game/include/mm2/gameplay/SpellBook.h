@@ -1,31 +1,21 @@
 #pragma once
-// Spell-book data + known-spell decode for the in-game character sheet.
+// Spell-book decode for the in-game character sheet.
 //
-// 100% ASM-faithful to EXTRACTED/mm2.capstone.annotated.asm:
+// Known spells: 6-byte bitfield at roster $51..$56 (48 bits, one school).
+// Not the $4C..$57 span the format doc calls "spell book"; $50 is the
+// class/title nibble (OP_32).
+//   expand_spellbook_bits @ 0x659a: `$51(base+i)` i=0..5, bit j → index i*8+j.
+//   Guild buy @ 0x1d8d4: byte `$51+(N>>3)`, bit mask[N&7] (A4-$66b1).
+//   OP_2E learn @ 0x16f50: `$51(base+idx)` on class match.
+// LSB-first (mask[i]=1<<i); same table as the 5-town donation field @ 0x1d7b8.
 //
-//  * Known-spell storage (roster record): the spell-book is a 6-byte bitfield at
-//    record offset $51..$56 (48 bits = one school of 48 spells). This is NOT the
-//    full $4C..$57 span the format doc loosely labels "spell book", and $50 is a
-//    separate class/title nibble (event VM OP_32). Evidence:
-//      - Grid renderer expand_spellbook_bits @ 0x659a reads `$51(base+i)` for
-//        i = 0..5 (6 bytes) and tests each bit j (0..7) -> spell index i*8 + j.
-//      - Guild buy-spell @ 0x1d8d4 sets spell N: byte `$51 + (N>>3)`, bit
-//        mask[N&7] (mask table A4-$66b1).
-//      - Event OP_2E learn @ 0x16f50 writes `$51(base + idx)` for a class match.
-//    Bit order is LSB-first (mask[i] = 1<<i): the same A4-$66b1 table builds the
-//    5-town donation field 0x01..0x10 -> 0x1F @ 0x1d7b8.
+// School (OP_2E @ 0x16f64/0x16f7c, $7B36): Sorcerer = class 4/2 (Archer);
+// Cleric = class 3/1 (Paladin). Other classes have no book.
 //
-//  * School by class (OP_2E @ 0x16f64/0x16f7c, and $7B36): Sorcerer spells are
-//    learned by class 4 (Sorcerer) and 2 (Archer); Cleric spells by class 3
-//    (Cleric) and 1 (Paladin). All other classes have no spell book.
-//
-//  * Spell metadata (names, level grouping, SP / gem cost): transcribed from the
-//    manual Appendix B via editor/src/core/Spells.cpp `kSpells[]` and
-//    EXTRACTED/docs/19-spells-and-item-use.md. Per-level counts 7,7,6,6,5,5,4,4,4
-//    (grid uses cumulative offsets A4-$8C22 + counts A4-$8C2B). Flat order matches
-//    spells.dat and the items.dat use-effect index. No names/costs are invented.
-//  * Cast-when (Anytime/Combat/Explore) from spells.dat byte0 bits 0x40/0x80 —
-//    see kSorcererCastWhen / kClericCastWhen (tools/_gen_spell_cast_when.py).
+// Names / level groups / SP+gem cost: manual Appendix B via Spells.cpp kSpells[]
+// and docs/19. Per-level counts 7,7,6,6,5,5,4,4,4 (A4-$8C22 / -$8C2B).
+// Flat order = spells.dat = items.dat use-effect index.
+// Cast-when: spells.dat byte0 0x40/0x80 (kSorcererCastWhen / kClericCastWhen).
 
 #include <cstdint>
 

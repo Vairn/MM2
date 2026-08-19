@@ -6,12 +6,7 @@
 
 namespace mm2::ui {
 
-/**
- * Play-screen HUD chrome. Classic wraps PlayScreenChrome/CombatPanel;
- * Agui draws the Xeen-inspired layout with a native-res atlas.
- *
- * Game logic stays in GameSession — only draw (+ optional hit-test) swaps.
- */
+/** Play-screen HUD. Classic = PlayScreenChrome/CombatPanel; Agui = atlas. */
 class IPlayHud {
 public:
     virtual ~IPlayHud() = default;
@@ -47,10 +42,8 @@ public:
     virtual void drawModalBackdrop(gfx::ScreenCompositor &c) = 0;
 
     /**
-     * Optional mouse hit-test for Agui gadgets.
-     * Returns true and writes a single uppercase command letter (e.g. 'C' Cast)
-     * or 0 for d-pad / face gem specials via out_special.
-     * out_special: 0=none, 1=forward, 2=back, 3=left, 4=right, 5=wait, 6=face_gem.
+     * Agui mouse hit-test. true → uppercase command letter in out_cmd.
+     * out_special: 0=none, 1=fwd, 2=back, 3=left, 4=right, 5=wait, 6=face_gem.
      */
     virtual bool hitTest(int x, int y, char *out_cmd, int *out_special) const
     {

@@ -1,5 +1,5 @@
 #pragma once
-// Combat session — faithful port of the encounter-entry + round-loop shell:
+// Combat session — encounter-entry + round-loop shell:
 //   -$7EDE -> 0x051C2  combat_encounter_entry (play_sound_seq id2 "oh noes" @ 0x51D8)
 //   0x12CE0            live-count recompute
 //   0x1213E/.. 0x11F0A random picker (mm2/combat/EncounterPicker.h)

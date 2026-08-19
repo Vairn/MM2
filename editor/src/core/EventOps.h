@@ -158,7 +158,7 @@ inline int decodeU16Arg(uint8_t op, const std::vector<uint8_t>& args) {
     return (args[0] | (args[1] << 8)) & 0xFFFF;
 }
 
-// Human-readable pseudo-code for one opcode, ported from decompile_op().
+// One-opcode dump, from decompile_op().
 // `strAt` returns the string-table entry for an index (for inline previews),
 // `itemAt` resolves an items.dat id to a name. Either may be null. `loc` is the
 // event.dat location id (== map screen for 0..59), used to resolve OP_0B sign

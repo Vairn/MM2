@@ -5,7 +5,6 @@
 
 namespace mm2::ui {
 
-/** A1200-oriented play HUD: portraits, icon rail, d-pad, protect gems. */
 class AguiPlayHud final : public IPlayHud {
 public:
     bool init(const char *data_dir) override;

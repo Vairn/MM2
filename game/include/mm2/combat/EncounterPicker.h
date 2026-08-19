@@ -1,7 +1,6 @@
 #pragma once
-// Random encounter picker — faithful port of 0x11E58 (xp budget init),
-// 0x1213E/0x12072/0x11F0A (picker loop), and 0x12CE0 (live-count recompute).
-// See EXTRACTED/docs/35-encounter-tables.md for the full ASM trace.
+// Random encounter picker: 0x11E58 (xp budget), 0x1213E/0x12072/0x11F0A
+// (loop), 0x12CE0 (live-count). See docs/35-encounter-tables.md.
 
 #include "mm2/GameState.h"
 #include "mm2/gameplay/ExploreActions.h"
@@ -14,9 +13,8 @@
 
 namespace mm2::combat {
 
-/** Stands in for the unpack thunk -$7EF6, which fetches a picked monster
- *  type's "friend count" field (monsters.dat Oabil low nibble, see
- *  MM2_MON_ADD_FRIENDS_COUNT). Pass nullptr to use a faithful default of 1. */
+/** Unpack thunk -$7EF6: monster "friend count" (Oabil low nibble,
+ *  MM2_MON_ADD_FRIENDS_COUNT). nullptr → 1. */
 using FriendCountLookup = uint8_t (*)(uint8_t monster_type, const void *ctx);
 
 /** 0x11E58: party_xp_budget (A4-$6FCA) = total party current HP / 8, scaled

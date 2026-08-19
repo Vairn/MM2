@@ -1,6 +1,6 @@
 #pragma once
-// Lifted event-script AST for the editor decompiler/compiler.
-// Mirrors tools/mm2_event_lang/ast.py (shape), not the fixed-array C stub.
+// Event-script AST (editor decompiler/compiler).
+// Shape matches tools/mm2_event_lang/ast.py, not the fixed-array C stub.
 
 #include <cstdint>
 #include <map>

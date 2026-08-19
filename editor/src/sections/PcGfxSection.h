@@ -1,13 +1,8 @@
 #pragma once
-// PC DOS (GOG) graphics viewer — CGA (.4) / EGA (.16) wall sheets and the
-// MONSTERS.4 / MONSTERS.16 combat atlas. Mirrors GfxSection's scan/decode/
-// preview flow but for the PC codec in core/PcGfx.h (see tools/decode_pc_gfx.py
-// and EXTRACTED/docs/54-pc-dos-graphics-formats.md).
-//
-// PC assets normally live in a separate GOG install folder from the Amiga
-// data folder, so this section keeps its own directory (shared with other
-// sections via AppState::pcDataDir) instead of using the section's load()
-// dataDir directly.
+// PC DOS CGA (.4) / EGA (.16) sheets and MONSTERS.4/.16 atlas.
+// Same scan/decode path as GfxSection; codec in core/PcGfx.h
+// (tools/decode_pc_gfx.py, docs/54-pc-dos-graphics-formats.md).
+// Assets live in AppState::pcDataDir, not the Amiga data folder.
 
 #include <optional>
 #include <string>

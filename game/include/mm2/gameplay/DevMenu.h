@@ -1,5 +1,5 @@
 #pragma once
-// Remake developer overlay (PC F11 / Amiga Help) — not ASM-faithful retail UI.
+// Developer overlay (PC F11 / Amiga Help). Not retail UI.
 
 #include "mm2/gameplay/DevMenuGrants.h"
 

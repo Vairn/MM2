@@ -1,6 +1,5 @@
 #pragma once
 // event.dat runtime: loader @ 0x92F2, init @ 0x1754A, scanner @ 0x175E2, VM @ 0x172CA.
-// Milestone: text ops OP_01..OP_07, OP_09, OP_0F + OP_10/OP_11 skip (event 20).
 
 #include "mm2/GameState.h"
 #include "mm2/combat/CombatSession.h"
@@ -76,16 +75,12 @@ public:
     void bindItems(const Mm2ItemsFile *items) { items_ = items; }
     const Mm2ItemsFile *items() const { return items_; }
 
-    /** Optional pluggable town-service menu backend (temple/training). When bound
-     *  the OP_0E temple/training selectors run the faithful interactive menu via
-     *  this UI; when null they show the str.dat intro and defer (no fabrication). */
+    /** Town-service UI (temple/training). Null: str.dat intro only. */
     void bindTownServiceUi(ITownServiceUi *ui) { town_service_ui_ = ui; }
     ITownServiceUi *townServiceUi() const { return town_service_ui_; }
 
-    /** Optional rng(min,max) source (0x22BC6 contract) for the OP_0E default-range
-     *  Arena Games ticket engine (asm 0x9D76's rng(1,16) @ thunk -$7BB4). When
-     *  null, the arena's difficulty roll falls back to a fixed 1 (documented gap,
-     *  no fabricated randomness). */
+    /** rng(min,max) @ 0x22BC6 for OP_0E 0x08 arena (0x9D76 rng(1,16) -$7BB4).
+     *  Null → fixed roll of 1. */
     void bindRng(gameplay::Rng *rng) { rng_ = rng; }
     gameplay::Rng *rng() const { return rng_; }
 

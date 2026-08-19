@@ -42,7 +42,7 @@ public:
 
     /* map_facing_from_key @ 0x5636: latches the key, the direction-mask
      * bundle hi byte (A4-$AA28) and the facing index (A4-$AA29).
-     * Mirrors apply_facing_key in EXTRACTED/decomp/mm2_party_launch.c. */
+     * Same mapping as apply_facing_key in EXTRACTED/decomp/mm2_party_launch.c. */
     void setFacingKey(char key)
     {
         uint8_t bundle_hi = 0;

@@ -153,8 +153,7 @@ private:
     bool combat_character_sheet_ = false;
     void tickPlayInput(const platform::KeyState &keys);
     void handleExploreCommand(gameplay::PlaySessionAction action);
-    /* Bash door @ 0x9B48 / Unlock door @ 0x20CA2 — detect the wall field ahead
-     * and run the faithful Might / thievery rolls (gameplay::ExploreActions). */
+    /* Bash @ 0x9B48 / Unlock @ 0x20CA2 — wall ahead + ExploreActions rolls. */
     void handleBashDoor();
     void handleUnlockDoor();
     void applyDoorTrapDamage();
@@ -203,12 +202,10 @@ private:
     void runPendingEvents();
     void refreshEventsForScreen();
     void refreshWorldAfterEventTransition();
-    /** Reload world/env/events if gs screen moved since `before` (spell teleports
-     *  like Fly / recall set screenId directly). Mirrors an OP_0C transition. */
+    /** Reload world/env/events if gs screen moved since `before` (Fly / recall). */
     void handleSpellScreenChange(uint8_t before_screen);
     void syncSheetCastAux();
     void maybeQueueScriptedScenes(bool on_start);
-    /** Open the interactive town-service overlay when an OP_0E selector requested it. */
     void maybeOpenTownServiceMenu();
     void maybeFinishInnRegistry();
     void maybeOpenDeathStrikes();

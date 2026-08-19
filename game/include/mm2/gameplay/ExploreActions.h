@@ -1,14 +1,11 @@
 #pragma once
-// Faithful Bash / Unlock decision logic (doc 43 §7.1 / §7.6).
+// Bash / Unlock (doc 43 §7.1 / §7.6).
 //   Bash door   @ 0x9B48 / strength roll @ 0x9BCA-0x9CAA (thunk -$7DC4).
 //   Unlock door @ 0x20CA2                               (thunk -$7CCE).
 //
-// These are pure functions over the traced rolls/comparisons so they can be
-// unit-tested deterministically. The map/door runtime state they consume in
-// Door strength / trap byte come from the materialized attrib record (+0x12/+0x13,
-// runtime A4-$5608/-$5607). Lock clear mirrors -$7F02 @ 0x4B06 via collision
-// page wall-bit clear (mm2_map_clear_door_lock). Trap victim/damage @ 0x1A9A6 /
-// 0x1A90E is simplified in GameSession.
+// Door strength / trap: attrib +0x12/+0x13 (A4-$5608/-$5607).
+// Lock clear: -$7F02 @ 0x4B06 via mm2_map_clear_door_lock.
+// Trap victim/damage @ 0x1A9A6 / 0x1A90E is simplified in GameSession.
 
 #include "mm2/CppStdCompat.h"
 

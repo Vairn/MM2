@@ -215,48 +215,17 @@ bool eventVmPartyTryPayGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLa
 bool eventVmPartyTryPayFood(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                             uint8_t amount);
 
-/* ---------------------------------------------------------------------------
- * Arena Games ticket-combat engine (ASM 0x9D76). CORRECTED 2026-07: this
- * routine is the FIXED, sole target of explicit OP_0E selector 0x08's thunk
- * -$7DBE — byte-verified by reading the A4 vtable trampoline table directly
- * out of EXTRACTED/ghidra/mm2_data_00.bin (file offset 0x7FFE+disp):
- *   -$7DBE (file off 0x0240): `4EF9 00009D76` -> 0x09D76 (this engine)
- *   -$7DFA (file off 0x0204): `4EF9 000092F2` -> 0x092F2 (event_dat_loader)
- * A prior pass misread this and claimed -$7DFA (the OP_0E DEFAULT-range
- * dispatch thunk, called from 0x160AE after 0x15EDC bins the selector into
- * category 0x3C-0x46) was the arena's target; that made the port fabricate
- * "you must have a ticket to compete" text for every unrelated default-range
- * selector (Olympic trials, post-victory reward tiers, the game-start Corak
- * monologue, ...). The default-range thunk actually re-enters the SAME
- * event_dat_loader used to enter a normal on-map location (0x92F2) — almost
- * certainly to load one of event.dat's non-map "string bank" pseudo-records
- * (e.g. decoder location 60, "Nordon/Nordonna/Corak") keyed by the
- * category/index pair; that reinvocation is not reverse-engineered yet, so
- * EventTownServices.cpp's default case no longer guesses at it. This engine
- * is NOT shared by explicit selector 0x07 (general store, thunk -$7DB8 ->
- * 0xA62C, also byte-verified) — a distinct fixed address. Selectors that DO
- * reach this engine are only those whose event.dat script encodes OP_0E 0x08
- * directly (e.g. Middlegate's arena-entrance tile). Every default-range
- * selector (Atlantium Olympic trials 0x12-0x25, Vulcania/Sandsobar arena
- * tiers, post-victory combat tiers 0x26-0x29/0x4A-0x4F, Mount Farview reward
- * 0x97, etc.) does NOT funnel into this code — only explicit selector 0x08
- * does, unconditionally:
- *   1) scans every party member's BACKPACK ONLY (record+0x3A..0x3F, NOT
- *      equipped slots) for a ticket item 0xD0..0xD3 (asm 0x9D9C-0x9DDA);
- *   2) on miss: "Sorry, but you must have a ticket to compete in these
- *      games." (str @ code 0xA082/0xA0A7) — no combat;
- *   3) on hit: consumes the ticket (thunk -$7F26), shows "The games master
- *      accepts your ticket.  Let the battle begin!" (0xA0BF/0xA0E5), and
- *      arms a FIXED encounter via the same battle-slot array as OP_12/13
- *      (A4-$11DE), monster type = ((color*3 + area[screen]) * 16) +
- *      rng(1,16) (asm 0x9E86-0x9EC2, area table @ data hunk 0xE74);
- *   4) on victory (combat engine not ported — see EventCombatEncounter.h):
- *      the ROM grants gold from a 4(color) x 3(town tier) table (data hunk
- *      0xE7A) to the first eligible party member and prints "Winner, you
- *      receive N gold" (0xA0FC/0xA111) — plus a documented ROM bug that
- *      corrupts record+0x79 (doc 36-class-quest-hp-bug.md). Reward granting
- *      is intentionally NOT performed by this port yet (no combat-victory
- *      callback exists), matching OP_12/13's fidelity level. */
+/* Arena Games (OP_0E 0x08). Thunk -$7DBE → 0x09D76 (mm2_data_00.bin
+ * 0x7FFE+disp @ file 0x0240: `4EF9 00009D76`). -$7DFA is the OP_0E
+ * default-range loader (0x092F2), not this; 0x07 store is -$7DB8 → 0xA62C.
+ *
+ * Only scripts that encode OP_0E 0x08 reach here (e.g. Middlegate arena tile):
+ *   1) backpack-only scan for ticket 0xD0..0xD3 (0x9D9C-0x9DDA);
+ *   2) miss → str 0xA082/0xA0A7, no combat;
+ *   3) hit → consume (-$7F26), str 0xA0BF/0xA0E5, seed A4-$11DE:
+ *      type = ((color*3 + area[screen])*16) + rng(1,16) (0x9E86-0x9EC2, 0xE74);
+ *   4) victory gold: 4×3 table @ 0xE7A; ROM also corrupts record+0x79 (doc 36).
+ *      Reward write is still a gap (no victory callback). */
 
 struct Mm2ArenaTicket {
     bool found = false;
@@ -302,11 +271,9 @@ uint32_t eventVmTrainingCostPerChar(int level, int town_index);
 
 /** Per-character base HEALING cost (FAQ §3-6, doc 34 §13.2) for a LIVING
  *  character: `current_level × training_town_index × 10` gp (same town index as
- *  training). The FAQ dead (×10) / eradicated (×100) multipliers are applied
- *  inside the deferred temple engine (OP_0E 0x03 → 0x1D208) and are NOT folded
- *  in here: roster condition byte $26 only groups $80+ as Dead/Stone/Eradicated
- *  (doc 06), and the dead-vs-eradicated threshold is not yet ASM-confirmed.
- *  Exposed for the future engine port + unit tests. */
+ *  training). Dead (×10) / eradicated (×100) multipliers are applied in
+ *  townSvcHeal (OP_0E temple → 0x1D208), not here: roster $26 only groups $80+
+ *  as Dead/Stone/Eradicated (doc 06); dead-vs-eradicated is not ASM-confirmed. */
 uint32_t eventVmHealingCostPerChar(int level, int town_index);
 
 /** str.dat tip/rumor bank (0x9666 / A4-$7DE8):

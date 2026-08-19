@@ -4,7 +4,6 @@
 
 namespace mm2::ui {
 
-/** Thin wrapper over PlayScreenChrome / CombatPanel (ASM-faithful). */
 class ClassicPlayHud final : public IPlayHud {
 public:
     bool init(const char * /*data_dir*/) override { return true; }

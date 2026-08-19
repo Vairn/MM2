@@ -1,5 +1,5 @@
 #pragma once
-// New Event Wizard: prefab templates → form → .mm2evt snippet for EventSection.
+// Prefab → form → .mm2evt snippet for EventSection.
 
 #include <functional>
 #include <string>
@@ -27,16 +27,9 @@ struct WizardTemplate {
     const char* blurb;
 };
 
-/** Prefab registry (10 templates). */
 const std::vector<WizardTemplate>& wizardTemplates();
+const char* const* wizardCondNames(int* count);  // same order as DslParse::triggerCondName
 
-/** Names for trigger condition combos (must match DslParse triggerCondName). */
-const char* const* wizardCondNames(int* count);
-
-/**
- * Shared form state for all templates. Each template reads only the fields it
- * needs; unused fields are ignored.
- */
 struct WizardForm {
     // DoorSign / DialogueReward
     std::string message = "A door. It is locked.";
@@ -64,13 +57,6 @@ struct WizardForm {
     int trapMember = 0;           // 0 = all
 };
 
-/**
- * Builds a .mm2evt snippet from wizard form state. Pure text emission using
- * only DSL syntax supported by DslParse. Returns three fragments: string defs,
- * trigger line, script block.
- *
- * itemNameOf / monsterNameOf may be null; when provided they add # comments.
- */
 struct WizardSnippet {
     std::string stringsBlock;   // "  name: \"text\"" lines (may be empty)
     std::string triggerLine;    // "on tile (y, x) cond -> name  @event NN"
@@ -87,7 +73,6 @@ WizardSnippet buildWizardSnippet(
     const std::function<std::string(int)>& monsterNameOf,
     const WizardForm& form);
 
-/** Modal wizard state held by EventSection. */
 struct WizardState {
     int templateIdx = 0;
     WizardForm form;
@@ -98,12 +83,6 @@ struct WizardState {
     int condIndex = 0;
 };
 
-/**
- * Merges a snippet into an existing .mm2evt buffer:
- *  - stringsBlock lines are appended inside the strings: block (created if missing),
- *  - triggerLine is appended after the last `on tile (` line,
- *  - scriptBlock is appended at the end.
- */
 std::string mergeWizardSnippet(const std::string& buffer, const WizardSnippet& snip);
 
 }  // namespace mm2

@@ -1,6 +1,6 @@
 // Bash / Unlock / Rest unit test.
 //
-// Covers the faithful explore-command decision logic traced from the 68k ASM:
+// Explore-command rolls from the 68k:
 //   - bashDoorRoll   (0x9BCA strength + 0x9C4C trap roll)
 //   - unlockDoorRoll (0x20D26 pick + 0x20D5C trap roll)
 //   - advanceTimeTick(0x55) (Rest clock advance @ 0x19CEC -> rollover 0x6A06)

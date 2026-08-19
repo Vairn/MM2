@@ -41,7 +41,7 @@ bool EventFile::save(const std::string& path) const {
 }
 
 // Parse one 0xFF-delimited segment into opcode nodes. `segAbs` is the absolute
-// file offset of the segment's first byte. Mirrors parse_segment_stream_nodes:
+// file offset of the segment's first byte. Same walk as parse_segment_stream_nodes:
 // the byte stream is walked in order and does NOT stop at token-skip opcodes.
 static EventSegment parseSegment(const uint8_t* seg, size_t len, size_t segAbs) {
     EventSegment out;

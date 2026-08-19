@@ -134,8 +134,7 @@ void scanDoorWrongFacings(mm2::events::EventRuntime &runtime, mm2::GameStateView
     }
 }
 
-/* Scripted town-service UI backend: replays a fixed sequence of menu choices so
- * the faithful menu driver can be exercised headlessly. */
+/* Scripted ITownServiceUi: replays a fixed sequence of menu choices. */
 class ScriptedTownUi : public mm2::events::ITownServiceUi {
 public:
     struct Step {
@@ -1931,8 +1930,7 @@ int main(int argc, char **argv)
                "arena victory grants the ticket-color/screen gold reward", fails);
     }
 
-    /* ASM-faithful town-service transaction layer (temple heal/restore/donate +
-     * stat training) and the pluggable menu driver. */
+    /* Town-service leaves + menu driver. */
     testTownServiceTransactions(fails);
 
     /* Mage guild (OP_0E 0x05) + temple spell purchase (menu D-F): ASM-confirmed
@@ -2178,8 +2176,7 @@ int main(int argc, char **argv)
     mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
     expect(runtime.scanAndRun(gs, world), "event 24 tavern fires at (4,6) facing W", fails);
     expect(runtime.textView().layerCount() > 0, "OP_0B tavern sign persists after OP_0E", fails);
-    /* OP_0E 0x03 shows the faithful str.dat pub intro (Middlegate = Amber
-     * waitress "Do you wish to order from our vast menu of drinks (y/n)?"). */
+    /* OP_0E 0x03 pub intro (Middlegate: Amber waitress, drinks y/n). */
     expect(runtime.textView().containsText("Amber") || runtime.textView().containsText("drinks"),
            "OP_0E 0x03 tavern shows pub intro (str.dat)", fails);
     expect(!runtime.textView().containsText("May I aid you"),

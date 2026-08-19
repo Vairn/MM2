@@ -211,9 +211,7 @@ void MapSection::drawWindow() {
                           : env == Env::Castle ? "Castle"
                           : env == Env::Outdoor ? "Outdoor" : "Town";
 
-    // The engine composites the scene from two 208x60 backdrops: sky.32 (the
-    // ceiling/sky, top) over the per-environment floor image (bottom), then
-    // paints perspective walls on top. We reproduce the backdrop here.
+    // sky.32 (208x60, top) over the env floor (bottom); walls on top.
     const float W = 208.0f, H = 60.0f;
     float z = viewZoom_;
 
@@ -238,7 +236,6 @@ void MapSection::drawWindow() {
         dl->AddImage(static_cast<ImTextureID>(s.tex[static_cast<size_t>(frame)]), a, b);
     };
 
-    // Reserve the canvas and draw a border, then the two backdrop halves.
     ImVec2 canvas(W * z, (H * 2) * z);
     dl->AddRectFilled(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
                       ui::ToU32(ui::CanvasBg()));
@@ -585,11 +582,9 @@ void MapSection::drawView3D() {
     dl->AddRectFilled(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
                       ui::ToU32(ui::CanvasBg()));
 
-    // 1. floor backdrop - townf.32 frame 0 at (8, 68)
     blit(*floor, 0, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DFloorY));
-    // 2. sky/ceiling backdrop - sky.32 frame from roof bit at (8, 8)
     blit(sky_, skyFrame, static_cast<float>(kView3DOriginX), static_cast<float>(kView3DSkyY));
-    // 3. walls (town/cave/castle.32) - painted over sky/floor like view_3d_master @0x2ECE
+    // walls over sky/floor — view_3d_master @0x2ECE
     for (const View3DBlit& wb : scene.blits) {
         blit(*walls, wb.frame, static_cast<float>(wb.x), static_cast<float>(wb.y));
         blitTorch(wb);
@@ -793,7 +788,7 @@ void MapSection::drawMinimap() {
 
     for (int cy = 0; cy < dim; ++cy) {      // cy=0 = north (top of minimap)
         for (int cx = 0; cx < dim; ++cx) {  // cx=0 = west (left of minimap)
-            // Disk row 0 = south â†’ screen bottom; cy=0 â†” disk row 15 (north).
+            // Disk row 0 = south (bottom); cy=0 is disk row 15 (north).
             int     diskY = dim - 1 - cy;
             int     idx   = diskY * dim + cx;
             uint8_t v     = vis[static_cast<size_t>(idx)];
@@ -962,7 +957,6 @@ void MapSection::drawWorkspace(App& app, EditorSelection& sel) {
     if (sel.doc != DocKind::Map || sel.kind == EditorSelection::Kind::None)
         sel.Select(DocKind::Map, EditorSelection::Kind::MapScreen, screen_);
 
-    // Honor Properties / cross-doc tab requests.
     const char* forceTab = nullptr;
     if (!sel.requestInnerTab.empty() && sel.doc == DocKind::Map) {
         forceTab = sel.requestInnerTab.c_str();

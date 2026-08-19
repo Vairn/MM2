@@ -365,7 +365,7 @@ static const char *const kPubRumors[5][kPubRumorCount] = {
         "Visit Dawn's, D4 3,7",
     },
 };
-/* Linear 0x976E fill after rumors: town0 tips then drink/food chrome (ASM-faithful). */
+/* Linear 0x976E fill after rumors: town0 tips then drink/food chrome. */
 static const char *const kPubTips[5][kPubTipCount] = {
     {
         "Slayer seeks death",
