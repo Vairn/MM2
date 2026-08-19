@@ -1,11 +1,7 @@
 #pragma once
-// roster.dat - layout confirmed (64 records * 130 bytes (0x82) = 8320 bytes).
-// GOG ROSTER.DAT is 8292 bytes (same 48 char records + 2052-byte global stream;
-// Amiga pads 28 zero bytes at EOF to fill roster slot 63). load() accepts both.
-//   Multibyte fields are little-endian on disk.
-//   See EXTRACTED/docs/06-roster-format.md and decomp/mm2_roster_codec.h.
-//
-// Full 130-byte record with typed accessors; unknown bytes survive round-trip.
+// roster.dat: 64 records * 130 bytes (0x82) = 8320 (Amiga). GOG ROSTER.DAT is
+// 8292 (same 48 char records + 2052-byte global stream; Amiga pads 28 zeros).
+// load() accepts both. Multibyte fields are little-endian on disk.
 
 #include <array>
 #include <string>
@@ -29,11 +25,8 @@ constexpr int kRosterItemSlots = 6;
 // Normalize Amiga (8320) or PC (8292) on-disk images to kRosterFileSize bytes.
 bool normalizeRosterDiskImage(Bytes& bytes);
 
-// One logical equipped/backpack item. NOTE: on disk these are stored as
-// Structure-of-Arrays (6 ids, 6 charges, 6 flags per group), not interleaved
-// triplets -- see roster_off::kEquipped/kBackpack and RosterRecord::slot().
-//   charges: usable charges, decremented on item-use (68k ASM 0x137F0/0x138A6;
-//            Blitz3D editor "plus"). flags: per-instance flags ("efft").
+// One equipped/backpack slot. On disk these are SoA (6 ids, 6 charges, 6 flags),
+// not interleaved triplets — see roster_off::kEquipped/kBackpack.
 struct RosterItemSlot {
     uint8_t itemId = 0;
     uint8_t charges = 0;
@@ -63,15 +56,8 @@ constexpr int kEnduranceCur = 0x27;
 constexpr int kEquipped = 0x28;      // Structure-of-Arrays: id[6]@0x28, charges[6]@0x2E, flags[6]@0x34
 constexpr int kBackpack = 0x3A;      // Structure-of-Arrays: id[6]@0x3A, charges[6]@0x40, flags[6]@0x46
 constexpr int kItemChargesRun = 6;   // id run -> +6 charges run -> +12 flags run
-constexpr int kSpells = 0x4C;        // 0x4C..0x57: tentatively "spells" -- UNVERIFIED
-                                     // (MM2 gates spells by spell-level, not per-spell
-                                     // flags, so this label is suspect). Byte +0x50 is
-                                     // NOT a spell field: the event VM (OP_32 @0x17190 ->
-                                     // 0x04614/0x45C4) reads +0x50 as a packed pair of
-                                     // alignment/profession-title nibbles and counts party
-                                     // members whose nibble == a title id (0x04 Crusader,
-                                     // 0x08 Heroic, 0x09 druid/pagan). ASM annotates
-                                     // +0x50 "class nibble".
+constexpr int kSpells = 0x4C;        // 0x4C..0x57 unlabeled; +0x50 is title nibbles
+                                     // (OP_32 @ 0x17190), not a per-spell bitset.
 constexpr int kAlignTitleNibbles = 0x50;  // packed alignment/profession-title nibble pair
 constexpr int kSpMax = 0x58;         // u16 LE
 constexpr int kSpCur = 0x5A;

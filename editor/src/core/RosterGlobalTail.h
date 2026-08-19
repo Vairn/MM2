@@ -1,8 +1,6 @@
 #pragma once
-// Global quest/state bytes packed in roster.dat slots 48..63 (file offset 0x1860).
-// Runtime addresses use A4 displacements from anchor $7FFE; the on-disk layout is the
-// 0x1860-byte serialized stream written by save_game_state @ 0x823C (reload @ 0x86F6).
-// See EXTRACTED/docs/06-roster-format.md.
+// Global quest/state bytes in roster.dat slots 48..63 (file offset 0x1860).
+// A4 displacements from $7FFE; on-disk stream from save_game_state @ 0x823C.
 
 namespace mm2::roster_global {
 

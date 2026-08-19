@@ -75,7 +75,7 @@ bool editEnumCombo(const char* id, uint8_t* value, const char* const* names, int
     return true;
 }
 
-// Roster +$26 condition — ASM-confirmed bitfield + fatal values.
+// Roster +$26 condition bitfield + fatal values.
 // Living bits (OR up to 0x7F): bset #0/#2/#3/#4 @ 0xEEA6/0x1CEF8/0x1CC66/0x19DD4,
 //   btst #1 silence @ 0x118F0, or #$20 paralyz @ 0x1EE94, #$40 uncon @ 0xC3FC.
 // Fatal whole-byte: #$81 dead @ 0x1EEC8, #$82 stone @ 0x1EEDA, #$FF erad @ 0x1EEEC.

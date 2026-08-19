@@ -127,19 +127,6 @@ void textAtInverse(ScreenCompositor &c, int col, int row, const char *text)
     }
 }
 
-void glyphTextAt(ScreenCompositor &c, int col, int row, const char *text)
-{
-#if MM2_HOST_AMIGA
-    for (int i = 0; text[i]; ++i) {
-        c.drawGlyphPen((col + i) * 8, row * 8, static_cast<uint8_t>(text[i]), kPenWhite);
-    }
-#else
-    for (int i = 0; text[i]; ++i) {
-        c.drawGlyph((col + i) * 8, row * 8, static_cast<uint8_t>(text[i]), 255, 255, 255);
-    }
-#endif
-}
-
 /* h_line @ 0x4032: cap 6 at col0, glyph 5 cols col0+1..col1-1, cap 7 at col1. */
 void hLine(ScreenCompositor &c, int col0, int col1, int row)
 {
@@ -427,7 +414,7 @@ void drawPlayRightColumn(ScreenCompositor &c, PlayRightPanel panel, const PlayPr
         "# View Char",
     };
     for (int i = 0; i < 15; ++i) {
-        glyphTextAt(c, 0x1C, 1 + i, kCommandRef[i]);
+        textAt(c, 0x1C, 1 + i, kCommandRef[i]);
     }
 }
 

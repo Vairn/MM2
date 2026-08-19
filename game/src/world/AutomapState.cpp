@@ -4,6 +4,16 @@
 
 namespace mm2::world {
 
+namespace {
+
+bool tileInRange(int screen, int x, int y)
+{
+    return screen >= 0 && screen < MM2_MAP_SCREEN_COUNT && x >= 0 && y >= 0 &&
+           x < MM2_MAP_GRID_DIM && y < MM2_MAP_GRID_DIM;
+}
+
+}  // namespace
+
 void AutomapState::clearAll()
 {
     for (AutomapScreenVis &s : screens_) {
@@ -15,8 +25,7 @@ void AutomapState::clearAll()
 
 bool AutomapState::isVisited(int screen, int x, int y) const
 {
-    if (screen < 0 || screen >= MM2_MAP_SCREEN_COUNT || x < 0 || y < 0 ||
-        x >= MM2_MAP_GRID_DIM || y >= MM2_MAP_GRID_DIM) {
+    if (!tileInRange(screen, x, y)) {
         return false;
     }
     return (screens_[screen].rows[y] & automapColMask(x)) != 0;
@@ -24,8 +33,7 @@ bool AutomapState::isVisited(int screen, int x, int y) const
 
 void AutomapState::markVisited(int screen, int x, int y)
 {
-    if (screen < 0 || screen >= MM2_MAP_SCREEN_COUNT || x < 0 || y < 0 ||
-        x >= MM2_MAP_GRID_DIM || y >= MM2_MAP_GRID_DIM) {
+    if (!tileInRange(screen, x, y)) {
         return;
     }
     screens_[screen].rows[y] |= automapColMask(x);
@@ -41,11 +49,6 @@ void AutomapState::markScreenVisited(int screen)
     }
 }
 
-bool AutomapState::rosterHasSkillId(const Mm2RosterRecord &rec, int skill_id)
-{
-    return gameplay::rosterHasSkillId(rec, static_cast<uint8_t>(skill_id));
-}
-
 bool AutomapState::partyHasCartographer(const Mm2RosterFile &roster, const Mm2PartyLaunch &launch)
 {
     for (int i = 0; i < launch.party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
@@ -57,7 +60,7 @@ bool AutomapState::partyHasCartographer(const Mm2RosterFile &roster, const Mm2Pa
         if (rec.condition >= 0x81) {
             continue;
         }
-        if (rosterHasSkillId(rec, kAutomapSkillCartographer)) {
+        if (gameplay::rosterHasSkillId(rec, static_cast<uint8_t>(kAutomapSkillCartographer))) {
             return true;
         }
     }

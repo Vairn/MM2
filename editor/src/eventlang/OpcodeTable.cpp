@@ -17,7 +17,7 @@ const OpcodeInfo& opcodeInfo(uint8_t op) {
         {"OP_08_WAIT_SPACE_SCRIPTED", 0},  // 08 @ 0x15D26 — Space + SCRIPTED_KEY_MODE=$FD
         {"OP_09_PROMPT_YN", 0},            // 09 @ 0x15D3C
         {"OP_0A_PROMPT_YN_B", 0},          // 0A @ 0x15D9A
-        {"OP_0B_SHOW_SERVICE_WINDOW", 2},  // 0B @ 0x15DB0 — sign index, NOT string
+        {"OP_0B_SHOW_SERVICE_WINDOW", 2},  // 0B @ 0x15DB0 — sign index, not string
         {"OP_0C_MAP_TRANSITION", 2},       // 0C @ 0x15E12
         {"OP_0D_PLAY_SOUND_SEQ", 1},       // 0D @ 0x15EC4 → play_sound_seq @ 0x6FB8
         {"OP_0E_EXEC_SELECTOR", 1},        // 0E @ 0x160C2
@@ -64,7 +64,7 @@ const OpcodeInfo& opcodeInfo(uint8_t op) {
 }
 
 uint8_t tokenDelta(uint8_t op) {
-    // Byte-exact copy of EventVmHelpers::kOpTokenDelta (ROM A4-$6CC8).
+    // ROM A4-$6CC8 (same values as EventVmHelpers::kOpTokenDelta).
     static const uint8_t kOpTokenDelta[kOpcodeCount] = {
         0,  2,  2,  2,  2,  2,  2,  1,  1,  1,  1,  3,  3,  2,  2,  1,  2,  2,  13, 11, 1,  4,
         3,  3,  5,  5,  3,  2,  2,  2,  2,  7,  7,  4,  3,  3,  3,  2,  1,  1,  3,  1,  15, 2,

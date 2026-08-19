@@ -41,10 +41,7 @@ public:
     /** Modal Quick Ref / sheet backdrop. */
     virtual void drawModalBackdrop(gfx::ScreenCompositor &c) = 0;
 
-    /**
-     * Agui mouse hit-test. true → uppercase command letter in out_cmd.
-     * out_special: 0=none, 1=fwd, 2=back, 3=left, 4=right, 5=wait, 6=face_gem.
-     */
+    /** Agui hit-test. out_cmd = uppercase letter; out_special 0=none, 1..6 move/wait/face. */
     virtual bool hitTest(int x, int y, char *out_cmd, int *out_special) const
     {
         (void)x;

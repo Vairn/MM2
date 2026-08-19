@@ -14,12 +14,7 @@ void appendStringTable(ParsedLocation& loc, const uint8_t* blob, size_t len, siz
     while (sp < len) {
         size_t e = sp;
         while (e < len && blob[e] != 0xFF) ++e;
-        std::string s;
-        for (size_t k = sp; k < e; ++k) {
-            uint8_t b = blob[k];
-            s += (b == 0x40) ? '\n' : static_cast<char>(b);
-        }
-        loc.strings.push_back(std::move(s));
+        loc.strings.push_back(decodeEventText(blob + sp, e - sp));
         loc.stringRaw.emplace_back(blob + sp, blob + e);
         sp = e + 1;
     }
@@ -36,8 +31,8 @@ void splitScriptPool(ParsedLocation& loc, const uint8_t* blob, size_t scriptStar
         loc.segmentsRaw.push_back(std::move(raw));
         segStart = i + 1;
     }
-    // Trailing bytes without a final 0xFF (rare) — keep as last segment.
-    // Do NOT invent an empty segment after a terminating 0xFF (that +1 FF broke roundtrip).
+    // Trailing bytes without a final 0xFF: keep as last segment (do not add an
+    // empty one after a terminating 0xFF).
     if (segStart < scriptEnd) {
         std::vector<uint8_t> raw(blob + segStart, blob + scriptEnd);
         loc.segmentsOps.push_back(parseSegmentOps(raw.data(), raw.size()));
@@ -45,9 +40,8 @@ void splitScriptPool(ParsedLocation& loc, const uint8_t* blob, size_t scriptStar
     }
 }
 
-/** locs 60..70: queued-dispatch overlay banks (ASM 0x176B6).
- *  work_buf[0..1] = LE string anchor; scripts start at offset 2.
- *  Must NOT scan for 00 00 00 — opcode streams embed that pattern. */
+/** locs 60..70 overlay banks (ASM 0x176B6): LE string anchor at [0..1],
+ *  scripts at offset 2. Do not scan for 00 00 00 (opcodes can embed it). */
 ParsedLocation parseOverlayRecord(const uint8_t* blob, size_t len) {
     ParsedLocation loc;
     loc.terminated = true;

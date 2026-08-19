@@ -20,13 +20,6 @@ constexpr QuestFlagPat kQuestFlagPatterns[] = {
     {0x75, 0xFD, 0x02, "sorcerer_stasis", "ybmug_freed"},
 };
 
-std::vector<uint8_t> encodeAnswer(const std::string& text) {
-    std::vector<uint8_t> out(10, 0xFA);
-    for (size_t i = 0; i < text.size() && i < 10; ++i)
-        out[i] = static_cast<uint8_t>((0x11A - static_cast<unsigned char>(text[i])) & 0xFF);
-    return out;
-}
-
 int resolveString(const Stmt& stmt, const std::unordered_map<std::string, int>& stringIndex) {
     auto it = stmt.num.find("string");
     if (it != stmt.num.end()) return it->second;
@@ -101,7 +94,7 @@ std::vector<LoweredOp> exprToCondOps(const Expr& expr) {
                           0}};
     }
     if (k == "answer_eq") {
-        auto enc = encodeAnswer(expr.getStr("text"));
+        auto enc = encodeAnswerBytes(expr.getStr("text"));
         return {LoweredOp{0x30, enc, 0}};
     }
     if (k == "consume_item" || k == "has_item_id" || k == "has_item")

@@ -8,20 +8,6 @@
 
 namespace mm2::gfx {
 
-namespace {
-
-bool joinAnmPath(char *path, size_t cap, const char *data_dir, int disk_index)
-{
-    if (disk_index < 0 || disk_index > 99) {
-        return false;
-    }
-    char name[16];
-    std::snprintf(name, sizeof(name), "%02d.anm", disk_index);
-    return joinDataPath(path, cap, data_dir, name);
-}
-
-}  // namespace
-
 AnmPlanarPool &AnmPlanarPool::instance()
 {
     // Function-local static is fine with Amiga -fno-threadsafe-statics (no __cxa_guard_*).

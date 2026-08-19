@@ -53,7 +53,6 @@ public:
                uint32_t start_flags = 0);
     void shutdown();
 
-    /** Select play HUD before start() (default Classic). */
     void setPlayHudKind(ui::PlayHudKind kind) { play_hud_kind_ = kind; }
     ui::PlayHudKind playHudKind() const { return play_hud_kind_; }
 
@@ -86,7 +85,6 @@ public:
 
     const gfx::ScreenCompositor &compositor() const { return compositor_; }
 
-    /** Read-only game-state view (offline golden dumps / debugging). */
     const GameStateView &gameState() const { return gs_; }
     const combat::CombatSession &combatSession() const { return combat_; }
 
@@ -189,7 +187,6 @@ private:
     void openDeathStrikesPanel(bool bump_ctr);
     /** All-dead from combat/rest/trap/OP_31/boot — same panel as OP_0E FD abort==3. */
     void beginPartyWipeGameOver();
-    /** If the party is fully dead and Death Strikes is not already up, open it. */
     void maybeBeginPartyWipeGameOver();
     /** 0x141CE / 0x1A1F8: Goto Town from SAVED_TOWN_ID (no inn re-registry). */
     void finishDeathStrikesGotoTown();

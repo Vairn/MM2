@@ -33,4 +33,15 @@ inline bool joinDataPath(char *out, size_t out_cap, const char *dir, const char 
     return true;
 }
 
+/** ``NN.anm`` under data_dir (disk_index 0..99). */
+inline bool joinAnmPath(char *out, size_t out_cap, const char *dir, int disk_index)
+{
+    if (disk_index < 0 || disk_index > 99) {
+        return false;
+    }
+    char name[16];
+    snprintf(name, sizeof(name), "%02d.anm", disk_index);
+    return joinDataPath(out, out_cap, dir, name);
+}
+
 }  // namespace mm2

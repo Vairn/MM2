@@ -30,10 +30,9 @@ uint8_t encounterRecomputeLiveCount(GameStateView &gs);
 
 /** 0x1213E: loop of encounterPickerBudgetCheck + encounterAddsFriends until
  *  the budget/group-size gate is exhausted. Only runs when
- *  MM2_GS_ENCOUNTER_MODE lacks the 0x80 fixed-fight bit (mirrors the ASM
- *  gate at 0x12CFA — callers should check mode themselves, matching the
- *  ROM's `cmp.w #$80,d0 / bcc` at 0x12CFE). `friend_count_lookup` is
- *  forwarded to encounterAddsFriends. */
+ *  MM2_GS_ENCOUNTER_MODE lacks the 0x80 fixed-fight bit (0x12CFA;
+ *  `cmp.w #$80,d0 / bcc` @ 0x12CFE — callers check mode). `friend_count_lookup`
+ *  is forwarded to encounterAddsFriends. */
 void encounterRunRandomPicker(GameStateView &gs, const Mm2AttribRecord &attrib,
                                gameplay::Rng &rng, FriendCountLookup friend_count_lookup = nullptr,
                                const void *ctx = nullptr);

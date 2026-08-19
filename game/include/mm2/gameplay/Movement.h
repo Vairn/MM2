@@ -10,6 +10,8 @@
 #include "mm2_party_launch.h"
 #include "mm2_roster_codec.h"
 
+#include <cstddef>
+
 namespace mm2::gameplay {
 
 /* Raw exploration codes from the indoor/outdoor key readers (doc 43). */
@@ -73,11 +75,22 @@ void sessionInteractionGate(GameStateView &gs);
 
 /* Rest SP bonus lookup @ 0x4442 (table A4-$7486): returns the unsigned tier
  * byte used at 0x19C74 before addq #3. Attr is INT or PER per class @ 0x19C48. */
-uint8_t restSpellBonusFactor(uint8_t attr);
+inline uint8_t restSpellBonusFactor(uint8_t attr)
+{
+    static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
+                                      60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
+    uint8_t bonus = 0xFD; /* −3 */
+    for (size_t i = 0; i < sizeof(kThresh); ++i) {
+        if (attr <= kThresh[i]) {
+            break;
+        }
+        ++bonus;
+    }
+    return bonus;
+}
 
-/* Align Amiga working level (+$20) / spell-level (+$23) with remake-canonical
- * +$71/+72. Stock roster starters ship +$20=1 while +$71=4; Rest @ 0x19C9A
- * multiplies by +$20, so a stale working byte leaves casters at creation SP.
+/* Align working level (+$20) / spell-level (+$23) with sheet +$71/+72.
+ * Stock starters ship +$20=1 while +$71=4; Rest @ 0x19C9A multiplies by +$20.
  * Call at party load only — not before Rest 0x4476, which copies +$20→+$71
  * and would commit a fountain temp level written only to +$71. */
 void syncRosterWorkingLevelFields(Mm2RosterRecord &rec);

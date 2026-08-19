@@ -1,26 +1,20 @@
 #pragma once
-// attrib.dat - 60 screens * 64 bytes = 3840 bytes (partially decoded).
-//   Confirmed offsets (aloc = area * 64). See
-//   EXTRACTED/docs/12-attrib-dat-format.md.
+// attrib.dat: 60 screens * 64 bytes = 3840. Offsets (aloc = area * 64):
 //     +0x00  area id (== record index)
 //     +0x01  map category (1 town/surface, 2 cavern, 3 dungeon, 4 castle)
-//     +0x02  tileset/graphics set
+//     +0x02  tileset
 //     +0x03  environment type (town/cavern/castle/outside)
-//     +0x04  if >0: outside-area flag (value = terrain class), name at +0x15
-//     +0x05..+0x08  world adjacency: 4 neighbour screen ids (opposite pairs
-//                   (0x05,0x07) and (0x06,0x08)); == area id when interior.
-//                   Verified fully symmetric across all 60 records.
-//     +0x0E  entry coord (packed (Y<<4)|X party spawn/safe square)
-//     +0x0F  era gate (events run when this == current era index)
-//     +0x11  sublayout param (observed)
-//     +0x12  door strength (materialized A4-$5608; bash @ 0x9C2A)
-//     +0x13  door trap (materialized A4-$5607; unlock @ 0x20D6E)
-//     +0x14  sublayout param (observed)
-//     +0x15  outside area label byte / interior complex-id hi byte
-//     +0x15..+0x16  complex id (big-endian word, shared town<->cavern)
+//     +0x04  outside-area flag if >0 (terrain class); name at +0x15
+//     +0x05..+0x08  neighbour screen ids; == area id when interior
+//     +0x0E  entry coord packed (Y<<4)|X
+//     +0x0F  era gate
+//     +0x12  door strength (A4-$5608; bash @ 0x9C2A)
+//     +0x13  door trap (A4-$5607; unlock @ 0x20D6E)
+//     +0x15  outside label / interior complex-id hi
+//     +0x15..+0x16  complex id (BE word)
 //     +0x17  level/floor (interior)
-//     +0x1B  flags2 (observed; nonzero on a few screens)
-//     +0x20..+0x3F  roof flags (32 bytes * 8 bits = 256 roof bits)
+//     +0x1B  flags2
+//     +0x20..+0x3F  roof flags (32 bytes = 256 bits)
 //   Otherwise preserved raw.
 
 #include <array>
@@ -91,9 +85,7 @@ struct AttribScreen {
     }
 };
 
-// Roof grid cell (col x, row y, y=0 at top) -> on-disk roof bit index.
-// ASM-confirmed: tile t => byte (0x20 + t>>3), bit (t & 7), t = y*16 + x.
-// Plain linear, no reversal (docs/12-attrib-dat-format.md).
+// Roof cell (x, y) → on-disk bit index t = y*16 + x; byte 0x20+t>>3, bit t&7.
 inline int attribRoofTileAt(int x, int y) { return y * 16 + x; }
 
 struct AttribFile {

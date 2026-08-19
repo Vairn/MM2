@@ -2,6 +2,7 @@
 
 #include "mm2/events/EventFieldMap.h"
 #include "mm2/events/EventVmHelpers.h"
+#include "mm2/events/EventVmRegs.h"
 
 #include "mm2/CppStdCompat.h"
 
@@ -52,7 +53,7 @@ Mm2RosterRecord *memberBySlot(Mm2RosterFile *roster, const Mm2PartyLaunch *launc
 
 uint32_t fieldLoad(const Mm2RosterRecord &rec, const FieldSpec &spec)
 {
-    const uint8_t *p = reinterpret_cast<const uint8_t *>(&rec) + spec.offset;
+    const uint8_t *p = rosterRecordBytes(rec) + spec.offset;
     switch (spec.kind) {
     case FieldKind::Byte:
         return p[0];
@@ -90,7 +91,7 @@ void fieldStoreWidth(Mm2RosterRecord &rec, int offset, uint32_t v, int write_byt
     if (write_bytes > 4) {
         write_bytes = 4;
     }
-    auto *raw = reinterpret_cast<uint8_t *>(&rec);
+    uint8_t *raw = rosterRecordBytes(rec);
     if (offset < 0 || offset + write_bytes > MM2_ROSTER_RECORD_SIZE) {
         return;
     }
@@ -119,7 +120,7 @@ void applyMemberValueOp(GameStateView &gs, Mm2RosterRecord &rec, const FieldSpec
     uint32_t newval;
     if (subtract) {
         if (cur < amount) {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
+            setEventCond(gs, 0);
             return;  // can't afford: no write
         }
         newval = cur - amount;
@@ -128,7 +129,7 @@ void applyMemberValueOp(GameStateView &gs, Mm2RosterRecord &rec, const FieldSpec
         const uint32_t cap = fieldMax(spec.kind);
         newval = (sum > cap) ? cap : static_cast<uint32_t>(sum);
     }
-    if (mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG) != 0) {
+    if (eventCond(gs) != 0) {
         fieldStoreWidth(rec, spec.offset, newval, write_bytes);
     }
 }
@@ -165,7 +166,7 @@ void eventApplyPartyEffect(GameStateView &gs, Mm2RosterFile *roster, const Mm2Pa
     const bool subtract = mode_b;                       // OP_20 = subtract
 
     // event_op1f_party_effect @ 0x1690E member selection.
-    const uint8_t incoming_cond = mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG);
+    const uint8_t incoming_cond = eventCond(gs);
     uint8_t member_spec = sel;
     uint32_t amount_value = value24;
     if (member_spec & 0x80) {
@@ -178,7 +179,7 @@ void eventApplyPartyEffect(GameStateView &gs, Mm2RosterFile *roster, const Mm2Pa
         member_spec = (slot >= 0) ? static_cast<uint8_t>(slot + 1) : incoming_cond;
     }
 
-    mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 1);
+    setEventCond(gs, 1);
 
     const int party_count = launch->party_count;
     if (member_spec > party_count) {

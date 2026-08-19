@@ -4,27 +4,14 @@
 
 #include "core/EventOps.h"
 #include "core/PcDatLzw.h"
+#include "eventlang/BytecodeParse.h"
 #include "eventlang/Encode.h"
+#include "eventlang/OpcodeTable.h"
 
 namespace mm2 {
 
-const char* eventCondName(uint8_t cond) {
-    switch (cond) {
-        case 0x10: return "ALWAYS";
-        case 0x20: return "DIR_N?";
-        case 0x40: return "DIR_SPECIAL";
-        case 0x80: return "ENTER";
-        case 0xC0: return "ENTER+SPECIAL";
-        case 0xF0: return "ANY_DIR";
-        default: return nullptr;
-    }
-}
-
 bool EventFile::load(const std::string& path) {
-    // Plain event.dat (Amiga, or already-decompressed) takes priority; GOG
-    // splits it into EVENTSI.DAT (indoor) + EVENTSO.DAT (outdoor) instead --
-    // each is its own per-location LZW table, merged into an Amiga-shaped
-    // blob by pcDatLoadEventAuto (see PcDatLzw.h for the container format).
+    // Plain event.dat first; else GOG EVENTSI.DAT + EVENTSO.DAT via pcDatLoadEventAuto.
     if (pcDatReadFlexible(path, raw)) {
         decode();
         return true;
@@ -40,62 +27,24 @@ bool EventFile::save(const std::string& path) const {
     return writeFile(path, raw);
 }
 
-// Parse one 0xFF-delimited segment into opcode nodes. `segAbs` is the absolute
-// file offset of the segment's first byte. Same walk as parse_segment_stream_nodes:
-// the byte stream is walked in order and does NOT stop at token-skip opcodes.
+// Parse one 0xFF-delimited segment; stamp absOff for in-place hex edits.
 static EventSegment parseSegment(const uint8_t* seg, size_t len, size_t segAbs) {
     EventSegment out;
     out.rawLen = len;
-
-    // Plain-text record heuristic (decode_event.looks_like_text_record).
-    if (len >= 4) {
-        size_t printable = 0, letters = 0;
-        for (size_t i = 0; i < len; ++i) {
-            uint8_t b = seg[i];
-            if ((b >= 0x20 && b <= 0x7E) || b == 0x40) ++printable;
-            if (b >= 0x41 && b <= 0x7A) ++letters;
-        }
-        if (letters >= 3 && static_cast<double>(printable) / len >= 0.85) {
-            out.isText = true;
-            for (size_t i = 0; i < len; ++i) {
-                uint8_t b = seg[i];
-                out.text += (b == 0x40) ? '\n' : static_cast<char>(b);
-            }
-            return out;
-        }
+    if (eventlang::looksLikeTextRecord(seg, len)) {
+        out.isText = true;
+        out.text = eventlang::decodeEventText(seg, len);
+        return out;
     }
-
-    size_t i = 0;
-    while (i < len) {
+    for (const auto& lo : eventlang::parseSegmentOps(seg, len)) {
         EventOp node;
-        node.op = seg[i];
-        node.absOff = segAbs + i;
-        ++i;
-
-        if (!opcodeKnown(node.op)) {
-            out.ops.push_back(node);  // unknown opcode -> stop
-            break;
-        }
-
-        int argc = opcodeArgc(node.op);
-        if (argc < 0) {
-            node.variable = true;
-            if (i < len) {
-                node.args.push_back(seg[i]);
-                ++i;
-            }
-            out.ops.push_back(node);
-            continue;  // stream continues past selector byte
-        }
-
-        for (int k = 0; k < argc && i < len; ++k, ++i)
-            node.args.push_back(seg[i]);
-        if (static_cast<int>(node.args.size()) < argc) {
-            node.truncated = true;
-            out.ops.push_back(node);
-            break;
-        }
-        out.ops.push_back(node);
+        node.op = lo.op;
+        node.args = lo.args;
+        node.absOff = segAbs + static_cast<size_t>(lo.off);
+        const int argc = eventlang::opcodeArgc(lo.op);
+        node.variable = argc < 0;
+        node.truncated = argc >= 0 && static_cast<int>(lo.args.size()) < argc;
+        out.ops.push_back(std::move(node));
     }
     return out;
 }
@@ -161,12 +110,7 @@ static EventLocation decodeLocation(const Bytes& raw, int id, uint32_t off, uint
         while (sp < blobLen) {
             size_t e = sp;
             while (e < blobLen && blob[e] != 0xFF) ++e;
-            std::string s;
-            for (size_t k = sp; k < e; ++k) {
-                uint8_t b = blob[k];
-                s += (b == 0x40) ? '\n' : static_cast<char>(b);
-            }
-            loc.strings.push_back(s);
+            loc.strings.push_back(eventlang::decodeEventText(blob + sp, e - sp));
             sp = e + 1;
         }
     }

@@ -64,6 +64,33 @@ void drawEscFooter(gfx::ScreenCompositor &c)
     drawCell(c, kEscPromptRow, kEscPromptCol, "( 'ESC' to go back )");
 }
 
+void fillSpellBuyStatus(char *status, size_t cap, const char *name, const char *spell_name,
+                        const mm2::events::TownSvcSpellResult &r, uint32_t offer)
+{
+    if (r.learned) {
+        std::snprintf(status, cap, "%s learned %s for %u gp.", name, spell_name, u32(r.cost));
+    } else if (r.reject == mm2::events::TownSvcSpellReject::NotEnoughGold) {
+        std::snprintf(status, cap, "%s: not enough gold (%u gp).", name, u32(offer));
+    } else if (r.reject == mm2::events::TownSvcSpellReject::Condition) {
+        std::snprintf(status, cap, "%s is afflicted - cannot buy.", name);
+    } else {
+        std::snprintf(status, cap, "Not for sale.");
+    }
+}
+
+void formatPubPair(char *status, size_t cap, const char *a, const char *c, const char *empty)
+{
+    if (a && c && a[0] && a[0] != '(' && c[0] && c[0] != '(') {
+        std::snprintf(status, cap, "%s\n%s", a, c);
+    } else if (a && a[0] && a[0] != '(') {
+        std::snprintf(status, cap, "%s", a);
+    } else if (empty) {
+        std::snprintf(status, cap, "%s", empty);
+    } else {
+        status[0] = '\0';
+    }
+}
+
 /* XP gate that arms 'T' @ 0x20BD0 (tst -$8(a5) from the 0x20AD2 scc). */
 bool trainingXpEligible(const mm2::events::TownServiceContext &ctx, int slot)
 {
@@ -181,10 +208,7 @@ bool trySelectMemberByDigit(int &slot, const mm2::events::TownServiceContext &ct
     return true;
 }
 
-/** Draw one already-`\n`-free line, greedily word-wrapping at the screen's right
- *  edge (320px / 8px cells = 40 cols, minus the border column) instead of running
- *  text off-screen — e.g. "Gene Eric learned Mass Distortion for 1000 gp." at a
- *  ~24-col option column needs 2-3 rows. Returns the row after the last one drawn. */
+/* Word-wrap at col 39 (320/8). Returns the row after the last line drawn. */
 int drawWrappedLine(gfx::ScreenCompositor &c, int row, int col, const char *text, uint8_t r, uint8_t g,
                     uint8_t b)
 {
@@ -222,9 +246,7 @@ int drawWrappedLine(gfx::ScreenCompositor &c, int row, int col, const char *text
     return row;
 }
 
-/** Draw a str.dat line that may contain embedded `\n` (pub food names); each
- *  `\n`-delimited segment is further word-wrapped by drawWrappedLine. Returns
- *  the row after the last line drawn. */
+/* str.dat line with embedded `\n` (pub food names); each segment word-wrapped. */
 int drawMultiline(gfx::ScreenCompositor &c, int row, int col, const char *text, uint8_t r = 255,
                     uint8_t g = 255, uint8_t b = 255)
 {
@@ -749,16 +771,7 @@ void PlayTownServiceUi::applyTempleAndReturn(int party_slot)
             *rec, mm2::gameplay::SpellSchool::Cleric, slot.spell_index, slot.gold);
         const mm2::events::TownSvcSpellResult r =
             mm2::events::townSvcBuySpell(*rec, slot.spell_index, offer);
-        if (r.learned) {
-            std::snprintf(status_, sizeof(status_), "%s learned %s for %u gp.", name, spell_name,
-                          u32(r.cost));
-        } else if (r.reject == mm2::events::TownSvcSpellReject::NotEnoughGold) {
-            std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(offer));
-        } else if (r.reject == mm2::events::TownSvcSpellReject::Condition) {
-            std::snprintf(status_, sizeof(status_), "%s is afflicted - cannot buy.", name);
-        } else {
-            std::snprintf(status_, sizeof(status_), "Not for sale.");
-        }
+        fillSpellBuyStatus(status_, sizeof(status_), name, spell_name, r, offer);
         break;
     }
     default:
@@ -784,16 +797,7 @@ void PlayTownServiceUi::applyGuildBuyAndReturn(int party_slot)
         *rec, mm2::gameplay::SpellSchool::Sorcerer, slot.spell_index, slot.gold);
     const mm2::events::TownSvcSpellResult r =
         mm2::events::townSvcBuySpell(*rec, slot.spell_index, offer);
-    if (r.learned) {
-        std::snprintf(status_, sizeof(status_), "%s learned %s for %u gp.", name, spell_name,
-                      u32(r.cost));
-    } else if (r.reject == mm2::events::TownSvcSpellReject::NotEnoughGold) {
-        std::snprintf(status_, sizeof(status_), "%s: not enough gold (%u gp).", name, u32(offer));
-    } else if (r.reject == mm2::events::TownSvcSpellReject::Condition) {
-        std::snprintf(status_, sizeof(status_), "%s is afflicted - cannot buy.", name);
-    } else {
-        std::snprintf(status_, sizeof(status_), "Not for sale.");
-    }
+    fillSpellBuyStatus(status_, sizeof(status_), name, spell_name, r, offer);
     guild_slot_ = -1;
     holdShopResult(Phase::Menu); /* 0x1D6C2 result hold — same as temple spell buy */
 }
@@ -1055,13 +1059,7 @@ void PlayTownServiceUi::applyTavernTip()
     const char *a = (b >= 0 && b < mm2::events::kPubTipCount) ? tavern_data_.tips[b] : nullptr;
     const char *c =
         (b + 1 < mm2::events::kPubTipCount) ? tavern_data_.tips[b + 1] : nullptr;
-    if (a && c && a[0] && a[0] != '(' && c[0] && c[0] != '(') {
-        std::snprintf(status_, sizeof(status_), "%s\n%s", a, c);
-    } else if (a && a[0] && a[0] != '(') {
-        std::snprintf(status_, sizeof(status_), "%s", a);
-    } else {
-        std::snprintf(status_, sizeof(status_), "Thank you -\nPlease come again");
-    }
+    formatPubPair(status_, sizeof(status_), a, c, "Thank you -\nPlease come again");
     phase_ = Phase::TavernRumor;
 }
 
@@ -1086,13 +1084,7 @@ void PlayTownServiceUi::applyTavernRumor()
         (b >= 0 && b < mm2::events::kPubRumorCount) ? tavern_data_.rumors[b] : nullptr;
     const char *c =
         (b + 1 < mm2::events::kPubRumorCount) ? tavern_data_.rumors[b + 1] : nullptr;
-    if (a && c && a[0] && a[0] != '(' && c[0] && c[0] != '(') {
-        std::snprintf(status_, sizeof(status_), "%s\n%s", a, c);
-    } else if (a && a[0] && a[0] != '(') {
-        std::snprintf(status_, sizeof(status_), "%s", a);
-    } else {
-        status_[0] = '\0';
-    }
+    formatPubPair(status_, sizeof(status_), a, c, nullptr);
     phase_ = Phase::TavernRumor;
 }
 

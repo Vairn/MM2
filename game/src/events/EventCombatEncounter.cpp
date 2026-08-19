@@ -1,8 +1,23 @@
 #include "mm2/events/EventCombatEncounter.h"
 
 #include "mm2/CppStdCompat.h"
+#include "mm2/events/EventVmRegs.h"
 
 namespace mm2::events {
+
+namespace {
+
+void enterCombatYield(GameStateView &gs, combat::CombatSession *combat, const world::MapWorld *world)
+{
+    if (combat && world) {
+        combat->enter(gs, *world);
+    }
+    if (combat && combat->active()) {
+        setEventAbort(gs);
+    }
+}
+
+}  // namespace
 
 void eventRunFixedEncounter(GameStateView &gs, EventTextView &text, EventVmWait &wait,
                             const uint8_t *monster_block, int block_len, bool variant_b,
@@ -36,17 +51,10 @@ void eventRunFixedEncounter(GameStateView &gs, EventTextView &text, EventVmWait 
         mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 0);
     }
 
-    /* 0x1635E: jsr -$7EDE (combat engine). */
-    if (combat && world) {
-        combat->enter(gs, *world);
-    }
-    /* 0x16362: abort flag set so the event interpreter yields to combat.
-     * 0x16368-0x1637C: post-combat pending-event latch (-$7F1A → A4-$7952) is
-     * driven by GameSession once combat->active() goes false.
-     * Port: only abort when a fight actually armed (empty picker → no yield). */
-    if (combat && combat->active()) {
-        mm2_gs_set_u8(a4, MM2_GS_SCRIPT_ABORT, 1);
-    }
+    /* 0x1635E: jsr -$7EDE. 0x16362 abort so the VM yields; GameSession drives
+     * the pending-event latch (-$7F1A → A4-$7952) after combat->active() clears.
+     * Abort only when a fight armed (empty picker → no yield). */
+    enterCombatYield(gs, combat, world);
 }
 
 void eventRunTileAmbientEncounter(GameStateView &gs, combat::CombatSession *combat,
@@ -66,12 +74,7 @@ void eventRunTileAmbientEncounter(GameStateView &gs, combat::CombatSession *comb
     mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_OVERFLOW_TYPE, 0);
     mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 0);
 
-    if (combat && world) {
-        combat->enter(gs, *world);
-    }
-    if (combat && combat->active()) {
-        mm2_gs_set_u8(a4, MM2_GS_SCRIPT_ABORT, 1);
-    }
+    enterCombatYield(gs, combat, world);
 }
 
 void eventRunOp0eFdEncounter(GameStateView &gs, combat::CombatSession *combat,

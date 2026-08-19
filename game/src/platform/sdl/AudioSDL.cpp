@@ -87,38 +87,27 @@ bool tryLoadWav(const char *path, WavBuf &out)
     return out.len > 0;
 }
 
+bool tryAudioDir(const char *root, const char *sub, const char *name, WavBuf &out)
+{
+    char *dir = mm2_path_scratch_a();
+    char *path = mm2_path_scratch_b();
+    if (!joinDataPath(dir, MM2_PATH_SCRATCH_CAP, root, sub)) {
+        return false;
+    }
+    if (!joinDataPath(path, MM2_PATH_SCRATCH_CAP, dir, name)) {
+        return false;
+    }
+    return tryLoadWav(path, out);
+}
+
 bool loadNamed(const char *data_dir, const char *exe_dir, const char *name, WavBuf &out)
 {
-    char path[MM2_PATH_SCRATCH_CAP];
-    char d0[MM2_PATH_SCRATCH_CAP];
-    char d1[MM2_PATH_SCRATCH_CAP];
-    char d2[MM2_PATH_SCRATCH_CAP];
-    char d3[MM2_PATH_SCRATCH_CAP];
-    const char *dirs[4] = {};
-    int n = 0;
-
-    if (exe_dir && exe_dir[0] && joinDataPath(d0, sizeof(d0), exe_dir, "audio")) {
-        dirs[n++] = d0;
+    if (exe_dir && exe_dir[0] && tryAudioDir(exe_dir, "audio", name, out)) {
+        return true;
     }
-    if (joinDataPath(d1, sizeof(d1), data_dir, "audio")) {
-        dirs[n++] = d1;
-    }
-    if (joinDataPath(d2, sizeof(d2), data_dir, "EXTRACTED/audio")) {
-        dirs[n++] = d2;
-    }
-    if (joinDataPath(d3, sizeof(d3), data_dir, "../EXTRACTED/audio")) {
-        dirs[n++] = d3;
-    }
-
-    for (int i = 0; i < n; ++i) {
-        if (!joinDataPath(path, sizeof(path), dirs[i], name)) {
-            continue;
-        }
-        if (tryLoadWav(path, out)) {
-            return true;
-        }
-    }
-    return false;
+    return tryAudioDir(data_dir, "audio", name, out) ||
+           tryAudioDir(data_dir, "EXTRACTED/audio", name, out) ||
+           tryAudioDir(data_dir, "../EXTRACTED/audio", name, out);
 }
 
 void mixVoice(Voice &v, Sint16 *out, int frames)

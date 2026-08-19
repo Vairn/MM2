@@ -23,20 +23,12 @@ bool readEntireFile(const char *path, uint8_t **out, std::size_t *out_size)
         return false;
     }
     const long sz = std::ftell(f);
-    if (sz <= 0) {
-        std::fclose(f);
-        return false;
-    }
-    if (std::fseek(f, 0, SEEK_SET) != 0) {
+    if (sz <= 0 || std::fseek(f, 0, SEEK_SET) != 0) {
         std::fclose(f);
         return false;
     }
     auto *buf = new uint8_t[static_cast<std::size_t>(sz)];
-    if (!buf) {
-        std::fclose(f);
-        return false;
-    }
-    if (std::fread(buf, 1, static_cast<std::size_t>(sz), f) != static_cast<std::size_t>(sz)) {
+    if (!buf || std::fread(buf, 1, static_cast<std::size_t>(sz), f) != static_cast<std::size_t>(sz)) {
         delete[] buf;
         std::fclose(f);
         return false;
@@ -81,7 +73,7 @@ bool AguiAtlas::load(const char *data_dir)
         return false;
     }
 
-    /* data_dir may be ``amiga/`` (dist); also accept sibling ``ui/agui`` next to it. */
+    /* data_dir may be amiga/ (dist); also accept sibling ui/agui next to it. */
     const char *rel_paths[] = {
         "ui/agui/agui_atlas.rgba",
         "../ui/agui/agui_atlas.rgba",
@@ -95,18 +87,19 @@ bool AguiAtlas::load(const char *data_dir)
         "game/data/ui/agui/agui_atlas.json",
     };
 
-    char rgba_path[MM2_PATH_SCRATCH_CAP];
-    char json_path[MM2_PATH_SCRATCH_CAP];
+    char *const rgba_path = mm2_path_scratch_a();
+    char *const json_path = mm2_path_scratch_b();
+    uint8_t *rgba = nullptr;
+    std::size_t rgba_size = 0;
     bool found = false;
     for (int i = 0; i < 4; ++i) {
-        if (mm2::joinDataPath(rgba_path, MM2_PATH_SCRATCH_CAP, data_dir, rel_paths[i]) &&
-            mm2::joinDataPath(json_path, MM2_PATH_SCRATCH_CAP, data_dir, json_rels[i])) {
-            FILE *probe = std::fopen(rgba_path, "rb");
-            if (probe) {
-                std::fclose(probe);
-                found = true;
-                break;
-            }
+        if (!mm2::joinDataPath(rgba_path, MM2_PATH_SCRATCH_CAP, data_dir, rel_paths[i]) ||
+            !mm2::joinDataPath(json_path, MM2_PATH_SCRATCH_CAP, data_dir, json_rels[i])) {
+            continue;
+        }
+        if (readEntireFile(rgba_path, &rgba, &rgba_size)) {
+            found = true;
+            break;
         }
     }
     if (!found) {
@@ -116,13 +109,13 @@ bool AguiAtlas::load(const char *data_dir)
     uint8_t *json_bytes = nullptr;
     std::size_t json_size = 0;
     if (!readEntireFile(json_path, &json_bytes, &json_size) || json_size == 0) {
-        delete[] json_bytes;
+        delete[] rgba;
         return false;
     }
-    /* Ensure NUL for strstr parsing. */
     auto *json = new char[json_size + 1];
     if (!json) {
         delete[] json_bytes;
+        delete[] rgba;
         return false;
     }
     std::memcpy(json, json_bytes, json_size);
@@ -134,6 +127,7 @@ bool AguiAtlas::load(const char *data_dir)
     if (!jsonIntAfter(json, "\"width\"", &w) || !jsonIntAfter(json, "\"height\"", &h) || w <= 0 ||
         h <= 0) {
         delete[] json;
+        delete[] rgba;
         return false;
     }
 
@@ -176,11 +170,6 @@ bool AguiAtlas::load(const char *data_dir)
     }
     delete[] json;
 
-    uint8_t *rgba = nullptr;
-    std::size_t rgba_size = 0;
-    if (!readEntireFile(rgba_path, &rgba, &rgba_size)) {
-        return false;
-    }
     const std::size_t expected = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
     if (rgba_size != expected) {
         delete[] rgba;

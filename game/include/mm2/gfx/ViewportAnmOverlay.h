@@ -19,14 +19,7 @@ enum class AnmLoopMode : uint8_t {
     HoldLast = 1, /* one-shot raise/hold (portcullis-style; untraced — opt-in later) */
 };
 
-/**
- * Load NN.anm, advance composed frames on VBlank-tick delays, blit over the 3D viewport.
- * Sequence delays are retail VBlank counts (~60 Hz NTSC / 50 Hz PAL). Callers that may
- * miss vblanks (slow combat frames) should invoke tick() once per elapsed nowTicks()
- * step — GameSession::tickOverlayAnimations does this. Direct tick() = one VBlank.
- *
- * On Amiga, planar cels come from AnmPlanarPool (shared by disk index).
- */
+/** NN.anm overlay: VBlank-tick delays, blit over the 3D hood. Amiga cels from AnmPlanarPool. */
 class ViewportAnmOverlay {
 public:
     /** OP_0B table id via 0x15756 → sign_sprite_load @ 0x316E / 0x9A30 (file = id). */
@@ -83,8 +76,7 @@ public:
     /** Raw blit at (dst_x, dst_y). */
     void blitAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) const;
 
-    /** Scripted OP_0B place (0x3266): whole-canvas origin (same as blitAt now
-     *  that PC pictures keep their fixed 96×96 canvas). */
+    /** OP_0B place @ 0x3266 — whole-canvas origin (PC pictures stay 96×96). */
     void blitCanvasAt(gfx::ScreenCompositor &c, int dst_x, int dst_y) const;
 
 private:

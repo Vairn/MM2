@@ -30,18 +30,12 @@ inline bool isElementalPlane(int screen)
 
 inline bool cartoUsesOutb(int screen, bool outdoor_surface)
 {
-    if (isElementalPlane(screen)) {
-        return true;
-    }
-    return outdoor_surface;
+    return isElementalPlane(screen) || outdoor_surface;
 }
 
 inline int cartoFrame(int screen, uint8_t visual, bool outdoor_surface)
 {
-    if (screen >= 41 && screen <= 44) {
-        return visual & 0x1F;
-    }
-    if (outdoor_surface) {
+    if (cartoUsesOutb(screen, outdoor_surface)) {
         return visual & 0x1F;
     }
     return kCartoTile[(visual >> 2) & 0x3F];

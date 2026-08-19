@@ -1,7 +1,6 @@
 #pragma once
 // PC DOS CGA (.4) / EGA (.16) sheets and MONSTERS.4/.16 atlas.
-// Same scan/decode path as GfxSection; codec in core/PcGfx.h
-// (tools/decode_pc_gfx.py, docs/54-pc-dos-graphics-formats.md).
+// Same scan/decode path as GfxSection; codec in core/PcGfx.h.
 // Assets live in AppState::pcDataDir, not the Amiga data folder.
 
 #include <optional>

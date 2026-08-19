@@ -1,6 +1,5 @@
 #pragma once
-// First-person dungeon view — ported from editor/src/core/View3D.{h,cpp}
-// (frustum @ 0x2900, paint @ 0x2F7E). See EXTRACTED/docs/15-3d-view-and-game-screen.md.
+// First-person dungeon view (frustum @ 0x2900, paint @ 0x2F7E).
 
 #include "mm2/CppStdCompat.h"
 
@@ -67,7 +66,7 @@ struct View3DTorchBlit {
     int y = 0;
 };
 
-/** Returns false when this wall slot has no torch overlay (townt/cavet/castlet.32). */
+/** False when this wall slot has no torch overlay (townt/cavet/castlet.32). */
 bool view3dTorchBlitFor(const View3DBlit &wb, int phase, View3DTorchBlit *out);
 
 struct View3DScene {

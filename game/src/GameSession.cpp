@@ -34,7 +34,40 @@ namespace mm2 {
 
 namespace {
 
-const char *kTownNames[] = {"?", "Middlegate", "Atlantium", "Tundara", "Vulcania", "Sandsobar"};
+const char *areaNameRaw(int area);
+
+void loadItemsAndMonsters(const char *data_dir, Mm2ItemsFile &items, bool &has_items,
+                          Mm2MonstersFile &monsters, bool &has_monsters)
+{
+    char *path = mm2_path_scratch_a();
+    if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir, "items.dat")) {
+        has_items = mm2_items_load_file(path, &items) == MM2_ITEMS_OK;
+    }
+    if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir, "monsters.dat")) {
+        has_monsters = mm2_monsters_load_file(path, &monsters) == MM2_MONSTERS_OK;
+    }
+}
+
+void reloadRosterDat(const char *data_dir, Mm2RosterFile &roster)
+{
+    if (!data_dir) {
+        return;
+    }
+    char *const path = mm2_path_scratch_a();
+    if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir, "roster.dat")) {
+        (void)mm2_roster_load_file(path, &roster);
+    }
+}
+
+void applyGotoTownEpilogueGs(GameStateView &gs)
+{
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SCREEN_MODE_PREV, 0xFF);
+    gs.setScreenId(0xFF);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SIGN_ENV_ID, 7);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
+    events::clearEventWalkSpellLatch(gs);
+    events::setEventExit(gs, 0);
+}
 
 void drawSpellEyeOverlayIfActive(gfx::ScreenCompositor &c, const gfx::EnvAssets &env,
                                  const world::MapWorld &world, const GameStateView &gs, bool assets_ok)
@@ -369,11 +402,8 @@ uint32_t combatPartyHudSig(const Mm2RosterFile &roster, const Mm2PartyLaunch &la
 
 const char *GameSession::areaName(uint8_t area_id)
 {
-    static const char *kAreas[] = {"Middlegate", "Atlantium", "Tundara", "Vulcania", "Sandsobar"};
-    if (area_id < 5) {
-        return kAreas[area_id];
-    }
-    return "?";
+    const char *n = (area_id < 5) ? areaNameRaw(static_cast<int>(area_id)) : nullptr;
+    return n ? n : "?";
 }
 
 namespace {
@@ -481,7 +511,8 @@ const char *GameSession::currentScreenLabel() const
 
 const char *GameSession::townName(uint8_t town_filter)
 {
-    return (town_filter >= 1 && town_filter <= 5) ? kTownNames[town_filter] : "?";
+    const char *n = (town_filter >= 1 && town_filter <= 5) ? areaNameRaw(town_filter - 1) : nullptr;
+    return n ? n : "?";
 }
 
 bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const Mm2PartyLaunch &launch,
@@ -603,13 +634,7 @@ bool GameSession::start(const char *data_dir, const Mm2RosterFile &roster, const
     ingame_sheet_.setPaperDoll(play_hud_kind_ == ui::PlayHudKind::Agui);
     ingame_sheet_.loadAssets(data_dir_);
 
-    char *path = mm2_path_scratch_a();
-    if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "items.dat")) {
-        has_items_ = mm2_items_load_file(path, &items_) == MM2_ITEMS_OK;
-    }
-    if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "monsters.dat")) {
-        has_monsters_ = mm2_monsters_load_file(path, &monsters_) == MM2_MONSTERS_OK;
-    }
+    loadItemsAndMonsters(data_dir_, items_, has_items_, monsters_, has_monsters_);
     combat_.bindParty(&roster_, &launch_);
     combat_.bindMonsters(has_monsters_ ? &monsters_ : nullptr);
     combat_.bindItems(has_items_ ? &items_ : nullptr);
@@ -687,15 +712,7 @@ void GameSession::tickBootstrap()
         MM2_DBG("MM2 GOTO: bootstrap load ingame_sheet + items\n");
         ingame_sheet_.setPaperDoll(play_hud_kind_ == ui::PlayHudKind::Agui);
     ingame_sheet_.loadAssets(data_dir_);
-        {
-            char *path = mm2_path_scratch_a();
-            if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "items.dat")) {
-                has_items_ = mm2_items_load_file(path, &items_) == MM2_ITEMS_OK;
-            }
-            if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "monsters.dat")) {
-                has_monsters_ = mm2_monsters_load_file(path, &monsters_) == MM2_MONSTERS_OK;
-            }
-        }
+        loadItemsAndMonsters(data_dir_, items_, has_items_, monsters_, has_monsters_);
         combat_.bindParty(&roster_, &launch_);
         combat_.bindMonsters(has_monsters_ ? &monsters_ : nullptr);
         combat_.bindItems(has_items_ ? &items_ : nullptr);
@@ -927,7 +944,7 @@ void GameSession::handleSpellScreenChange(uint8_t before_screen)
         return;
     }
     const bool screen_changed = gs_.screenId() != before_screen;
-    const bool latch = mm2_gs_u8(gs_.a4(), -0x79E4) != 0;
+    const bool latch = events::eventWalkSpellLatch(gs_) != 0;
     if (!screen_changed && !latch) {
         return;
     }
@@ -942,7 +959,7 @@ void GameSession::handleSpellScreenChange(uint8_t before_screen)
         gameplay::syncCurrentCellFlags(gs_, world_);
         gameplay::sessionInteractionGate(gs_);
     }
-    mm2_gs_set_u8(gs_.a4(), -0x79E4, 0);
+    events::clearEventWalkSpellLatch(gs_);
     markDirty();
 }
 
@@ -970,7 +987,7 @@ void GameSession::finishCombat()
      * the fight is over so OP_2B (gated on MM2_GS_COMBAT_VICTORY_LATCH) and
      * any post-combat script can fire, mirroring the ROM's -$7F1A pending
      * latch (0x16368-0x1637C). */
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 0);
+    events::clearEventAbort(gs_);
 
     /* Total wipe (defeat or flee with no living): retail 0x11646 then the play
      * loop's -$7F14 living check → Death Strikes @ 0x14106. Skip tile re-scan
@@ -1085,7 +1102,6 @@ void GameSession::finishDeathStrikesGotoTown()
     /* 0x141CE: move.b -$79AC,-$79F2; jsr -$7FB6; jsr 0x1A1F8 Goto Town. */
     const uint8_t town = mm2_gs_u8(gs_.a4(), MM2_GS_SAVED_TOWN_ID);
     gs_.setScreenId(town);
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_ID, town);
     if (town < 5) {
         goto_town_filter_ = static_cast<uint8_t>(town + 1);
     }
@@ -1094,18 +1110,8 @@ void GameSession::finishDeathStrikesGotoTown()
      * to roster.dat made a wipe permanent across restarts.
      * Reload the last good save so char-choose / next launch see living party
      * (total wipe skipped the post-combat write; in-memory records are dead). */
-    if (data_dir_) {
-        char *const path = mm2_path_scratch_a();
-        if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
-            (void)mm2_roster_load_file(path, &roster_);
-        }
-    }
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_PREV, 0xFF);
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_ID, 0xFF);
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_SIGN_ENV_ID, 7);
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
-    mm2_gs_set_u8(gs_.a4(), -0x79E4, 0);
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+    reloadRosterDat(data_dir_, roster_);
+    applyGotoTownEpilogueGs(gs_);
     back_to_goto_town_ = true;
 }
 
@@ -1116,11 +1122,11 @@ void GameSession::runPendingEvents()
     }
     if (mm2_gs_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH)) {
         const bool blocking_before = events_.blocksMovement();
-        const bool had_script_abort = mm2_gs_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT) != 0;
+        const bool had_script_abort = events::eventAbort(gs_) != 0;
         events_.scanAndRun(gs_, world_);
         if (combat_.active()) {
             markDirty();
-        } else if (!had_script_abort && mm2_gs_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT) != 0 &&
+        } else if (!had_script_abort && events::eventAbort(gs_) != 0 &&
                    !has_monsters_) {
             /* OP_12/13 aborted the script but CombatSession::enter could not run. */
             showStatusMessage("Encounter! (monsters.dat missing — fight skipped)");
@@ -1238,7 +1244,7 @@ void GameSession::beginDismissHireling()
     if (launch_.party_count < 1) {
         return;
     }
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 1); /* 0x1421E -$7950 := 1 */
+    events::setEventExit(gs_, 1); /* 0x1421E -$7950 := 1 */
     std::snprintf(status_message_, sizeof(status_message_), "Dismiss whom (1 - %d)?",
                   launch_.party_count);
     overlay_ = PlayOverlay::DismissHireling;
@@ -1271,8 +1277,8 @@ bool GameSession::removeHirelingFromParty(int16_t roster_index)
         launch_.roster_slots[last] = -1;
         mm2_gs_set_u16(gs_.a4(), MM2_GS_ROSTER_INDEX_TBL + last * 2, 0xFFFF);
     }
-    /* 0x36A0: -$795C := $FFFF; subq -$795A. */
-    mm2_gs_set_u16(gs_.a4(), -0x795C, 0xFFFF);
+    /* 0x36A0: last -$796A word (slot 7 / -$795C) := $FFFF; subq -$795A. */
+    mm2_gs_set_u16(gs_.a4(), MM2_GS_ROSTER_INDEX_TBL + (MM2_GS_PARTY_SIZE - 1) * 2, 0xFFFF);
     if (launch_.party_count > 0) {
         --launch_.party_count;
     }
@@ -1291,7 +1297,7 @@ void GameSession::applyExitFlagCleanup()
     (void)redraw_status;
     (void)redraw_roster;
     (void)redraw_divider;
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+    events::setEventExit(gs_, 0);
     markDirty();
 }
 
@@ -1300,7 +1306,7 @@ void GameSession::maybeApplyExitFlagCleanupOnExploreKey(const platform::KeyState
     /* Doc 43: after key read at $12D6, if -$7950 ≠ 0 → JSR -$7D40 (0x171AC).
      * OP_02 plaque text (Atlantium sorcerer statue, etc.) stays until this
      * key — abortScript skips cleanup so the message remains while idle. */
-    if (!gs_.valid() || mm2_gs_u8(gs_.a4(), MM2_GS_EXIT_FLAGS) == 0) {
+    if (!gs_.valid() || events::eventExit(gs_) == 0) {
         return;
     }
     gameplay::ExploreCode code{};
@@ -1391,10 +1397,10 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
     case gameplay::PlaySessionAction::Rest:
         /* Rest @ 0x19E20: set modal flag; 0x19E32 btst #3,-$55D6 → "Too dangerous!".
          * Current-cell latch -$55D6 is maintained by syncCurrentCellFlags. */
-        mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 1); /* 0x19E24: -$7950 := 1 */
+        events::setEventExit(gs_, 1); /* 0x19E24: -$7950 := 1 */
         gameplay::syncCurrentCellFlags(gs_, world_);
         if ((mm2_gs_u8(gs_.a4(), MM2_GS_TILE_RT_FLAGS) & 0x08) != 0) {
-            mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+            events::setEventExit(gs_, 0);
             showStatusMessage("Too dangerous!"); /* 0x19EBC */
             markDirty();
             break;
@@ -1409,11 +1415,8 @@ void GameSession::handleExploreCommand(gameplay::PlaySessionAction action)
 
 namespace {
 
-/* Wall field directly ahead, read from the centre cell of the active screen's
- * VISUAL page (the original's -$55BA source, MapWorld.h). 2-bit field per the
- * port codec: 0 open, 1 wall, 2 door, 3 wall+torch (MM2_MAP_WALL_*). This is
- * the same extraction View3D uses for the forward wall slot (cell & mask, then
- * >> shift). */
+/* Wall field ahead from the active screen VISUAL page (-$55BA).
+ * 2-bit: 0 open, 1 wall, 2 door, 3 wall+torch (MM2_MAP_WALL_*). */
 int forwardWallField(const mm2::world::MapWorld &world, int x, int y, char facing)
 {
     const uint8_t cell = world.visualPage()[static_cast<size_t>((y << 4) | (x & 0x0F))];
@@ -1428,12 +1431,6 @@ bool forwardDoorBlocked(const mm2::world::MapWorld &world, int x, int y, char fa
 void clearForwardDoorLock(mm2::world::MapWorld &world, int x, int y, char facing)
 {
     mm2_map_clear_door_lock(&world.mapFileMut().screens[world.currentScreen()], x, y, facing);
-}
-
-/* Unlock @ 0x20D44 reads roster +$1E plus equipped type-14 (0xF1C0). */
-int unlockThieveryFor(const Mm2RosterRecord &rec, const Mm2ItemsFile *items)
-{
-    return gameplay::rosterLiveThievery(rec, items);
 }
 
 }  // namespace
@@ -1500,7 +1497,7 @@ void GameSession::applyDoorTrapDamage()
         }
     }
 
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 3);
+    events::setEventExit(gs_, 3);
     applyExitFlagCleanup();
     if (buf[0] != '\0') {
         showStatusMessage(buf);
@@ -1620,7 +1617,9 @@ void GameSession::finishUnlockWithPartySlot(int party_slot)
     if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
         return;
     }
-    const int thievery = unlockThieveryFor(roster_.records[idx], has_items_ ? &items_ : nullptr);
+    /* Unlock @ 0x20D44: roster +$1E plus equipped type-14 (0xF1C0). */
+    const int thievery =
+        gameplay::rosterLiveThievery(roster_.records[idx], has_items_ ? &items_ : nullptr);
     const int lock_d100 = rng_.range(1, 100);  /* 0x20D2E */
     const int trap_d100 = rng_.range(1, 100);  /* 0x20D64 */
     const int trap_byte = mm2_attrib_door_trap_byte(&world_.attrib());
@@ -1661,7 +1660,7 @@ void GameSession::executeRest()
      * Always called (even amount 0); 0x6ACE then splits pooled gold equally. */
     if (!events::eventVmPartyTryPayGold(a4, &roster_, &launch_, hireling_pay)) {
         /* 0x19EA0 inline string. */
-        mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
+        events::setEventExit(a4, 0);
         showStatusMessage("Not enough gold - Dismiss hirelings");
         return;
     }
@@ -1673,8 +1672,8 @@ void GameSession::executeRest()
      *   saved move-counter -$796C nonzero            (0x19D90; cleared @ 0x19D76)
      * -$55D6 is the single current-cell byte (0x1B1C), not an array. */
     gameplay::syncCurrentCellFlags(gs_, world_);
-    const uint8_t move_counter = mm2_gs_u8(a4, -0x796C);
-    mm2_gs_set_u8(a4, -0x796C, 0); /* 0x19D76: clr -$796C */
+    const uint8_t move_counter = mm2_gs_u8(a4, MM2_GS_SHELTER_FLAG);
+    mm2_gs_set_u8(a4, MM2_GS_SHELTER_FLAG, 0); /* 0x19D76: clr -$796C */
     const uint8_t tile_rt = mm2_gs_u8(a4, MM2_GS_TILE_RT_FLAGS);
     const bool on_event_tile = tile_rt >= 0x80; /* 0x19D7C exact */
     const bool guard_dog = mm2_gs_u8(a4, MM2_GS_GUARD_DOG_FLAG) != 0;
@@ -1697,7 +1696,7 @@ void GameSession::executeRest()
                 rec.condition = static_cast<uint8_t>(rec.condition | 0x10);
             }
         }
-        mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
+        events::setEventExit(a4, 0);
         mm2_gs_set_u8(a4, MM2_GS_ENCOUNTER_MODE, 3);
         mm2_gs_set_u8(a4, MM2_GS_MONSTER_COUNT, 0); /* 0x19DEE: clr -$77BE */
         for (int i = 0; i < MM2_GS_MONSTER_SLOT_COUNT; ++i) {
@@ -1712,7 +1711,7 @@ void GameSession::executeRest()
     /* --- 0x19B28 rest execution: clear buffs, heal, advance the clock ------ */
     /* 0x19B2C..0x19B5C: clear the 13 contiguous temporary-buff bytes
      * (-$79AB light .. -$799F wizard-eye), exactly the set the ASM zeroes. */
-    for (int32_t off = -0x79AB; off <= -0x799F; ++off) {
+    for (int32_t off = MM2_GS_LIGHT_FACTOR; off <= MM2_GS_WIZARD_EYE_TIMER; ++off) {
         mm2_gs_set_u8(a4, off, 0);
     }
 
@@ -1781,7 +1780,7 @@ void GameSession::executeRest()
             gs_.setCoordX(static_cast<uint8_t>(packed & 0x0F));
             gs_.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
             mm2_gs_set_u8(a4, MM2_GS_PENDING_EVENT_LATCH, 1); /* 0x19D28 */
-            mm2_gs_set_u8(a4, -0x79E4, 1); /* 0x19D2E */
+            events::setEventWalkSpellLatch(a4); /* 0x19D2E */
             if (events_loaded_) {
                 refreshEventsForScreen();
             }
@@ -1794,7 +1793,7 @@ void GameSession::executeRest()
 
     mm2_gs_set_u8(a4, MM2_GS_PENDING_EVENT_LATCH, 1); /* dispatcher epilogue $1420 */
     mm2_gs_set_u8(a4, MM2_GS_BUSY_STATUS, 1);
-    mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 0);
+    events::setEventExit(a4, 0);
 
     showStatusMessage("Rest complete, no encounters."); /* 0x19D46 inline string */
     /* Age-illness @ 0x19B96 can wipe the party outside combat (0x9F22 path). */
@@ -1849,7 +1848,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
             if (dev_menu_state_.teleport_use_spawn) {
                 gs_.setCoordX(0xFF);
                 gs_.setCoordY(0xFF);
-                mm2_gs_set_u8(gs_.a4(), -0x79E4, 1);
+                events::setEventWalkSpellLatch(gs_);
             } else {
                 gs_.setCoordX(static_cast<uint8_t>(dev_menu_state_.teleport_x & 0x0F));
                 gs_.setCoordY(static_cast<uint8_t>(dev_menu_state_.teleport_y & 0x0F));
@@ -1907,7 +1906,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                                                 has_items_ ? &items_ : nullptr);
                 revealSearchContainerOpen();
                 showSearchReward(buf);
-                mm2_gs_set_u8(gs_.a4(), -0x79E4, 0);
+                events::clearEventWalkSpellLatch(gs_);
                 maybeBeginPartyWipeGameOver();
                 markDirty();
             }
@@ -1998,7 +1997,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                 fd_name_len_ = 0;
                 fd_name_buf_[0] = '\0';
                 fd_print_stage_ = 0;
-                mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 3);
+                events::setEventAbort(gs_, 3);
                 /* Same 0x14106 panel as OP_0E FD abort==3 (addq -$7972 inside). */
                 openDeathStrikesPanel(/*bump_ctr=*/true);
                 markDirty();
@@ -2083,16 +2082,14 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
                     overlay_ = PlayOverlay::None;
                     status_message_[0] = '\0';
                     fd_print_stage_ = 0;
-                    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 1);
+                    events::setEventAbort(gs_);
                     markDirty();
                     return;
                 }
                 overlay_ = PlayOverlay::None;
                 status_message_[0] = '\0';
                 fd_print_stage_ = 0;
-                mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 2);
-                mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_ID,
-                              mm2_gs_u8(gs_.a4(), MM2_GS_SAVED_TOWN_ID));
+                events::setEventAbort(gs_, 2);
                 gs_.setScreenId(mm2_gs_u8(gs_.a4(), MM2_GS_SAVED_TOWN_ID));
                 mm2_gs_set_u16(gs_.a4(), MM2_GS_OP0E_SUBMODE, 1);
                 events_.armInnGotoTown();
@@ -2141,7 +2138,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         /* 0x141F4: digit pick; only -$796A[slot] >= $18; else re-prompt. */
         const char ch = static_cast<char>(keys.last_ascii);
         if (keys.escape || ch == 0x1B) {
-            mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+            events::setEventExit(gs_, 0);
             overlay_ = PlayOverlay::None;
             status_message_[0] = '\0';
             markDirty();
@@ -2161,7 +2158,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         if (!removeHirelingFromParty(ridx)) {
             return;
         }
-        mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 3); /* 0x1428A */
+        events::setEventExit(gs_, 3); /* 0x1428A */
         applyExitFlagCleanup(); /* 0x1429E → -$7D40 */
         showStatusMessage("Come back real soon."); /* $142A6 */
         return;
@@ -2200,12 +2197,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         /* Dismiss → title. Reload roster.dat so the menu sees the last good save
          * (total wipe deliberately skipped the post-combat write). */
         if (keys.escape || keys.any_key) {
-            if (data_dir_) {
-                char *const path = mm2_path_scratch_a();
-                if (joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir_, "roster.dat")) {
-                    (void)mm2_roster_load_file(path, &roster_);
-                }
-            }
+            reloadRosterDat(data_dir_, roster_);
             status_message_[0] = '\0';
             overlay_ = PlayOverlay::None;
             back_to_title_ = true;
@@ -2249,7 +2241,7 @@ void GameSession::tickOverlayInput(const platform::KeyState &keys)
         }
         if (keys.escape || ch == 'N') {
             /* 0x19E8E: repaint chrome, clear -$7950, abort. */
-            mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+            events::setEventExit(gs_, 0);
             overlay_ = PlayOverlay::None;
             markDirty();
         }
@@ -3005,13 +2997,8 @@ void GameSession::maybeFinishInnRegistry()
         goto_town_filter_ = static_cast<uint8_t>(map_id + 1);
     }
     saveRosterWithGlobalTail();
-    /* 0x1A1F8 Goto Town epilogue GS (UI chrome omitted): */
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_PREV, 0xFF);
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_SCREEN_MODE_ID, 0xFF);
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_SIGN_ENV_ID, 7);
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
-    mm2_gs_set_u8(gs_.a4(), -0x79E4, 0);
-    mm2_gs_set_u8(gs_.a4(), MM2_GS_EXIT_FLAGS, 0);
+    /* 0x1A1F8 Goto Town epilogue GS (UI chrome omitted). */
+    applyGotoTownEpilogueGs(gs_);
     back_to_goto_town_ = true;
 }
 
@@ -3087,7 +3074,7 @@ void GameSession::startOp0eFdEncounter()
         /* Fight refused (no monsters.dat) — skip to defeat path. */
         fd_await_combat_ = false;
         fd_print_stage_ = 0;
-        mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 1);
+        events::setEventAbort(gs_);
         showStatusMessage("Encounter! (monsters.dat missing — fight skipped)");
     }
 }
@@ -3104,7 +3091,7 @@ void GameSession::resumeOp0eFdAfterCombat()
     } else {
         /* 0x14AF6: SCRIPT_ABORT=1 */
         fd_print_stage_ = 0;
-        mm2_gs_set_u8(gs_.a4(), MM2_GS_SCRIPT_ABORT, 1);
+        events::setEventAbort(gs_);
     }
 }
 
@@ -3242,7 +3229,7 @@ void GameSession::finishSearchTrapAnim()
                                     has_items_ ? &items_ : nullptr);
     revealSearchContainerOpen();
     showSearchReward(buf);
-    mm2_gs_set_u8(gs_.a4(), -0x79E4, 0);
+    events::clearEventWalkSpellLatch(gs_);
     maybeBeginPartyWipeGameOver();
     markDirty();
 }
@@ -3302,7 +3289,7 @@ void GameSession::renderView3D()
  * without attrib bit7 (Ice Cavern, etc.) still dim when light_factor is 0. */
 void GameSession::applyCantSeeViewportDim()
 {
-    const bool no_light = gs_.valid() && mm2_gs_u8(gs_.a4(), MM2_GS_LIGHT_FACTOR) == 0;
+    const bool no_light = gs_.valid() && gs_.lightFactor() == 0;
     const bool cant_see = gs_.valid() && mm2_gs_u8(gs_.a4(), MM2_GS_CANT_SEE_FLAG) != 0;
     const bool cave_unlit = no_light && env_.kind() == gfx::EnvKind::Cavern;
     const bool dim = (cant_see || cave_unlit) && overlay_ != PlayOverlay::Automap &&

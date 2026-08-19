@@ -1,5 +1,7 @@
 #include "eventlang/Encode.h"
 
+#include "core/ByteIO.h"
+#include "core/EventOps.h"
 #include "eventlang/Decompile.h"
 #include "eventlang/Lower.h"
 
@@ -72,7 +74,7 @@ std::vector<uint8_t> encodeLocation(Location& loc) {
             // Preserve unlifted overlay bytecode (no AST body).
             scriptPool.insert(scriptPool.end(), sc->rawSegment.begin(), sc->rawSegment.end());
         } else {
-            // Strict: always lower from AST. rawSegment must not paper over lift bugs.
+            // Re-lower from AST when a body is present.
             auto ops = lowerStmts(sc->body, stringIndex);
             auto bytes = opsToBytes(ops);
             scriptPool.insert(scriptPool.end(), bytes.begin(), bytes.end());
@@ -133,23 +135,17 @@ std::vector<uint8_t> encodeEventDat(const EventFileAst& file) {
     if (canReuseHeader) {
         entries = file.header;
     } else {
-        uint32_t cursor = 71 * 6;
+        uint32_t cursor = static_cast<uint32_t>(kEventHeaderSize);
         for (const auto& rec : records) {
             entries.emplace_back(cursor, static_cast<uint16_t>(rec.size()));
             cursor += static_cast<uint32_t>(rec.size());
         }
     }
 
-    std::vector<uint8_t> out(71 * 6, 0);
-    for (int i = 0; i < 71 && i < static_cast<int>(entries.size()); ++i) {
-        uint32_t off = entries[i].first;
-        uint16_t length = entries[i].second;
-        out[i * 6 + 0] = static_cast<uint8_t>((off >> 24) & 0xFF);
-        out[i * 6 + 1] = static_cast<uint8_t>((off >> 16) & 0xFF);
-        out[i * 6 + 2] = static_cast<uint8_t>((off >> 8) & 0xFF);
-        out[i * 6 + 3] = static_cast<uint8_t>(off & 0xFF);
-        out[i * 6 + 4] = static_cast<uint8_t>((length >> 8) & 0xFF);
-        out[i * 6 + 5] = static_cast<uint8_t>(length & 0xFF);
+    std::vector<uint8_t> out(static_cast<size_t>(kEventHeaderSize), 0);
+    for (int i = 0; i < kEventLocationCount && i < static_cast<int>(entries.size()); ++i) {
+        writeU32BE(&out[i * 6], entries[i].first);
+        writeU16BE(&out[i * 6 + 4], entries[i].second);
     }
     for (const auto& rec : records) out.insert(out.end(), rec.begin(), rec.end());
     return out;
@@ -159,24 +155,18 @@ std::vector<uint8_t> patchLocationInEventDat(const uint8_t* data, size_t len, in
                                             const std::vector<uint8_t>& newRecord) {
     EventFileAst file;
     if (!loadEventRecords(data, len, file)) return {};
-    if (locId < 0 || locId >= 71) return {};
+    if (locId < 0 || locId >= kEventLocationCount) return {};
     file.rawRecords[locId] = newRecord;
 
-    // Rebuild with contiguous layout after header.
-    std::vector<uint8_t> out(71 * 6, 0);
-    uint32_t cursor = 71 * 6;
-    for (int i = 0; i < 71; ++i) {
+    std::vector<uint8_t> out(static_cast<size_t>(kEventHeaderSize), 0);
+    uint32_t cursor = static_cast<uint32_t>(kEventHeaderSize);
+    for (int i = 0; i < kEventLocationCount; ++i) {
         const auto& rec = file.rawRecords[i];
-        out[i * 6 + 0] = static_cast<uint8_t>((cursor >> 24) & 0xFF);
-        out[i * 6 + 1] = static_cast<uint8_t>((cursor >> 16) & 0xFF);
-        out[i * 6 + 2] = static_cast<uint8_t>((cursor >> 8) & 0xFF);
-        out[i * 6 + 3] = static_cast<uint8_t>(cursor & 0xFF);
-        uint16_t length = static_cast<uint16_t>(rec.size());
-        out[i * 6 + 4] = static_cast<uint8_t>((length >> 8) & 0xFF);
-        out[i * 6 + 5] = static_cast<uint8_t>(length & 0xFF);
-        cursor += length;
+        writeU32BE(&out[i * 6], cursor);
+        writeU16BE(&out[i * 6 + 4], static_cast<uint16_t>(rec.size()));
+        cursor += static_cast<uint32_t>(rec.size());
     }
-    for (int i = 0; i < 71; ++i)
+    for (int i = 0; i < kEventLocationCount; ++i)
         out.insert(out.end(), file.rawRecords[i].begin(), file.rawRecords[i].end());
     return out;
 }

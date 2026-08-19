@@ -1,8 +1,7 @@
 /**
- * AGA playfield via ACE — patterned on LandsOfLore src/misc/screen.c.
- * AGA palette hardware applies at any bpp (4bp on AGA is still AGA palettes).
- * MM2 uses TAG_VPORT_BPP 6 (64 indices) per 41-aga-port-plan.md; retail .32 is ECS on disk.
- * ACE extview sets BPLCON2 KillEHB when ubBpp == 6 on AGA (see ACE src/ace/utils/extview.c).
+ * AGA playfield via ACE (LoL screen.c pattern).
+ * TAG_VPORT_BPP 6 (64 pens); retail .32 is ECS 5-plane on disk.
+ * ACE extview sets BPLCON2 KillEHB when ubBpp == 6 on AGA.
  */
 
 #include "mm2/platform/amiga/Mm2AmigaDisplay.h"

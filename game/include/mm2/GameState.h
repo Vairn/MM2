@@ -55,7 +55,7 @@ public:
             default: return;
         }
         mm2_gs_set_u8(a4_, MM2_GS_LAST_MOVE_KEY, static_cast<uint8_t>(key));
-        mm2_gs_set_u8(a4_, -0x55D8, bundle_hi); /* A4-$AA28 tile bundle hi */
+        mm2_gs_set_u8(a4_, MM2_GS_FACING_BUNDLE, bundle_hi); /* A4-$AA28 tile bundle hi */
         mm2_gs_set_u8(a4_, MM2_GS_FACING_INDEX, facing_idx);
     }
 

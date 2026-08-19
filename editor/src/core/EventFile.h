@@ -1,8 +1,7 @@
 #pragma once
-// event.dat decoder (Amiga MM2).
+// event.dat decoder.
 //
-// Layout (docs/06-event-dat-format.md, tools/decode_event.py):
-//   [header]  71 entries x 6 bytes  (u32 abs offset BE, u16 length BE)
+//   [header]  71 entries × 6 bytes  (u32 abs offset BE, u16 length BE)
 //   per location:
 //     tile-event triplets (pos, event, cond) until 00 00 00
 //     u16 LE string-table relative offset
@@ -81,8 +80,5 @@ struct EventFile {
     /** Replace location `locId` record and rebuild file (offsets may shift). */
     bool replaceLocationRecord(int locId, const std::vector<uint8_t>& newRecord);
 };
-
-// Condition-flag name (towns/outdoor), matching decode_event.FLAG_NAMES.
-const char* eventCondName(uint8_t cond);
 
 }  // namespace mm2

@@ -59,6 +59,7 @@
 #define MM2_GS_SIGN_ENV_ID      (-0x79E3)  /* byte  ($861D) OP_0B table pick @ 0x15772 */
 #define MM2_GS_RUNTIME_ENV      (-0x7660)  /* byte  ($89A0) area gfx env id; surface_flag&0xF @ 0x1650 */
 #define MM2_GS_BUSY_STATUS      (-0x79E5)  /* byte  ($861B) */
+#define MM2_GS_WALK_SPELL_LATCH (-0x79E4)  /* byte  ($861C) walk/cast; NOT EXIT (-$7950) */
 #define MM2_GS_ERA              (-0x79B6)  /* word  ($864A) era/timeline 0..9 */
 /* Low byte of the era word; read as the "current era" by event gating.
  * (Previously mislabeled CUR_EVENT_ID: there is no standalone byte write to
@@ -114,6 +115,9 @@
 #define MM2_GS_ATTRIB_TRAP_SHIFT (-0x5606) /* byte ($A9FA) attrib+0x14; 0x1A8A4 *2 loop */
 #define MM2_GS_ATTRIB_RECALL_COORD (-0x5604) /* byte ($A9FC) attrib+0x16 packed YX; Surface @ 0xB2B2 */
 #define MM2_GS_ATTRIB_RECALL_SCREEN (-0x5602) /* byte ($A9FE) attrib+0x18 dest screen; Surface */
+#define MM2_GS_BRIBE_FOOD       (-0x11C2)  /* byte  ($EE3E) treasure bit5 accumulate @ 0x4C8E */
+#define MM2_GS_BRIBE_GOLD       (-0x11C1)  /* byte  ($EE3F) treasure bit6 */
+#define MM2_GS_BRIBE_GEMS       (-0x11C0)  /* byte  ($EE40) treasure bit7 */
 #define MM2_GS_MONSTER_PABIL    (-0x11BC)  /* byte  ($EE44) Pabil&$1F @ 0x4DFA */
 #define MM2_GS_MONSTER_PABIL_CHANCE (-0x11BB) /* byte ($EE45) group-special chance @ 0x4E14 */
 #define MM2_GS_MONSTER_CHARGE_INIT (-0x11BA) /* byte ($EE46) (spd2>>4)+1 @ 0x4EB8; → -$503 */
@@ -138,6 +142,7 @@
 #define MM2_GS_TURN_UNDEAD_USED (-0x051F)  /* byte  ($FAE1) Turn Undead latch @ 0xC078 */
 #define MM2_GS_ERADICATE_SKIP_PRINT (-0x051E) /* byte ($FAE2) 1→0x10DFC skips " goes down!" */
 #define MM2_GS_SPELL_SKIP_RESIST (-0x051B) /* byte  ($FAE5) 0x10894 skips resist if set (Frenzy) */
+#define MM2_GS_DIVINE_INT_USED  (-0x051A)  /* byte  ($FAE6) Divine Intervention latch @ 0xC6C0; clr @ 0x12C78 */
 #define MM2_GS_FRENZY_LATCH     (-0x051C)  /* byte  ($FAE4) Frenzy once-per-fight @ 0xC3D8 */
 #define MM2_GS_SHELTER_FLAG     (-0x796C)  /* byte  ($8694) Shelter @ 0xADA8; rest ambush gate 0x19D6E */
 #define MM2_GS_PARTY_COUNT      (-0x795A)  /* word  ($86A6) active party size */
@@ -231,10 +236,23 @@
 #define MM2_GS_FOUND_ITEM_CHARGES (-0x3F16)  /* byte[3] ($C0EA) found-item charges (OP_19 attr2) */
 #define MM2_GS_FOUND_GEMS         (-0x3F12)  /* word  ($C0EE) gems (big-endian) */
 #define MM2_GS_FOUND_GOLD_EXP     (-0x3F10)  /* long  ($C0F0) gold/exp (big-endian, 24-bit) */
+#define MM2_GS_SPELL_SP_COST      (-0x3F0A)  /* word  ($C0F6) SP staging → 0x6DC6 sub +$58; Enchant need @ 0xB0A0 */
+#define MM2_GS_SPELL_GEM_COST     (-0x3F08)  /* word  ($C0F8) gem staging → 0x6DC6 sub +$5C */
 #define MM2_GS_FOUND_SENTINEL     (-0x794C)  /* byte  ($86B4) 0xFF=filled, 0xFE=auto-search pending */
 #define MM2_GS_FOUND_ITEM_SLOTS   3
 #define MM2_GS_FOUND_SENTINEL_FILLED  0xFF
 #define MM2_GS_FOUND_SENTINEL_PENDING 0xFE
+#define MM2_GS_FOUND_PACKS_FULL (-0x5AD2)  /* byte  ($A52E) Search distribute overflow @ 0x1AC94 */
+/* Attack-resolve scratch -$5E32..-$5E2A (player 0x11304 / monster 0x10478). */
+#define MM2_GS_ATTACK_RANGED     (-0x5E32)  /* byte  ($A1CE) 1=shoots @ 0x10584; 0=melee @ 0x105A2 */
+#define MM2_GS_ATTACK_HIT_N      (-0x5E31)  /* byte  ($A1CF) hits landed; addq @ 0x11534 / 0x10530 */
+#define MM2_GS_ATTACK_DMG_SIDES  (-0x5E30)  /* byte  ($A1D0) weapon die sides (+$4C / +$4E) @ 0x1137A */
+#define MM2_GS_ATTACK_DMG_ADD    (-0x5E2F)  /* byte  ($A1D1) damage addend @ 0x113DE */
+#define MM2_GS_ATTACK_SWINGS     (-0x5E2E)  /* byte  ($A1D2) swing count (level/div+1) @ 0x11368 */
+#define MM2_GS_ATTACK_SWING_MAX  (-0x5E2D)  /* byte  ($A1D3) swing copy; monster -$11B2 @ 0x10496 */
+#define MM2_GS_ATTACK_HIT_LEVEL  (-0x5E2C)  /* byte  ($A1D4) to-hit level/hd @ 0x1133E */
+#define MM2_GS_ATTACK_HIT_BONUS  (-0x5E2B)  /* byte  ($A1D5) to-hit bonus (+$4D/+$4F) @ 0x11384 */
+#define MM2_GS_ATTACK_CRIT       (-0x5E2A)  /* byte  ($A1D6) 0=normal 1=backstab 2=critical @ 0x11040 */
 #define MM2_GS_LOOT_ITEM_TIER     (-0x5E29)  /* byte  ($A1D7) best treasure bits0-1 this fight (0x10B74) */
 #define MM2_GS_LOOT_ITEM_TYPE_HI  (-0x5E28)  /* byte  ($A1D8) type>>4 when tier updates (0x10B74) */
 #define MM2_GS_MONSTER_FLEE_PRINT (-0x5E27)  /* byte  ($A1D9) 1→" runs away!" else " goes down!" (0x10DFC) */
@@ -248,6 +266,7 @@
 #define MM2_GS_SELECTED_MEMBER  (-0x5D42)  /* byte  ($A2BE) primary selected slot 1..8 */
 #define MM2_GS_SAVED_COND_FLAG  (-0x5D3F)  /* byte  ($A2C1) OP_15 cond snapshot / select mirror */
 #define MM2_GS_PARTY_SELECT_CTX (-0x5D3F)  /* alias: same byte as SAVED_COND_FLAG */
+#define MM2_GS_FACING_BUNDLE    (-0x55D8)  /* byte  ($AA28) tile-bundle hi; map_facing_from_key @ 0x5636 */
 #define MM2_GS_FACING_INDEX     (-0x55D7)  /* byte  ($AA29) */
 #define MM2_GS_EVENT_BUSY_SENTINEL (-0x55C8)  /* byte  ($AA38) */
 #define MM2_GS_ATTRIB_ERA_GATE  (-0x560B)  /* byte  ($A9F5) */

@@ -1,5 +1,7 @@
 #include "eventlang/Decompile.h"
 
+#include "core/ByteIO.h"
+#include "core/EventOps.h"
 #include "eventlang/BytecodeParse.h"
 #include "eventlang/CfgLift.h"
 #include "eventlang/Semantics.h"
@@ -35,15 +37,13 @@ void walkReplaceStringRefs(std::vector<Stmt>& stmts,
 
 bool loadEventRecords(const uint8_t* data, size_t len, EventFileAst& out) {
     out = EventFileAst{};
-    constexpr size_t kHeader = 71 * 6;
-    if (!data || len < kHeader) return false;
-    out.header.resize(71);
-    out.rawRecords.resize(71);
-    for (int i = 0; i < 71; ++i) {
+    if (!data || len < static_cast<size_t>(kEventHeaderSize)) return false;
+    out.header.resize(kEventLocationCount);
+    out.rawRecords.resize(kEventLocationCount);
+    for (int i = 0; i < kEventLocationCount; ++i) {
         const uint8_t* p = data + i * 6;
-        uint32_t off = (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16) |
-                       (static_cast<uint32_t>(p[2]) << 8) | p[3];
-        uint16_t length = static_cast<uint16_t>((p[4] << 8) | p[5]);
+        uint32_t off = readU32BE(p);
+        uint16_t length = readU16BE(p + 4);
         out.header[i] = {off, length};
         if (off + length <= len) {
             out.rawRecords[i].assign(data + off, data + off + length);

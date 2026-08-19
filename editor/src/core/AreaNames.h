@@ -1,32 +1,10 @@
 #pragma once
-// MM2 area (map screen) names, transcribed from b3dmm2/mm2ed.bb (the Select
-// area / Case block around line 3145). There are 60 map screens (0..59);
-// unnamed indices are overland surface areas the legacy tool labels from
-// attrib.dat at runtime, so we fall back to "Area NN".
+// Map-screen names (0..59). Unnamed overland screens fall back to sector A1..E4
+// or "Area NN". Castle basements: 55 Hillstone → 45/46, 56 Woodhaven → 47/48,
+// 57 Pinehurst → 49/50, 58 Luxus → 51/52.
 //
-// The legacy .bb had many placeholder/misspelled names; all entries were
-// verified against the game-data map index table at
-// dungeoncrawl-classics.com/might-and-magic/mm2/mm2-map-details and the
-// GameFAQs walkthrough's canonical location names. Corrections applied:
-//   - town spellings: Tundra->Tundara, Volcania->Vulcania (+ their caverns)
-//   - punctuation/typos: Corak's, Sarakin's, Druid's, Forbidden, Dragon's,
-//     Dawn's, Gemmaker's Cave, Nomadic Rift, "Plain"->"Plane"
-//   - wrong locations: 23 Square Isle->Square Lake Cave, 24 Tundra Cave->Ice
-//     Cavern, 26 Murry's Resort->Murray's Cave
-//   - castle basements 45-52 (were generic "dungeon Level N") and Castle
-//     Xabran (59, was "the One in 800")
-//   - Hillstone/Woodhaven main indices 55/56 were swapped in the legacy .bb.
-// Each castle's two basements sit at a fixed offset from its main index:
-//   55 Hillstone -> 45/46, 56 Woodhaven -> 47/48,
-//   57 Pinehurst -> 49/50, 58 Luxus    -> 51/52.
-//
-// Environment-type decode (also from mm2ed.bb):
-//   attrib +0x04 > 0            -> outside area (sector label A1..E4 via +0x15)
-//   else attrib +0x03 == 17     -> town
-//                       == 18     -> cavern
-//                       == 19/20  -> castle
-//   areas 41..44 are forced outside for some runtime paths; auto-map still uses
-//   townb.32 with fixed frames 8/4/4/5 in the -$79E2==0 branch (@0x21EA).
+// attrib +0x04 > 0 → outside (sector at +0x15); else +0x03: 17 town, 18 cavern,
+// 19/20 castle. Screens 41..44 are elemental planes.
 
 #include <cstdint>
 #include <cstdio>
@@ -127,7 +105,7 @@ inline const char* outdoorSectorName(int area) {
     }
 }
 
-// Display label: canonical name, else overland sector (A1..E4), else "Area NN".
+// Named area, else overland sector (A1..E4), else "Area NN".
 inline std::string areaLabel(int area) {
     const char* n = areaNameRaw(area);
     if (n[0]) return std::string(n);

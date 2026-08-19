@@ -28,7 +28,7 @@ struct WizardTemplate {
 };
 
 const std::vector<WizardTemplate>& wizardTemplates();
-const char* const* wizardCondNames(int* count);  // same order as DslParse::triggerCondName
+const char* const* wizardCondNames(int* count);  // TriggerCond Always..EnterSpecial
 
 struct WizardForm {
     // DoorSign / DialogueReward

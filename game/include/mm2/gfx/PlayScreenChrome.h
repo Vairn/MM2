@@ -1,9 +1,8 @@
 #pragma once
 #include "mm2/gfx/ScreenCompositor.h"
 
-// Play-screen HUD chrome, traced from the session refresh chain
-// (0x52A2: -$7EA8 -> 0x60F4 chrome, -$7EA2 -> 0x6150 party panel,
-//  -$7EBA -> 0x560A dividers+status, then 0x5E28 / 0x5D54 right column).
+// Play HUD @ 0x52A2: -$7EA8 → 0x60F4 chrome, -$7EA2 → 0x6150 party,
+// -$7EBA → 0x560A status, then 0x5E28 / 0x5D54 right column.
 
 namespace mm2::gfx {
 

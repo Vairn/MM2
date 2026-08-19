@@ -102,8 +102,6 @@ const char *conditionName(uint8_t c)
     }
 }
 
-// FAQ save-state note: skill nibbles 1..15 — see RosterSkillDisplay.cpp.
-
 void drawCellText(gfx::ScreenCompositor &c, int row, int col, const char *text, uint8_t r = 255, uint8_t g = 255,
                   uint8_t b = 255)
 {

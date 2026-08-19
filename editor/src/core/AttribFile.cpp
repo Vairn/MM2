@@ -25,9 +25,7 @@ Bytes AttribFile::encode() const {
 bool AttribFile::load(const std::string& path) {
     Bytes b;
     if (!pcDatReadFlexible(path, b)) return false;
-    // GOG ATTRIB.DAT is LZW-compressed (whole-file container); decompresses
-    // byte-identical to the Amiga attrib.dat. No-op on already-plain files.
-    b = pcDatDecompressFlat(b);
+    b = pcDatDecompressFlat(b);  // GOG LZW; no-op on plain files
     return decode(b);
 }
 

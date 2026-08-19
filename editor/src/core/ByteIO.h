@@ -1,12 +1,10 @@
 #pragma once
-// Endian-aware read/write helpers for MM2 data files.
-//
-// MM2 is an Amiga (68000) game. Multibyte fields in .dat files are generally
-// little-endian on disk (matches Blitz3D ReadShort/ReadInt and on-disk bytes).
-// Default to readU16LE / writeU16LE unless a format doc or ASM trace says otherwise.
+// Endian helpers for MM2 .dat files. Multibyte fields are little-endian on disk
+// unless a format notes otherwise (e.g. event.dat location headers are BE).
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -48,6 +46,12 @@ inline void writeU32LE(uint8_t* p, uint32_t v) {
     p[1] = static_cast<uint8_t>(v >> 8);
     p[2] = static_cast<uint8_t>(v >> 16);
     p[3] = static_cast<uint8_t>(v >> 24);
+}
+
+inline std::string hexByte(int v) {
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "0x%02X", v & 0xFF);
+    return buf;
 }
 
 inline uint8_t nibbleHi(uint8_t packed) { return (packed >> 4) & 0x0F; }

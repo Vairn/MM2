@@ -67,8 +67,6 @@ inline const Mm2RosterRecord *partyRecord(const Mm2RosterFile &roster, const Mm2
     return &roster.records[idx];
 }
 
-inline int partyMemberCount(const Mm2PartyLaunch &launch) { return launch.party_count; }
-
 inline uint8_t addSatU8(uint8_t v, uint32_t delta)
 {
     const uint32_t sum = static_cast<uint32_t>(v) + delta;

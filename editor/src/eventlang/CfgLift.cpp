@@ -29,7 +29,7 @@ Expr opToCondExpr(const LoweredOp& op) {
         int v = decodeU16Arg(o, a.data(), static_cast<int>(a.size()));
         return Expr::make("gold_at_least").set("amount", v);
     }
-    // OP_25 @ 0x16B82: pay gems (BE u16), NOT a "code" check.
+    // OP_25 @ 0x16B82: pay gems (BE u16).
     if (o == 0x25) {
         int v = decodeU16Arg(o, a.data(), static_cast<int>(a.size()));
         return Expr::make("gems_at_least").set("amount", v);
@@ -65,16 +65,7 @@ Expr opToCondExpr(const LoweredOp& op) {
             .set("sel", a[0])
             .setList("args", args);
     }
-    if (o == 0x30) {
-        std::string decoded;
-        for (uint8_t b : a) {
-            int ch = (0x11A - b) & 0xFF;
-            if (ch >= 0x20 && ch <= 0x7E) decoded += static_cast<char>(ch);
-            else decoded += '?';
-        }
-        while (!decoded.empty() && decoded.back() == ' ') decoded.pop_back();
-        return Expr::make("answer_eq").set("text", decoded);
-    }
+    if (o == 0x30) return Expr::make("answer_eq").set("text", decodeAnswerBytes(a));
     Expr e = Expr::make("raw_op").set("op", o);
     std::vector<int> args;
     for (uint8_t x : a) args.push_back(x);

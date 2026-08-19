@@ -1,13 +1,6 @@
 #pragma once
-// Outdoor first-person view (outdoor_3d_master @0x18870).
-//
-// Pipeline (see EXTRACTED/docs/15-3d-view-and-game-screen.md):
-//   1. refreshOutdoorHood   — page-0 rows -> -$55D4 / -$55D0 / -$55CC
-//   2. processTerrainRows   — @0x9544 terrain lookup -> -$55C6 / -$55C2 / -$55BE
-//   3. buildDecorBlits      — @0x182D8 floor decor on biome sheet (-$7A0A)
-//   4. buildHorizonBlits    — @0x1877A horizon from outdoor1/2/3.32
-//
-// Kept in sync with editor/src/core/Outdoor3D.{h,cpp} and tools/view3d_outdoor.py.
+// outdoor_3d_master @0x18870: hood -$55D4/D0/CC, terrain @0x9544 → -$55C6/C2/BE,
+// decor @0x182D8 (-$7A0A), horizon @0x1877A (outdoor1/2/3.32).
 
 #include "mm2/CppStdCompat.h"
 
@@ -69,12 +62,7 @@ struct OutdoorSpriteBlit {
     int y = 0;
 };
 
-/* Night sky + stars — outdoor_3d_master @0x18870 calls the night routine
- * (thunk -$7e78 -> @0x0687C) instead of the daytime sky.32 blit whenever
- * MM2_GS_TIME_SUBDAY (-$79b4, word, 256 = 1 day) >= 0x80 (the second half of
- * the day). The routine fills the sky band black then plots 7 star pixels. */
-
-/* Night is the second half of the day cycle (cmpi.w #$80,-$79b4 @0x18898). */
+/* Night sky @0x0687C (thunk -$7e78) when -$79b4 >= 0x80 (cmpi.w #$80 @0x18898). */
 constexpr int kOutdoorNightSubdayThreshold = 0x80;
 
 /* Black sky fill — fill-rect primitive @0x217ba paints horizontal lines from
@@ -99,11 +87,8 @@ struct OutdoorStarBlit {
     uint8_t pen = 0;
 };
 
-/* Replicates the star plot loop @0x68ea: starting table index = facing*4
- * (N=0,W=4,S=8,E=12 from facing key char -$79b1), 7 consecutive entries with
- * the @0x6946 wrap-to-0, screen x = X[idx]*8 + 8 (+12 columns for stars 4..6
- * @0x691e), y = Y[idx]. Returns kOutdoorStarCount. `facing` uses the engine
- * 0=N,1=E,2=S,3=W convention. */
+/* Star loop @0x68ea: idx = facing*4 (N=0,W=4,S=8,E=12 from -$79b1), wrap @0x6946,
+ * x = X[idx]*8+8 (+12 for stars 4..6 @0x691e). facing 0=N,1=E,2=S,3=W. */
 int buildOutdoorStars(int facing, std::array<OutdoorStarBlit, kOutdoorStarCount> &out);
 
 struct OutdoorScene {

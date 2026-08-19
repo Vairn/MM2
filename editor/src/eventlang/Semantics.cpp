@@ -6,6 +6,16 @@
 #include <utility>
 
 namespace mm2::eventlang {
+namespace {
+
+std::string asciiLower(const std::string& s) {
+    std::string lower;
+    lower.reserve(s.size());
+    for (char c : s) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return lower;
+}
+
+}  // namespace
 
 TriggerCond triggerCondFromByte(uint8_t raw) {
     switch (raw) {
@@ -35,24 +45,9 @@ uint8_t triggerCondByte(TriggerCond cond, uint8_t rawFallback) {
 
 bool isCondSetOp(uint8_t op) {
     switch (op) {
-        case 0x09:
-        case 0x0A:
-        case 0x15:  // OP_15 apply_party test → cond_flag (not masked write)
-        case 0x16:
-        case 0x17:
-        case 0x19:  // give_item → cond=1 if placed on a member
-        case 0x1B:
-        case 0x1C:  // rng roll → raw cond byte
-        case 0x1F:  // party_effect add → cond=1, underflow N/A
-        case 0x20:  // party_effect sub → cond=0 on underflow (EventPartyEffects)
-        case 0x22:
-        case 0x23:
-        case 0x24:
-        case 0x25:  // pay gems → cond
-        case 0x28:  // consume backpack item → cond
-        case 0x2D:
-        case 0x30:
-        case 0x32:
+        case 0x09: case 0x0A: case 0x15: case 0x16: case 0x17: case 0x19:
+        case 0x1B: case 0x1C: case 0x1F: case 0x20: case 0x22: case 0x23:
+        case 0x24: case 0x25: case 0x28: case 0x2D: case 0x30: case 0x32:
             return true;
         default:
             return false;
@@ -77,8 +72,7 @@ const char* partyFieldName(int fieldSel) {
 }
 
 int partyFieldByName(const std::string& name) {
-    std::string lower;
-    for (char c : name) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    const std::string lower = asciiLower(name);
     if (lower == "skills") return 0x6D;
     if (lower == "quest_flags") return 0x74;
     if (lower == "quest_byte") return 0x75;
@@ -123,8 +117,7 @@ const char* varGroupName(int group) {
 }
 
 int varGroupByName(const std::string& name) {
-    std::string lower;
-    for (char c : name) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    const std::string lower = asciiLower(name);
     if (lower.size() >= 3 && (lower[0] == '0') && (lower[1] == 'x')) {
         int v = 0;
         for (size_t i = 2; i < lower.size(); ++i) {
@@ -256,16 +249,7 @@ std::string formatSelectorDsl(int sel) {
     char hex[8];
     std::snprintf(hex, sizeof(hex), "0x%02X", s);
 
-    // Named town services (explicit OP_0E cases @ 0x160C2).
-    if (s == 0x01) return "shop inn";
-    if (s == 0x02) return "shop training";
-    if (s == 0x03) return "shop tavern";
-    if (s == 0x04) return "shop temple";
-    if (s == 0x05) return "shop mages_guild";
-    if (s == 0x06) return "shop blacksmith";
-    if (s == 0x07) return "shop general_store";
-    if (s == 0x08) return "shop arena";
-    if (s == 0x64) return "shop circus";
+    if (const char* shop = shopSelectorToken(s)) return std::string("shop ") + shop;
 
     if (const char* lab = selectorHandlerLabel(s)) {
         char buf[96];
@@ -303,15 +287,7 @@ std::string formatSelectorDsl(int sel) {
 
 std::string formatSelectorSummary(int sel) {
     const int s = sel & 0xFF;
-    if (s == 0x01) return "shop inn";
-    if (s == 0x02) return "shop training";
-    if (s == 0x03) return "shop tavern";
-    if (s == 0x04) return "shop temple";
-    if (s == 0x05) return "shop mages_guild";
-    if (s == 0x06) return "shop blacksmith";
-    if (s == 0x07) return "shop general_store";
-    if (s == 0x08) return "shop arena";
-    if (s == 0x64) return "shop circus";
+    if (const char* shop = shopSelectorToken(s)) return std::string("shop ") + shop;
     if (const char* lab = selectorHandlerLabel(s)) return lab;
     if (auto bin = binExecSelector(s)) {
         char buf[64];
@@ -360,8 +336,7 @@ const char* sayVariantForOp(uint8_t op) {
 }
 
 int classFieldByName(const std::string& name) {
-    std::string lower;
-    for (char c : name) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    const std::string lower = asciiLower(name);
     if (lower == "knight") return 0x00;
     if (lower == "paladin") return 0x01;
     if (lower == "archer") return 0x02;
@@ -373,9 +348,40 @@ int classFieldByName(const std::string& name) {
     return 0;
 }
 
+const char* shopSelectorToken(int sel) {
+    switch (sel & 0xFF) {
+        case 0x01: return "inn";
+        case 0x02: return "training";
+        case 0x03: return "tavern";
+        case 0x04: return "temple";
+        case 0x05: return "mages_guild";
+        case 0x06: return "blacksmith";
+        case 0x07: return "general_store";
+        case 0x08: return "arena";
+        case 0x64: return "circus";
+        default: return nullptr;
+    }
+}
+
+std::vector<uint8_t> encodeAnswerBytes(const std::string& text) {
+    std::vector<uint8_t> out(10, 0xFA);
+    for (size_t i = 0; i < text.size() && i < 10; ++i)
+        out[i] = static_cast<uint8_t>((0x11A - static_cast<unsigned char>(text[i])) & 0xFF);
+    return out;
+}
+
+std::string decodeAnswerBytes(const std::vector<uint8_t>& args) {
+    std::string decoded;
+    for (uint8_t b : args) {
+        int c = (0x11A - b) & 0xFF;
+        decoded += (c >= 0x20 && c <= 0x7E) ? static_cast<char>(c) : '?';
+    }
+    while (!decoded.empty() && decoded.back() == ' ') decoded.pop_back();
+    return decoded;
+}
+
 int selectorByShopOrQuest(const std::string& kind, const std::string& name) {
-    std::string n;
-    for (char c : name) n += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    const std::string n = asciiLower(name);
     if (kind == "shop") {
         if (n == "inn") return 0x01;
         if (n == "training") return 0x02;

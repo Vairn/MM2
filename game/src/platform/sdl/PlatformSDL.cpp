@@ -447,8 +447,8 @@ bool resolveDataDir(const char *hint, char *out, size_t out_cap)
             writeResolved(hint);
             return true;
         }
-        char amiga_child[MM2_PATH_SCRATCH_CAP];
-        if (joinDataPath(amiga_child, sizeof(amiga_child), hint, "amiga") && probeMapDat(amiga_child)) {
+        char *const amiga_child = mm2_path_scratch_b();
+        if (joinDataPath(amiga_child, MM2_PATH_SCRATCH_CAP, hint, "amiga") && probeMapDat(amiga_child)) {
             writeResolved(amiga_child);
             return true;
         }

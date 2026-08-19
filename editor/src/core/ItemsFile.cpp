@@ -55,8 +55,6 @@ Bytes ItemsFile::encode() const {
 
 bool ItemsFile::load(const std::string& path) {
     Bytes b;
-    // GOG ITEMS.DAT is already plain (byte-identical to items.dat); only the
-    // filename casing differs, so this just needs the flexible lookup.
     if (!pcDatReadFlexible(path, b)) return false;
     return decode(b);
 }

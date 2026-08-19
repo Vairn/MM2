@@ -1308,7 +1308,8 @@ int main()
         expect(scast.tickSheetCastAux(gs, '1'), "explore-cast: Fly accepts 1", fails);
         expect(gs.screenId() == 5, "explore-cast: Fly A1 → screen 5", fails);
         expect(gs.coordX() == 0xFF && gs.coordY() == 0xFF, "explore-cast: Fly leaves $FF coords", fails);
-        expect(mm2_gs_u8(gs.a4(), -0x79E4) == 1, "explore-cast: Fly sets -$79E4", fails);
+        expect(mm2_gs_u8(gs.a4(), MM2_GS_WALK_SPELL_LATCH) == 1,
+               "explore-cast: Fly sets walk/spell latch", fails);
         expect(!scast.sheetCastPending(), "explore-cast: Fly completes", fails);
         expect(!scast.active(), "explore-cast: Fly done stays Inactive", fails);
 

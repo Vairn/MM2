@@ -1,26 +1,20 @@
 #pragma once
-// MM2 spell tables + item "use power" decoding.
+// Spell tables + item "use power" decoding.
 //
-// Two schools (Sorcerer, Cleric), 9 levels each, with a different spell count
-// per level (identical for both schools): L1..L9 = 7,7,6,6,5,5,4,4,4 (48 each).
-// Within a level, spells are numbered in the order stored here (alphabetical,
-// which matches the in-game numbering used by item effect bytes and the manual).
+// Two schools, 9 levels, same counts: L1..L9 = 7,7,6,6,5,5,4,4,4 (48 each).
+// Order within a level matches in-game / items.dat effect bytes.
 //
-// The reference data below (SP/gem cost, cast restriction, object, description)
-// is transcribed from the MM2 "Gates to Another World" manual, Appendix B.
-// It cross-validates the spells.dat 2-byte record decode (see SpellsFile.h):
-//   byte0: bits 0x80 = non-combat-only, 0x40 = combat-only (neither = anytime),
-//          bit 0x10 = "special/computed cost" flag, low nibble = gem cost.
-//   byte1: bit 0x80 = outdoor-only, bits 6-4 = per-level SP multiplier,
-//          low nibble = flat SP cost (0 => per caster level).
+// spells.dat 2-byte record (see SpellsFile.h):
+//   byte0: 0x80 non-combat-only, 0x40 combat-only (neither = anytime),
+//          0x10 special/computed cost, low nibble = gem cost.
+//   byte1: 0x80 outdoor-only, bits 6-4 = per-level SP multiplier,
+//          low nibble = flat SP (0 => per caster level).
 //
-// The items.dat effect byte (0x0F) is a *flat spell index*, not a (type,amount)
-// pair (verified byte-exact vs the RPGClassics "Use Ability" column):
-//   0x00        no use power
-//   0x01..0x7F  non-spell stat boost (hi nibble = kind, lo = amount)
-//   0x81..0xB0  Sorcerer spell, flat index = byte - 0x80
-//   0xB1..0xE0  Cleric   spell, flat index = byte - 0xB0
-// See EXTRACTED/docs/19-spells-and-item-use.md and tools/mm2_spells.py.
+// items.dat 0x0F is a flat index:
+//   0x00        none
+//   0x01..0x7F  non-spell boost (hi nibble = kind, lo = amount)
+//   0x81..0xB0  Sorcerer, index = byte - 0x80
+//   0xB1..0xE0  Cleric,   index = byte - 0xB0
 
 #include <cstdint>
 #include <string>

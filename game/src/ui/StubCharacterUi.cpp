@@ -20,18 +20,6 @@ static const char *kAlignNames[] = {
     "Good", "Neutral", "Evil",
 };
 
-bool joinPath(char *out, std::size_t out_cap, const char *dir, const char *name)
-{
-    const std::size_t dir_len = std::strlen(dir);
-    const std::size_t name_len = std::strlen(name);
-    const bool need_sep = dir_len > 0 && dir[dir_len - 1] != '/' && dir[dir_len - 1] != '\\';
-    if (dir_len + name_len + (need_sep ? 1u : 0u) + 1u > out_cap) {
-        return false;
-    }
-    std::snprintf(out, out_cap, "%s%s%s", dir, need_sep ? "/" : "", name);
-    return true;
-}
-
 const char *className(uint8_t id)
 {
     if (id < sizeof(kClassNames) / sizeof(kClassNames[0])) {

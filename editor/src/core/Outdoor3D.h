@@ -1,13 +1,10 @@
 #pragma once
 // Outdoor first-person view (outdoor_3d_master @0x18870).
 //
-// Pipeline (see EXTRACTED/docs/15-3d-view-and-game-screen.md):
 //   1. refreshOutdoorHood   — page-0 rows -> -$55D4 / -$55D0 / -$55CC
 //   2. processTerrainRows   — @0x9544 terrain lookup -> -$55C6 / -$55C2 / -$55BE
 //   3. buildDecorBlits      — @0x182D8 floor decor on biome sheet (-$7A0A)
 //   4. buildHorizonBlits    — @0x1877A horizon from outdoor1/2/3.32
-//
-// Kept in sync with tools/view3d_outdoor.py.
 
 #include <array>
 #include <cstdint>

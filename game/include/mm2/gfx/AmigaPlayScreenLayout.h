@@ -1,22 +1,8 @@
 #pragma once
-// Amiga play-screen layout traced from EXTRACTED/mm2.capstone.annotated.asm.
-// See EXTRACTED/docs/15-3d-view-and-game-screen.md §4.
-//
-// Border / chrome ASM (A4-relative thunks):
-//   console_box          JSR -$809E(A4)  @ 0x7F68  — red 8×8 glyph frame (glyphs 0x0E..0x15)
-//   pixel_line_draw      JSR -$8080(A4)  @ 0x7F80  — 1px red line segments
-//   fill_rect            JSR -$807A(A4)  @ 0x7F86  — solid fill (Protection panel backdrop)
-//
-// Key call sites:
-//   play_screen_chrome_init   0x54F2  — first-time HUD chrome (807A fills + 60B6 lines)
-//   draw_viewport_red_lines   0x60B6  — three 8080 segments (status-bar column dividers)
-//   play_screen_panel_box     0x55D8  — 809E box row=0x11 col=0x26 (Protection header rule)
-//   show_command_reference    0x5D54  — 809E + party/command text rows
-//   draw_party_status_panel   0x6150  — party lines rows 0x13..0x16
-//   clear_cell_rect           0x42DC  — win_clear_cells (not nwcp portraits)
-//   play_frame_draw           0x5444  — 5312 party lines → 53A0 viewport (2ECE 3D)
-//
-// 3D backdrop anchors (view_3d_master @ 0x2ECE): sky @ (8,8), floor @ (8,68), 208×60 each.
+// Play-screen cells. Thunks: console_box -$809E @ 0x7F68 (glyphs 0x0E..0x15),
+// pixel_line -$8080 @ 0x7F80, fill_rect -$807A @ 0x7F86.
+// Chrome 0x54F2 / 0x60F4, party 0x6150, clear_cell_rect 0x42DC.
+// 3D hood @ 0x2ECE: sky (8,8), floor (8,68), 208×60.
 
 namespace mm2::gfx::play_layout {
 

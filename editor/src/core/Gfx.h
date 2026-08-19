@@ -1,23 +1,17 @@
 #pragma once
-// Decoder for the MM2 planar image-chunk format shared by:
-//   - .32 tileset/sprite files (image chunk begins at offset 0)
-//   - .anm "TV" animations    (image chunk located after the prelude/sequence
-//                               via an FF 00 marker)
-//
-// Note: `globe.32` and `disk.32` share the `.32` extension in the resource table
-// but are XOR string/data blobs, not image chunks — see decode_globe_amiga.py.
-// Gfx.cpp tryDecryptXor32 is a legacy heuristic and must not be treated as gfx.
-// Image chunk layout (big-endian words), see EXTRACTED/docs/07-anm-tv-format.md
-// and tools/decode_anm.py:
+// Planar image-chunk decoder for .32 tilesets (chunk at offset 0) and .anm
+// TV animations (chunk after prelude/sequence, located via FF 00).
+// globe.32 / disk.32 share the .32 extension but are XOR blobs, not images
+// (tryDecryptXor32 is a leftover heuristic).
+// Layout (big-endian words):
 //   u16 frame_count
 //   u16 depth_or_mode      (observed 3; plane count is fixed at 5)
 //   frame_count * { u16 width; u16 height; u16 flags }
-//   32 * u16 palette        (Amiga 0x0RGB, 4 bits per channel)
-//   nibble-RLE plane stream  (5 concatenated bitplanes per frame)
+//   32 * u16 palette        (Amiga 0x0RGB)
+//   nibble-RLE plane stream (5 concatenated bitplanes per frame)
 //
-// Pixel codec: command byte; if hi nibble is 0x0 or 0xF emit that nibble
-// (low_nibble+1) times, else emit the two literal nibbles. Nibbles pack MSB
-// first into bytes. Each frame decodes to 5 * rassize(w,h) bytes.
+// Pixel codec: command byte; hi nibble 0x0 or 0xF repeats that nibble
+// (low_nibble+1) times, else two literal nibbles. MSB first.
 
 #include <cstdint>
 #include <string>
@@ -84,9 +78,7 @@ GfxImage gfxDecode(const Bytes& bytes, bool isAnm, const uint8_t (*palette_overr
 bool gfxLoad(const std::string& path, bool isAnm, GfxImage& out,
              const uint8_t (*palette_override)[4] = nullptr);
 
-// --- .32 encoder (inverse of gfxDecode for chunk-at-offset-0 sheets) ----------
-//
-// One indexed frame: row-major palette indices (0..31), index 0 = transparent.
+// .32 encoder (inverse of gfxDecode for chunk-at-offset-0 sheets).
 struct GfxEncodeFrame {
     int width = 0;
     int height = 0;
@@ -94,9 +86,7 @@ struct GfxEncodeFrame {
     std::vector<uint8_t> indices;  // width*height, values 0..31
 };
 
-// Build a complete .32 byte stream: header + frame table + 32-colour palette
-// (RGBA in, packed to Amiga 0x0RGB) + nibble-RLE plane streams. The codec is
-// byte-identical to the original game data on round-trip.
+// Encode header + frame table + 32-colour palette + nibble-RLE planes.
 Bytes gfxEncode32(const std::vector<GfxEncodeFrame>& frames,
                   const uint8_t palette[kGfxPaletteColors][4], int depth);
 
@@ -105,12 +95,9 @@ Bytes gfxEncode32(const std::vector<GfxEncodeFrame>& frames,
 Bytes gfxEncode32FromImage(const GfxImage& img);
 bool gfxSave32(const std::string& path, const GfxImage& img);
 
-// --- .anm TV-prelude composition (runtime-accurate; game must use this path) ---
-//
-// Stored image frames are NOT what the game blits for N>0:
-//   frame 0  = full base sprite
-//   frame N  = patch bitmap; draw at prelude[N-1] over frame 0 after clearing that rect
-// Sequence stream indices refer to these composed states, not raw patch sheets.
+// --- .anm TV-prelude composition ---
+// frame 0 = full base sprite; frame N = patch at prelude[N-1] over frame 0
+// (rect cleared first). Sequence indices refer to composed states.
 
 struct GfxAnmCanvas {
     int minX = 0;

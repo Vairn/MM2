@@ -1,7 +1,5 @@
 #pragma once
-// Generic raw-bytes container for formats not yet structurally decoded
-// (spells.dat = 256 bytes, unknown layout; event.dat = container decoded by
-// tools/decode_event.py but edited here as raw for now).
+// Generic raw-bytes container.
 
 #include <string>
 

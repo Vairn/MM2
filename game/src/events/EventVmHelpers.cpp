@@ -2,6 +2,7 @@
 
 #include "mm2/CppStdCompat.h"
 #include "mm2/events/EventFieldMap.h"
+#include "mm2/events/EventOp.h"
 #include "mm2/gameplay/ExploreActions.h"
 #include "mm2/gameplay/RosterSkills.h"
 #include "mm2/platform/Audio.h"
@@ -81,6 +82,107 @@ Mm2RosterRecord *rosterRecordMut(Mm2RosterFile *roster, int roster_idx)
     return &roster->records[roster_idx];
 }
 
+enum class PartyPoolKind : uint8_t { Gold, Gems, Food };
+
+int partyPoolRecOff(PartyPoolKind kind)
+{
+    switch (kind) {
+    case PartyPoolKind::Gold:
+        return static_cast<int>(offsetof(Mm2RosterRecord, gold));
+    case PartyPoolKind::Gems:
+        return static_cast<int>(offsetof(Mm2RosterRecord, gems));
+    case PartyPoolKind::Food:
+        return static_cast<int>(offsetof(Mm2RosterRecord, food));
+    }
+    return 0;
+}
+
+uint32_t partyPoolWidthMask(PartyPoolKind kind, uint32_t v)
+{
+    switch (kind) {
+    case PartyPoolKind::Gold:
+        return v;
+    case PartyPoolKind::Gems:
+        return v & 0xFFFFu;
+    case PartyPoolKind::Food:
+        return v & 0xFFu;
+    }
+    return v;
+}
+
+bool partyPoolLoad(const uint8_t *a4, const Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
+                   int party_slot, PartyPoolKind kind, uint32_t *out)
+{
+    if (!out) {
+        return false;
+    }
+    if (roster && launch) {
+        const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[party_slot]);
+        if (!rec) {
+            return false;
+        }
+        if (kind == PartyPoolKind::Gold) {
+            *out = rec->gold;
+        } else if (kind == PartyPoolKind::Gems) {
+            *out = rec->gems;
+        } else {
+            *out = rec->food;
+        }
+        return true;
+    }
+    if (!a4) {
+        return false;
+    }
+    const int idx = partyRosterIndex(a4, party_slot);
+    if (idx < 0) {
+        return false;
+    }
+    const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + partyPoolRecOff(kind);
+    if (kind == PartyPoolKind::Gold) {
+        *out = mm2_gs_u32(a4, off);
+    } else if (kind == PartyPoolKind::Gems) {
+        *out = mm2_gs_u16(a4, off);
+    } else {
+        *out = mm2_gs_u8(a4, off);
+    }
+    return true;
+}
+
+void partyPoolStore(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch, int party_slot,
+                    PartyPoolKind kind, uint32_t value)
+{
+    value = partyPoolWidthMask(kind, value);
+    if (roster && launch) {
+        Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[party_slot]);
+        if (!rec) {
+            return;
+        }
+        if (kind == PartyPoolKind::Gold) {
+            rec->gold = value;
+        } else if (kind == PartyPoolKind::Gems) {
+            rec->gems = static_cast<uint16_t>(value);
+        } else {
+            rec->food = static_cast<uint8_t>(value);
+        }
+        return;
+    }
+    if (!a4) {
+        return;
+    }
+    const int idx = partyRosterIndex(a4, party_slot);
+    if (idx < 0) {
+        return;
+    }
+    const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + partyPoolRecOff(kind);
+    if (kind == PartyPoolKind::Gold) {
+        mm2_gs_set_u32(a4, off, value);
+    } else if (kind == PartyPoolKind::Gems) {
+        mm2_gs_set_u16(a4, off, static_cast<uint16_t>(value));
+    } else {
+        mm2_gs_set_u8(a4, off, static_cast<uint8_t>(value));
+    }
+}
+
 /** $7BBE: share gold equally among eligible (< 0x18) members; needs 2+ eligible.
  *  Truncating divide remainder accrues to the initiator (first eligible slot). */
 void partyShareGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
@@ -94,57 +196,24 @@ void partyShareGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *la
             continue;
         }
         uint32_t gold = 0;
-        bool have = false;
-        if (roster && launch) {
-            const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[i]);
-            if (rec) {
-                gold = rec->gold;
-                have = true;
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx >= 0) {
-                gold = mm2_gs_u32(a4, MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x66);
-                have = true;
-            }
+        if (!partyPoolLoad(a4, roster, launch, i, PartyPoolKind::Gold, &gold)) {
+            continue;
         }
-        if (have) {
-            eligible[n++] = i;
-            total += gold;
-        }
+        eligible[n++] = i;
+        total += gold;
     }
     if (n <= 1) {
         return; /* $7BBE: nothing to share with a single member. */
     }
     const uint32_t share = total / static_cast<uint32_t>(n);
     for (int k = 0; k < n; ++k) {
-        const int i = eligible[k];
-        if (roster && launch) {
-            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[i]);
-            if (rec) {
-                rec->gold = share;
-                total -= share;
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x66;
-            mm2_gs_set_u32(a4, off, share);
-            total -= share;
-        }
+        partyPoolStore(a4, roster, launch, eligible[k], PartyPoolKind::Gold, share);
+        total -= share;
     }
-    /* Rounding remainder -> initiator (first eligible). */
-    const int first = eligible[0];
     if (total) {
-        if (roster && launch) {
-            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[first]);
-            if (rec) {
-                rec->gold = static_cast<uint32_t>(rec->gold + total);
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, first);
-            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x66;
-            mm2_gs_set_u32(a4, off,
-                           mm2_gs_u32(a4, off) + total);
+        uint32_t first = 0;
+        if (partyPoolLoad(a4, roster, launch, eligible[0], PartyPoolKind::Gold, &first)) {
+            partyPoolStore(a4, roster, launch, eligible[0], PartyPoolKind::Gold, first + total);
         }
     }
 }
@@ -155,16 +224,9 @@ void partyShareGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *la
 {
     uint32_t total = 0;
     for (int i = 0; i < count; ++i) {
-        if (roster && launch) {
-            const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[i]);
-            if (rec) {
-                total += rec->gems;
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx >= 0) {
-                total += mm2_gs_u16(a4, MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x5C);
-            }
+        uint32_t gems = 0;
+        if (partyPoolLoad(a4, roster, launch, i, PartyPoolKind::Gems, &gems)) {
+            total += gems;
         }
     }
     if (count <= 0) {
@@ -172,36 +234,18 @@ void partyShareGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *la
     }
     const uint16_t share = static_cast<uint16_t>(total / static_cast<uint32_t>(count));
     for (int i = 0; i < count; ++i) {
-        if (roster && launch) {
-            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[i]);
-            if (rec) {
-                rec->gems = share;
-                total -= share;
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx < 0) {
-                continue;
-            }
-            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x5C;
-            mm2_gs_set_u16(a4, off, share);
-            total -= share;
+        uint32_t dummy = 0;
+        if (!partyPoolLoad(a4, roster, launch, i, PartyPoolKind::Gems, &dummy)) {
+            continue;
         }
+        partyPoolStore(a4, roster, launch, i, PartyPoolKind::Gems, share);
+        total -= share;
     }
-    /* Rounding remainder -> initiator (slot 0). */
     if (total) {
-        if (roster && launch) {
-            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[0]);
-            if (rec) {
-                rec->gems = static_cast<uint16_t>(rec->gems + static_cast<uint16_t>(total));
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, 0);
-            if (idx >= 0) {
-                const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x5C;
-                mm2_gs_set_u16(a4, off,
-                               static_cast<uint16_t>(mm2_gs_u16(a4, off) + static_cast<uint16_t>(total)));
-            }
+        uint32_t first = 0;
+        if (partyPoolLoad(a4, roster, launch, 0, PartyPoolKind::Gems, &first)) {
+            partyPoolStore(a4, roster, launch, 0, PartyPoolKind::Gems,
+                           first + static_cast<uint16_t>(total));
         }
     }
 }
@@ -212,16 +256,9 @@ void partyShareFood(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *la
 {
     uint32_t total = 0;
     for (int i = 0; i < count; ++i) {
-        if (roster && launch) {
-            const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[i]);
-            if (rec) {
-                total += rec->food;
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx >= 0) {
-                total += mm2_gs_u8(a4, MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x25);
-            }
+        uint32_t food = 0;
+        if (partyPoolLoad(a4, roster, launch, i, PartyPoolKind::Food, &food)) {
+            total += food;
         }
     }
     if (count <= 0) {
@@ -229,38 +266,63 @@ void partyShareFood(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *la
     }
     const uint8_t share = static_cast<uint8_t>(total / static_cast<uint32_t>(count));
     for (int i = 0; i < count; ++i) {
-        if (roster && launch) {
-            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[i]);
-            if (rec) {
-                rec->food = share;
-                total -= share;
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx < 0) {
-                continue;
-            }
-            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x25;
-            mm2_gs_set_u8(a4, off, share);
-            total -= share;
+        uint32_t dummy = 0;
+        if (!partyPoolLoad(a4, roster, launch, i, PartyPoolKind::Food, &dummy)) {
+            continue;
         }
+        partyPoolStore(a4, roster, launch, i, PartyPoolKind::Food, share);
+        total -= share;
     }
-    /* Rounding remainder -> initiator (slot 0). */
     if (total) {
-        if (roster && launch) {
-            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[0]);
-            if (rec) {
-                rec->food = static_cast<uint8_t>(rec->food + static_cast<uint8_t>(total));
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, 0);
-            if (idx >= 0) {
-                const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x25;
-                mm2_gs_set_u8(a4, off,
-                              static_cast<uint8_t>(mm2_gs_u8(a4, off) + static_cast<uint8_t>(total)));
-            }
+        uint32_t first = 0;
+        if (partyPoolLoad(a4, roster, launch, 0, PartyPoolKind::Food, &first)) {
+            partyPoolStore(a4, roster, launch, 0, PartyPoolKind::Food,
+                           first + static_cast<uint8_t>(total));
         }
     }
+}
+
+bool partyPoolPay(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch, uint32_t amount,
+                  PartyPoolKind kind)
+{
+    const int count = partyActiveCount(a4, launch);
+    uint32_t total = 0;
+    for (int i = 0; i < count; ++i) {
+        if (!partySlotEligible(a4, launch, i)) {
+            continue;
+        }
+        uint32_t v = 0;
+        if (partyPoolLoad(a4, roster, launch, i, kind, &v)) {
+            total += v;
+        }
+    }
+    if (total < amount) {
+        return false;
+    }
+    uint32_t remain = partyPoolWidthMask(kind, total - amount);
+    bool pooled = false;
+    for (int i = 0; i < count; ++i) {
+        if (!partySlotEligible(a4, launch, i)) {
+            continue;
+        }
+        uint32_t dummy = 0;
+        if (!partyPoolLoad(a4, roster, launch, i, kind, &dummy)) {
+            continue;
+        }
+        partyPoolStore(a4, roster, launch, i, kind, pooled ? 0u : remain);
+        pooled = true;
+        remain = 0;
+    }
+    if (pooled) {
+        if (kind == PartyPoolKind::Gold) {
+            partyShareGold(a4, roster, launch, count);
+        } else if (kind == PartyPoolKind::Gems) {
+            partyShareGems(a4, roster, launch, count);
+        } else {
+            partyShareFood(a4, roster, launch, count);
+        }
+    }
+    return pooled || amount == 0;
 }
 
 /* Item storage is Structure-of-Arrays (Mm2RosterRecord: equipped_id[6]/
@@ -268,8 +330,9 @@ void partyShareFood(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *la
  * SoA layout confirmed by OP_16 @ 0x16520 and OP_19 @ 0x165D8. */
 bool itemInRecord(const Mm2RosterRecord &rec, uint8_t item_id)
 {
-    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
-        if (rec.equipped_id[i] == item_id || rec.backpack_id[i] == item_id) {
+    const uint8_t *raw = rosterRecordBytes(rec);
+    for (int i = 0; i < kRosterItemSlots; ++i) {
+        if (rosterEquipId(raw, i) == item_id || rosterBackpackId(raw, i) == item_id) {
             return true;
         }
     }
@@ -278,19 +341,16 @@ bool itemInRecord(const Mm2RosterRecord &rec, uint8_t item_id)
 
 bool consumeItemInRecord(Mm2RosterRecord &rec, uint8_t item_id)
 {
-    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
-        if (rec.equipped_id[i] == item_id) {
-            rec.equipped_id[i] = 0;
-            rec.equipped_charges[i] = 0;
-            rec.equipped_flags[i] = 0;
+    uint8_t *raw = rosterRecordBytes(rec);
+    for (int i = 0; i < kRosterItemSlots; ++i) {
+        if (rosterEquipId(raw, i) == item_id) {
+            rosterWriteEquip(raw, i, 0, 0, 0);
             return true;
         }
     }
-    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
-        if (rec.backpack_id[i] == item_id) {
-            rec.backpack_id[i] = 0;
-            rec.backpack_charges[i] = 0;
-            rec.backpack_flags[i] = 0;
+    for (int i = 0; i < kRosterItemSlots; ++i) {
+        if (rosterBackpackId(raw, i) == item_id) {
+            rosterWriteBackpack(raw, i, 0, 0, 0);
             return true;
         }
     }
@@ -361,7 +421,7 @@ bool eventVmIsTownServiceSelector(uint8_t sel)
 /* ROM opcode_len_tbl @ A4-$6CC8 (data hunk file offset 0x1336), read verbatim
  * via tools/dump_event_token_table.py. Differs from naive "1 + argc" at op
  * 0x00 (0, not 1) and op 0x25 (2, not 3) -- see header doc comment. */
-constexpr uint8_t kOpTokenDelta[0x33] = {
+constexpr uint8_t kOpTokenDelta[kEventOpFirstInvalid] = {
     0,  2,  2,  2,  2,  2,  2,  1,  1,  1,  1,  3,  3,  2,  2,  1,  2,  2,  13, 11, 1,  4,  3,  3,  5,  5,  3,
     2,  2,  2,  2,  7,  7,  4,  3,  3,  3,  2,  1,  1,  3,  1,  15, 2,  2,  3,  3,  1,  11, 4,  2,
 };
@@ -435,13 +495,13 @@ bool eventVmStringLooksLikeBytecode(const uint8_t *bytes, size_t len)
         return false;
     }
     const uint8_t op = bytes[0];
-    if (op == 0 || op >= 0x33) {
+    if (op == static_cast<uint8_t>(EventOp::Invalid) || op >= kEventOpFirstInvalid) {
         return false;
     }
-    if (op == 0x12) {
+    if (op == static_cast<uint8_t>(EventOp::EncounterSetup)) {
         return len >= 12;
     }
-    if (op == 0x13) {
+    if (op == static_cast<uint8_t>(EventOp::EncounterSetupB)) {
         return len >= 10;
     }
     if (len >= 2 && bytes[1] < 0x20) {
@@ -561,7 +621,7 @@ uint32_t eventVmPartyGoldTotal(const uint8_t *a4, const Mm2RosterFile *roster,
         if (idx < 0) {
             continue;
         }
-        const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x66;
+        const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + partyPoolRecOff(PartyPoolKind::Gold);
         total += mm2_gs_u32(a4, off);
     }
     return total;
@@ -587,7 +647,7 @@ int eventVmCountPartyNibbleMatches(const uint8_t *a4, const Mm2RosterFile *roste
             if (!rec || rec->condition >= 0x81) {
                 continue;
             }
-            const uint8_t packed = reinterpret_cast<const uint8_t *>(rec)[0x50];
+            const uint8_t packed = rosterRecordBytes(*rec)[0x50];
             if ((packed & 0x0F) == id) {
                 ++count;
             }
@@ -606,7 +666,7 @@ int eventVmCountPartyNibbleMatches(const uint8_t *a4, const Mm2RosterFile *roste
             continue;
         }
         const int base = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE;
-        if (mm2_gs_u8(a4, base + 0x26) >= 0x81) {
+        if (mm2_gs_u8(a4, base + static_cast<int>(offsetof(Mm2RosterRecord, condition))) >= 0x81) {
             continue;
         }
         const uint8_t packed = mm2_gs_u8(a4, base + 0x50);
@@ -647,7 +707,8 @@ int eventVmCountLivingPartyMembers(const uint8_t *a4, const Mm2RosterFile *roste
             continue;
         }
         const int base = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE;
-        if ((mm2_gs_u8(a4, base + 0x26) & 0xE0) == 0) {
+        if ((mm2_gs_u8(a4, base + static_cast<int>(offsetof(Mm2RosterRecord, condition))) & 0xE0) ==
+            0) {
             ++count;
         }
     }
@@ -667,15 +728,9 @@ bool eventVmPartyGiveItem(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaun
             if (!rec) {
                 continue;
             }
-            auto *raw = reinterpret_cast<uint8_t *>(rec);
-            for (int m = 0; m < 6; ++m) {
-                if (raw[0x3A + m] == 0) {
-                    raw[0x3A + m] = item_id;
-                    raw[0x40 + m] = charges;
-                    raw[0x46 + m] = flags;
-                    placed = true;
-                    break;
-                }
+            uint8_t *raw = rosterRecordBytes(*rec);
+            if (rosterPlaceInFirstEmptyBackpack(raw, item_id, charges, flags)) {
+                placed = true;
             }
         }
     }
@@ -724,11 +779,10 @@ bool eventVmPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch
         if (!rec) {
             continue;
         }
-        for (int m = 0; m < MM2_ROSTER_ITEM_SLOTS; ++m) {
-            if (rec->backpack_id[m] == item_id) {
-                rec->backpack_id[m] = 0;
-                rec->backpack_charges[m] = 0;
-                rec->backpack_flags[m] = 0;
+        uint8_t *raw = rosterRecordBytes(*rec);
+        for (int m = 0; m < kRosterItemSlots; ++m) {
+            if (rosterBackpackId(raw, m) == item_id) {
+                rosterWriteBackpack(raw, m, 0, 0, 0);
                 return true;
             }
         }
@@ -812,9 +866,9 @@ uint8_t eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2Par
     (void)field_w;
 
     /* 0x16430: snapshot incoming cond → -$5D3F; clear -$5D41; clear cond. */
-    const uint8_t incoming_cond = mm2_gs_u8(a4, MM2_GS_COND_FLAG);
+    const uint8_t incoming_cond = eventCond(a4);
     mm2_gs_set_u8(a4, MM2_GS_SAVED_COND_FLAG, incoming_cond);
-    mm2_gs_set_u8(a4, MM2_GS_COND_FLAG, 0);
+    setEventCond(a4, 0);
 
     uint8_t effective_or = or_m;
     uint8_t spec = member_spec;
@@ -884,7 +938,7 @@ uint8_t eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2Par
 
         uint8_t byte_val = 0;
         if (roster) {
-            const uint8_t *raw = reinterpret_cast<const uint8_t *>(&roster->records[roster_idx]);
+            const uint8_t *raw = rosterRecordBytes(roster->records[roster_idx]);
             if (field_off < MM2_ROSTER_RECORD_SIZE) {
                 byte_val = raw[field_off];
             }
@@ -897,7 +951,7 @@ uint8_t eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2Par
             /* 0x164E6: (field & and) | or */
             byte_val = static_cast<uint8_t>((byte_val & and_m) | effective_or);
             if (roster) {
-                uint8_t *raw = reinterpret_cast<uint8_t *>(&roster->records[roster_idx]);
+                uint8_t *raw = rosterRecordBytes(roster->records[roster_idx]);
                 if (field_off < MM2_ROSTER_RECORD_SIZE) {
                     raw[field_off] = byte_val;
                 }
@@ -916,7 +970,7 @@ uint8_t eventVmApplyPartyByteOp(uint8_t *a4, Mm2RosterFile *roster, const Mm2Par
     }
 
     if (!masked) {
-        mm2_gs_set_u8(a4, MM2_GS_COND_FLAG, cond);
+        setEventCond(a4, cond);
     }
     return masked ? 0 : cond;
 }
@@ -972,7 +1026,7 @@ uint32_t eventVmDeductPartyGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2Par
         if (idx < 0) {
             continue;
         }
-        const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x66;
+        const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + partyPoolRecOff(PartyPoolKind::Gold);
         uint32_t gold = mm2_gs_u32(a4, off);
         if (gold >= left) {
             mm2_gs_set_u32(a4, off, gold - left);
@@ -1006,19 +1060,18 @@ void eventVmApplyOp31Damage(Mm2RosterRecord *rec, uint16_t damage)
     if (!rec || damage == 0) {
         return;
     }
-    auto *raw = reinterpret_cast<uint8_t *>(rec);
-    if (raw[0x26] >= 0x80) {
+    if (rec->condition >= 0x80) {
         return;
     }
-    raw[0x26] = static_cast<uint8_t>(raw[0x26] & 0xEF); /* andi #$EF @ 0x4AA0 */
+    rec->condition = static_cast<uint8_t>(rec->condition & 0xEF); /* andi #$EF @ 0x4AA0 */
     const uint16_t hp = rec->hp_max;
     uint8_t lethal = 0;
-    if (raw[0x26] & 0x40) {
+    if (rec->condition & 0x40) {
         /* Already unconscious bit6 → force dead 0x81 @ 0x4AB2. */
-        raw[0x26] = 0x81;
+        rec->condition = 0x81;
         lethal = 1;
     } else if (damage >= hp) {
-        raw[0x26] = static_cast<uint8_t>(raw[0x26] | 0x40);
+        rec->condition = static_cast<uint8_t>(rec->condition | 0x40);
         lethal = 1;
     } else {
         rec->hp_max = static_cast<uint16_t>(hp - damage);
@@ -1044,7 +1097,7 @@ void eventVmOp31IterateDamage(uint8_t *a4, Mm2RosterFile *roster, const Mm2Party
     uint16_t value = damage;
     if (a4 && spec >= 0x80) {
         spec = static_cast<uint8_t>(spec & 0x7F);
-        value = mm2_gs_u8(a4, MM2_GS_COND_FLAG);
+        value = eventCond(a4);
     }
 
     uint8_t slots[8];
@@ -1060,7 +1113,7 @@ void eventVmOp31IterateDamage(uint8_t *a4, Mm2RosterFile *roster, const Mm2Party
         if (one == 9) {
             one = a4 ? mm2_gs_u8(a4, MM2_GS_SELECTED_MEMBER) : 0;
             if (one == 0 && a4) {
-                one = mm2_gs_u8(a4, MM2_GS_COND_FLAG);
+                one = eventCond(a4);
             }
             if (one == 0) {
                 one = 1;
@@ -1262,8 +1315,8 @@ void searchTrapApply4952(uint8_t *a4, Mm2RosterRecord *member, uint16_t damage, 
     if (!member) {
         return;
     }
-    auto *raw = reinterpret_cast<uint8_t *>(member);
-    if (raw[0x26] >= 0x80) {
+    uint8_t *raw = rosterRecordBytes(*member);
+    if (member->condition >= 0x80) {
         return;
     }
 
@@ -1342,7 +1395,7 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
         if (msg && msg_cap > 0) {
             std::snprintf(msg, msg_cap, "Each share = 0 Gold");
         }
-        mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 3);
+        setEventExit(a4, 3);
         return true;
     }
 
@@ -1369,7 +1422,7 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
     loot.gems = 0;
     loot.sentinel = MM2_FOUND_SENTINEL_EMPTY;
     mm2_found_items_write(a4, &loot);
-    mm2_gs_set_u8(a4, -0x5AD2, 0);
+    mm2_gs_set_u8(a4, MM2_GS_FOUND_PACKS_FULL, 0);
 
     for (int i = 0; i < party_n; ++i) {
         Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[i]);
@@ -1389,7 +1442,7 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
     bool packs_full = false;
 
     for (int s = 0; s < MM2_FOUND_ITEM_SLOTS; ++s) {
-        if (mm2_gs_u8(a4, -0x5AD2) != 0) {
+        if (mm2_gs_u8(a4, MM2_GS_FOUND_PACKS_FULL) != 0) {
             break;
         }
         const uint8_t id = mm2_gs_u8(a4, MM2_GS_FOUND_ITEM_ID + s);
@@ -1404,53 +1457,45 @@ bool eventVmSearchDistribute(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyL
             if (!rec) {
                 continue;
             }
-            auto *raw = reinterpret_cast<uint8_t *>(rec);
-            for (int m = 0; m < 6; ++m) {
-                if (raw[0x3A + m] == 0) {
-                    raw[0x3A + m] = id;
-                    raw[0x40 + m] = charges;
-                    raw[0x46 + m] = flags;
-                    mm2_gs_set_u8(a4, MM2_GS_FOUND_ITEM_ID + s, 0);
-                    mm2_gs_set_u8(a4, MM2_GS_FOUND_ITEM_CHARGES + s, 0);
-                    mm2_gs_set_u8(a4, MM2_GS_FOUND_ITEM_FLAGS + s, 0);
-                    placed = true;
-                    if (finder_n < 3) {
-                        char pname[MM2_ROSTER_NAME_SIZE + 1];
-                        mm2_roster_name_to_cstr(rec, pname, sizeof(pname));
-                        char iname[MM2_ITEMS_NAME_SIZE + 1];
-                        iname[0] = '\0';
-                        if (items && id < MM2_ITEMS_RECORD_COUNT) {
-                            mm2_item_name_to_cstr(&items->records[id], iname, sizeof(iname));
-                        }
-                        if (!iname[0]) {
-                            std::snprintf(iname, sizeof(iname), "Item#%u",
-                                          static_cast<unsigned>(id));
-                        }
-                        const uint8_t plus = static_cast<uint8_t>(flags & 0x3F);
-                        if (plus != 0) {
-                            std::snprintf(finder_lines[finder_n], sizeof(finder_lines[finder_n]),
-                                          "%s found %s +%u", pname, iname,
-                                          static_cast<unsigned>(plus));
-                        } else {
-                            std::snprintf(finder_lines[finder_n], sizeof(finder_lines[finder_n]),
-                                          "%s found %s", pname, iname);
-                        }
-                        ++finder_n;
+            uint8_t *raw = rosterRecordBytes(*rec);
+            if (rosterPlaceInFirstEmptyBackpack(raw, id, charges, flags)) {
+                mm2_gs_set_u8(a4, MM2_GS_FOUND_ITEM_ID + s, 0);
+                mm2_gs_set_u8(a4, MM2_GS_FOUND_ITEM_CHARGES + s, 0);
+                mm2_gs_set_u8(a4, MM2_GS_FOUND_ITEM_FLAGS + s, 0);
+                placed = true;
+                if (finder_n < 3) {
+                    char pname[MM2_ROSTER_NAME_SIZE + 1];
+                    mm2_roster_name_to_cstr(rec, pname, sizeof(pname));
+                    char iname[MM2_ITEMS_NAME_SIZE + 1];
+                    iname[0] = '\0';
+                    if (items && id < MM2_ITEMS_RECORD_COUNT) {
+                        mm2_item_name_to_cstr(&items->records[id], iname, sizeof(iname));
                     }
-                    break;
+                    if (!iname[0]) {
+                        std::snprintf(iname, sizeof(iname), "Item#%u", static_cast<unsigned>(id));
+                    }
+                    const uint8_t plus = static_cast<uint8_t>(flags & 0x3F);
+                    if (plus != 0) {
+                        std::snprintf(finder_lines[finder_n], sizeof(finder_lines[finder_n]),
+                                      "%s found %s +%u", pname, iname, static_cast<unsigned>(plus));
+                    } else {
+                        std::snprintf(finder_lines[finder_n], sizeof(finder_lines[finder_n]),
+                                      "%s found %s", pname, iname);
+                    }
+                    ++finder_n;
                 }
             }
         }
         if (!placed) {
-            const uint8_t ov = mm2_gs_u8(a4, -0x5AD2);
-            mm2_gs_set_u8(a4, -0x5AD2, static_cast<uint8_t>(ov + 1));
+            const uint8_t ov = mm2_gs_u8(a4, MM2_GS_FOUND_PACKS_FULL);
+            mm2_gs_set_u8(a4, MM2_GS_FOUND_PACKS_FULL, static_cast<uint8_t>(ov + 1));
             mm2_gs_set_u8(a4, MM2_GS_FOUND_SENTINEL, MM2_FOUND_SENTINEL_FILLED);
             packs_full = true;
             break;
         }
     }
 
-    mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 3);
+    setEventExit(a4, 3);
     if (msg && msg_cap > 0) {
         /* 0x1ACFA..0x1AD5E share line (gems inline on same row in ASM). */
         size_t used = 0;
@@ -1492,7 +1537,7 @@ SearchPrepareResult eventVmSearchPrepare(uint8_t *a4, Mm2RosterFile *roster,
     if (!a4) {
         return SearchPrepareResult::Nothing;
     }
-    mm2_gs_set_u8(a4, -0x79E4, 0); /* 0x1B1B0 */
+    clearEventWalkSpellLatch(a4); /* 0x1B1B0 */
 
     if (!mm2_found_items_has_loot(a4)) {
         if (out) {
@@ -1508,8 +1553,8 @@ SearchPrepareResult eventVmSearchPrepare(uint8_t *a4, Mm2RosterFile *roster,
         mm2_found_items_read(a4, &peek);
         const uint8_t score = searchComputeRating(peek);
         const uint8_t rating = searchApplyRatingRng(score, rng);
-        mm2_gs_set_u8(a4, -0x79E4, 1); /* 0x1B30C during Identify window */
-        mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 7); /* 0x1B48E */
+        setEventWalkSpellLatch(a4); /* 0x1B30C during Identify window */
+        setEventExit(a4, 7); /* 0x1B48E */
         if (out) {
             out->rating = rating;
             searchFillContainerName(a4, score, out->container_name, sizeof(out->container_name));
@@ -1688,8 +1733,8 @@ void eventVmSearchLeave(uint8_t *a4)
 {
     /* 0x1B45C / 0x1B48E: keep loot, -$7950 := 7. */
     if (a4) {
-        mm2_gs_set_u8(a4, -0x79E4, 0);
-        mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS, 7);
+        clearEventWalkSpellLatch(a4);
+        setEventExit(a4, 7);
     }
 }
 
@@ -1700,88 +1745,27 @@ void eventVmExecEngineCall(uint8_t *a4, uint8_t index, world::MapWorld *world)
         return;
     }
     /* OP_0D @ 0x15EC4 → thunk -$7E42 → play_sound_seq @ 0x6FB8 (ids 0..9).
-     * id 0 gated by Walk Beep (A4-$79AF); 1..9 by Sounds (A4-$79B0).
-     * Older comments mislabeled this as an on-screen draw sequence — ASM is audio. */
+     * id 0 gated by Walk Beep (A4-$79AF); 1..9 by Sounds (A4-$79B0). */
     const bool sounds = (mm2_gs_u8(a4, MM2_GS_SOUNDS_FLAG) & 1) != 0;
     const bool walk = (mm2_gs_u8(a4, MM2_GS_WALK_BEEP_FLAG) & 1) != 0;
     audio::playSoundSeq(index, sounds, walk);
 
     /* Index 0x09 also used as a pragmatic pre-transition refresh latch. */
     if (index == 0x09) {
-        mm2_gs_set_u8(a4, MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(a4, MM2_GS_EXIT_FLAGS) | 1));
+        orEventExit(a4, 1);
     }
 }
-
-namespace {
-
-/** 0x6ACE / 0x6B9A — helpers live at file top of anonymous namespace. */
-
-}  // namespace
 
 bool eventVmPartyTryPayGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                             uint32_t amount)
 {
-    /* party_gold_pool_pay @ 0x6ACE (thunk -$7E6C). */
+    /* party_gold_pool_pay @ 0x6ACE (thunk -$7E6C) then jsr $7BBE. */
     if (a4) {
-        mm2_gs_set_u8(a4, MM2_GS_COND_FLAG, 0); /* 0x6ADC clr -$7951 */
+        setEventCond(a4, 0); /* 0x6ADC clr -$7951 */
     }
-    const int count = partyActiveCount(a4, launch);
-    uint32_t total = 0;
-    for (int i = 0; i < count; ++i) {
-        if (!partySlotEligible(a4, launch, i)) {
-            continue;
-        }
-        if (roster && launch) {
-            const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[i]);
-            if (rec) {
-                total += rec->gold;
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx >= 0) {
-                total += mm2_gs_u32(a4, MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x66);
-            }
-        }
-    }
-    if (total < amount) {
-        return false;
-    }
-    uint32_t remain = total - amount;
-    bool pooled = false;
-    for (int i = 0; i < count; ++i) {
-        if (!partySlotEligible(a4, launch, i)) {
-            continue;
-        }
-        if (roster && launch) {
-            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[i]);
-            if (!rec) {
-                continue;
-            }
-            rec->gold = pooled ? 0u : remain;
-            pooled = true;
-            remain = 0;
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx < 0) {
-                continue;
-            }
-            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x66;
-            mm2_gs_set_u32(a4, off, pooled ? 0u : remain);
-            pooled = true;
-            remain = 0;
-        }
-    }
-    /* 0x6ACE epilogue → jsr $7BBE: re-share the pooled remainder equally among
-     * all eligible (< 0x18) members; any rounding remainder goes to the first
-     * (initiator). Without this, a pool-pay piles every member's gold onto one. */
-    if (pooled) {
-        partyShareGold(a4, roster, launch, count);
-    }
-
-    const bool ok = pooled || amount == 0;
+    const bool ok = partyPoolPay(a4, roster, launch, amount, PartyPoolKind::Gold);
     if (a4 && ok) {
-        mm2_gs_set_u8(a4, MM2_GS_COND_FLAG, 1); /* 0x6B2E */
+        setEventCond(a4, 1); /* 0x6B2E */
     }
     return ok;
 }
@@ -1789,117 +1773,15 @@ bool eventVmPartyTryPayGold(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLa
 bool eventVmPartyTryPayGems(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                             uint16_t amount)
 {
-    /* party_gems_pool_pay @ 0x6B9A (thunk -$7E66). */
-    const int count = partyActiveCount(a4, launch);
-    uint32_t total = 0;
-    for (int i = 0; i < count; ++i) {
-        if (!partySlotEligible(a4, launch, i)) {
-            continue;
-        }
-        if (roster && launch) {
-            const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[i]);
-            if (rec) {
-                total += rec->gems;
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx >= 0) {
-                total += mm2_gs_u16(a4, MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x5C);
-            }
-        }
-    }
-    if (total < amount) {
-        return false;
-    }
-    uint16_t remain = static_cast<uint16_t>(total - amount);
-    bool pooled = false;
-    for (int i = 0; i < count; ++i) {
-        if (!partySlotEligible(a4, launch, i)) {
-            continue;
-        }
-        if (roster && launch) {
-            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[i]);
-            if (!rec) {
-                continue;
-            }
-            rec->gems = pooled ? 0u : remain;
-            pooled = true;
-            remain = 0;
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx < 0) {
-                continue;
-            }
-            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x5C;
-            mm2_gs_set_u16(a4, off, pooled ? 0u : remain);
-            pooled = true;
-            remain = 0;
-        }
-    }
-    /* 0x6B9A epilogue → jsr $7CB0: re-share the pooled gems remainder equally
-     * among ALL party members; rounding remainder to the first. */
-    if (pooled) {
-        partyShareGems(a4, roster, launch, count);
-    }
-    return pooled || amount == 0;
+    /* party_gems_pool_pay @ 0x6B9A (thunk -$7E66) then jsr $7CB0. */
+    return partyPoolPay(a4, roster, launch, amount, PartyPoolKind::Gems);
 }
 
 bool eventVmPartyTryPayFood(uint8_t *a4, Mm2RosterFile *roster, const Mm2PartyLaunch *launch,
                             uint8_t amount)
 {
-    /* party_food_pool_pay @ 0x6C66 (thunk -$7E60). */
-    const int count = partyActiveCount(a4, launch);
-    uint32_t total = 0;
-    for (int i = 0; i < count; ++i) {
-        if (!partySlotEligible(a4, launch, i)) {
-            continue;
-        }
-        if (roster && launch) {
-            const Mm2RosterRecord *rec = rosterRecord(roster, launch->roster_slots[i]);
-            if (rec) {
-                total += rec->food;
-            }
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx >= 0) {
-                total += mm2_gs_u8(a4, MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x25);
-            }
-        }
-    }
-    if (total < amount) {
-        return false;
-    }
-    uint8_t remain = static_cast<uint8_t>(total - amount);
-    bool pooled = false;
-    for (int i = 0; i < count; ++i) {
-        if (!partySlotEligible(a4, launch, i)) {
-            continue;
-        }
-        if (roster && launch) {
-            Mm2RosterRecord *rec = rosterRecordMut(roster, launch->roster_slots[i]);
-            if (!rec) {
-                continue;
-            }
-            rec->food = pooled ? 0u : remain;
-            pooled = true;
-            remain = 0;
-        } else if (a4) {
-            const int idx = partyRosterIndex(a4, i);
-            if (idx < 0) {
-                continue;
-            }
-            const int off = MM2_GS_ROSTER_BASE + idx * MM2_GS_ROSTER_STRIDE + 0x25;
-            mm2_gs_set_u8(a4, off, pooled ? 0u : remain);
-            pooled = true;
-            remain = 0;
-        }
-    }
-    /* 0x6C66 epilogue → jsr $7D3E: re-share the pooled food remainder equally
-     * among ALL party members; rounding remainder to the first. */
-    if (pooled) {
-        partyShareFood(a4, roster, launch, count);
-    }
-    return pooled || amount == 0;
+    /* party_food_pool_pay @ 0x6C66 (thunk -$7E60) then jsr $7D3E. */
+    return partyPoolPay(a4, roster, launch, amount, PartyPoolKind::Food);
 }
 
 const uint8_t kArenaAreaIndex[5] = {0, 2, 0, 0, 1};
@@ -1924,8 +1806,9 @@ Mm2ArenaTicket eventVmFindArenaTicket(const uint8_t *a4, const Mm2RosterFile *ro
         if (!rec) {
             continue;
         }
-        for (int slot = 0; slot < MM2_ROSTER_ITEM_SLOTS; ++slot) {
-            const uint8_t id = rec->backpack_id[slot];
+        const uint8_t *raw = rosterRecordBytes(*rec);
+        for (int slot = 0; slot < kRosterItemSlots; ++slot) {
+            const uint8_t id = rosterBackpackId(raw, slot);
             if (id >= 0xD0u && id <= 0xD3u) {
                 result.found = true;
                 result.color = static_cast<uint8_t>(id - 0xD0u);
@@ -1951,9 +1834,8 @@ void eventVmConsumeArenaTicket(Mm2RosterFile *roster, const Mm2PartyLaunch *laun
     if (!rec || ticket.backpack_slot < 0 || ticket.backpack_slot >= MM2_ROSTER_ITEM_SLOTS) {
         return;
     }
-    rec->backpack_id[ticket.backpack_slot] = 0;
-    rec->backpack_charges[ticket.backpack_slot] = 0;
-    rec->backpack_flags[ticket.backpack_slot] = 0;
+    uint8_t *raw = rosterRecordBytes(*rec);
+    rosterWriteBackpack(raw, ticket.backpack_slot, 0, 0, 0);
 }
 
 uint8_t eventVmArenaMonsterType(uint8_t color, int screen, int rng_1_to_16)
@@ -2141,8 +2023,8 @@ void eventVmFillOp0eFdStrTables(uint8_t *a4, const uint8_t *str_dat, size_t str_
     fill(MM2_GS_OP0E_FD_PTR5, 10);
 
     mm2_gs_set_u8(a4, MM2_GS_OP0E_FD_MODE, 0xFD);
-    for (int i = 0; i < 11; ++i) {
-        mm2_gs_set_u8(a4, -0x11DE + i, 0);
+    for (int i = 0; i < MM2_GS_MONSTER_BATTLE_SLOTS; ++i) {
+        mm2_gs_set_u8(a4, MM2_GS_MONSTER_SLOTS + i, 0);
     }
 }
 

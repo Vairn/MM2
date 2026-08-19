@@ -1,20 +1,10 @@
 #pragma once
-// World data owner: map.dat (60 screens x 2 pages) + attrib.dat (60 records).
-//
-// Models the original screen-enter path:
-//   - attrib screen-enter @ 0x923E: current screen id (A4-$79F2) * 64 ->
-//     copies the 64-byte attrib record into A4-$561A; env / view-mode are
-//     materialized from that record.
-//   - map pages: the flat map.dat blob lives at A4-$EEF4; the hood sampler
-//     (map_row_sampler @ 0x190C) reads the centre visual page (A4-$55BA),
-//     the collision page (A4-$54BA) and the four neighbour visual buffers,
-//     selected via the attrib neighbour bytes 0x05..0x08.
-//   - screen change LAB_256E @ 0x256E: crossing an edge picks the neighbour
-//     screen id from the current attrib record and re-enters.
-//
-// Neighbour slot -> compass mapping (slot0=N, 1=E, 2=S, 3=W) matches the
-// editor View3D buildMapBuffers(); doc 12 confirms slots (0,2)/(1,3) are
-// opposite pairs.
+// map.dat (60 screens × 2 pages) + attrib.dat (60 records).
+// attrib screen-enter @ 0x923E: A4-$79F2 * 64 → copy record to A4-$561A.
+// map blob A4-$EEF4; hood sampler @ 0x190C: visual A4-$55BA, collision A4-$54BA,
+// neighbour visual pages from attrib 0x05..0x08.
+// screen change LAB_256E @ 0x256E.
+// Neighbour slots 0=N 1=E 2=S 3=W (doc 12: (0,2)/(1,3) opposite).
 
 #include "mm2/CppStdCompat.h"
 #include "mm2/gfx/View3D.h"

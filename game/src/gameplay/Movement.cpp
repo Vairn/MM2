@@ -14,10 +14,6 @@ namespace mm2::gameplay {
 
 namespace {
 
-constexpr int32_t kGsFacingBundleHi = -0x55D8; /* A4-$AA28 */
-constexpr int32_t kGsLightFactor = -0x79AB;
-constexpr int32_t kGsPositionChanged = -0x4F4E; /* word; loop tail -> event latch */
-
 char flipFacingForBackStep(char key)
 {
     switch (key) {
@@ -52,11 +48,6 @@ void latchEventOnTurn(GameStateView &gs)
     /* movement_turn @ 0x5802 also clears A4-$77BD when the turn updates coords. */
     mm2_gs_set_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH, 0);
     mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
-}
-
-uint8_t collisionAt(const world::MapWorld &world, int x, int y)
-{
-    return world.collisionAt(x, y);
 }
 
 /* Outdoor visual sample with neighbour wrap (hood row0 layout @ 0x190C). */
@@ -106,7 +97,7 @@ ObstructionMsg passabilityObstruction(const world::MapWorld &world, GameStateVie
                                       char facing_key, Mm2RosterFile *roster,
                                       const Mm2PartyLaunch *launch)
 {
-    const uint8_t coll = collisionAt(world, x, y);
+    const uint8_t coll = world.collisionAt(x, y);
     if (mm2_map_passability_blocked(coll, facing_key) == 0) {
         return ObstructionMsg::None;
     }
@@ -218,19 +209,18 @@ void agePartyOnDayRollover(Mm2RosterFile *roster, const Mm2PartyLaunch *launch)
         if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
             continue;
         }
-        auto *raw = reinterpret_cast<uint8_t *>(&roster->records[idx]);
+        Mm2RosterRecord &rec = roster->records[idx];
+        uint8_t *raw = events::rosterRecordBytes(rec);
         raw[0x22] = static_cast<uint8_t>(raw[0x22] + 1);
         if (raw[0x22] >= 0xB5) {
-            raw[0x21] = static_cast<uint8_t>(raw[0x21] + 1);
+            rec.age = static_cast<uint8_t>(rec.age + 1);
             raw[0x22] = 1;
         }
     }
 }
 
-/* Day rollover @ 0x6A06: once subday reaches one full day (0x100), advance the
- * per-era calendar and fold subday back into [0,0x100). Shared by the per-step
- * tick (n=1) and the multi-tick advance (Rest n=0x55). Arithmetic mirrors the
- * ASM exactly. */
+/* Day rollover @ 0x6A06: subday >= 0x100 → advance per-era calendar, subday %= 0x100.
+ * Shared by step tick (n=1) and Rest (n=0x55). */
 void applyDayRollover(GameStateView &gs, Mm2RosterFile *roster, const Mm2PartyLaunch *launch)
 {
     uint8_t *a4 = gs.a4();
@@ -292,9 +282,9 @@ void applyStepTimeTick(GameStateView &gs, uint8_t collision_cell_at_dest, Mm2Ros
 
     /* 0069e8: light drain only fires for n==1 (a step), not the multi-tick Rest. */
     if (mm2_map_collision_is_dark(collision_cell_at_dest)) {
-        const uint8_t light = mm2_gs_u8(gs.a4(), kGsLightFactor);
+        const uint8_t light = gs.lightFactor();
         if (light > 0) {
-            mm2_gs_set_u8(gs.a4(), kGsLightFactor, static_cast<uint8_t>(light - 1));
+            gs.setLightFactor(static_cast<uint8_t>(light - 1));
             /* GAP: Protect panel redraw (-$7EAE @ 0x5E28) deferred. */
         }
     }
@@ -360,7 +350,7 @@ void sessionInteractionGate(GameStateView &gs)
     }
     uint8_t *a4 = gs.a4();
     mm2_gs_set_u8(a4, MM2_GS_CANT_SEE_FLAG, 0); /* 0x53C0 */
-    if (mm2_gs_u8(a4, MM2_GS_LIGHT_FACTOR) != 0) { /* 0x53C4: light suppresses */
+    if (gs.lightFactor() != 0) { /* 0x53C4: light suppresses */
         return;
     }
     /* 0x53CA: -$5600 (attrib flags 0x1A) >= $80 → can't-see. */
@@ -374,22 +364,6 @@ void sessionInteractionGate(GameStateView &gs)
     }
 }
 
-uint8_t restSpellBonusFactor(uint8_t attr)
-{
-    /* 0x4442: walk A4-$7486 thresholds; start bonus=$FD (−3 signed), addq per miss.
-     * Return value is the unsigned byte used at 0x19C74 before addq #3. */
-    static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
-                                      60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
-    uint8_t bonus = 0xFD; /* −3 */
-    for (size_t i = 0; i < sizeof(kThresh); ++i) {
-        if (attr <= kThresh[i]) {
-            break;
-        }
-        ++bonus;
-    }
-    return bonus;
-}
-
 void syncRosterWorkingLevelFields(Mm2RosterRecord &rec)
 {
     rec.unknown_1a_20[6] = rec.level; /* +$20 ← +$71 */
@@ -400,14 +374,13 @@ void syncRosterWorkingLevelFields(Mm2RosterRecord &rec)
 void syncPartySecondaryStats(Mm2RosterRecord &rec)
 {
     /* 0x4476: MOVE.B $10→$6B, $14→$6F, $12→$6D, $11→$6C, $20→$71, $23→$72, $13→$6E. */
-    auto *raw = reinterpret_cast<uint8_t *>(&rec);
-    raw[0x6B] = raw[0x10];
-    raw[0x6F] = raw[0x14];
-    raw[0x6D] = raw[0x12];
-    raw[0x6C] = raw[0x11];
-    raw[0x71] = raw[0x20];
-    raw[0x72] = raw[0x23];
-    raw[0x6E] = raw[0x13];
+    rec.might_base = rec.might_current;
+    rec.accuracy_base = rec.accuracy_current;
+    rec.personality_base = rec.personality_current;
+    rec.intelligence_base = rec.intelligence_current;
+    rec.level = rec.unknown_1a_20[6]; /* +$20 → +$71 */
+    rec.spell_level = static_cast<uint8_t>((rec.unknown_22 >> 8) & 0xFF); /* +$23 → +$72 */
+    rec.speed_base = rec.speed_current;
 }
 
 void applyRestSecondaryStatWriteback(Mm2RosterRecord &rec)
@@ -509,7 +482,7 @@ MoveResult step(world::MapWorld &world, GameStateView &gs, bool forward, Mm2Rost
         gs.setFacingKey(saved_facing);
     }
 
-    const uint8_t dest_cell = collisionAt(world, tx, ty);
+    const uint8_t dest_cell = world.collisionAt(tx, ty);
     applyStepTimeTick(gs, dest_cell, roster, launch);
     events::eventVmTickSpellEyeOnStep(gs.a4(), world.isOutdoor());
     /* Hood refresh @ 0x1B1C latches the destination collision into -$55D6. */

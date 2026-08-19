@@ -4,12 +4,7 @@
 
 namespace mm2 {
 
-// Reference data transcribed from the MM2 "Gates to Another World" manual,
-// Appendix B (pp. 40-58). Order = manual spell numbering (alphabetical within
-// each level), which also matches the spells.dat record order and the
-// items.dat flat-effect index. SP/gem/cast values cross-validate the on-disk
-// 2-byte records: gems 96/96, cast 96/96, outdoor 12/12, SP 95/96 (only
-// Meteor Shower differs - its base SP is computed per-monster in game code).
+// Spell names/costs from the MM2 manual Appendix B. Order matches spells.dat.
 #define SO SpellSchool::Sorcerer
 #define CL SpellSchool::Cleric
 #define ANY SpellCast::Anytime

@@ -1,17 +1,12 @@
 #pragma once
-// Decoder for the MM2 PC DOS (GOG) CGA (.4) / EGA (.16) graphics formats.
-// Ported from tools/decode_pc_gfx.py (the source of truth for this codec) —
-// see EXTRACTED/docs/54-pc-dos-graphics-formats.md for the format spec.
+// PC DOS CGA (.4) / EGA (.16) graphics. Also implemented in tools/decode_pc_gfx.py.
 //
-// Two families of files share the same LZW container:
-//   - Wall / sprite sheets (THROW.4, TOWN.16, SKY.4, ...): a flat table of
-//     complete frames, no compositing.
-//   - MONSTERS.4 / MONSTERS.16 combat atlas: one LZW blob per monster
-//     "picture id" (1-based, same id as Amiga NN.anm), each blob holding a
-//     base frame (0) plus delta patch frames composited onto a 96x96 canvas,
-//     driven by (frame,delay) animation scripts.
+// Shared LZW container:
+//   - Wall/sprite sheets: flat frame table, no compositing.
+//   - MONSTERS.4/.16: one LZW blob per picture id (1-based, same as Amiga NN.anm),
+//     base frame 0 plus delta patches on a 96x96 canvas.
 //
-// Not Amiga: see core/Gfx.h for the .32/.anm planar formats.
+// Amiga .32/.anm: core/Gfx.h.
 
 #include <cstdint>
 #include <optional>

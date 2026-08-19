@@ -1,6 +1,8 @@
 #include "mm2/events/TownServiceTransactions.h"
 
+#include "mm2/events/EventVmHelpers.h"
 #include "mm2/gameplay/ExploreActions.h"
+#include "mm2/gameplay/Movement.h"
 #include "mm2/gameplay/RosterSkills.h"
 #include "mm2/gameplay/SpellBook.h"
 
@@ -15,21 +17,6 @@
 namespace mm2::events {
 
 namespace {
-
-/* -$7F56 / 0x4442 — same table as Rest SP / training HP (A4-$7486). */
-uint8_t attrTableBonus(uint8_t attr)
-{
-    static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
-                                      60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
-    uint8_t bonus = 0xFD;
-    for (size_t i = 0; i < sizeof(kThresh); ++i) {
-        if (attr <= kThresh[i]) {
-            break;
-        }
-        ++bonus;
-    }
-    return bonus;
-}
 
 /* A4-$6738 costs; BE u16 ×6 — tavern B. */
 static const uint16_t kStatBoostCosts[6] = {5, 5, 20, 20, 50, 100};
@@ -128,8 +115,9 @@ void writePartyEncoding(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, uin
         if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
             continue;
         }
-        auto *raw = reinterpret_cast<uint8_t *>(&roster->records[idx]);
-        raw[0x78] = encoding;
+        Mm2RosterRecord &rec = roster->records[idx];
+        uint8_t *raw = rosterRecordBytes(rec);
+        rec.script_work_flag = encoding;
         raw[0x7C] = static_cast<uint8_t>((raw[0x7C] & 0xFE) | (drink_mode ? 1u : 0u));
         ++r.members_written;
     }
@@ -163,48 +151,49 @@ void satAddByte(uint8_t *field, uint8_t amount)
 /* 0xA3AE jump table keyed on skill nibble 1..15 (0 / 3 / 4 / 10..13 = nop). */
 void generalStoreApplySkillNibble(Mm2RosterRecord &rec, uint8_t skill_id)
 {
-    auto *raw = reinterpret_cast<uint8_t *>(&rec);
     switch (skill_id) {
     case 1: /* 0xA3BC: −5 accuracy current+base */
-        satSubByte(raw + 0x14, 5);
-        satSubByte(raw + 0x6F, 5);
+        satSubByte(&rec.accuracy_current, 5);
+        satSubByte(&rec.accuracy_base, 5);
         break;
     case 2: /* 0xA3E4: −5 speed current+base */
-        satSubByte(raw + 0x13, 5);
-        satSubByte(raw + 0x6E, 5);
+        satSubByte(&rec.speed_current, 5);
+        satSubByte(&rec.speed_base, 5);
         break;
     case 5: /* 0xA40C: −5 personality current+base */
-        satSubByte(raw + 0x12, 5);
-        satSubByte(raw + 0x6D, 5);
+        satSubByte(&rec.personality_current, 5);
+        satSubByte(&rec.personality_base, 5);
         break;
     case 6: /* 0xA434: −5 luck current+base */
-        satSubByte(raw + 0x15, 5);
-        satSubByte(raw + 0x70, 5);
+        satSubByte(&rec.luck_current, 5);
+        satSubByte(&rec.luck_base, 5);
         break;
     case 7: /* 0xA45C: −5 might current+base */
-        satSubByte(raw + 0x10, 5);
-        satSubByte(raw + 0x6B, 5);
+        satSubByte(&rec.might_current, 5);
+        satSubByte(&rec.might_base, 5);
         break;
     case 8: /* 0xA484: −1 to all six currents then all six bases */
-        for (int off : {0x10, 0x11, 0x12, 0x13, 0x14, 0x15}) {
-            satSubByte(raw + off, 1);
+        for (uint8_t *field : {&rec.might_current, &rec.intelligence_current, &rec.personality_current,
+                               &rec.speed_current, &rec.accuracy_current, &rec.luck_current}) {
+            satSubByte(field, 1);
         }
-        for (int off : {0x6B, 0x6C, 0x6D, 0x6E, 0x6F, 0x70}) {
-            satSubByte(raw + off, 1);
+        for (uint8_t *field : {&rec.might_base, &rec.intelligence_base, &rec.personality_base,
+                               &rec.speed_base, &rec.accuracy_base, &rec.luck_base}) {
+            satSubByte(field, 1);
         }
-        satSubByte(raw + 0x27, 1); /* endurance_current */
-        satSubByte(raw + 0x73, 1); /* endurance_base */
+        satSubByte(&rec.endurance_current, 1);
+        satSubByte(&rec.endurance_base, 1);
         break;
     case 9: /* 0xA596: −5 intelligence current+base */
-        satSubByte(raw + 0x11, 5);
-        satSubByte(raw + 0x6C, 5);
+        satSubByte(&rec.intelligence_current, 5);
+        satSubByte(&rec.intelligence_base, 5);
         break;
     case 14: /* 0xA5BC: −15 age */
-        satSubByte(raw + 0x1E, 15);
+        satSubByte(&rec.age, 15);
         break;
     case 15: /* 0xA5D0: −5 endurance current + endurance base */
-        satSubByte(raw + 0x27, 5);
-        satSubByte(raw + 0x73, 5);
+        satSubByte(&rec.endurance_current, 5);
+        satSubByte(&rec.endurance_base, 5);
         break;
     default:
         break;
@@ -504,11 +493,11 @@ TownSvcDonateResult townSvcTempleDonate(uint8_t *a4, Mm2RosterRecord &rec, int m
             mm2_gs_set_u8(a4, MM2_GS_LEVITATE_FLAG, 1);
             mm2_gs_set_u8(a4, MM2_GS_WALK_WATER_FLAG, 1);
             mm2_gs_set_u8(a4, MM2_GS_GUARD_DOG_FLAG, 1);
-            mm2_gs_set_u8(a4, -0x79A5, 0); /* clr.b -$79A5 @ 0x1D82A */
-            mm2_gs_set_u8(a4, -0x79A1, 1);
-            mm2_gs_set_u8(a4, -0x79A2, 1);
-            mm2_gs_set_u8(a4, -0x79A3, 1);
-            mm2_gs_set_u8(a4, -0x79A4, 1); /* overlaps TALISMAN_BASE[0] — ASM writes it */
+            mm2_gs_set_u8(a4, MM2_GS_BUFF_79A5, 0); /* clr.b -$79A5 @ 0x1D82A */
+            mm2_gs_set_u8(a4, MM2_GS_BUFF_79A1, 1);
+            mm2_gs_set_u8(a4, MM2_GS_BUFF_79A2, 1);
+            mm2_gs_set_u8(a4, MM2_GS_BUFF_79A3, 1);
+            mm2_gs_set_u8(a4, MM2_GS_TALISMAN_BASE, 1); /* overlaps TALISMAN_BASE[0] — ASM writes it */
             mm2_gs_set_u8(a4, MM2_GS_CLASS_QUEST_CNT, 0xC8); /* -$79A0 */
             mm2_gs_set_u8(a4, MM2_GS_QUEST_COUNTER_B, 0xC8); /* -$799F */
             const uint16_t ctr = mm2_gs_u16(a4, MM2_GS_TEMPLE_BLESS_CTR);
@@ -556,13 +545,8 @@ TownSvcBuyResult townSvcSmithBuy(Mm2RosterRecord &rec, uint8_t item_id, uint8_t 
     }
 
     /* 0x1BE60: first empty backpack slot (id-run +$3A); full -> caption 2. */
-    int slot = -1;
-    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
-        if (mm2_roster_backpack(&rec, i).item_id == 0) {
-            slot = i;
-            break;
-        }
-    }
+    uint8_t *raw = rosterRecordBytes(rec);
+    const int slot = rosterFirstEmptyBackpack(raw);
     if (slot < 0) {
         r.price = 0;
         r.reject = TownSvcBuyReject::BackpackFull;
@@ -577,11 +561,7 @@ TownSvcBuyResult townSvcSmithBuy(Mm2RosterRecord &rec, uint8_t item_id, uint8_t 
     }
 
     /* 0x1BEBC: write id/charges/flags into the empty backpack slot. */
-    Mm2RosterItemSlot bought;
-    bought.item_id = item_id;
-    bought.charges = charges;
-    bought.flags = flags;
-    mm2_roster_set_backpack(&rec, slot, bought);
+    rosterWriteBackpack(raw, slot, item_id, charges, flags);
 
     r.bought = true;
     r.slot = slot;
@@ -648,8 +628,8 @@ TownSvcSellResult townSvcSmithSell(Mm2RosterRecord &rec, int backpack_slot, uint
         return r;
     }
 
-    const Mm2RosterItemSlot slot = mm2_roster_backpack(&rec, backpack_slot);
-    if (slot.item_id == 0) {
+    uint8_t *raw = rosterRecordBytes(rec);
+    if (rosterBackpackId(raw, backpack_slot) == 0) {
         r.price = 0;
         r.reject = TownSvcSellReject::NoItem;
         return r;
@@ -659,8 +639,7 @@ TownSvcSellResult townSvcSmithSell(Mm2RosterRecord &rec, int backpack_slot, uint
     rec.gold += credit;
 
     /* Clear the backpack slot (-$7F26 path @ 0x1BC26). */
-    Mm2RosterItemSlot empty{};
-    mm2_roster_set_backpack(&rec, backpack_slot, empty);
+    rosterWriteBackpack(raw, backpack_slot, 0, 0, 0);
 
     r.sold = true;
     return r;
@@ -841,7 +820,11 @@ TownSvcIdentifyResult townSvcSmithIdentify(Mm2RosterRecord &rec, int backpack_sl
         return r;
     }
 
-    const Mm2RosterItemSlot slot = mm2_roster_backpack(&rec, backpack_slot);
+    uint8_t *raw = rosterRecordBytes(rec);
+    Mm2RosterItemSlot slot;
+    slot.item_id = rosterBackpackId(raw, backpack_slot);
+    slot.charges = rosterBackpackCharges(raw, backpack_slot);
+    slot.flags = rosterBackpackFlags(raw, backpack_slot);
     if (slot.item_id == 0) {
         r.cost = 0;
         r.reject = TownSvcIdentifyReject::NoItem;
@@ -985,8 +968,7 @@ TownSvcGeneralStoreResult townSvcGeneralStoreConvert(Mm2RosterRecord &rec)
     /* 0xA62C buy path after Y + member pick: 100gp gate @ 0xA75E, apply both
      * +$50 nibbles via 0xA3AE (-$7F44 saturate-sub), clear +$50, success text. */
     TownSvcGeneralStoreResult r;
-    auto *raw = reinterpret_cast<uint8_t *>(&rec);
-    const uint8_t pack = raw[0x50];
+    const uint8_t pack = gameplay::rosterSkillPackedByte(rec);
     if (pack == 0) {
         r.message = "The secondary skills are gone.";
         return r;
@@ -998,7 +980,7 @@ TownSvcGeneralStoreResult townSvcGeneralStoreConvert(Mm2RosterRecord &rec)
     r.paid = true;
     generalStoreApplySkillNibble(rec, static_cast<uint8_t>(pack & 0x0F));
     generalStoreApplySkillNibble(rec, static_cast<uint8_t>((pack >> 4) & 0x0F));
-    raw[0x50] = 0;
+    gameplay::rosterSkillPackedByteMut(rec) = 0;
     r.converted = true;
     r.message = "The secondary skills are gone.";
     return r;
@@ -1010,33 +992,33 @@ void townSvcCircusWinBoost(Mm2RosterRecord &rec, int attr_choice)
      * Menu 1..6 (0-based): +$10 might / +$12 per / +$14 acc / +$27 end /
      * +$13 speed / +$15 luck. Default → +$11 intelligence. FAQ's 7th game
      * (Shell Game / intellect as key 7) is not in this leaf. */
-    auto *raw = reinterpret_cast<uint8_t *>(&rec);
-    if ((raw[0x7D] & 0x02) == 0) {
+    uint8_t *raw = rosterRecordBytes(rec);
+    if ((raw[MM2_ROSTER_OFF_CIRCUS] & MM2_ROSTER_CIRCUS_BIT) == 0) {
         return;
     }
-    raw[0x7D] = static_cast<uint8_t>(raw[0x7D] & 0xFD);
+    raw[MM2_ROSTER_OFF_CIRCUS] = static_cast<uint8_t>(raw[MM2_ROSTER_OFF_CIRCUS] & static_cast<uint8_t>(~MM2_ROSTER_CIRCUS_BIT));
     uint8_t *field = nullptr;
     switch (attr_choice) {
     case 0:
-        field = raw + 0x10; /* might */
+        field = &rec.might_current;
         break;
     case 1:
-        field = raw + 0x12; /* personality */
+        field = &rec.personality_current;
         break;
     case 2:
-        field = raw + 0x14; /* accuracy */
+        field = &rec.accuracy_current;
         break;
     case 3:
-        field = raw + 0x27; /* endurance */
+        field = &rec.endurance_current;
         break;
     case 4:
-        field = raw + 0x13; /* speed */
+        field = &rec.speed_current;
         break;
     case 5:
-        field = raw + 0x15; /* luck */
+        field = &rec.luck_current;
         break;
     default:
-        field = raw + 0x11; /* intelligence fallback */
+        field = &rec.intelligence_current;
         break;
     }
     uint8_t v = *field;
@@ -1064,14 +1046,9 @@ bool townSvcCircusGiveCupieDoll(Mm2RosterFile *roster, const Mm2PartyLaunch *lau
         if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
             continue;
         }
-        Mm2RosterRecord &rec = roster->records[idx];
-        for (int s = 0; s < MM2_ROSTER_ITEM_SLOTS; ++s) {
-            if (rec.backpack_id[s] == 0) {
-                rec.backpack_id[s] = 0xDA;
-                rec.backpack_charges[s] = 0;
-                rec.backpack_flags[s] = 0;
-                return true;
-            }
+        uint8_t *raw = rosterRecordBytes(roster->records[idx]);
+        if (rosterPlaceInFirstEmptyBackpack(raw, 0xDA, 0, 0)) {
+            return true;
         }
     }
     return false;
@@ -1089,8 +1066,9 @@ void townSvcArmDrinkMatchOnKill(Mm2RosterFile *roster, const Mm2PartyLaunch *lau
         if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
             continue;
         }
-        auto *raw = reinterpret_cast<uint8_t *>(&roster->records[idx]);
-        if (raw[0x78] == 0 || raw[0x78] != monster_type) {
+        Mm2RosterRecord &rec = roster->records[idx];
+        uint8_t *raw = rosterRecordBytes(rec);
+        if (rec.script_work_flag == 0 || rec.script_work_flag != monster_type) {
             continue;
         }
         if ((raw[0x7C] & 0x01) == 0) {
@@ -1104,11 +1082,11 @@ TownSvcDrinkApplyResult townSvcApplyDrinkEncoding(Mm2RosterRecord &rec)
 {
     /* 0x18D3A: bit1 of +$7C; tier from +$78 vs A4-$6AEA; gold A4-$6AE0 → +$62. */
     TownSvcDrinkApplyResult r;
-    auto *raw = reinterpret_cast<uint8_t *>(&rec);
+    uint8_t *raw = rosterRecordBytes(rec);
     if ((raw[0x7C] & 0x02) == 0) {
         return r;
     }
-    const uint8_t enc = raw[0x78];
+    const uint8_t enc = rec.script_work_flag;
     if (enc == 0) {
         return r;
     }
@@ -1124,7 +1102,7 @@ TownSvcDrinkApplyResult townSvcApplyDrinkEncoding(Mm2RosterRecord &rec)
     }
     r.gold = kDrinkGoldAward[tier];
     rec.experience += r.gold; /* 0x18DC0: add.l → +$62 experience (table is gold-sized XP). */
-    raw[0x78] = 0;
+    rec.script_work_flag = 0;
     raw[0x7C] = static_cast<uint8_t>(raw[0x7C] & 0xFD);
     r.applied = true;
     return r;
@@ -1135,8 +1113,7 @@ TownSvcFoodApplyResult townSvcApplyFoodEncoding(const Mm2ItemsFile *items, Mm2Ro
     /* 0x18DE0 leaf (XP arm @ 0x18E82): enc=+78 as items.dat id; gold×8 → +$62; clr +$78.
      * A4-$3EEC = items.dat base (-$3EFE) + $12 gold word. */
     TownSvcFoodApplyResult r;
-    auto *raw = reinterpret_cast<uint8_t *>(&rec);
-    const uint8_t enc = raw[0x78];
+    const uint8_t enc = rec.script_work_flag;
     if (enc == 0) {
         return r;
     }
@@ -1152,7 +1129,7 @@ TownSvcFoodApplyResult townSvcApplyFoodEncoding(const Mm2ItemsFile *items, Mm2Ro
     }
     r.xp = static_cast<uint32_t>(item_gold) << 3; /* asl.l #3 */
     rec.experience += r.xp;
-    raw[0x78] = 0;
+    rec.script_work_flag = 0;
     r.applied = true;
     return r;
 }
@@ -1169,9 +1146,9 @@ int townSvcPartyFindBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch *la
         if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
             continue;
         }
-        Mm2RosterRecord &rec = roster->records[idx];
+        const uint8_t *raw = rosterRecordBytes(roster->records[idx]);
         for (int s = 0; s < MM2_ROSTER_ITEM_SLOTS; ++s) {
-            if (rec.backpack_id[s] == item_id) {
+            if (rosterBackpackId(raw, s) == item_id) {
                 return s + 1;
             }
         }
@@ -1183,25 +1160,7 @@ bool townSvcPartyConsumeBackpackItem(Mm2RosterFile *roster, const Mm2PartyLaunch
                                      uint8_t item_id)
 {
     /* 0x18D06: find via 0x18C74 then -$7F26 clear id/charges/flags. */
-    if (!roster || !launch || item_id == 0) {
-        return false;
-    }
-    for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
-        const int idx = launch->roster_slots[i];
-        if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
-            continue;
-        }
-        Mm2RosterRecord &rec = roster->records[idx];
-        for (int s = 0; s < MM2_ROSTER_ITEM_SLOTS; ++s) {
-            if (rec.backpack_id[s] == item_id) {
-                rec.backpack_id[s] = 0;
-                rec.backpack_charges[s] = 0;
-                rec.backpack_flags[s] = 0;
-                return true;
-            }
-        }
-    }
-    return false;
+    return eventVmPartyConsumeBackpackItem(roster, launch, item_id);
 }
 
 TownSvcDrinkResult townSvcPubDrink(Mm2RosterRecord &rec, int drink_idx, gameplay::Rng *rng)
@@ -1295,7 +1254,7 @@ TownSvcSpecialtyResult townSvcTavernSpecialty(uint8_t *a4, Mm2RosterRecord &rec,
     }
     r.paid = true;
     /* 0x1CECA: -$7F56(+$73 endurance_base)+5 → rng(1,hi)==1 sick. */
-    const int end_hi = static_cast<int>(attrTableBonus(rec.endurance_base)) + 5;
+    const int end_hi = static_cast<int>(gameplay::restSpellBonusFactor(rec.endurance_base)) + 5;
     const int sick_roll = rng ? rng->range(1, end_hi > 0 ? end_hi : 1) : 2;
     if (sick_roll == 1) {
         r.sick = true;
@@ -1342,7 +1301,7 @@ int townSvcQuestLordArm(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, boo
         if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
             continue;
         }
-        auto *raw = reinterpret_cast<uint8_t *>(&roster->records[idx]);
+        uint8_t *raw = rosterRecordBytes(roster->records[idx]);
         uint8_t flags = raw[0x7C];
         if ((flags & mask) != 0) {
             continue;
@@ -1390,7 +1349,7 @@ TownSvcQuestCompleteResult townSvcQuestCompleteReward(Mm2RosterFile *roster,
             continue;
         }
         Mm2RosterRecord &rec = roster->records[idx];
-        auto *raw = reinterpret_cast<uint8_t *>(&rec);
+        uint8_t *raw = rosterRecordBytes(rec);
         const uint8_t flags = raw[0x7C];
         if ((flags & 0x04) == 0) {
             continue;
@@ -1473,7 +1432,7 @@ bool townSvcQuestBusy(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool 
         if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
             continue;
         }
-        auto *raw = reinterpret_cast<uint8_t *>(&roster->records[idx]);
+        uint8_t *raw = rosterRecordBytes(roster->records[idx]);
         const uint8_t flags = raw[0x7C];
         if (static_cast<bool>(flags & 0x01) != drink) {
             continue;
@@ -1481,7 +1440,7 @@ bool townSvcQuestBusy(Mm2RosterFile *roster, const Mm2PartyLaunch *launch, bool 
         if ((flags & 0x04) != 0) {
             return true;
         }
-        if (raw[0x78] != 0) {
+        if (roster->records[idx].script_work_flag != 0) {
             return true;
         }
     }
@@ -1507,12 +1466,13 @@ bool townSvcQuestTargetName(const Mm2RosterFile *roster, const Mm2PartyLaunch *l
         if (idx < 0 || idx >= MM2_ROSTER_RECORD_COUNT) {
             continue;
         }
-        const auto *raw = reinterpret_cast<const uint8_t *>(&roster->records[idx]);
+        const Mm2RosterRecord &rec = roster->records[idx];
+        const uint8_t *raw = rosterRecordBytes(rec);
         if (static_cast<bool>(raw[0x7C] & 0x01) != drink) {
             continue;
         }
-        if (raw[0x78] != 0) {
-            target = raw[0x78];
+        if (rec.script_work_flag != 0) {
+            target = rec.script_work_flag;
             break;
         }
     }
@@ -1561,7 +1521,7 @@ TownSvcTipResult townSvcTavernTip(Mm2RosterRecord &rec, uint16_t day_of_year, ga
         return r;
     }
     /* 0x1D006: hi = -$7F56(+$73)+5; rng(1,hi)==1 to show tip. */
-    const uint8_t factor = attrTableBonus(rec.endurance_base);
+    const uint8_t factor = gameplay::restSpellBonusFactor(rec.endurance_base);
     const int hi = static_cast<int>(factor) + 5;
     const int roll = rng ? rng->range(1, hi > 0 ? hi : 1) : 1;
     if (roll != 1) {

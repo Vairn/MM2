@@ -1,5 +1,8 @@
 #include "sections/eventwizard/EventWizard.h"
 
+#include "core/ByteIO.h"
+#include "eventlang/Ast.h"
+
 #include <cstdio>
 #include <sstream>
 
@@ -8,16 +11,15 @@ namespace mm2 {
 namespace {
 
 const char* kCondNames[] = {
-    "always", "enter", "from north", "dir special",
-    "any_direction", "facing ns", "enter special",
+    eventlang::triggerCondName(eventlang::TriggerCond::Always),
+    eventlang::triggerCondName(eventlang::TriggerCond::Enter),
+    eventlang::triggerCondName(eventlang::TriggerCond::FromNorth),
+    eventlang::triggerCondName(eventlang::TriggerCond::DirSpecial),
+    eventlang::triggerCondName(eventlang::TriggerCond::AnyDirection),
+    eventlang::triggerCondName(eventlang::TriggerCond::FacingNs),
+    eventlang::triggerCondName(eventlang::TriggerCond::EnterSpecial),
 };
 constexpr int kCondCount = sizeof(kCondNames) / sizeof(kCondNames[0]);
-
-std::string hex2(int v) {
-    char buf[8];
-    std::snprintf(buf, sizeof(buf), "0x%02X", v & 0xFF);
-    return buf;
-}
 
 std::string condName(int idx) {
     if (idx < 0 || idx >= kCondCount) idx = 0;
@@ -125,7 +127,7 @@ WizardSnippet buildWizardSnippet(
                     auto n = itemNameOf(form.itemId);
                     if (!n.empty()) itemCmt = "  # " + n;
                 }
-                b << "  give_item item=" << hex2(form.itemId)
+                b << "  give_item item=" << hexByte(form.itemId)
                   << " member=0 charges=0 flags=0x00" << itemCmt << "\n";
             }
             break;
@@ -162,7 +164,7 @@ WizardSnippet buildWizardSnippet(
             }
             s << stringDef("open", form.payMsg) << "\n";
             s << stringDef("hint", form.refuseMsg) << "\n";
-            b << "  if has_item " << hex2(form.itemId) << ":" << itemCmt << "\n";
+            b << "  if has_item " << hexByte(form.itemId) << ":" << itemCmt << "\n";
             b << "    say open\n";
             b << "    wait space\n";
             if (form.clearTile) b << "    clear_tile_event\n";
@@ -172,10 +174,10 @@ WizardSnippet buildWizardSnippet(
             break;
         }
         case WizardTemplateKind::ServiceShop: {
-            b << "  service_title sign=" << hex2(form.signIndex)
+            b << "  service_title sign=" << hexByte(form.signIndex)
               << " mode=" << form.serviceMode << "\n";
             if (form.shopSelector > 0) {
-                b << "  selector " << hex2(form.shopSelector) << "\n";
+                b << "  selector " << hexByte(form.shopSelector) << "\n";
             }
             break;
         }
@@ -183,7 +185,7 @@ WizardSnippet buildWizardSnippet(
             b << "  fight monsters";
             std::string names;
             for (int m : form.monsters) {
-                b << " " << hex2(m);
+                b << " " << hexByte(m);
                 if (monsterNameOf) {
                     auto n = monsterNameOf(m);
                     if (!n.empty()) {
@@ -198,7 +200,7 @@ WizardSnippet buildWizardSnippet(
             break;
         }
         case WizardTemplateKind::Transition: {
-            b << "  go_to screen " << form.screen << " pos " << hex2(form.pos) << "\n";
+            b << "  go_to screen " << form.screen << " pos " << hexByte(form.pos) << "\n";
             break;
         }
         case WizardTemplateKind::Riddle: {
@@ -215,7 +217,7 @@ WizardSnippet buildWizardSnippet(
             break;
         }
         case WizardTemplateKind::Trap: {
-            b << "  party_damage member=" << hex2(form.trapMember)
+            b << "  party_damage member=" << hexByte(form.trapMember)
               << " value=" << form.amount << "\n";
             break;
         }

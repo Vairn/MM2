@@ -1,7 +1,6 @@
 #pragma once
-// str.dat - text pool (7808 bytes). Byte transform:
-//   decoded = (encoded + 0x1C) & 0xFF ; encoded byte 0x01 = newline.
-//   See tools/mm2_codec.py and EXTRACTED/docs/11-str-decoded.txt.
+// str.dat text pool (7808 bytes). decoded = (encoded + 0x1C) & 0xFF;
+// encoded 0x01 = newline.
 
 #include <string>
 

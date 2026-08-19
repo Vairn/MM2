@@ -19,6 +19,15 @@ struct ParsedLocation {
     std::vector<std::vector<LoweredOp>> segmentsOps;
 };
 
+inline std::string decodeEventText(const uint8_t* p, size_t n) {
+    std::string s;
+    if (!p) return s;
+    s.reserve(n);
+    for (size_t i = 0; i < n; ++i)
+        s += (p[i] == 0x40) ? '\n' : static_cast<char>(p[i]);
+    return s;
+}
+
 bool looksLikeTextRecord(const uint8_t* seg, size_t len);
 std::vector<LoweredOp> parseSegmentOps(const uint8_t* seg, size_t len);
 ParsedLocation parseLocationRecord(const uint8_t* blob, size_t len, int locId);

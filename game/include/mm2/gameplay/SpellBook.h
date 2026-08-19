@@ -25,10 +25,8 @@ namespace mm2::gameplay {
 
 enum class SpellSchool : uint8_t { None, Sorcerer, Cleric };
 
-// SP cost: when per_level is true the runtime cost is "sp per caster level"
-// (printed "sp/L"); otherwise it is a flat sp cost. gems = gem cost (0 = none).
-// Values are the manual-transcribed costs (special computed-cost spells keep the
-// manual's hard-coded gem figure, e.g. Duplication 100, Star Burst 20).
+// SP cost: per_level → "sp/L" (cost × caster level); else flat. gems=0 none.
+// Computed-cost spells keep the manual gem figure (Duplication 100, Star Burst 20).
 struct SpellMeta {
     const char *name;
     uint8_t level;   // 1..9
@@ -364,8 +362,7 @@ inline char schoolTag(SpellSchool school)
     return (school == SpellSchool::Sorcerer) ? 'S' : (school == SpellSchool::Cleric) ? 'C' : '?';
 }
 
-// Known-spell test for spell index n (0..47) within the character's school.
-// spell N known <=> rec.spells[5 + (N>>3)] & (1 << (N&7)). See header notes.
+// Spell n (0..47) known <=> rec.spells[5 + (N>>3)] & (1 << (N&7)).
 inline bool spellKnownInBook(const Mm2RosterRecord &rec, int n)
 {
     if (n < 0 || n >= kSpellsPerSchool) {
@@ -378,9 +375,7 @@ inline bool spellKnownInBook(const Mm2RosterRecord &rec, int n)
     return (rec.spells[byte_index] & (1u << (n & 7))) != 0u;
 }
 
-// Mark spell index n (0..47) as known. Mirrors the guild buy-spell write
-// ($1d8d4): byte $51+(n>>3) |= 1<<(n&7). Provided for tests/tools (does NOT
-// modify the roster codec).
+// Guild buy write @ 0x1d8d4: `$51+(n>>3)` |= 1<<(n&7). Tests/tools.
 inline void spellLearnInBook(Mm2RosterRecord &rec, int n)
 {
     if (n < 0 || n >= kSpellsPerSchool) {

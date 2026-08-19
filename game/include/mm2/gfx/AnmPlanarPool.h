@@ -15,10 +15,7 @@ struct AnmPlanarHandle {
     bool valid() const { return slot >= 0; }
 };
 
-/**
- * Refcounted NN.anm load + lazy planar cel cache, shared across combat / OP_0B /
- * scripted overlays so the same disk index is composed once.
- */
+/** Refcounted NN.anm planar cels, shared by disk index (combat / OP_0B). */
 class AnmPlanarPool {
 public:
     static constexpr int kMaxEntries = 16;

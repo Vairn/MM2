@@ -1,8 +1,6 @@
 #pragma once
 
-// Agui paper-doll overlay geometry on the in-game character sheet.
-// Replaces only the equipped/backpack text block (rows $0C..$12). Stats/footer
-// stay classic. Equipped storage is still six untyped roster slots.
+// Agui paper-doll on the in-game sheet (replaces equipped/backpack rows $0C..$12).
 
 #include <cstdint>
 

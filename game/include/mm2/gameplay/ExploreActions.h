@@ -48,7 +48,7 @@ private:
     uint32_t state_;
 };
 
-/* ---- Bash door (0x9BCA) -------------------------------------------------- */
+/* Bash @ 0x9BCA */
 
 enum class BashOutcome : uint8_t {
     Opened,     /* strength beat the door and the d100 trap roll missed -> door opens, step through */
@@ -70,7 +70,7 @@ struct BashDecision {
  * All comparisons are byte-wise as in the ASM. */
 BashDecision bashDoorRoll(int might_sum, int door_strength, int roll_10_109, int trap_d100);
 
-/* ---- Unlock door (0x20CA2) ----------------------------------------------- */
+/* Unlock @ 0x20CA2 */
 
 enum class UnlockOutcome : uint8_t {
     Success,    /* pick succeeded -> clear lock, "Success!" */

@@ -149,9 +149,7 @@ Bytes MonstersFile::encode() const {
 bool MonstersFile::load(const std::string& path) {
     Bytes b;
     if (!pcDatReadFlexible(path, b)) return false;
-    // GOG MONSTERS.DAT is LZW-compressed (whole-file container); decompresses
-    // byte-identical to the Amiga monsters.dat. No-op on already-plain files.
-    b = pcDatDecompressFlat(b);
+    b = pcDatDecompressFlat(b);  // GOG LZW; no-op on plain files
     return decode(b);
 }
 

@@ -2,6 +2,7 @@
 
 #include "mm2/world/MapWorld.h"
 #include "mm2/gameplay/ExploreActions.h"
+#include "mm2/events/EventVmRegs.h"
 
 #include "mm2_party_launch.h"
 #include "mm2_roster_codec.h"
@@ -33,19 +34,10 @@ bool eventVmLocationStringRaw(const Mm2EventLocation *loc, int idx, const uint8_
 /** True when a string-bank entry is event bytecode (e.g. loc 61 str[22] = OP_12). */
 bool eventVmStringLooksLikeBytecode(const uint8_t *bytes, size_t len);
 
-/** Token-skip length delta for opcodes 0x00..0x32, byte-exact from the ROM's
- *  opcode_len_tbl @ A4-$6CC8 (data hunk file offset 0x1336; source of truth:
- *  tools/dump_event_token_table.py / EXTRACTED/event_token_len_table.json).
- *  Used ONLY by the skip-token walker (OP_10/OP_11/OP_2B via thunk 0x157FC)
- *  to advance PAST a token it does not execute. This is distinct from (and,
- *  for 2 opcodes, different than) "1 + argc":
- *    - op 0x00 (invalid): ROM skip delta is 0, not 1.
- *    - op 0x25 (OP_25 check-code16): the handler reads 2 argument bytes when
- *      EXECUTED (own length 3), but the ROM skip-table entry is only 2
- *      (opcode + 1 byte) — a genuine ROM quirk. A skip walk that passes OVER
- *      an OP_25 token (rather than executing it) under-counts by one byte in
- *      the original game, desyncing the token stream by 1. Returns 1 for
- *      opcodes outside 0x00..0x32 (should not occur; dispatcher aborts first). */
+/** Skip-table length for opcodes 0x00..0x32 from ROM opcode_len_tbl @ A4-$6CC8
+ *  (data hunk 0x1336). Used only by OP_10/OP_11/OP_2B (thunk 0x157FC). Distinct
+ *  from execute length: op 0x00 skip is 0 not 1; op 0x25 executes 3 bytes but
+ *  the skip entry is 2 (ROM under-counts by 1). Returns 1 outside 0x00..0x32. */
 uint8_t eventVmTokenDelta(uint8_t op);
 
 /** event_op_var_resolve @ 0x15620 — returns byte offset from A4, or 0 if unmapped. */
@@ -71,6 +63,110 @@ int eventVmCountPartyNibbleMatches(const uint8_t *a4, const Mm2RosterFile *roste
  *  OP_31 abort gate `-$7F14`→`0x47EC` returns nonzero (→ SCRIPT_ABORT) when this is 0. */
 int eventVmCountLivingPartyMembers(const uint8_t *a4, const Mm2RosterFile *roster,
                                    const Mm2PartyLaunch *launch);
+
+/* SoA item runs on a 0x82-byte record (not Mm2RosterRecord named slots). */
+constexpr int kRosterEquipId = 0x28;
+constexpr int kRosterEquipCharges = 0x2E;
+constexpr int kRosterEquipFlags = 0x34;
+constexpr int kRosterBackpackId = 0x3A;
+constexpr int kRosterBackpackCharges = 0x40;
+constexpr int kRosterBackpackFlags = 0x46;
+constexpr int kRosterItemSlots = 6;
+
+inline const uint8_t *rosterRecordBytes(const Mm2RosterRecord &rec)
+{
+    return reinterpret_cast<const uint8_t *>(&rec);
+}
+inline uint8_t *rosterRecordBytes(Mm2RosterRecord &rec)
+{
+    return reinterpret_cast<uint8_t *>(&rec);
+}
+inline uint8_t rosterEquipId(const uint8_t *rec, int slot)
+{
+    return rec[kRosterEquipId + slot];
+}
+inline uint8_t rosterEquipCharges(const uint8_t *rec, int slot)
+{
+    return rec[kRosterEquipCharges + slot];
+}
+inline uint8_t rosterEquipFlags(const uint8_t *rec, int slot)
+{
+    return rec[kRosterEquipFlags + slot];
+}
+inline uint8_t rosterBackpackId(const uint8_t *rec, int slot)
+{
+    return rec[kRosterBackpackId + slot];
+}
+inline uint8_t rosterBackpackCharges(const uint8_t *rec, int slot)
+{
+    return rec[kRosterBackpackCharges + slot];
+}
+inline uint8_t rosterBackpackFlags(const uint8_t *rec, int slot)
+{
+    return rec[kRosterBackpackFlags + slot];
+}
+inline void rosterSetEquipId(uint8_t *rec, int slot, uint8_t id)
+{
+    rec[kRosterEquipId + slot] = id;
+}
+inline void rosterSetEquipCharges(uint8_t *rec, int slot, uint8_t charges)
+{
+    rec[kRosterEquipCharges + slot] = charges;
+}
+inline void rosterSetEquipFlags(uint8_t *rec, int slot, uint8_t flags)
+{
+    rec[kRosterEquipFlags + slot] = flags;
+}
+inline void rosterSetBackpackId(uint8_t *rec, int slot, uint8_t id)
+{
+    rec[kRosterBackpackId + slot] = id;
+}
+inline void rosterSetBackpackCharges(uint8_t *rec, int slot, uint8_t charges)
+{
+    rec[kRosterBackpackCharges + slot] = charges;
+}
+inline void rosterSetBackpackFlags(uint8_t *rec, int slot, uint8_t flags)
+{
+    rec[kRosterBackpackFlags + slot] = flags;
+}
+inline int rosterFirstEmptySlot(const uint8_t *rec, int id_base)
+{
+    for (int m = 0; m < kRosterItemSlots; ++m) {
+        if (rec[id_base + m] == 0) {
+            return m;
+        }
+    }
+    return -1;
+}
+inline int rosterFirstEmptyBackpack(const uint8_t *rec)
+{
+    return rosterFirstEmptySlot(rec, kRosterBackpackId);
+}
+inline int rosterFirstEmptyEquip(const uint8_t *rec)
+{
+    return rosterFirstEmptySlot(rec, kRosterEquipId);
+}
+inline void rosterWriteEquip(uint8_t *rec, int slot, uint8_t id, uint8_t charges, uint8_t flags)
+{
+    rosterSetEquipId(rec, slot, id);
+    rosterSetEquipCharges(rec, slot, charges);
+    rosterSetEquipFlags(rec, slot, flags);
+}
+inline void rosterWriteBackpack(uint8_t *rec, int slot, uint8_t id, uint8_t charges, uint8_t flags)
+{
+    rosterSetBackpackId(rec, slot, id);
+    rosterSetBackpackCharges(rec, slot, charges);
+    rosterSetBackpackFlags(rec, slot, flags);
+}
+inline bool rosterPlaceInFirstEmptyBackpack(uint8_t *rec, uint8_t id, uint8_t charges, uint8_t flags)
+{
+    const int m = rosterFirstEmptyBackpack(rec);
+    if (m < 0) {
+        return false;
+    }
+    rosterWriteBackpack(rec, m, id, charges, flags);
+    return true;
+}
 
 /** OP_19 backpack place: first empty +$3A slot, else found-item overflow. Returns true
  *  when placed on a member (cond=1 path). */

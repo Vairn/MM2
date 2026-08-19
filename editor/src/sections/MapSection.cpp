@@ -143,12 +143,9 @@ bool MapSection::save(const std::string& dataDir) {
 }
 
 bool MapSection::isOutdoor(int screen) const {
-    if (mm2::isElementalPlane(screen)) return true;
     if (attribLoaded_) return attrib_.screens[screen].isOutdoor();
-    // Without attrib data, fall back to the named interior areas (towns,
-    // caverns, castles and dungeons all carry real names); unnamed indices are
-    // overland surface tiles.
-    return areaNameRaw(screen)[0] == '\0';
+    // No attrib: named screens are interiors; unnamed are overland. Planes are outdoor.
+    return isElementalPlane(screen) || areaNameRaw(screen)[0] == '\0';
 }
 
 bool MapSection::usesOutbCarto(int screen) const {

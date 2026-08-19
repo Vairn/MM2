@@ -1,13 +1,14 @@
 #include "mm2_found_items.h"
+#include "mm2_gamestate.h"
 
 /* Signed A4 displacements (mirror MM2_GS_FOUND_* in mm2_gamestate.h). */
 enum {
-    OFF_ID       = -0x3F1C,
-    OFF_FLAGS    = -0x3F19,
-    OFF_CHARGES  = -0x3F16,
-    OFF_GEMS     = -0x3F12,
-    OFF_GOLD     = -0x3F10,
-    OFF_SENTINEL = -0x794C
+    OFF_ID       = MM2_GS_FOUND_ITEM_ID,
+    OFF_FLAGS    = MM2_GS_FOUND_ITEM_FLAGS,
+    OFF_CHARGES  = MM2_GS_FOUND_ITEM_CHARGES,
+    OFF_GEMS     = MM2_GS_FOUND_GEMS,
+    OFF_GOLD     = MM2_GS_FOUND_GOLD_EXP,
+    OFF_SENTINEL = MM2_GS_FOUND_SENTINEL
 };
 
 /* Big-endian RAM accessors (68k move.w / move.l store order). */

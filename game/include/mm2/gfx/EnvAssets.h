@@ -1,16 +1,7 @@
 #pragma once
-// Per-environment tileset selection + loading.
-//
-// The area-load dispatcher (ASM 0x1786..0x187E, jump table @ 0x1880, 7 env
-// cases) resolves filename-table entries (DATA 0x7B0, 4 bytes/entry) into
-// the A4 sheet handles. Roles (EXTRACTED/docs/15-3d-view-and-game-screen.md §1):
-//   -$7A06 walls   -$7A22 floor   -$7A1E ceiling   -$7A1A auto-map
-//   -$7A16/-$7A12/-$7A0E outdoor sheets   -$7A02 sky (global, entry 6,
-//   loaded once @ 0x25FA6)   -$7A0A biome floor decor (outdoor)
-//
-// Indoor milestone: walls (-$7A06), floor (-$7A22), global sky.32 (-$7A02).
-// Outdoor milestone: outf.32 floor, sky.32, outdoor1/2/3.32 horizon layers,
-// biome decor sheets (desert/ocean/tundra/swamp).
+// Area-load dispatcher 0x1786..0x187E (jump @ 0x1880): filename table DATA 0x7B0.
+//   -$7A06 walls  -$7A22 floor  -$7A1E ceiling/torches  -$7A1A automap
+//   -$7A02 sky (entry 6, once @ 0x25FA6)  -$7A0A outdoor biome decor
 
 #include "mm2/CppStdCompat.h"
 
@@ -45,10 +36,9 @@ EnvKind envKindFromAttrib(const Mm2AttribRecord &rec);
 
 class EnvAssets {
 public:
-    /* Load the global sky sheet (sky.32, filename-table entry 6). */
+    /* sky.32, filename-table entry 6. */
     bool loadGlobal(const char *data_dir);
 
-    /* (Re)load the per-environment sheets for the active view mode. */
     bool loadEnv(const char *data_dir, EnvKind kind);
 
     void unloadAll();

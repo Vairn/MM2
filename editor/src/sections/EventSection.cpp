@@ -285,22 +285,6 @@ std::optional<std::pair<int, int>> overlayTargetFromStmt(const eventlang::Stmt& 
     return eventlang::binExecSelector(sel);
 }
 
-/** First overlay target in a script body (walks nested ifs). */
-std::optional<std::pair<int, int>> overlayTargetFromScript(const eventlang::Script& sc) {
-    std::function<std::optional<std::pair<int, int>>(const std::vector<eventlang::Stmt>&)> walk;
-    walk = [&](const std::vector<eventlang::Stmt>& stmts) -> std::optional<std::pair<int, int>> {
-        for (const auto& st : stmts) {
-            if (auto t = overlayTargetFromStmt(st)) return t;
-            if (st.kind == "if") {
-                if (auto t = walk(st.thenBody)) return t;
-                if (auto t = walk(st.elseBody)) return t;
-            }
-        }
-        return std::nullopt;
-    };
-    return walk(sc.body);
-}
-
 /** Parse `overlay N event_MM` from a .mm2evt line (ignores leading space / trailing comment). */
 std::optional<std::pair<int, int>> parseOverlayLine(std::string_view line) {
     while (!line.empty() && (line.front() == ' ' || line.front() == '\t')) line.remove_prefix(1);
@@ -322,26 +306,6 @@ std::optional<std::pair<int, int>> parseOverlayLine(std::string_view line) {
     if (i == start) return std::nullopt;
     for (size_t j = start; j < i; ++j) ev = ev * 10 + (line[j] - '0');
     return std::make_pair(loc, ev);
-}
-
-/** True when the script is essentially a single overlay call (+ optional clear_tile_event). */
-bool scriptIsOverlayOnly(const eventlang::Script& sc) {
-    int overlayN = 0;
-    for (const auto& st : sc.body) {
-        if (st.kind == "clear_tile_event" || st.kind == "end" || st.kind == "abort") continue;
-        if (overlayTargetFromStmt(st)) {
-            ++overlayN;
-            continue;
-        }
-        return false;
-    }
-    return overlayN == 1;
-}
-
-std::string hex2sh(int v) {
-    char buf[8];
-    std::snprintf(buf, sizeof(buf), "%02X", v & 0xFF);
-    return buf;
 }
 
 }  // namespace

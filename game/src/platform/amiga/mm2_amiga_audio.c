@@ -1,5 +1,5 @@
 /**
- * Amiga Paula generative SFX/title — ASM-faithful tables + play_tone_env timing.
+ * Amiga Paula SFX/title — tables + play_tone_env timing (0x77AA / 0x6FB8).
  *
  * ACE owns the machine, so we poke custom.aud[] / DMACON (same end state as
  * audio.device CMD_WRITE in retail 0x738C / 0x7532).

@@ -42,13 +42,7 @@ size_t formatPartyStatusLine(char *out, size_t cap, int slot_index, const char *
         /* combat_message_helper @ 0x12848: glyph 0x17 or space, then same name/HP. */
         const char prefix =
             prefix_style == PartyStatusPrefix::CombatFrontRank ? static_cast<char>(0x17) : ' ';
-        if (hp > 999) {
-            std::snprintf(out, cap, "%c%d) %s /+++", prefix, slot_digit, nm);
-        } else {
-            std::snprintf(out, cap, "%c%d) %s /%s", prefix, slot_digit, nm, hp_field);
-        }
-    } else if (hp > 999) {
-        std::snprintf(out, cap, " %d) %s /+++", slot_digit, nm);
+        std::snprintf(out, cap, "%c%d) %s /%s", prefix, slot_digit, nm, hp_field);
     } else {
         std::snprintf(out, cap, " %d) %s /%s", slot_digit, nm, hp_field);
     }

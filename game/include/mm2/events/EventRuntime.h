@@ -2,6 +2,7 @@
 // event.dat runtime: loader @ 0x92F2, init @ 0x1754A, scanner @ 0x175E2, VM @ 0x172CA.
 
 #include "mm2/GameState.h"
+#include "mm2/events/EventOp.h"
 #include "mm2/combat/CombatSession.h"
 #include "mm2/events/EventTextView.h"
 #include "mm2/gameplay/ExploreActions.h"
@@ -182,9 +183,62 @@ private:
     void normalizeAtToNewline(char *s) const;
 
     uint8_t readU8(GameStateView &gs);
+    const char *readScriptString(GameStateView &gs, char *buf, size_t cap);
+    bool cantSee(const GameStateView &gs) const;
     void skipTokens(GameStateView &gs, int count);
     bool runVmLoop(GameStateView &gs, world::MapWorld &world);
     void dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t op);
+    void opInvalid(GameStateView &gs);
+    void opText(GameStateView &gs);
+    void opTextBlock(GameStateView &gs);
+    void opText3(GameStateView &gs);
+    void opTextDoor(GameStateView &gs);
+    void opTextPopupA(GameStateView &gs);
+    void opTextPopupB(GameStateView &gs);
+    void opWaitSpace(GameStateView &gs);
+    void opWaitSpaceScripted(GameStateView &gs);
+    void opPromptYn(GameStateView &gs);
+    void opPromptYnB(GameStateView &gs);
+    void opShowServiceWindow(GameStateView &gs, world::MapWorld &world);
+    void opMapTransition(GameStateView &gs, world::MapWorld &world);
+    void opPlaySoundSeq(GameStateView &gs, world::MapWorld &world);
+    void opExecSelector(GameStateView &gs, world::MapWorld &world);
+    void opEndScript(GameStateView &gs);
+    void opIfTrueSkiptok(GameStateView &gs);
+    void opIfFalseSkiptok(GameStateView &gs);
+    void opEncounterSetup(GameStateView &gs, world::MapWorld &world);
+    void opEncounterSetupB(GameStateView &gs, world::MapWorld &world);
+    void opClearTileEvent(GameStateView &gs, world::MapWorld &world);
+    void opApplyParty(GameStateView &gs);
+    void opScanPartyItems(GameStateView &gs);
+    void opLoadVarRawToCond(GameStateView &gs);
+    void opApplyPartyMasked(GameStateView &gs);
+    void opGiveItem(GameStateView &gs);
+    void opStoreVar8(GameStateView &gs);
+    void opCondThreshold(GameStateView &gs);
+    void opRngRollToCond(GameStateView &gs);
+    void opAudioWait(GameStateView &gs);
+    void opDelay(GameStateView &gs);
+    void opPartyEffect(GameStateView &gs, bool mode_b);
+    void opSetTile(GameStateView &gs, world::MapWorld &world);
+    void opCheckEraRange(GameStateView &gs);
+    void opCheckDayRange(GameStateView &gs);
+    void opPayGoldToCond(GameStateView &gs);
+    void opPayGemsToCond(GameStateView &gs);
+    void opSelectMember(GameStateView &gs);
+    void opSelectMemberB(GameStateView &gs);
+    void opConsumeItemToCond(GameStateView &gs);
+    void opSetAbort(GameStateView &gs);
+    void opSetTreasure(GameStateView &gs);
+    void opSkiptokIfVictory(GameStateView &gs);
+    void opAddWordCounter(GameStateView &gs);
+    void opCheckMemberAttr(GameStateView &gs);
+    void opOrMemberField(GameStateView &gs);
+    void opReadAnswer(GameStateView &gs);
+    void opCheckAnswer(GameStateView &gs);
+    void opPartyIterateDamage(GameStateView &gs);
+    void opCountTitleNibble(GameStateView &gs);
+    void opUnknown(GameStateView &gs, uint8_t op);
     void endScript(GameStateView &gs);
     void abortScript(GameStateView &gs);
     void resetDelayState();

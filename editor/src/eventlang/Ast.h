@@ -1,6 +1,5 @@
 #pragma once
 // Event-script AST (editor decompiler/compiler).
-// Shape matches tools/mm2_event_lang/ast.py, not the fixed-array C stub.
 
 #include <cstdint>
 #include <map>
@@ -85,7 +84,7 @@ struct LoweredOp {
     int off = 0;  // offset within segment
 };
 
-// Flexible key/value bags keep parity with the Python AST without a huge enum.
+// Flexible key/value bags (avoids a huge stmt/expr enum).
 struct Expr {
     std::string kind;
     std::map<std::string, std::string> str;

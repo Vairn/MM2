@@ -1,11 +1,8 @@
 #pragma once
 
 /**
- * Amiga / ACE configuration for MM2 (AmigaPorts/ACE + EXTRACTED/docs/41-aga-port-plan.md).
- *
- * CMake must set the ACE_* cache variables before FetchContent(ace_engine), and the game
- * target must define ACE_USE_AGA_FEATURES / ACE_USE_ECS_FEATURES so headers match the
- * linked ACE build (see game/CMakeLists.txt).
+ * Amiga / ACE config. CMake sets ACE_* before FetchContent(ace); the game target
+ * must define ACE_USE_AGA_FEATURES / ACE_USE_ECS_FEATURES to match the linked build.
  */
 
 /* --- ACE feature flags (LoL: CMakeLists.txt ACE_USE_AGA_FEATURES / ACE_USE_ECS_FEATURES) --- */

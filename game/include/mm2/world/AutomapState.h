@@ -40,7 +40,6 @@ public:
     void saveToRosterTail(Mm2RosterFile &roster) const;
 
     static bool partyHasCartographer(const Mm2RosterFile &roster, const Mm2PartyLaunch &launch);
-    static bool rosterHasSkillId(const Mm2RosterRecord &rec, int skill_id);
 
 private:
     AutomapScreenVis screens_[MM2_MAP_SCREEN_COUNT]{};

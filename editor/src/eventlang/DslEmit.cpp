@@ -1,5 +1,6 @@
 #include "eventlang/DslEmit.h"
 
+#include "core/ByteIO.h"
 #include "core/EventOps.h"
 #include "eventlang/Semantics.h"
 
@@ -14,14 +15,7 @@
 namespace mm2::eventlang {
 namespace {
 
-std::string hex2(int v) {
-    char buf[8];
-    std::snprintf(buf, sizeof(buf), "0x%02X", v & 0xFF);
-    return buf;
-}
-
 std::string itemNameComment(int id, const EmitLookups* lookups);
-std::string monsterNameComment(int id, const EmitLookups* lookups);
 
 std::string formatExpr(const Expr& expr, const EmitLookups* lookups) {
     const std::string& k = expr.kind;
@@ -79,11 +73,11 @@ std::string formatExpr(const Expr& expr, const EmitLookups* lookups) {
     }
     if (k == "party_effect_ok") {
         std::ostringstream oss;
-        oss << "party_effect_ok mode=" << expr.getNum("mode") << " sel=" << hex2(expr.getNum("sel"));
+        oss << "party_effect_ok mode=" << expr.getNum("mode") << " sel=" << hexByte(expr.getNum("sel"));
         auto it = expr.lists.find("args");
         if (it != expr.lists.end() && it->second.size() > 1) {
             oss << " args";
-            for (size_t i = 1; i < it->second.size(); ++i) oss << " " << hex2(it->second[i]);
+            for (size_t i = 1; i < it->second.size(); ++i) oss << " " << hexByte(it->second[i]);
         }
         return oss.str();
     }
@@ -151,10 +145,10 @@ std::string formatExpr(const Expr& expr, const EmitLookups* lookups) {
     }
     if (k == "raw_op") {
         std::ostringstream oss;
-        oss << "@op " << hex2(expr.getNum("op"));
+        oss << "@op " << hexByte(expr.getNum("op"));
         auto it = expr.lists.find("args");
         if (it != expr.lists.end())
-            for (int x : it->second) oss << " " << hex2(x);
+            for (int x : it->second) oss << " " << hexByte(x);
         return oss.str();
     }
     return "@cond " + k;
@@ -189,20 +183,6 @@ std::string stringRefComment(const std::string& ref,
 std::string itemNameComment(int id, const EmitLookups* lookups) {
     if (!lookups || !lookups->itemName) return {};
     const std::string nm = lookups->itemName(id);
-    if (nm.empty() || nm[0] == '#') return {};
-    std::string one = nm;
-    for (char& c : one)
-        if (c == '\n') c = '@';
-    while (!one.empty() && (one.back() == ' ' || one.back() == '\t')) one.pop_back();
-    if (one.size() > 56) one = one.substr(0, 53) + "...";
-    for (char& c : one)
-        if (c == '"') c = '\'';
-    return std::string("  # ") + one;
-}
-
-std::string monsterNameComment(int id, const EmitLookups* lookups) {
-    if (!lookups || !lookups->monsterName) return {};
-    const std::string nm = lookups->monsterName(id);
     if (nm.empty() || nm[0] == '#') return {};
     std::string one = nm;
     for (char& c : one)
@@ -363,11 +343,11 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
     }
     if (k == "party_effect") {
         std::ostringstream oss;
-        oss << pad << "party_effect mode=" << stmt.getNum("mode") << " sel=" << hex2(stmt.getNum("sel"));
+        oss << pad << "party_effect mode=" << stmt.getNum("mode") << " sel=" << hexByte(stmt.getNum("sel"));
         auto it = stmt.lists.find("args");
         if (it != stmt.lists.end() && it->second.size() > 1) {
             oss << " args";
-            for (size_t i = 1; i < it->second.size(); ++i) oss << " " << hex2(it->second[i]);
+            for (size_t i = 1; i < it->second.size(); ++i) oss << " " << hexByte(it->second[i]);
             // Annotate field selector + LE24 amount (EventPartyEffects @ 0x1690E).
             if (it->second.size() >= 6) {
                 const int field = it->second[1];
@@ -387,7 +367,7 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
         oss << pad << "treasure";
         auto it = stmt.lists.find("data");
         if (it != stmt.lists.end())
-            for (int x : it->second) oss << " " << hex2(x);
+            for (int x : it->second) oss << " " << hexByte(x);
         lines.push_back(oss.str());
         return;
     }
@@ -427,13 +407,13 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
         auto mit = stmt.lists.find("monsters");
         if (mit != stmt.lists.end())
             for (int x : mit->second) {
-                oss << " " << hex2(x);
+                oss << " " << hexByte(x);
                 mids.push_back(x);
             }
         oss << " flags";
         auto fit = stmt.lists.find("flags");
         if (fit != stmt.lists.end())
-            for (int x : fit->second) oss << " " << hex2(x);
+            for (int x : fit->second) oss << " " << hexByte(x);
         // Name annotation: grouped spawn list after the opcode.
         if (!mids.empty() && lookups && lookups->monsterName) {
             std::string names;
@@ -491,7 +471,7 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
         auto it = stmt.lists.find("data");
         if (it != stmt.lists.end())
             for (int x : it->second) {
-                oss << " " << hex2(x);
+                oss << " " << hexByte(x);
                 if (x != 0) mids.push_back(x);
             }
         if (!mids.empty() && lookups && lookups->monsterName) {
@@ -651,10 +631,10 @@ void formatStmt(const Stmt& stmt, int depth, const std::unordered_map<std::strin
     }
     if (k == "raw_op") {
         std::ostringstream oss;
-        oss << pad << "@op " << hex2(stmt.getNum("op"));
+        oss << pad << "@op " << hexByte(stmt.getNum("op"));
         auto it = stmt.lists.find("args");
         if (it != stmt.lists.end())
-            for (int x : it->second) oss << " " << hex2(x);
+            for (int x : it->second) oss << " " << hexByte(x);
         lines.push_back(oss.str());
         return;
     }

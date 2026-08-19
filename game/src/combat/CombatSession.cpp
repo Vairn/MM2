@@ -4,11 +4,13 @@
 #include "mm2/combat/CombatAuto.h"
 #include "mm2/combat/EncounterPicker.h"
 #include "mm2/events/EventVmHelpers.h"
+#include "mm2/events/EventVmRegs.h"
 #include "mm2/events/TownServiceTransactions.h"
 #include "mm2/gameplay/SpellBook.h"
 #include "mm2/gameplay/RosterSkills.h"
 #include "mm2/platform/Audio.h"
 #include "mm2_create_character.h"
+#include "mm2_encounter.h"
 #include "mm2_found_items.h"
 
 #include <cstring>
@@ -280,9 +282,9 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
             ++bribe_gems;
         }
     }
-    mm2_gs_set_u8(gs.a4(), -0x11C2, bribe_food);
-    mm2_gs_set_u8(gs.a4(), -0x11C1, bribe_gold);
-    mm2_gs_set_u8(gs.a4(), -0x11C0, bribe_gems);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_BRIBE_FOOD, bribe_food);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_BRIBE_GOLD, bribe_gold);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_BRIBE_GEMS, bribe_gems);
     for (int i = 0; i < party_count_ && i < MM2_GS_PARTY_SIZE; ++i) {
         const int idx = rosterIndexForPartySlot(i);
         if (idx >= 0) {
@@ -334,7 +336,9 @@ bool CombatSession::enter(GameStateView &gs, const world::MapWorld &world)
     seedCombatStaticTables(gs);
     /* 0x923E buffer: flee thresh is attrib 0x0D at -$560D (even if MapWorld
      * was not file-loaded — tests synthesize attrib bytes). */
-    mm2_gs_set_u8(gs.a4(), MM2_GS_RETREAT_DIFF, world.attrib().raw[0x0D]);
+    Mm2EncounterTuning tuning{};
+    mm2_encounter_tuning_from_attrib(world.attrib().raw, &tuning);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_RETREAT_DIFF, tuning.retreat_difficulty);
     syncMonsterSlotsToGs(gs);
     /* 0x11C82/0x11C2C: seed -$503[slot] from -$11BA after 0x4C8E unpack. */
     for (int i = 0; i < MM2_GS_MONSTER_BATTLE_SLOTS; ++i) {
@@ -654,15 +658,15 @@ void CombatSession::resolveBribeTry(GameStateView &gs, const world::MapWorld &wo
     bool paid = false;
     uint8_t gate = 0;
     if (bribe_kind_ == 1) {
-        gate = mm2_gs_u8(gs.a4(), -0x11C2);
+        gate = mm2_gs_u8(gs.a4(), MM2_GS_BRIBE_FOOD);
         paid = gate != 0 && bribe_roll_ >= bribe_demand_ &&
                events::eventVmPartyTryPayFood(gs.a4(), roster_, launch_, amount_lo);
     } else if (bribe_kind_ == 2) {
-        gate = mm2_gs_u8(gs.a4(), -0x11C1);
+        gate = mm2_gs_u8(gs.a4(), MM2_GS_BRIBE_GOLD);
         paid = gate != 0 && bribe_roll_ >= bribe_demand_ &&
                events::eventVmPartyTryPayGold(gs.a4(), roster_, launch_, bribe_amount_);
     } else if (bribe_kind_ == 3) {
-        gate = mm2_gs_u8(gs.a4(), -0x11C0);
+        gate = mm2_gs_u8(gs.a4(), MM2_GS_BRIBE_GEMS);
         paid = gate != 0 && bribe_roll_ >= bribe_demand_ &&
                events::eventVmPartyTryPayGems(gs.a4(), roster_, launch_, bribe_amount_);
     }
@@ -1044,8 +1048,8 @@ bool CombatSession::tick(GameStateView &gs, const world::MapWorld &world, const 
             pending_cast_flat_ = -1;
             pending_cast_school_ = -1;
             mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 0);
-            mm2_gs_set_u16(gs.a4(), -0x3F0A, 0);
-            mm2_gs_set_u16(gs.a4(), -0x3F08, 0);
+            mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_SP_COST, 0);
+            mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_GEM_COST, 0);
             state_ = CombatState::AwaitingCommand;
             setStatus("");
             return false;
@@ -1244,7 +1248,7 @@ void CombatSession::beginRound(GameStateView &gs)
     /* 0x12B40..0x12B4C: initiative scratch */
     mm2_gs_set_u8(gs.a4(), -0x4F5, 0);
     mm2_gs_set_u8(gs.a4(), -0x5E37, 0);
-    mm2_gs_set_u8(gs.a4(), -0x4F7, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_TURN_SLOT, 0);
     mm2_gs_set_u8(gs.a4(), -0x5E38, 0);
 
     syncMonsterSlotsToGs(gs);
@@ -1468,8 +1472,8 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
         }
         gem_cost = meta->gems;
     }
-    mm2_gs_set_u16(gs.a4(), -0x3F0A, sp_cost);
-    mm2_gs_set_u16(gs.a4(), -0x3F08, gem_cost);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_SP_COST, sp_cost);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_GEM_COST, gem_cost);
     /* 0x6DC6: always sub gems from +$5C; SP from +$58 only if enough. */
     if (!skip_cast_cost_) {
         if (caster.gems >= gem_cost) {
@@ -1481,9 +1485,9 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             caster.sp_current = static_cast<uint16_t>(caster.sp_current - sp_cost);
         }
     }
-    mm2_gs_set_u16(gs.a4(), -0x3F0A, 0);
-    mm2_gs_set_u16(gs.a4(), -0x3F08, 0);
-    if (mm2_gs_u8(gs.a4(), -0x79EA) == 0) {
+    mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_SP_COST, 0);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_GEM_COST, 0);
+    if (events::eventAbort(gs) == 0) {
         mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
     }
 
@@ -1502,8 +1506,8 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 mm2_gs_set_u8(gs.a4(), off, static_cast<uint8_t>(t + 5));
             }
         }
-        mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
-        mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+        events::setEventAbort(gs);
+        events::clearEventWalkSpellLatch(gs);
     };
     auto addq_flag = [&](int32_t off) {
         /* Levitate/Guard Dog/Shelter: addq #1 if < $FF; set -$79EA, clr -$79E4. */
@@ -1511,8 +1515,18 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
         if (v < 0xFF) {
             mm2_gs_set_u8(gs.a4(), off, static_cast<uint8_t>(v + 1));
         }
-        mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
-        mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+        events::setEventAbort(gs);
+        events::clearEventWalkSpellLatch(gs);
+    };
+    auto apply_light = [&]() {
+        /* S1/5 and C1/5 Light @ 0xA8D8 */
+        uint8_t light = mm2_gs_u8(gs.a4(), MM2_GS_LIGHT_FACTOR);
+        if (light < 0xFE) {
+            mm2_gs_set_u8(gs.a4(), MM2_GS_LIGHT_FACTOR, static_cast<uint8_t>(light + 1));
+        }
+        events::setEventWalkSpellLatch(gs);
+        events::setEventAbort(gs);
+        effect = true;
     };
 
     if (meta && school == gameplay::SpellSchool::Sorcerer) {
@@ -1535,7 +1549,8 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS && n > 0 && n < static_cast<int>(sizeof(line) - 8); ++i) {
                 n += std::snprintf(line + n, sizeof(line) - static_cast<size_t>(n), " %c-%u",
                                    static_cast<char>('A' + i),
-                                   static_cast<unsigned>(caster.backpack_charges[i]));
+                                   static_cast<unsigned>(events::rosterBackpackCharges(
+                                       events::rosterRecordBytes(caster), i)));
             }
             std::snprintf(status_line_, sizeof(status_line_), "%s", line);
             mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
@@ -1547,13 +1562,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
             return;
         } else if (flat0 == 4) { /* S1/5 Light @ 0xA8D8 */
-            uint8_t light = mm2_gs_u8(gs.a4(), MM2_GS_LIGHT_FACTOR);
-            if (light < 0xFE) {
-                mm2_gs_set_u8(gs.a4(), MM2_GS_LIGHT_FACTOR, static_cast<uint8_t>(light + 1));
-            }
-            mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
-            effect = true;
+            apply_light();
         } else if (flat0 == 7) { /* S2/1 Eagle Eye @ 0xA91C */
             add_eye(MM2_GS_EAGLE_EYE_TIMER);
             effect = true;
@@ -1561,7 +1570,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             addq_flag(MM2_GS_LEVITATE_FLAG);
             effect = true;
         } else if (flat0 == 10) { /* S2/4 Jump @ 0xAFFA: 0x5692 facing step */
-            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x20) != 0) {
+            if ((mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) & 0x20) != 0) {
                 std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1570,11 +1579,11 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             facingDelta5692(gs, dx, dy);
             gs.setCoordX(static_cast<uint8_t>((gs.coordX() + dx) & 0x0F));
             gs.setCoordY(static_cast<uint8_t>((gs.coordY() + dy) & 0x0F));
-            mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
-            mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+            events::setEventAbort(gs);
+            events::clearEventWalkSpellLatch(gs);
             effect = true;
         } else if (flat0 == 12) { /* S2/6 Lloyd's Beacon @ 0xAADC */
-            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x40) != 0) {
+            if ((mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) & 0x40) != 0) {
                 std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1584,11 +1593,11 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
         } else if (flat0 == 13) { /* S2/7 Protection from Magic @ 0xC7A2 */
             const uint8_t lv = caster.level > 0 ? caster.level : 1;
             mm2_gs_set_u8(gs.a4(), MM2_GS_MAGIC_PROTECT, static_cast<uint8_t>(lv + 0x0A));
-            mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
-            mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+            events::setEventAbort(gs);
+            events::clearEventWalkSpellLatch(gs);
             effect = true;
         } else if (flat0 == 15) { /* S3/2 Fly @ 0xABCC */
-            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x40) != 0) {
+            if ((mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) & 0x40) != 0) {
                 std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1604,7 +1613,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             }
             effect = true;
         } else if (flat0 == 30) { /* S5/5 Teleport @ 0xADD6 */
-            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x10) != 0) {
+            if ((mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) & 0x10) != 0) {
                 std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1649,7 +1658,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
             }
-            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x08) != 0) {
+            if ((mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) & 0x08) != 0) {
                 std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1666,7 +1675,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
             }
-            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x01) != 0) {
+            if ((mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) & 0x01) != 0) {
                 std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1687,7 +1696,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             beginItemPickCast(gs, flat0, "Duplicate which (A-F)?");
             return;
         } else if (flat0 == 38) { /* S7/3 Etherealize @ 0xAFFA: Jump-equivalent facing step */
-            if ((mm2_gs_u8(gs.a4(), -0x5600) & 0x20) != 0) {
+            if ((mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_FLAGS) & 0x20) != 0) {
                 std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
@@ -1696,8 +1705,8 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             facingDelta5692(gs, dx, dy);
             gs.setCoordX(static_cast<uint8_t>((gs.coordX() + dx) & 0x0F));
             gs.setCoordY(static_cast<uint8_t>((gs.coordY() + dy) & 0x0F));
-            mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
-            mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+            events::setEventAbort(gs);
+            events::clearEventWalkSpellLatch(gs);
             effect = true;
         } else if (flat0 == 47) { /* S9/4 Enchant Item @ 0xB050 */
             beginItemPickCast(gs, flat0, "Enchant which (A-F)?");
@@ -1772,8 +1781,8 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
         } else if (flat0 == 11) { /* C2/5 Protection From Elements @ 0xC834 */
             const uint8_t lv = caster.level > 0 ? caster.level : 1;
             mm2_gs_set_u8(gs.a4(), MM2_GS_FORCES_PROTECT, static_cast<uint8_t>(lv + 0x14));
-            mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
-            mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+            events::setEventAbort(gs);
+            events::clearEventWalkSpellLatch(gs);
             effect = true;
         } else if (flat0 == 30) { /* C5/5 Remove Condition @ 0xC916 */
             if (party_count_ <= 1 && skip_cast_cost_) {
@@ -1784,13 +1793,7 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
             beginPartyPickCast(gs, flat0, "On whom");
             return;
         } else if (flat0 == 4) { /* C1/5 Light @ 0xA8D8 family */
-            uint8_t light = mm2_gs_u8(gs.a4(), MM2_GS_LIGHT_FACTOR);
-            if (light < 0xFE) {
-                mm2_gs_set_u8(gs.a4(), MM2_GS_LIGHT_FACTOR, static_cast<uint8_t>(light + 1));
-            }
-            mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
-            effect = true;
+            apply_light();
         } else if (flat0 == 15) { /* C3/2 Create Food @ 0xB1BE */
             if (caster.food < 0x28) {
                 caster.food = static_cast<uint8_t>(caster.food + 8);
@@ -1805,13 +1808,13 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 mm2_gs_set_u8(gs.a4(), MM2_GS_LIGHT_FACTOR,
                               static_cast<uint8_t>(light + 0x14));
             }
-            mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+            events::setEventWalkSpellLatch(gs);
+            events::setEventAbort(gs);
             effect = true;
         } else if (flat0 == 19) { /* C3/6 Walk on Water @ 0xB22C */
             mm2_gs_set_u8(gs.a4(), MM2_GS_WALK_WATER_FLAG, 1);
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
-            mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+            events::setEventAbort(gs);
+            events::clearEventWalkSpellLatch(gs);
             effect = true;
         } else if (flat0 == 21) { /* C4/2 @ 0xB278: move.b #1,-$79A3 (unnamed) */
             mm2_gs_set_u8(gs.a4(), MM2_GS_BUFF_79A3, 1);
@@ -1880,8 +1883,8 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 const uint8_t packed = kSeasonB[tier];
                 gs.setCoordX(static_cast<uint8_t>(packed & 0x0F));
                 gs.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
-                mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 1);
-                mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+                events::setEventExit(gs, 1);
+                events::setEventAbort(gs);
                 effect = true;
             } else {
                 std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
@@ -1909,8 +1912,8 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 gs.setCoordX(static_cast<uint8_t>(packed & 0x0F));
                 gs.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
                 gs.setScreenId(mm2_gs_u8(gs.a4(), MM2_GS_ATTRIB_RECALL_SCREEN));
-                mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
-                mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+                events::setEventWalkSpellLatch(gs);
+                events::setEventAbort(gs);
                 effect = true;
             } else {
                 std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
@@ -1991,13 +1994,13 @@ void CombatSession::resolvePlayerCast(GameStateView &gs, int flat0)
                 return;
             }
             /* 0xC6C0: if -$51A already set → 0xD29C "already" path; else addq + heal. */
-            if (mm2_gs_u8(gs.a4(), -0x51A) != 0) {
+            if (mm2_gs_u8(gs.a4(), MM2_GS_DIVINE_INT_USED) != 0) {
                 std::snprintf(status_line_, sizeof(status_line_),
                               "Divine Intervention already used.");
                 mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
                 return;
             }
-            mm2_gs_set_u8(gs.a4(), -0x51A, 1);
+            mm2_gs_set_u8(gs.a4(), MM2_GS_DIVINE_INT_USED, 1);
             for (int p = 0; p < party_count_ && p < MM2_GS_PARTY_SIZE; ++p) {
                 const int ri = rosterIndexForPartySlot(p);
                 if (ri < 0) {
@@ -2131,8 +2134,8 @@ bool CombatSession::tickPartyPick(GameStateView &gs, char key)
             const uint8_t packed = mm2_gs_u8(gs.a4(), MM2_GS_LLOYD_COORD);
             gs.setCoordX(static_cast<uint8_t>(packed & 0x0F));
             gs.setCoordY(static_cast<uint8_t>((packed >> 4) & 0x0F));
-            mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
-            mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+            events::setEventWalkSpellLatch(gs);
+            events::setEventAbort(gs);
             std::snprintf(status_line_, sizeof(status_line_), "Beacon recalled.");
         } else {
             return false;
@@ -2156,8 +2159,8 @@ bool CombatSession::tickPartyPick(GameStateView &gs, char key)
             gs.setCoordX(static_cast<uint8_t>((gs.coordX() + dx) & 0x0F));
             gs.setCoordY(static_cast<uint8_t>((gs.coordY() + dy) & 0x0F));
         }
-        mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
-        mm2_gs_set_u8(gs.a4(), -0x79E4, 0);
+        events::setEventAbort(gs);
+        events::clearEventWalkSpellLatch(gs);
         pending_cast_flat_ = -1;
         pending_cast_school_ = -1;
         mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
@@ -2186,8 +2189,8 @@ bool CombatSession::tickPartyPick(GameStateView &gs, char key)
         gs.setCoordY(0xFF);
         gs.setCoordX(0xFF);
         gs.setScreenId(mm2_gs_u8(gs.a4(), MM2_GS_FLY_SCREEN_TBL + idx));
-        mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
-        mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+        events::setEventWalkSpellLatch(gs);
+        events::setEventAbort(gs);
         cast_aux_ = -1;
         pending_cast_flat_ = -1;
         pending_cast_school_ = -1;
@@ -2205,8 +2208,8 @@ bool CombatSession::tickPartyPick(GameStateView &gs, char key)
         gs.setScreenId(static_cast<uint8_t>(key - '1'));
         gs.setCoordX(0xFF);
         gs.setCoordY(0xFF);
-        mm2_gs_set_u8(gs.a4(), -0x79E4, 1);
-        mm2_gs_set_u8(gs.a4(), -0x79EA, 1);
+        events::setEventWalkSpellLatch(gs);
+        events::setEventAbort(gs);
         pending_cast_flat_ = -1;
         pending_cast_school_ = -1;
         mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_ACTED, 1);
@@ -2371,7 +2374,8 @@ bool CombatSession::tickItemPick(GameStateView &gs, char key)
     }
     const int pack_slot = uk - 'A';
     const int ri = rosterIndexForPartySlot(active_party_slot_);
-    if (ri < 0 || roster_->records[ri].backpack_id[pack_slot] == 0) {
+    if (ri < 0 ||
+        events::rosterBackpackId(events::rosterRecordBytes(roster_->records[ri]), pack_slot) == 0) {
         return false; /* 0xB56E: empty slot rejected, re-prompt */
     }
     const int school = pending_cast_school_;
@@ -2400,13 +2404,14 @@ void CombatSession::applyRechargeToBackpackSlot(GameStateView &gs, int pack_slot
         return;
     }
     Mm2RosterRecord &rec = roster_->records[ri];
-    if (rec.backpack_charges[pack_slot] == 0) {
+    uint8_t *raw = events::rosterRecordBytes(rec);
+    if (events::rosterBackpackCharges(raw, pack_slot) == 0) {
         std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
         return;
     }
     const int add = rng_ ? rng_->range(1, 6) : 1;
-    const int sum = static_cast<int>(rec.backpack_charges[pack_slot]) + add;
-    rec.backpack_charges[pack_slot] = static_cast<uint8_t>(sum > 255 ? 255 : sum);
+    const int sum = static_cast<int>(events::rosterBackpackCharges(raw, pack_slot)) + add;
+    events::rosterSetBackpackCharges(raw, pack_slot, static_cast<uint8_t>(sum > 255 ? 255 : sum));
     std::snprintf(status_line_, sizeof(status_line_), "Recharged +%d.", add);
 }
 
@@ -2419,25 +2424,18 @@ void CombatSession::applyDuplicationFromBackpackSlot(GameStateView &gs, int pack
         return;
     }
     Mm2RosterRecord &rec = roster_->records[ri];
-    const uint8_t id = rec.backpack_id[pack_slot];
+    uint8_t *raw = events::rosterRecordBytes(rec);
+    const uint8_t id = events::rosterBackpackId(raw, pack_slot);
     if (id == 0 || id >= 0xD0) {
         std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
         return;
     }
-    int empty = -1;
-    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
-        if (rec.backpack_id[i] == 0) {
-            empty = i;
-            break;
-        }
-    }
-    if (empty < 0) {
+    if (!events::rosterPlaceInFirstEmptyBackpack(raw, id,
+                                                 events::rosterBackpackCharges(raw, pack_slot),
+                                                 events::rosterBackpackFlags(raw, pack_slot))) {
         std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
         return;
     }
-    rec.backpack_id[empty] = id;
-    rec.backpack_charges[empty] = rec.backpack_charges[pack_slot];
-    rec.backpack_flags[empty] = rec.backpack_flags[pack_slot];
     mm2_gs_set_u8(gs.a4(), MM2_GS_ENGINE_FLAG_79E8, 1);
     std::snprintf(status_line_, sizeof(status_line_), "Duplicated.");
 }
@@ -2450,19 +2448,20 @@ void CombatSession::applyEnchantToBackpackSlot(GameStateView &gs, int pack_slot)
         return;
     }
     Mm2RosterRecord &rec = roster_->records[ri];
-    const uint8_t flags = rec.backpack_flags[pack_slot];
+    uint8_t *raw = events::rosterRecordBytes(rec);
+    const uint8_t flags = events::rosterBackpackFlags(raw, pack_slot);
     const uint8_t hi = static_cast<uint8_t>(flags & 0xC0);
     uint8_t plus = static_cast<uint8_t>(flags & 0x3F);
     /* 0xB0A0: plus*$32 → -$3F0A; cmp vs +$58 (sp_max). */
     const uint16_t need = static_cast<uint16_t>(static_cast<uint16_t>(plus) * 0x32);
-    mm2_gs_set_u16(gs.a4(), -0x3F0A, need);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_SPELL_SP_COST, need);
     if (rec.sp_max < need) {
         std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
         return;
     }
     /* cmpi #$3F / bhi skip addq; plus already ≤$3F so always addq (may become $40). */
     plus = static_cast<uint8_t>(plus + 1);
-    rec.backpack_flags[pack_slot] = static_cast<uint8_t>(hi | plus);
+    events::rosterSetBackpackFlags(raw, pack_slot, static_cast<uint8_t>(hi | plus));
     std::snprintf(status_line_, sizeof(status_line_), "Enchanted.");
 }
 
@@ -2475,11 +2474,12 @@ void CombatSession::applyUncurseToBackpackSlot(GameStateView &gs, int pack_slot)
         return;
     }
     Mm2RosterRecord &rec = roster_->records[ri];
-    if (rec.backpack_charges[pack_slot] == 0xFF) {
+    uint8_t *raw = events::rosterRecordBytes(rec);
+    if (events::rosterBackpackCharges(raw, pack_slot) == 0xFF) {
         std::snprintf(status_line_, sizeof(status_line_), "* Spell Failed *");
         return;
     }
-    rec.backpack_charges[pack_slot] = 1;
+    events::rosterSetBackpackCharges(raw, pack_slot, 1);
     std::snprintf(status_line_, sizeof(status_line_), "Uncursed.");
 }
 
@@ -2662,43 +2662,44 @@ bool CombatSession::applyItemUse(GameStateView &gs, int party_slot, bool backpac
         return false;
     }
     Mm2RosterRecord &r = roster_->records[ri];
+    uint8_t *raw = events::rosterRecordBytes(r);
     uint8_t item_id = 0;
     uint8_t flags_before = 0;
     if (backpack) {
-        item_id = r.backpack_id[slot_index];
-        flags_before = r.backpack_flags[slot_index];
+        item_id = events::rosterBackpackId(raw, slot_index);
+        flags_before = events::rosterBackpackFlags(raw, slot_index);
         if (item_id == 0 || item_id == 0xFF) {
             std::snprintf(status_line_, sizeof(status_line_), "No power.");
             return false;
         }
-        if (r.backpack_charges[slot_index] == 0) {
+        if (events::rosterBackpackCharges(raw, slot_index) == 0) {
             std::snprintf(status_line_, sizeof(status_line_), "No charges.");
             return false;
         }
-        r.backpack_charges[slot_index] =
-            static_cast<uint8_t>(r.backpack_charges[slot_index] - 1);
-        if (r.backpack_charges[slot_index] == 0) {
-            r.backpack_id[slot_index] = 0xFF;
-            r.backpack_flags[slot_index] = 0;
+        events::rosterSetBackpackCharges(
+            raw, slot_index, static_cast<uint8_t>(events::rosterBackpackCharges(raw, slot_index) - 1));
+        if (events::rosterBackpackCharges(raw, slot_index) == 0) {
+            events::rosterSetBackpackId(raw, slot_index, 0xFF);
+            events::rosterSetBackpackFlags(raw, slot_index, 0);
         }
     } else {
-        item_id = r.equipped_id[slot_index];
-        flags_before = r.equipped_flags[slot_index];
+        item_id = events::rosterEquipId(raw, slot_index);
+        flags_before = events::rosterEquipFlags(raw, slot_index);
         if (item_id == 0) {
             std::snprintf(status_line_, sizeof(status_line_), "No power.");
             return false;
         }
-        if (r.equipped_charges[slot_index] == 0) {
+        if (events::rosterEquipCharges(raw, slot_index) == 0) {
             std::snprintf(status_line_, sizeof(status_line_), "No charges.");
             return false;
         }
         /* Combat equip path decrements; explore 0xE8D8 does not. */
         if (state_ != CombatState::Inactive && !exploration_cast_) {
-            r.equipped_charges[slot_index] =
-                static_cast<uint8_t>(r.equipped_charges[slot_index] - 1);
-            if (r.equipped_charges[slot_index] == 0) {
-                r.equipped_id[slot_index] = 0xFF;
-                r.equipped_flags[slot_index] = 0;
+            events::rosterSetEquipCharges(
+                raw, slot_index, static_cast<uint8_t>(events::rosterEquipCharges(raw, slot_index) - 1));
+            if (events::rosterEquipCharges(raw, slot_index) == 0) {
+                events::rosterSetEquipId(raw, slot_index, 0xFF);
+                events::rosterSetEquipFlags(raw, slot_index, 0);
             }
         }
     }
@@ -4246,11 +4247,11 @@ void CombatSession::resolvePlayerAttack(GameStateView &gs, bool shooting, int ta
 
     loadMonsterCombatGlobals(gs, target);
     mm2_gs_set_u8(gs.a4(), MM2_GS_CUR_MON_SLOT, static_cast<uint8_t>(target));
-    mm2_gs_set_u8(gs.a4(), -0x5E32, shooting ? 1 : 0); /* ranged latch */
-    mm2_gs_set_u8(gs.a4(), -0x5E2A, 0);
-    mm2_gs_set_u8(gs.a4(), -0x5E2F, 0);
-    mm2_gs_set_u8(gs.a4(), -0x5E30, 0);
-    mm2_gs_set_u8(gs.a4(), -0x5E31, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_RANGED, shooting ? 1 : 0); /* ranged latch */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_CRIT, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_DMG_ADD, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_DMG_SIDES, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_HIT_N, 0);
     mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, 0);
 
     const uint8_t cls = attacker.class_id;
@@ -4259,32 +4260,32 @@ void CombatSession::resolvePlayerAttack(GameStateView &gs, bool shooting, int ta
     const uint8_t swing_div = mm2_gs_u8(gs.a4(), -0x6F36 + (cls < 8 ? cls : 0));
     const uint8_t hd = hit_div > 0 ? hit_div : 1;
     const uint8_t sd = swing_div > 0 ? swing_div : 1;
-    mm2_gs_set_u8(gs.a4(), -0x5E2C, static_cast<uint8_t>(level / hd));
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_HIT_LEVEL, static_cast<uint8_t>(level / hd));
     uint8_t swings = static_cast<uint8_t>(level / sd + 1);
-    mm2_gs_set_u8(gs.a4(), -0x5E2E, swings);
-    mm2_gs_set_u8(gs.a4(), -0x5E2D, swings);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_SWINGS, swings);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_SWING_MAX, swings);
 
     /* +$4C..+$4F are combat weapon sides/bonus (roster "spells[0..3]"). */
-    mm2_gs_set_u8(gs.a4(), -0x5E30, attacker.spells[0]); /* +$4C */
-    mm2_gs_set_u8(gs.a4(), -0x5E2B, attacker.spells[1]); /* +$4D */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_DMG_SIDES, attacker.spells[0]); /* +$4C */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_HIT_BONUS, attacker.spells[1]); /* +$4D */
     if (shooting) {
-        mm2_gs_set_u8(gs.a4(), -0x5E2B, attacker.spells[3]); /* +$4F */
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_HIT_BONUS, attacker.spells[3]); /* +$4F */
         if (cls == 2) { /* Archer: addend = rng(1,min(level,100)) */
             uint8_t lv = level > 0x64 ? 0x64 : level;
-            mm2_gs_set_u8(gs.a4(), -0x5E2F, static_cast<uint8_t>(rng_->range(1, lv > 0 ? lv : 1)));
+            mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_DMG_ADD, static_cast<uint8_t>(rng_->range(1, lv > 0 ? lv : 1)));
         } else {
-            mm2_gs_set_u8(gs.a4(), -0x5E30, attacker.spells[2]); /* +$4E */
+            mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_DMG_SIDES, attacker.spells[2]); /* +$4E */
         }
     }
     {
-        uint8_t add = mm2_gs_u8(gs.a4(), -0x5E2F);
-        add = static_cast<uint8_t>(add + mm2_gs_u8(gs.a4(), -0x5E2B));
+        uint8_t add = mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_DMG_ADD);
+        add = static_cast<uint8_t>(add + mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_HIT_BONUS));
         add = static_cast<uint8_t>(add + gameplay::restSpellBonusFactor(attacker.might_base));
-        mm2_gs_set_u8(gs.a4(), -0x5E2F, add);
-        uint8_t hit_b = mm2_gs_u8(gs.a4(), -0x5E2B);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_DMG_ADD, add);
+        uint8_t hit_b = mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_HIT_BONUS);
         hit_b = static_cast<uint8_t>(hit_b + gameplay::restSpellBonusFactor(attacker.accuracy_base));
         hit_b = static_cast<uint8_t>(hit_b + mm2_gs_u8(gs.a4(), MM2_GS_BLESS_COUNTER));
-        mm2_gs_set_u8(gs.a4(), -0x5E2B, hit_b);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_HIT_BONUS, hit_b);
     }
 
     char mon_name[MM2_MONSTER_NAME_SIZE + 1];
@@ -4303,12 +4304,12 @@ void CombatSession::resolvePlayerAttack(GameStateView &gs, bool shooting, int ta
             if ((attacker.condition & 0x01) != 0) {
                 base = 3;
             }
-            int ceiling = static_cast<int>(base) + mm2_gs_u8(gs.a4(), -0x5E2C);
+            int ceiling = static_cast<int>(base) + mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_HIT_LEVEL);
             if (ceiling > 0xFA) {
                 ceiling = 0xFA;
             }
             int roll = rng_->range(1, ceiling > 0 ? ceiling : 1);
-            roll += mm2_gs_u8(gs.a4(), -0x5E2B);
+            roll += mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_HIT_BONUS);
             if (roll > 0xFF) {
                 hit = true;
             } else if (roll <= 0x0A) {
@@ -4327,18 +4328,18 @@ void CombatSession::resolvePlayerAttack(GameStateView &gs, bool shooting, int ta
             continue;
         }
         ++hits;
-        uint8_t sides = mm2_gs_u8(gs.a4(), -0x5E30);
+        uint8_t sides = mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_DMG_SIDES);
         int piece = rng_->range(1, sides > 0 ? sides : 1);
-        piece += mm2_gs_u8(gs.a4(), -0x5E2F);
+        piece += mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_DMG_ADD);
         if (piece > 0xFA) {
             piece = 1;
         }
-        mm2_gs_set_u8(gs.a4(), -0x5E31, static_cast<uint8_t>(mm2_gs_u8(gs.a4(), -0x5E31) + 1));
+        mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_HIT_N, static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_HIT_N) + 1));
         mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY,
                        static_cast<uint16_t>(mm2_gs_u16(gs.a4(), MM2_GS_HP_APPLY) + piece));
     }
     if (hits > 0) {
-        const uint16_t bonus = mm2_gs_u8(gs.a4(), -0x7999);
+        const uint16_t bonus = mm2_gs_u8(gs.a4(), MM2_GS_HOLY_BONUS_CTR);
         if (bonus != 0) {
             mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY,
                            static_cast<uint16_t>(mm2_gs_u16(gs.a4(), MM2_GS_HP_APPLY) + bonus));
@@ -4353,13 +4354,13 @@ void CombatSession::resolvePlayerAttack(GameStateView &gs, bool shooting, int ta
         const int lr = rng_->range(1, static_cast<int>(luck) + 0x64);
         if (cls == 5) { /* Ninja */
             if (lr > 0x5A || lr < 5) {
-                mm2_gs_set_u8(gs.a4(), -0x5E2A, 1);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_CRIT, 1);
                 mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY,
                                static_cast<uint16_t>(mm2_gs_u16(gs.a4(), MM2_GS_HP_APPLY) * 2));
             }
         } else if (cls == 6) { /* Robber */
             if (lr > 0x5E || lr < 5) {
-                mm2_gs_set_u8(gs.a4(), -0x5E2A, 2);
+                mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_CRIT, 2);
                 mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY,
                                static_cast<uint16_t>(mm2_gs_u16(gs.a4(), MM2_GS_HP_APPLY) * 4));
             }
@@ -4368,7 +4369,7 @@ void CombatSession::resolvePlayerAttack(GameStateView &gs, bool shooting, int ta
 
     const uint16_t dmg = mm2_gs_u16(gs.a4(), MM2_GS_HP_APPLY);
     /* 0x11040: shoots / attacks / back stabs (-$5E2A==1) / criticals (==2). */
-    const uint8_t crit = mm2_gs_u8(gs.a4(), -0x5E2A);
+    const uint8_t crit = mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_CRIT);
     const char *verb = "attacks";
     if (shooting) {
         verb = "shoots";
@@ -4667,7 +4668,7 @@ void CombatSession::resolveMonsterTurn(GameStateView &gs, int slot)
         const uint8_t melee_n = mm2_gs_u8(gs.a4(), MM2_GS_MELEE_RANGE_N);
         if (static_cast<uint8_t>(slot) < melee_n) {
             /* 0x1059E: clr ranged latch; 0x103BA target; 0x10478 damage. */
-            mm2_gs_set_u8(gs.a4(), -0x5E32, 0); /* 0x105A2: melee, not shoots */
+            mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_RANGED, 0); /* 0x105A2: melee, not shoots */
             mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, 0);
             const int target_slot = pickMonsterMeleeTarget103BA(gs);
             if (target_slot >= 0) {
@@ -4687,7 +4688,7 @@ void CombatSession::resolveMonsterTurn(GameStateView &gs, int slot)
     }
 
     /* 0x10838: clr -$5E32; 0x1061E/0x1265E highlight via panelView highlight_slot. */
-    mm2_gs_set_u8(gs.a4(), -0x5E32, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_RANGED, 0);
 }
 
 void CombatSession::spellFailedBanner1042C(GameStateView &gs)
@@ -4832,7 +4833,7 @@ void CombatSession::deliverMonsterHit10478(GameStateView &gs, int mon_slot, int 
     if (mm2_gs_u8(gs.a4(), MM2_GS_POWER_SHIELD_CTR) != 0) {
         dmg = static_cast<uint16_t>(dmg / 2);
     }
-    if (mm2_gs_u8(gs.a4(), -0x5E32) == 0 && mm2_gs_u8(gs.a4(), MM2_GS_SHIELD_COUNTER) != 0) {
+    if (mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_RANGED) == 0 && mm2_gs_u8(gs.a4(), MM2_GS_SHIELD_COUNTER) != 0) {
         dmg = static_cast<uint16_t>(dmg / 2);
     }
     applyPartyDamage4AAA(gs, target_slot, dmg, mon_name);
@@ -4877,8 +4878,8 @@ void CombatSession::monsterRangedAttack10584(GameStateView &gs, int slot)
     /* 0x10584: move.b #1,-$5E32; jsr 0x10332; clr -$53B; jsr 0x10478. */
     char mon_name[MM2_MONSTER_NAME_SIZE + 1];
     mm2_monster_name_to_cstr(&monsters_->records[slots_[slot].type], mon_name, sizeof(mon_name));
-    mm2_gs_set_u8(gs.a4(), -0x5E32, 1);
-    mm2_gs_set_u8(gs.a4(), -0x53B, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_RANGED, 1);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SPELL_STATUS_MODE, 0);
     const int target_slot = pickMonsterRangedTarget10332(gs);
     if (target_slot < 0) {
         return;
@@ -4904,7 +4905,7 @@ static uint16_t shieldHalvePartyDmg(uint8_t *a4, uint16_t dmg)
     if (mm2_gs_u8(a4, MM2_GS_POWER_SHIELD_CTR) != 0) {
         dmg = static_cast<uint16_t>(dmg / 2);
     }
-    if (mm2_gs_u8(a4, -0x5E32) == 0 && mm2_gs_u8(a4, MM2_GS_SHIELD_COUNTER) != 0) {
+    if (mm2_gs_u8(a4, MM2_GS_ATTACK_RANGED) == 0 && mm2_gs_u8(a4, MM2_GS_SHIELD_COUNTER) != 0) {
         dmg = static_cast<uint16_t>(dmg / 2);
     }
     return dmg;
@@ -5003,7 +5004,7 @@ void CombatSession::partyResistFlags7D94(GameStateView &gs, int party_slot)
             thr += rec.unknown_1a_20[2]; /* +$1C */
         } else {
             /* 0x4A44: *(party + flag_c + $11) */
-            const auto *raw = reinterpret_cast<const uint8_t *>(&rec);
+            const uint8_t *raw = events::rosterRecordBytes(rec);
             const int off = static_cast<int>(flag_c) + 0x11;
             if (off >= 0 && off < static_cast<int>(sizeof(Mm2RosterRecord))) {
                 thr += raw[off];
@@ -5464,9 +5465,9 @@ uint16_t CombatSession::monsterMeleeDamage10478(GameStateView &gs, int mon_slot,
 {
     /* 0x10478: hit_chance from type>>4 via -$6F16; ceiling vs AC+$24; swings. */
     mm2_gs_set_u16(gs.a4(), MM2_GS_HP_APPLY, 0);
-    mm2_gs_set_u8(gs.a4(), -0x5E31, 0);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_HIT_N, 0);
     const uint8_t swings = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SWINGS);
-    mm2_gs_set_u8(gs.a4(), -0x5E2D, swings);
+    mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_SWING_MAX, swings);
     const uint8_t mon_type = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_SLOTS + mon_slot);
     const uint8_t hit_idx = static_cast<uint8_t>(mon_type >> 4);
     uint8_t hit_chance = mm2_gs_u8(gs.a4(), MM2_GS_MONSTER_HIT_TBL + hit_idx);
@@ -5491,7 +5492,7 @@ uint16_t CombatSession::monsterMeleeDamage10478(GameStateView &gs, int mon_slot,
         const int raw = rng_ ? rng_->range(0x0A, 0x3F1) : 0x0A;
         const int roll = raw / 10;
         if (ceiling > static_cast<uint8_t>(roll)) {
-            mm2_gs_set_u8(gs.a4(), -0x5E31, static_cast<uint8_t>(mm2_gs_u8(gs.a4(), -0x5E31) + 1));
+            mm2_gs_set_u8(gs.a4(), MM2_GS_ATTACK_HIT_N, static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_HIT_N) + 1));
             const int hit_dmg = rng_ ? rng_->range(1, side_hi) : 1;
             total = static_cast<uint16_t>(total + hit_dmg);
         }
@@ -5516,9 +5517,9 @@ void CombatSession::applyPartyDamage4AAA(GameStateView &gs, int party_slot, uint
     /* 0xFF7C: -$5E32==1 (set by 0x10584 ranged) → "shoots"; else melee verb.
      * Port uses "attacks" for the melee table pick at -$6EF6 until that table
      * is wired; latch still gates hand-to-hand vs out-of-range archers. */
-    const char *verb = (mm2_gs_u8(gs.a4(), -0x5E32) == 1) ? "shoots" : "attacks";
-    const unsigned swing_n = static_cast<unsigned>(mm2_gs_u8(gs.a4(), -0x5E2D));
-    const unsigned hit_n = static_cast<unsigned>(mm2_gs_u8(gs.a4(), -0x5E31));
+    const char *verb = (mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_RANGED) == 1) ? "shoots" : "attacks";
+    const unsigned swing_n = static_cast<unsigned>(mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_SWING_MAX));
+    const unsigned hit_n = static_cast<unsigned>(mm2_gs_u8(gs.a4(), MM2_GS_ATTACK_HIT_N));
     if (dev_invulnerable_) {
         std::snprintf(status_line_, sizeof(status_line_), "%s %s %s — no effect.", mon_name, verb,
                       victim_name);

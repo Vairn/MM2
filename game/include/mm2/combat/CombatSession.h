@@ -120,8 +120,8 @@ public:
      *  thunk (OP_12/13, arena ticket, rest ambush, step random, tile
      *  collision) right after the caller seeds MM2_GS_MONSTER_SLOTS /
      *  MM2_GS_ENCOUNTER_MODE / MM2_GS_ENCOUNTER_OVERFLOW_TYPE /
-     *  MM2_GS_MONSTER_COUNT (right before it would set MM2_GS_SCRIPT_ABORT). */
-    /** Returns false when bindings/data are missing (no fight fabricated). */
+     *  MM2_GS_MONSTER_COUNT (right before it would set MM2_GS_SCRIPT_ABORT).
+     *  Returns false when bindings/data are missing. */
     bool enter(GameStateView &gs, const world::MapWorld &world);
 
     /** Advance the round loop: resolves automatic monster/initiative turns,
@@ -130,8 +130,7 @@ public:
      *  (caller should check lastOutcome() and resume the event VM). */
     bool tick(GameStateView &gs, const world::MapWorld &world, const platform::KeyState &keys);
 
-    /** One-line status text for the play-screen status line (doc 17 defers
-     *  the full book.32 combat panel — plan Phase 3/5). */
+    /** One-line status text for the play-screen status line (doc 17). */
     const char *statusLine() const { return status_line_; }
 
     /** Snapshot for gfx::drawCombatMonsterList / drawCombatOptionsBar. */

@@ -1,7 +1,6 @@
 #pragma once
-// OP_0E temple/training/smith/guild/tavern menus, one frame at a time.
-// Capture hooks stash the request and return false so townSvcRun* exits;
-// GameSession then pumps handleKey()/render() and the transaction leaves.
+// OP_0E shop menus, one frame at a time. Capture hooks stash and return false
+// so townSvcRun* exits; GameSession pumps handleKey()/render().
 
 #include "mm2/events/TownServiceMenu.h"
 #include "mm2/events/TownServiceTransactions.h"

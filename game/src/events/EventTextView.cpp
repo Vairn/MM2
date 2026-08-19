@@ -8,39 +8,9 @@
 #include "mm2/platform/amiga/Mm2AmigaConfig.h"
 #endif
 
-#if !MM2_HOST_AMIGA
-#include <chrono>
-#include <cstdio>
-#endif
-
 namespace mm2::events {
 
 namespace {
-
-// #region agent log
-inline void agentDbgLog(const char *hyp, const char *loc, const char *msg, const char *data_json)
-{
-#if MM2_HOST_AMIGA
-    (void)hyp;
-    (void)loc;
-    (void)msg;
-    (void)data_json;
-#else
-    FILE *f = std::fopen("C:/_20260421_/D-REC/development/MM2/debug-5e7785.log", "a");
-    if (!f) {
-        return;
-    }
-    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::system_clock::now().time_since_epoch())
-                        .count();
-    std::fprintf(f,
-                 "{\"sessionId\":\"5e7785\",\"hypothesisId\":\"%s\",\"location\":\"%s\",\"message\":\"%s\","
-                 "\"data\":%s,\"timestamp\":%lld}\n",
-                 hyp, loc, msg, data_json ? data_json : "{}", static_cast<long long>(ms));
-    std::fclose(f);
-#endif
-}
-// #endregion
 
 constexpr uint8_t kGlyphHSeg = 0x05;
 constexpr uint8_t kGlyphHCapL = 0x06;
@@ -500,7 +470,8 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, const GameS
      * A4-$71DA/-$71D8. Also drop any leftover FD bit7 place-stream: a prior
      * OP_08/0A/$FD chrome can leave MODE=$FD + BUF bit7 bytes that YesNo then
      * re-applies every poll (wrong (0,8) jump, or sticky canvasAt override).
-     * Inline of eventVmScriptedKeyReset — event_op_demo does not link Helpers. */
+     * Same stores as eventVmScriptedKeyReset plus MODE/BUF=$FF so YesNo cannot
+     * re-apply a stale place (event_op_demo does not link Helpers). */
     uint8_t *a4 = const_cast<uint8_t *>(gs.a4());
     if (a4) {
         mm2_gs_set_u16(a4, MM2_GS_SCRIPTED_KEY_IDX, 0xFFFF);
@@ -511,21 +482,6 @@ void EventTextView::showOp0B(const char *text, const char *data_dir, const GameS
         mm2_gs_set_u8(a4, MM2_GS_SCRIPTED_KEY_BUF, 0xFF);
         mm2_gs_set_u8(a4, MM2_GS_SCRIPTED_KEY_MODE, 0xFF);
     }
-    // #region agent log
-    {
-        char data[256];
-        const unsigned dy = a4 ? mm2_gs_u16(a4, MM2_GS_SCRIPTED_KEY_DY) : 0;
-        const unsigned dx = a4 ? mm2_gs_u16(a4, MM2_GS_SCRIPTED_KEY_DX) : 0;
-        const unsigned mode = a4 ? mm2_gs_u8(a4, MM2_GS_SCRIPTED_KEY_MODE) : 0;
-        std::snprintf(data, sizeof(data),
-                      "{\"str_idx\":%u,\"placement\":%u,\"anm_id\":%d,\"loaded\":%s,\"w\":%d,\"h\":%d,"
-                      "\"screen\":%d,\"seed_dy\":%u,\"seed_dx\":%u,\"mode\":%u}",
-                      static_cast<unsigned>(str_idx), static_cast<unsigned>(placement), anm_id,
-                      has_sign ? "true" : "false", sign_overlay_.width(), sign_overlay_.height(),
-                      static_cast<int>(gs.screenId()), dy, dx, mode);
-        agentDbgLog("A", "EventTextView.cpp:showOp0B", "op0b_load", data);
-    }
-    // #endregion
     const bool has_text = text != nullptr && text[0] != '\0';
     if (!has_sign && !has_text) {
         return;
@@ -633,33 +589,11 @@ void EventTextView::applyScriptedSignPlace(uint8_t placement, uint16_t dst_x, ui
         sign_dst_y_ = dst_y;
         sign_dst_override_ = true;
     }
-    // #region agent log
-    {
-        static uint16_t s_last_x = 0xFFFF, s_last_y = 0xFFFF;
-        static int s_last_ov = -1;
-        const int ov = sign_dst_override_ ? 1 : 0;
-        if (dst_x != s_last_x || dst_y != s_last_y || ov != s_last_ov) {
-            s_last_x = dst_x;
-            s_last_y = dst_y;
-            s_last_ov = ov;
-            char data[192];
-            std::snprintf(data, sizeof(data),
-                          "{\"placement\":%u,\"dst_x\":%u,\"dst_y\":%u,\"override\":%s,\"simple\":%s}",
-                          static_cast<unsigned>(placement), static_cast<unsigned>(dst_x),
-                          static_cast<unsigned>(dst_y), sign_dst_override_ ? "true" : "false",
-                          simple ? "true" : "false");
-            agentDbgLog("A", "EventTextView.cpp:applyScriptedSignPlace", "scripted_place_armed", data);
-        }
-    }
-    // #endregion
 }
 
 void EventTextView::clearServiceSignSprite()
 {
     /* place(-1) @ 0x3280 clears A4-$79FE. */
-    // #region agent log
-    agentDbgLog("C", "EventTextView.cpp:clearServiceSignSprite", "sign_cleared", "{}");
-    // #endregion
     sign_overlay_.unload();
     sign_placement_ = 0;
     sign_dst_override_ = false;
@@ -712,33 +646,6 @@ void EventTextView::drawServiceSignOverlay(gfx::ScreenCompositor &c) const
             continue;
         }
         if (sign_overlay_.loaded()) {
-            // #region agent log
-            {
-                static int s_last_dx = -9999, s_last_dy = -9999, s_last_ov = -1, s_last_fr = -1;
-                static int s_n = 0;
-                const int dx = sign_dst_override_ ? static_cast<int>(sign_dst_x_) : -1;
-                const int dy = sign_dst_override_ ? static_cast<int>(sign_dst_y_) : -1;
-                const int fr = sign_overlay_.composedFrame();
-                const bool changed = (dx != s_last_dx) || (dy != s_last_dy) ||
-                                     (static_cast<int>(sign_dst_override_) != s_last_ov) ||
-                                     (fr != s_last_fr) || ((s_n++ % 30) == 0);
-                if (changed) {
-                    s_last_dx = dx;
-                    s_last_dy = dy;
-                    s_last_ov = static_cast<int>(sign_dst_override_);
-                    s_last_fr = fr;
-                    char data[256];
-                    std::snprintf(data, sizeof(data),
-                                  "{\"path\":\"%s\",\"placement\":%u,\"dst_x\":%d,\"dst_y\":%d,"
-                                  "\"w\":%d,\"h\":%d,\"frame\":%d,\"disk\":%d}",
-                                  sign_dst_override_ ? "canvasAt" : "centered",
-                                  static_cast<unsigned>(sign_placement_), dx, dy,
-                                  sign_overlay_.width(), sign_overlay_.height(), fr,
-                                  sign_overlay_.diskIndex());
-                    agentDbgLog("A", "EventTextView.cpp:drawServiceSignOverlay", "sign_draw", data);
-                }
-            }
-            // #endregion
             if (sign_dst_override_) {
                 /* Scripted place (0x3266) @ 0x23E24: whole-canvas origin. */
                 sign_overlay_.blitCanvasAt(c, static_cast<int>(sign_dst_x_),
@@ -747,10 +654,6 @@ void EventTextView::drawServiceSignOverlay(gfx::ScreenCompositor &c) const
                 sign_overlay_.blitCentered(c, sign_placement_);
             }
         } else if (layer.text[0] != '\0') {
-            // #region agent log
-            agentDbgLog("C", "EventTextView.cpp:drawServiceSignOverlay", "sign_stub_not_loaded",
-                        "{\"loaded\":false}");
-            // #endregion
             drawServiceSignStub(c, layer.text);
         }
         break;

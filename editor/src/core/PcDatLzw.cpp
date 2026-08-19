@@ -106,16 +106,16 @@ Bytes pcDatDecompressMap(const Bytes& raw) {
 }
 
 bool pcDatIsEventTableHalf(const Bytes& raw) {
-    return readOffsetTable(raw, 4, kPcEventLocationCount).has_value();
+    return readOffsetTable(raw, 4, kEventLocationCount).has_value();
 }
 
 Bytes pcDatMergeEvent(const Bytes& indoorRaw, const Bytes& outdoorRaw) {
-    auto ti = readOffsetTable(indoorRaw, 4, kPcEventLocationCount);
-    auto to = readOffsetTable(outdoorRaw, 4, kPcEventLocationCount);
+    auto ti = readOffsetTable(indoorRaw, 4, kEventLocationCount);
+    auto to = readOffsetTable(outdoorRaw, 4, kEventLocationCount);
     if (!ti || !to) return {};
 
-    std::vector<Bytes> blobs(static_cast<size_t>(kPcEventLocationCount));
-    for (int i = 0; i < kPcEventLocationCount; ++i) {
+    std::vector<Bytes> blobs(static_cast<size_t>(kEventLocationCount));
+    for (int i = 0; i < kEventLocationCount; ++i) {
         uint32_t oi = (*ti)[static_cast<size_t>(i)];
         uint32_t oo = (*to)[static_cast<size_t>(i)];
         if (oi != 0 && oo != 0) return {};  // slot defined in both halves -- unexpected
@@ -124,10 +124,10 @@ Bytes pcDatMergeEvent(const Bytes& indoorRaw, const Bytes& outdoorRaw) {
     }
 
     constexpr size_t kEntrySize = 6;  // u32 BE offset + u16 BE length (Amiga event.dat)
-    Bytes header(static_cast<size_t>(kPcEventLocationCount) * kEntrySize, 0);
+    Bytes header(static_cast<size_t>(kEventLocationCount) * kEntrySize, 0);
     Bytes body;
     uint32_t cur = static_cast<uint32_t>(header.size());
-    for (int i = 0; i < kPcEventLocationCount; ++i) {
+    for (int i = 0; i < kEventLocationCount; ++i) {
         const Bytes& blob = blobs[static_cast<size_t>(i)];
         writeU32BE(header.data() + static_cast<size_t>(i) * kEntrySize, cur);
         writeU16BE(header.data() + static_cast<size_t>(i) * kEntrySize + 4,

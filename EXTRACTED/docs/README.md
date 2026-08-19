@@ -37,6 +37,7 @@ Source of truth: `EXTRACTED/docs/`, `EXTRACTED/mm2-ANALYSIS.md`, `tools/`, `edit
 | [`04-party-and-session.md`](04-party-and-session.md) | New game, party copy, session restart |
 | [`05-open-questions.md`](05-open-questions.md) | Unknowns and next trace targets |
 | [`08-event-runtime.md`](08-event-runtime.md) | Event VM — **C++ `EventRuntime` is authoritative**; ASM map + scanner |
+| [`61-cpp-port-shape.md`](61-cpp-port-shape.md) | Why the remake C++ looks like transcribed 68k (event VM first) |
 | [`13-time-era-calendar.md`](13-time-era-calendar.md) | In-game calendar, day/night, era |
 | [`14-game-state-struct.md`](14-game-state-struct.md) | `A4` field layout and party state |
 | [`49-data-hunk-mm2_data_00.md`](49-data-hunk-mm2_data_00.md) | **`mm2_data_00.bin` reference** — initialized `A4` data hunk + jump table, `file_offset==EA`, decoded static tables |
@@ -231,6 +232,7 @@ Outputs: `EXTRACTED/mm2.annotated.asm`, `EXTRACTED/asm/` splits.
 | Doc | Description |
 |-----|-------------|
 | [`game/README.md`](../../game/README.md) | Build targets (SDL2 / Amiga ACE), phases |
+| [`61-cpp-port-shape.md`](61-cpp-port-shape.md) | Remake C++ as ASM-transcribed vs readable (event VM, GameSession, combat) |
 | [`41-aga-port-plan.md`](41-aga-port-plan.md) | **AGA 6bp port** — palette zones, ACE planar, multi-combat sprites, future UI, extension dungeons/art |
 | [`39-title-screen-animation.md`](39-title-screen-animation.md) | Title screen fidelity reference |
 | [`39-character-ui-view-create.md`](39-character-ui-view-create.md) | Character UI backends |

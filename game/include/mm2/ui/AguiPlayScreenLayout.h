@@ -1,7 +1,6 @@
 #pragma once
 
-// A1200 Agui play HUD layout on the classic 320×200 compositor.
-// Viewport hood stays 208×120 so View3D tables remain valid.
+// Agui play HUD on the 320×200 compositor. Hood stays 208×120 (View3D tables).
 
 namespace mm2::ui::agui_layout {
 

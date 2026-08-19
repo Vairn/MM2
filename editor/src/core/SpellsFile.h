@@ -1,30 +1,18 @@
 #pragma once
-// spells.dat - 96 spells x 2 bytes of runtime cost/type metadata, decoded from
-// the file bytes and cross-validated against the manual (see core/Spells.h and
-// EXTRACTED/docs/19-spells-and-item-use.md).
+// spells.dat: 96 spells × 2 bytes. Records 0..47 Sorcerer, 48..95 Cleric.
 //
-//   records 0..47  = Sorcerer spells (flat index 1..48)
-//   records 48..95 = Cleric spells   (flat index 1..48)
-//
-// Per record (2 bytes):
 //   byte0:
-//     bit 0x80  cannot cast in combat   (non-combat-only)
-//     bit 0x40  cannot cast outside combat (combat-only)
-//       (neither bit set => castable anytime)
-//     bit 0x20  set together with 0x10 on non-combat special-cost spells
-//     bit 0x10  "special / computed cost" flag - the gem cost is hard-coded in
-//               game code (>15 gems, per-plus, etc.); the low nibble is not the
-//               real gem count for these (Duplication, Star Burst, Enchant Item,
-//               Divine Intervention, Uncurse Item).
-//     low nibble (0x0F) = gem cost (0..15) when not special.
+//     0x80  non-combat-only
+//     0x40  combat-only (neither bit => anytime)
+//     0x20  set with 0x10 on some special-cost non-combat spells
+//     0x10  special/computed gem cost (low nibble is not the real gem count)
+//     0x0F  gem cost (0..15) when not special
 //   byte1:
-//     bit 0x80    = outdoor-only spell (confirmed 12/12 against the manual).
-//     bits 6-4    = per-level SP multiplier (the X in "X/L") when low nibble 0.
-//     low nibble  = flat spell-point cost (1..10); 0 => cost is per caster level.
+//     0x80    outdoor-only
+//     bits 6-4 per-level SP multiplier ("X/L") when low nibble is 0
+//     0x0F    flat SP cost; 0 => per caster level
 //
-// The 256-byte file only uses the first 192 bytes; the trailing 64 bytes are
-// leftover/unused data (stray item-name bytes) and are preserved verbatim on
-// round-trip.
+// File is 256 bytes; first 192 are records, trailing 64 preserved on round-trip.
 
 #include <array>
 #include <cstdint>

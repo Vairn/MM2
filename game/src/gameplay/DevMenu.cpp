@@ -383,15 +383,12 @@ void renderCheats(gfx::ScreenCompositor &c, const DevMenuState &st)
         char line[40];
         const bool sel = (row_i == st.cheat_row);
         const DevCheatRow kind = static_cast<DevCheatRow>(row_i);
-        if (kind == DevCheatRow::AddXp) {
+        if (kind == DevCheatRow::AddXp || kind == DevCheatRow::AddGold || kind == DevCheatRow::AddGems) {
+            const int amt_idx = (kind == DevCheatRow::AddXp)    ? st.amount_idx_xp
+                                : (kind == DevCheatRow::AddGold) ? st.amount_idx_gold
+                                                                 : st.amount_idx_gems;
             std::snprintf(line, sizeof(line), "%c %-14s %u", sel ? '>' : ' ', kCheatLabels[row_i],
-                          grantAmountPreset(st.amount_idx_xp));
-        } else if (kind == DevCheatRow::AddGold) {
-            std::snprintf(line, sizeof(line), "%c %-14s %u", sel ? '>' : ' ', kCheatLabels[row_i],
-                          grantAmountPreset(st.amount_idx_gold));
-        } else if (kind == DevCheatRow::AddGems) {
-            std::snprintf(line, sizeof(line), "%c %-14s %u", sel ? '>' : ' ', kCheatLabels[row_i],
-                          grantAmountPreset(st.amount_idx_gems));
+                          grantAmountPreset(amt_idx));
         } else if (kind == DevCheatRow::BoostStats) {
             std::snprintf(line, sizeof(line), "%c %-14s +%u", sel ? '>' : ' ', kCheatLabels[row_i],
                           statBoostPreset(st.amount_idx_stats));

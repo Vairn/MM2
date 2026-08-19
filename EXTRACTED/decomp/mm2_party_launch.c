@@ -90,7 +90,7 @@ static void apply_facing_key(uint8_t *a4, char facing_key)
         break;
     }
     mm2_gs_set_u8(a4, MM2_GS_LAST_MOVE_KEY, (uint8_t)facing_key);
-    mm2_gs_set_u8(a4, -0x55D8, bundle_hi);              /* A4-$AA28 tile bundle hi */
+    mm2_gs_set_u8(a4, MM2_GS_FACING_BUNDLE, bundle_hi); /* A4-$AA28 tile bundle hi */
     mm2_gs_set_u8(a4, MM2_GS_FACING_INDEX, facing_idx); /* A4-$AA29 */
 }
 
@@ -101,7 +101,7 @@ void mm2_party_launch_apply(uint8_t *a4_base, const Mm2PartyLaunch *launch)
     }
 
     /* char_create_party_assemble exit @ 0x0E2C */
-    mm2_gs_set_u8(a4_base, -0x79AC, launch->area_id); /* A4-$8654 town/area latch */
+    mm2_gs_set_u8(a4_base, MM2_GS_SAVED_TOWN_ID, launch->area_id); /* A4-$8654 town/area latch */
     mm2_gs_set_u8(a4_base, MM2_GS_SCREEN_MODE_ID, launch->area_id);
     mm2_gs_set_u8(a4_base, MM2_GS_COORD_B, launch->coord_x);
     mm2_gs_set_u8(a4_base, MM2_GS_COORD_A, launch->coord_y);
@@ -114,6 +114,6 @@ void mm2_party_launch_apply(uint8_t *a4_base, const Mm2PartyLaunch *launch)
         mm2_gs_set_u16(a4_base, MM2_GS_ROSTER_INDEX_TBL + i * 2, word);
     }
 
-    mm2_gs_set_u16(a4_base, -0x795A, (uint16_t)launch->party_count); /* A4-$86A6 */
+    mm2_gs_set_u16(a4_base, MM2_GS_PARTY_COUNT, (uint16_t)launch->party_count); /* A4-$86A6 */
     mm2_gs_set_u8(a4_base, MM2_GS_NEW_GAME_FLAG, 1);
 }

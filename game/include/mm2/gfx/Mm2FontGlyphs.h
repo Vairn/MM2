@@ -3,7 +3,6 @@
 #include "mm2/CppStdCompat.h"
 
 // MM2 Amiga font-8 UI chrome (control glyphs 0x00–0x1F + format chars).
-// See EXTRACTED/docs/07-event-script-opcodes.md § "MM2 8×8 Text Format Characters".
 namespace mm2::gfx::font_glyphs {
 
 // Box outline glyphs for event OP_06 outdoor signpost @ 0x15AEE (pen A4-$7A50).

@@ -1,6 +1,8 @@
 #include "mm2/events/EventRuntime.h"
 
 #include "mm2/CppStdCompat.h"
+#include "mm2/events/EventOp.h"
+#include "mm2/events/EventVmRegs.h"
 #include "mm2/DataPath.h"
 #include "mm2/events/EventCombatEncounter.h"
 #include "mm2/events/EventPartyEffects.h"
@@ -161,7 +163,7 @@ bool EventRuntime::enterLocation(int location_id, GameStateView &gs, const world
 
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR, 0xFFFF);
     mm2_gs_set_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID, 0xFF);
-    mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
+    clearEventAbort(gs);
     initContextMaskTable(gs.a4());
     mm2_gs_set_u8(gs.a4(), MM2_GS_ERA_LOW, static_cast<uint8_t>(gs.era() & 0xFF));
     initParsed(gs);
@@ -296,7 +298,7 @@ int EventRuntime::poolSeekIn(const Mm2EventLocation *loc, uint8_t event_id) cons
     int record = 0;
     int seg_start = start;
     for (int i = start; i < end; ++i) {
-        if (loc->raw[i] == 0xFF) {
+        if (loc->raw[i] == static_cast<uint8_t>(EventOp::EndRecord)) {
             if (record == event_id) {
                 return seg_start;
             }
@@ -328,7 +330,8 @@ int EventRuntime::poolSeekWorkBuf(int start_pos, uint8_t event_id) const
         if (pos >= MM2_GS_EVENT_WORK_SIZE) {
             return -1;
         }
-        while (pos < MM2_GS_EVENT_WORK_SIZE && work_buf_[pos] != 0xFF) {
+        while (pos < MM2_GS_EVENT_WORK_SIZE &&
+               work_buf_[pos] != static_cast<uint8_t>(EventOp::EndRecord)) {
             ++pos;
         }
         if (pos >= MM2_GS_EVENT_WORK_SIZE) {
@@ -412,6 +415,16 @@ uint8_t EventRuntime::readU8(GameStateView &gs)
     return b;
 }
 
+const char *EventRuntime::readScriptString(GameStateView &gs, char *buf, size_t cap)
+{
+    return resolveString(readU8(gs), buf, cap);
+}
+
+bool EventRuntime::cantSee(const GameStateView &gs) const
+{
+    return mm2_gs_u8(gs.a4(), MM2_GS_CANT_SEE_FLAG) != 0;
+}
+
 void EventRuntime::skipTokens(GameStateView &gs, int count)
 {
     for (int i = 0; i < count; ++i) {
@@ -431,7 +444,7 @@ void EventRuntime::remapOp0cDest(uint8_t &dest_screen, uint8_t &dest_tile)
      *   if dest >= 0x80:  dest_tile = rng(1,255)
      *   dest &= 0x3F before map load
      * rng via A4-$7BB4 (same contract as gameplay::Rng). */
-    if ((dest_screen & 0x40) != 0) {
+    if ((dest_screen & kOp0cRandomScreen) != 0) {
         int roll = 1;
         if (rng_) {
             roll = rng_->range(1, 20);
@@ -440,10 +453,10 @@ void EventRuntime::remapOp0cDest(uint8_t &dest_screen, uint8_t &dest_tile)
         if (d >= 0x11) {
             d = static_cast<uint8_t>(d + 0x10);
         }
-        d = static_cast<uint8_t>(d | 0x80);
+        d = static_cast<uint8_t>(d | kOp0cRandomTile);
         dest_screen = d;
     }
-    if (dest_screen >= 0x80) {
+    if (dest_screen >= kOp0cRandomTile) {
         int tile_roll = 1;
         if (rng_) {
             tile_roll = rng_->range(1, 255);
@@ -488,7 +501,7 @@ bool EventRuntime::finishPendingTownMenu(GameStateView &gs, bool accepted)
         (void)redraw_status;
         (void)redraw_roster;
         (void)redraw_divider;
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 0);
+        setEventExit(gs, 0);
         return false;
     }
 
@@ -563,8 +576,8 @@ void EventRuntime::endScript(GameStateView &gs)
     (void)redraw_status;
     (void)redraw_roster;
     (void)redraw_divider;
-    mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 0);
-    mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
+    setEventExit(gs, 0);
+    clearEventAbort(gs);
     script_active_ = false;
     wait_ = EventVmWait::None;
     space_wait_armed_ = true;
@@ -579,7 +592,7 @@ void EventRuntime::endScript(GameStateView &gs)
 void EventRuntime::abortScript(GameStateView &gs)
 {
     /* VM loop @ 0x17540: abort set → skip $171AC cleanup; OP_02 message stays visible. */
-    mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
+    clearEventAbort(gs);
     script_active_ = false;
     wait_ = EventVmWait::None;
     space_wait_armed_ = true;
@@ -607,625 +620,781 @@ void EventRuntime::haltUiForHostOverlay(GameStateView &gs)
 
 void EventRuntime::dispatchOp(GameStateView &gs, world::MapWorld &world, uint8_t op)
 {
+    switch (static_cast<EventOp>(op)) {
+    case EventOp::Invalid:
+        opInvalid(gs);
+        break;
+    case EventOp::Text:
+        opText(gs);
+        break;
+    case EventOp::TextBlock:
+        opTextBlock(gs);
+        break;
+    case EventOp::Text3:
+        opText3(gs);
+        break;
+    case EventOp::TextDoor:
+        opTextDoor(gs);
+        break;
+    case EventOp::TextPopupA:
+        opTextPopupA(gs);
+        break;
+    case EventOp::TextPopupB:
+        opTextPopupB(gs);
+        break;
+    case EventOp::WaitSpace:
+        opWaitSpace(gs);
+        break;
+    case EventOp::WaitSpaceScripted:
+        opWaitSpaceScripted(gs);
+        break;
+    case EventOp::PromptYn:
+        opPromptYn(gs);
+        break;
+    case EventOp::PromptYnB:
+        opPromptYnB(gs);
+        break;
+    case EventOp::ShowServiceWindow:
+        opShowServiceWindow(gs, world);
+        break;
+    case EventOp::MapTransition:
+        opMapTransition(gs, world);
+        break;
+    case EventOp::PlaySoundSeq:
+        opPlaySoundSeq(gs, world);
+        break;
+    case EventOp::ExecSelector:
+        opExecSelector(gs, world);
+        break;
+    case EventOp::EndScript:
+        opEndScript(gs);
+        break;
+    case EventOp::IfTrueSkiptok:
+        opIfTrueSkiptok(gs);
+        break;
+    case EventOp::IfFalseSkiptok:
+        opIfFalseSkiptok(gs);
+        break;
+    case EventOp::EncounterSetup:
+        opEncounterSetup(gs, world);
+        break;
+    case EventOp::EncounterSetupB:
+        opEncounterSetupB(gs, world);
+        break;
+    case EventOp::ClearTileEvent:
+        opClearTileEvent(gs, world);
+        break;
+    case EventOp::ApplyParty:
+        opApplyParty(gs);
+        break;
+    case EventOp::ScanPartyItems:
+        opScanPartyItems(gs);
+        break;
+    case EventOp::LoadVarRawToCond:
+        opLoadVarRawToCond(gs);
+        break;
+    case EventOp::ApplyPartyMasked:
+        opApplyPartyMasked(gs);
+        break;
+    case EventOp::GiveItem:
+        opGiveItem(gs);
+        break;
+    case EventOp::StoreVar8:
+        opStoreVar8(gs);
+        break;
+    case EventOp::CondThreshold:
+        opCondThreshold(gs);
+        break;
+    case EventOp::RngRollToCond:
+        opRngRollToCond(gs);
+        break;
+    case EventOp::AudioWait:
+        opAudioWait(gs);
+        break;
+    case EventOp::Delay:
+        opDelay(gs);
+        break;
+    case EventOp::PartyEffect:
+        opPartyEffect(gs, false);
+        break;
+    case EventOp::PartyEffectB:
+        opPartyEffect(gs, true);
+        break;
+    case EventOp::SetTile:
+        opSetTile(gs, world);
+        break;
+    case EventOp::CheckEraRange:
+        opCheckEraRange(gs);
+        break;
+    case EventOp::CheckDayRange:
+        opCheckDayRange(gs);
+        break;
+    case EventOp::PayGoldToCond:
+        opPayGoldToCond(gs);
+        break;
+    case EventOp::PayGemsToCond:
+        opPayGemsToCond(gs);
+        break;
+    case EventOp::SelectMember:
+        opSelectMember(gs);
+        break;
+    case EventOp::SelectMemberB:
+        opSelectMemberB(gs);
+        break;
+    case EventOp::ConsumeItemToCond:
+        opConsumeItemToCond(gs);
+        break;
+    case EventOp::SetAbort:
+        opSetAbort(gs);
+        break;
+    case EventOp::SetTreasure:
+        opSetTreasure(gs);
+        break;
+    case EventOp::SkiptokIfVictory:
+        opSkiptokIfVictory(gs);
+        break;
+    case EventOp::AddWordCounter:
+        opAddWordCounter(gs);
+        break;
+    case EventOp::CheckMemberAttr:
+        opCheckMemberAttr(gs);
+        break;
+    case EventOp::OrMemberField:
+        opOrMemberField(gs);
+        break;
+    case EventOp::ReadAnswer:
+        opReadAnswer(gs);
+        break;
+    case EventOp::CheckAnswer:
+        opCheckAnswer(gs);
+        break;
+    case EventOp::PartyIterateDamage:
+        opPartyIterateDamage(gs);
+        break;
+    case EventOp::CountTitleNibble:
+        opCountTitleNibble(gs);
+        break;
+    case EventOp::EndRecord:
+    default:
+        opUnknown(gs, op);
+        break;
+    }
+}
+
+void EventRuntime::opText(GameStateView &gs)
+{
     char text_buf[256];
+    text_.showOp01(readScriptString(gs, text_buf, sizeof(text_buf)));
+    orEventExit(gs, 1);
+}
 
-    switch (op) {
-    case 0x01: {
-        const uint8_t idx = readU8(gs);
-        text_.showOp01(resolveString(idx, text_buf, sizeof(text_buf)));
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 1));
-        break;
+void EventRuntime::opTextBlock(GameStateView &gs)
+{
+    char text_buf[256];
+    text_.showOp02(readScriptString(gs, text_buf, sizeof(text_buf)), 19);
+    orEventExit(gs, 2);
+}
+
+void EventRuntime::opText3(GameStateView &gs)
+{
+    char text_buf[256];
+    const uint8_t idx = readU8(gs);
+    text_.showOp03(resolveString(idx, text_buf, sizeof(text_buf)));
+    if (location_id_ == 11 && idx == 5 && data_dir_) {
+        text_.showPegasusIllustration(data_dir_);
     }
-    case 0x02: {
-        const uint8_t idx = readU8(gs);
-        text_.showOp02(resolveString(idx, text_buf, sizeof(text_buf)), 19);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
-        break;
+    orEventExit(gs, 3);
+}
+
+void EventRuntime::opTextDoor(GameStateView &gs)
+{
+    /* OP_04 @ 0x159F4: skip draw if -$79E1 != 0. */
+    char text_buf[256];
+    const char *s = readScriptString(gs, text_buf, sizeof(text_buf));
+    if (!cantSee(gs)) {
+        text_.showOp04(s);
     }
-    case 0x03: {
-        const uint8_t idx = readU8(gs);
-        text_.showOp03(resolveString(idx, text_buf, sizeof(text_buf)));
-        if (location_id_ == 11 && idx == 5 && data_dir_) {
-            text_.showPegasusIllustration(data_dir_);
-        }
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 3));
-        break;
+}
+
+void EventRuntime::opTextPopupA(GameStateView &gs)
+{
+    /* OP_05 @ 0x15A46: can't-see gate @ 0x15A52. */
+    char text_buf[256];
+    const char *s = readScriptString(gs, text_buf, sizeof(text_buf));
+    if (!cantSee(gs)) {
+        text_.showOp05(s);
     }
-    case 0x04: {
-        /* OP_04 @ 0x159F4: resolve string, then skip draw if -$79E1 != 0. */
-        const uint8_t idx = readU8(gs);
-        const char *s = resolveString(idx, text_buf, sizeof(text_buf));
-        if (mm2_gs_u8(gs.a4(), MM2_GS_CANT_SEE_FLAG) == 0) {
-            text_.showOp04(s);
-        }
-        break;
+}
+
+void EventRuntime::opTextPopupB(GameStateView &gs)
+{
+    /* OP_06 @ 0x15AEE: '-'→'{' rewrite then can't-see gate @ 0x15B24. */
+    char text_buf[256];
+    const char *s = readScriptString(gs, text_buf, sizeof(text_buf));
+    if (!cantSee(gs)) {
+        text_.showOp06(s);
     }
-    case 0x05: {
-        /* OP_05 @ 0x15A46: same can't-see gate @ 0x15A52. */
-        const uint8_t idx = readU8(gs);
-        const char *s = resolveString(idx, text_buf, sizeof(text_buf));
-        if (mm2_gs_u8(gs.a4(), MM2_GS_CANT_SEE_FLAG) == 0) {
-            text_.showOp05(s);
-        }
-        break;
+}
+
+void EventRuntime::opWaitSpace(GameStateView &gs)
+{
+    (void)gs;
+    text_.showSpacePrompt();
+    wait_ = EventVmWait::Space;
+}
+
+void EventRuntime::opWaitSpaceScripted(GameStateView &gs)
+{
+    /* OP_08 @ 0x15D26: -$71DC←$FD then SPACE via -$7DDC scripted buffer. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPTED_KEY_MODE, 0xFD);
+    text_.showSpacePrompt();
+    wait_ = EventVmWait::Space;
+}
+
+void EventRuntime::opPromptYn(GameStateView &gs)
+{
+    /* OP_09 @ 0x15D3C: clears cond, polls Y/N — draws nothing (doc 44 §3.7). */
+    setEventCond(gs, 0);
+    wait_ = EventVmWait::YesNo;
+}
+
+void EventRuntime::opPromptYnB(GameStateView &gs)
+{
+    /* OP_0A: -$71DC←$FD then same as OP_09 with scripted source. */
+    mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPTED_KEY_MODE, 0xFD);
+    setEventCond(gs, 0);
+    wait_ = EventVmWait::YesNo;
+}
+
+void EventRuntime::opEndScript(GameStateView &gs)
+{
+    endScript(gs);
+}
+
+void EventRuntime::opIfTrueSkiptok(GameStateView &gs)
+{
+    const uint8_t n = readU8(gs);
+    if (eventCond(gs)) {
+        skipTokens(gs, n);
     }
-    case 0x06: {
-        /* OP_06 @ 0x15AEE: '-'→'{' rewrite then can't-see gate @ 0x15B24. */
-        const uint8_t idx = readU8(gs);
-        const char *s = resolveString(idx, text_buf, sizeof(text_buf));
-        if (mm2_gs_u8(gs.a4(), MM2_GS_CANT_SEE_FLAG) == 0) {
-            text_.showOp06(s);
-        }
-        break;
+}
+
+void EventRuntime::opIfFalseSkiptok(GameStateView &gs)
+{
+    const uint8_t n = readU8(gs);
+    if (!eventCond(gs)) {
+        skipTokens(gs, n);
     }
-    case 0x07:
-        text_.showSpacePrompt();
-        wait_ = EventVmWait::Space;
-        break;
-    case 0x08:
-        /* OP_08 @ 0x15D26: -$71DC←$FD then SPACE via -$7DDC scripted buffer. */
-        mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPTED_KEY_MODE, 0xFD);
-        text_.showSpacePrompt();
-        wait_ = EventVmWait::Space;
-        break;
-    case 0x09:
-    case 0x0A:
-        /* OP_09 @ 0x15D3C: clears cond, polls Y/N — draws nothing (doc 44 §3.7).
-         * OP_0A: -$71DC←$FD then same with scripted source. */
-        if (op == 0x0A) {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPTED_KEY_MODE, 0xFD);
-        }
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
-        wait_ = EventVmWait::YesNo;
-        break;
-    case 0x0F:
-        endScript(gs);
-        break;
-    case 0x10: {
-        const uint8_t n = readU8(gs);
-        if (mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG)) {
-            skipTokens(gs, n);
-        }
-        break;
+}
+
+void EventRuntime::opCheckEraRange(GameStateView &gs)
+{
+    /* event_op22_era_gate @ 0x16A9E: cond = (MM2_GS_ERA_LOW in [lo..hi]). */
+    const uint8_t lo = readU8(gs);
+    const uint8_t hi = readU8(gs);
+    const uint8_t era = mm2_gs_u8(gs.a4(), MM2_GS_ERA_LOW);
+    setEventCond(gs, (era >= lo && era <= hi) ? 1 : 0);
+}
+
+void EventRuntime::opSetAbort(GameStateView &gs)
+{
+    /* event_op29_force_abort @ 0x16D08: stop script before fall-through (e.g. C2 evt 22). */
+    setEventAbort(gs);
+}
+
+void EventRuntime::opMapTransition(GameStateView &gs, world::MapWorld &world)
+{
+    /* event_op0c_map_transition @ 0x15E12 — bit6/high remaps inside
+     * applyMapTransition; then OP_0F cleanup via endScript. */
+    const uint8_t dest_screen = readU8(gs);
+    const uint8_t dest_tile = readU8(gs);
+    /* Silent cruise hops: OP_0D 0x09 then OP_0C with no prior wait. Save
+     * before applyMapTransition → enterLocation clears the script flags. */
+    const bool chain_dwell = op0d_09_this_script_ && !script_had_wait_;
+    applyMapTransition(gs, world, dest_screen, dest_tile);
+    endScript(gs);
+    if (chain_dwell && mm2_gs_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH) != 0) {
+        delay_remaining_ = hopDwellPolls(controlsDelayClamped(gs));
+        delay_skip_armed_ = false;
+        delay_key_skippable_ = false;
+        wait_ = EventVmWait::Delay;
     }
-    case 0x11: {
-        const uint8_t n = readU8(gs);
-        if (!mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG)) {
-            skipTokens(gs, n);
-        }
-        break;
+}
+
+void EventRuntime::opExecSelector(GameStateView &gs, world::MapWorld &world)
+{
+    /* event_op0e_selector_dispatch @ 0x160C2: SCRIPT_ABORT=1 at entry so
+     * the current script ends after the selector returns; default-range
+     * bins set QUEUED_EVENT_ID for the scanner epilogue @ 0x176B6.
+     * 0x160D4: -$7946 = 2 (inn/0xFD overwrite to 1 before their jsr). */
+    setEventAbort(gs);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_OP0E_SUBMODE, 2);
+    const uint8_t sel = readU8(gs);
+    eventExecTownSelector(*this, gs, world, sel, roster_, launch_, items_, text_, wait_,
+                          location_id_, service_title_, rng_);
+}
+
+void EventRuntime::opShowServiceWindow(GameStateView &gs, world::MapWorld &world)
+{
+    const uint8_t str_idx = readU8(gs);
+    const uint8_t placement = readU8(gs);
+    /* OP_0B @ 0x15DB0 / 0x15756: str_idx is a sign/portrait table key, not str.dat.
+     * table[A4-$79E3][str_idx-1] → .anm; draw via -$7FBC/-$7FC2; exit bit 2. No text.
+     * Hillstone evt 15: 0b 0e 00 → env 2 → 49.anm. */
+    text_.showOp0B(nullptr, data_dir_, gs, &world.attrib(), str_idx, placement);
+    orEventExit(gs, 4);
+}
+
+void EventRuntime::opApplyParty(GameStateView &gs)
+{
+    const uint8_t count = readU8(gs);
+    const uint8_t op = readU8(gs);
+    const uint8_t val = readU8(gs);
+    applyPartyProgressOp(gs, roster_, launch_, count, op, val, false, 0, 0);
+}
+
+void EventRuntime::opApplyPartyMasked(GameStateView &gs)
+{
+    const uint8_t count = readU8(gs);
+    const uint8_t op = readU8(gs);
+    const uint8_t and_m = readU8(gs);
+    const uint8_t or_m = readU8(gs);
+    applyPartyProgressOp(gs, roster_, launch_, count, op, 0, true, and_m, or_m);
+}
+
+void EventRuntime::opInvalid(GameStateView &gs)
+{
+    setEventAbort(gs);
+}
+
+void EventRuntime::opPlaySoundSeq(GameStateView &gs, world::MapWorld &world)
+{
+    /* OP_0D @ 0x15EC4 -> thunk -$7E42 -> play_sound_seq @ 0x6FB8 (ids 0..9). */
+    const uint8_t idx = readU8(gs);
+    if (idx == 0x09) {
+        op0d_09_this_script_ = true;
     }
-    case 0x22: {
-        /* event_op22_era_gate @ 0x16A9E: cond = (MM2_GS_ERA_LOW in [lo..hi]). */
-        const uint8_t lo = readU8(gs);
-        const uint8_t hi = readU8(gs);
-        const uint8_t era = mm2_gs_u8(gs.a4(), MM2_GS_ERA_LOW);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, (era >= lo && era <= hi) ? 1 : 0);
-        break;
-    }
-    case 0x29:
-        /* event_op29_force_abort @ 0x16D08: stop script before fall-through (e.g. C2 evt 22). */
-        mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
-        break;
-    case 0x0C: {
-        /* event_op0c_map_transition @ 0x15E12 — bit6/high remaps inside
-         * applyMapTransition; then OP_0F cleanup via endScript. */
-        const uint8_t dest_screen = readU8(gs);
-        const uint8_t dest_tile = readU8(gs);
-        /* Silent cruise hops: OP_0D 0x09 then OP_0C with no prior wait. Save
-         * before applyMapTransition → enterLocation clears the script flags. */
-        const bool chain_dwell = op0d_09_this_script_ && !script_had_wait_;
-        applyMapTransition(gs, world, dest_screen, dest_tile);
-        endScript(gs);
-        if (chain_dwell && mm2_gs_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH) != 0) {
-            delay_remaining_ = hopDwellPolls(controlsDelayClamped(gs));
-            delay_skip_armed_ = false;
-            delay_key_skippable_ = false;
-            wait_ = EventVmWait::Delay;
-        }
-        break;
-    }
-    case 0x0E: {
-        /* event_op0e_selector_dispatch @ 0x160C2: SCRIPT_ABORT=1 at entry so
-         * the current script ends after the selector returns; default-range
-         * bins set QUEUED_EVENT_ID for the scanner epilogue @ 0x176B6.
-         * 0x160D4: -$7946 = 2 (inn/0xFD overwrite to 1 before their jsr). */
-        mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
-        mm2_gs_set_u16(gs.a4(), MM2_GS_OP0E_SUBMODE, 2);
-        const uint8_t sel = readU8(gs);
-        eventExecTownSelector(*this, gs, world, sel, roster_, launch_, items_, text_, wait_,
-                              location_id_, service_title_, rng_);
-        break;
-    }
-    case 0x0B: {
-        const uint8_t str_idx = readU8(gs);
-        const uint8_t placement = readU8(gs);
-        /* OP_0B @ 0x15DB0 / 0x15756: str_idx is a SIGN/PORTRAIT lookup key, NOT a
-         * str.dat text index. Direct trace of 0x15DB0 (see EXTRACTED docs
-         * 07/28 §OP_0B correction, 2026-07): the routine resolves str_idx via
-         * the per-env table @ 0x15756 into an .anm id, draws the window frame
-         * + portrait bitmap via thunks -$7FBC/-$7FC2, and sets exit-flag bit 2
-         * (below) — there is NO jsr to any text/string routine anywhere in
-         * this handler. The previous port fabricated a "service title" by
-         * ALSO feeding str_idx into resolveString(); because str_idx is a
-         * sign-table key that happens to collide with unrelated str.dat
-         * indices at some locations, this produced byte-for-byte wrong text
-         * cross-wired from a DIFFERENT string in the SAME location (e.g.
-         * Middlegate idx 0x14 == str[20] "Fool, you have no farthing to
-         * flick!" bleeding into the enroll-mages-guild AND goblet-quest
-         * doorways just because both happen to reuse Nordon's sign id 0x14;
-         * Middlegate Inn idx 0x03 == str[3] "Slaughtered Lamb"). Fixed by
-         * removing the text capture entirely — service_title_ is no longer
-         * written here, so callers correctly fall back to their own honest
-         * placeholder (town name) instead of fabricated/cross-wired text.
-         * env = A4-$79E3 (area_env_lookup @ 0x18AE on map load @ 0x1C44).
-         * anm = table[env][str_idx-1] → sign_sprite_load @ 0x316E.
-         * Hillstone evt 15: 0b 0e 00 → str[14], env 2 → 49.anm Lord Slayer portrait. */
-        text_.showOp0B(nullptr, data_dir_, gs, &world.attrib(), str_idx, placement);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 4));
-        break;
-    }
-    case 0x15: {
-        const uint8_t count = readU8(gs);
-        const uint8_t op = readU8(gs);
-        const uint8_t val = readU8(gs);
-        applyPartyProgressOp(gs, roster_, launch_, count, op, val, false, 0, 0);
-        break;
-    }
-    case 0x18: {
-        const uint8_t count = readU8(gs);
-        const uint8_t op = readU8(gs);
-        const uint8_t and_m = readU8(gs);
-        const uint8_t or_m = readU8(gs);
-        applyPartyProgressOp(gs, roster_, launch_, count, op, 0, true, and_m, or_m);
-        break;
-    }
-    case 0x00:
-        mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
-        break;
-    case 0x0D: {
-        /* OP_0D @ 0x15EC4 -> thunk -$7E42 -> play_sound_seq @ 0x6FB8 (ids 0..9). */
-        const uint8_t idx = readU8(gs);
-        if (idx == 0x09) {
-            op0d_09_this_script_ = true;
-        }
-        eventVmExecEngineCall(gs.a4(), idx, &world);
-        break;
-    }
-    case 0x14:
-        eventVmClearTileEventFlag(gs.a4(), world, gs.coordY(), gs.coordX());
-        /* PORT DEVIATION (ASM unclear): OP_14's collision-page andi #$7F does
-         * not stop the triplet walk (cavern (1,2) is already 0x41). A separate
-         * per-visit flag, checked by scanAndRun, is what actually suppresses
-         * re-trigger until enterLocation. Typical dungeon fights are
-         * OP_2B / OP_12 / OP_14 — post-combat re-scan skips OP_12 via OP_2B
-         * and lands here. */
-        markTileEventResolved(static_cast<int>(gs.coordY()), static_cast<int>(gs.coordX()));
-        break;
-    case 0x16: {
-        /* event_op16_scan_party_items @ 0x16520: reads 2 bytes (arg1 read then
-         * OVERWRITTEN by arg2 — only arg2 is used). Scans each party member's
-         * record (get_party_member_ptr_by_slot @ 0x477E, bound = party count
-         * A4-$795A); for m in 0..5 increments cond_flag when record[0x3A+m] OR
-         * record[0x28+m] == arg2, then breaks at the first member with any match.
-         * +0x28/+0x3A are the equipped/backpack item-id runs (6 ids each) — so this
-         * is an "any party member carrying item arg2" check. cond reflects the
-         * match count of that first member. */
-        readU8(gs);
-        const uint8_t want = readU8(gs);
-        uint8_t cond = 0;
-        if (launch_ && roster_) {
-            for (int i = 0; i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
-                const auto *rec = reinterpret_cast<const uint8_t *>(
-                    &roster_->records[launch_->roster_slots[i]]);
-                for (int m = 0; m < 6; ++m) {
-                    if (rec[0x3A + m] == want || rec[0x28 + m] == want) {
-                        ++cond;
-                    }
-                }
-                if (cond != 0) {
-                    break;
+    eventVmExecEngineCall(gs.a4(), idx, &world);
+}
+
+void EventRuntime::opClearTileEvent(GameStateView &gs, world::MapWorld &world)
+{
+    eventVmClearTileEventFlag(gs.a4(), world, gs.coordY(), gs.coordX());
+    /* PORT DEVIATION (ASM unclear): OP_14's collision-page andi #$7F does
+     * not stop the triplet walk (cavern (1,2) is already 0x41). A separate
+     * per-visit flag, checked by scanAndRun, is what actually suppresses
+     * re-trigger until enterLocation. Typical dungeon fights are
+     * OP_2B / OP_12 / OP_14 — post-combat re-scan skips OP_12 via OP_2B
+     * and lands here. */
+    markTileEventResolved(static_cast<int>(gs.coordY()), static_cast<int>(gs.coordX()));
+}
+
+void EventRuntime::opScanPartyItems(GameStateView &gs)
+{
+    /* event_op16_scan_party_items @ 0x16520: 1st byte discarded; scan +$3A/+ $28
+     * for arg2. cond = match count of the first member with any hit. */
+    readU8(gs);
+    const uint8_t want = readU8(gs);
+    uint8_t cond = 0;
+    if (launch_ && roster_) {
+        for (int i = 0; i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+            const uint8_t *rec = rosterRecordBytes(roster_->records[launch_->roster_slots[i]]);
+            for (int m = 0; m < kRosterItemSlots; ++m) {
+                if (rosterBackpackId(rec, m) == want || rosterEquipId(rec, m) == want) {
+                    ++cond;
                 }
             }
-        }
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, cond);
-        break;
-    }
-    case 0x17: {
-        /* event_op17_load_cond_var @ 0x165A4: cond_flag = *resolve(id) — the RAW
-         * variable byte (`move.b (a0),-$7951`), NOT a 0/1 bool. OP_1B compares
-         * cond against a threshold, so booleanizing here broke threshold gates.
-         * The handler reads the id byte, then reads+discards a 2nd byte. */
-        const uint8_t group = readU8(gs);
-        const uint8_t index = readU8(gs);
-        (void)index;
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, eventVmLoadVar(gs.a4(), group, index));
-        break;
-    }
-    case 0x19: {
-        /* event_op19_give_item @ 0x165D8: give one item to the first party member
-         * with a free backpack slot; set cond_flag=1 on success (0 on entry).
-         * Reads 4 bytes: arg1 (member-spec), id, attr2, attr3.
-         *   - If arg1 >= 0x80, the item id is taken from cond_flag (captured at
-         *     entry, BEFORE cond_flag is cleared) instead of the literal id byte.
-         *   - Per member, scan the backpack item-id run rec[0x3A+m] (m=0..5) for
-         *     the first empty (==0) slot and write id->rec[0x3A+m],
-         *     attr2->rec[0x40+m], attr3->rec[0x46+m]. These are the SoA backpack
-         *     id/bonus/flag runs (see OP_16; raw-byte access matches the file
-         *     bytes — the roster struct's AoS item slots mislabel them, flagged
-         *     for the roster agent).
-         *   - If every backpack is full the ROM drops the item into the shared
-         *     found-item buffer (overflow tail @ 0x166A0): it scans buffer id[0],
-         *     id[1] for the first empty slot (else slot 2), writing id->A4-$3F1C,
-         *     attr3->A4-$3F19 (flags), attr2->A4-$3F16 (charges) and raising the
-         *     sentinel A4-$794C=0xFF. cond_flag stays 0 in that case (the item was
-         *     NOT placed on a member). The buffer's "you found..." pickup is the
-         *     deferred Search payoff (0x1B19C) — we model the buffer state here. */
-        const uint8_t arg1 = readU8(gs);
-        uint8_t id = readU8(gs);
-        const uint8_t attr2 = readU8(gs);
-        const uint8_t attr3 = readU8(gs);
-        if (arg1 >= 0x80) {
-            id = mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG);
-        }
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
-        bool placed = false;
-        if (launch_ && roster_) {
-            for (int i = 0; !placed && i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS;
-                 ++i) {
-                auto *rec = reinterpret_cast<uint8_t *>(
-                    &roster_->records[launch_->roster_slots[i]]);
-                for (int m = 0; m < 6; ++m) {
-                    if (rec[0x3A + m] == 0) {
-                        rec[0x3A + m] = id;
-                        rec[0x40 + m] = attr2;
-                        rec[0x46 + m] = attr3;
-                        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 1);
-                        placed = true;
-                        break;
-                    }
-                }
+            if (cond != 0) {
+                break;
             }
         }
-        if (!placed) {
-            mm2_found_items_overflow_append(gs.a4(), id, attr2, attr3);
-        }
-        break;
     }
-    case 0x1A: {
-        /* event_op1a_store_var @ 0x166F8: reads ONLY 2 bytes — var id then value
-         * (the pointer resolver $15620 keys on the id alone). Reading a 3rd byte
-         * desynced every script that used OP_1A. */
-        const uint8_t group = readU8(gs);
-        const uint8_t val = readU8(gs);
-        eventVmStoreVar(gs.a4(), group, 0, val);
-        break;
-    }
-    case 0x1B: {
-        const uint8_t threshold = readU8(gs);
-        if (mm2_gs_u8(gs.a4(), MM2_GS_COND_FLAG) < threshold) {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
-        }
-        break;
-    }
-    case 0x1C: {
-        /* event_op1c_engine_query @ 0x16742: push arg, push #1, jsr -$7BB4
-         * (rng_roll @ 0x22BC6). Stores the RAW roll byte into cond_flag
-         * (`move.b d0,-$7951`) — not a boolean. Unbound rng → 1 (same as
-         * OP_0C fallback when rng_ is null). */
-        const uint8_t hi = readU8(gs);
-        const int roll = rng_ ? rng_->range(1, static_cast<int>(hi)) : 1;
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, static_cast<uint8_t>(roll & 0xFF));
-        break;
-    }
-    case 0x1D:
-        /* event_op1d_engine_indexed @ 0x16762: -$7E84 → audio_wait_helper @ 0x6798
-         * with index (arg1*7+1). Halves the wait count, polls -$7BD2, yields via
-         * -$7B42. Presentation/audio only — no cond/GS write. Consume argc=1. */
-        readU8(gs);
-        break;
-    case 0x1E: {
-        /* event_op1e_timed_wait @ 0x16780: `arg` iterations of delay(10) via
-         * -$7BC0→0x22B4A then poll -$7BD2→0x22586, break on key. Host maps that
-         * onto ~60 Hz frames (arg=200 ≈ 4 s at Delay 5), skippable after the
-         * Yes/Enter key is released so boarding does not need a second press.
-         * arg==0 is a no-op. */
-        const uint8_t ticks = readU8(gs);
-        if (ticks != 0) {
-            delay_remaining_ = op1eHostPolls(ticks, controlsDelayClamped(gs));
-            delay_skip_armed_ = false;
-            delay_key_skippable_ = true;
-            wait_ = EventVmWait::Delay;
-        }
-        break;
-    }
-    case 0x1F:
-    case 0x20: {
-        uint8_t args[5];
-        const uint8_t sel = readU8(gs);
-        for (int i = 0; i < 5; ++i) {
-            args[i] = readU8(gs);
-        }
-        eventApplyPartyEffect(gs, roster_, launch_, sel, args, op == 0x20);
-        break;
-    }
-    case 0x21: {
-        const uint8_t pos = readU8(gs);
-        const uint8_t visual = readU8(gs);
-        const uint8_t collision = readU8(gs);
-        eventVmPatchMapTile(world, (pos >> 4) & 0xF, pos & 0xF, visual, collision);
-        /* 0x16A34: bset #$2, EXIT_FLAGS (map redraw). */
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 4));
-        break;
-    }
-    case 0x23: {
-        /* event_op23_day_gate @ 0x16ADA: cond = day-of-year predicate.
-         * The day byte is the LOW byte of the current era's day word
-         * (-$79DE[era], read as `move.b $1(a0,era*2)` — big-endian RAM word, so
-         * +1 is the low 8 bits; day is 1..180 so this == day & 0xFF). arg1 is
-         * read first, arg2 second (both always consumed → argc 2):
-         *   arg1 == 0xB5 -> cond = (day bit0 set)   — odd-day gate
-         *   arg1 == 0xB6 -> cond = (day bit0 clear)  — even-day gate
-         *   else         -> cond = (arg1 <= day <= arg2)  — inclusive byte range
-         * (Previously only the range path existed; the 0xB5/0xB6 moon/odd-even
-         * gates silently fell through to a bogus range compare.) */
-        const uint8_t arg1 = readU8(gs);
-        const uint8_t arg2 = readU8(gs);
-        const uint8_t day = static_cast<uint8_t>(gs.day() & 0xFF);
-        uint8_t cond;
-        if (arg1 == 0xB5) {
-            cond = (day & 1) ? 1 : 0;
-        } else if (arg1 == 0xB6) {
-            cond = (day & 1) ? 0 : 1;
-        } else {
-            cond = (day >= arg1 && day <= arg2) ? 1 : 0;
-        }
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, cond);
-        break;
-    }
-    case 0x24: {
-        /* event_op24_gold_check @ 0x16B54: u16 via 0x155DA, then -$7E6C → 0x6ACE
-         * (pool+deduct). Cond = success. */
-        const uint8_t lo = readU8(gs);
-        const uint8_t hi = readU8(gs);
-        const uint32_t need = static_cast<uint32_t>(lo | (hi << 8));
-        const bool ok = eventVmPartyTryPayGold(gs.a4(), roster_, launch_, need);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, ok ? 1 : 0);
-        break;
-    }
-    case 0x25: {
-        /* event_op25_code_check @ 0x16B82: hi,lo → u16, then -$7E66 → 0x6B9A
-         * gems pool+deduct (NOT tickets/keys — those are OP_0E 0x08 / OP_28). */
-        const uint8_t hi = readU8(gs);
-        const uint8_t lo = readU8(gs);
-        const uint16_t need = static_cast<uint16_t>((hi << 8) | lo);
-        const bool ok = eventVmPartyTryPayGems(gs.a4(), roster_, launch_, need);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, ok ? 1 : 0);
-        break;
-    }
-    case 0x26:
-        /* OP_26 @ 0x16BC0 flag≠0: key wait only (thunks -$7D0A/-$7BD2). No ROM
-         * prompt string here — preceding OP_01/02 already drew the question.
-         * Success path @ 0x16C70 writes slot → cond / -$5D42 / -$5D3F. */
-        wait_ = EventVmWait::MemberSelect;
-        break;
-    case 0x27:
-        /* OP_27 @ 0x16BC0 flag=0: same leaf, input via -$7DDC. */
-        wait_ = EventVmWait::MemberSelect;
-        break;
-    case 0x28: {
-        /* OP_28 @ 0x16C86: discard 1st arg, item id = 2nd; backpack-only consume. */
-        (void)readU8(gs);
-        const uint8_t item_id = readU8(gs);
-        const bool has = eventVmPartyConsumeBackpackItem(roster_, launch_, item_id);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, has ? 1 : 0);
-        break;
-    }
-    case 0x2A: {
-        uint8_t block[14];
-        for (int i = 0; i < 14; ++i) {
-            block[i] = readU8(gs);
-        }
-        eventVmApplyTreasure(gs.a4(), roster_, launch_, block);
-        break;
-    }
-    case 0x2C: {
-        /* event_op2c_adjust_state @ 0x16D98: WORD add of the u8 arg into the
-         * counter at -$79B8 (add.w), then set exit-flag bit0 (redraw). */
-        const uint8_t add = readU8(gs);
-        const uint16_t cur = mm2_gs_u16(gs.a4(), MM2_GS_SCRIPT_COUNTER);
-        mm2_gs_set_u16(gs.a4(), MM2_GS_SCRIPT_COUNTER, static_cast<uint16_t>(cur + add));
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 1));
-        break;
-    }
-    case 0x2D: {
-        /* event_op2d_check_member_attr @ 0x16DBA: match each party member's
-         * attribute field against a value nibble; set cond=1 if the predicate
-         * holds across the party.
-         *   arg1 bit7 -> race (+0xE), bit6 -> sex (+0xC), neither -> class (+0xF);
-         *   bit5 -> "any member matches" mode, else "all members match" mode;
-         *   low nibble of arg1 = primary match value. If arg1 has no high bits
-         *   (& 0xE0 == 0), arg2's low nibble is a 2nd accepted value (field may
-         *   equal val1 OR val2). The loop breaks at the first member that fails
-         *   the desired predicate; cond reflects the last-examined member. */
-        const uint8_t arg1 = readU8(gs);
-        const uint8_t arg2 = readU8(gs);
-        const bool useRace = (arg1 & 0x80) != 0;
-        const bool useSex = (arg1 & 0x40) != 0;
-        const bool useClass = !useRace && !useSex;
-        const bool anyMode = (arg1 & 0x20) != 0;
-        const uint8_t val1 = static_cast<uint8_t>(arg1 & 0x0F);
-        const uint8_t val2 =
-            ((arg1 & 0xE0) == 0) ? static_cast<uint8_t>(arg2 & 0x0F) : val1;
+    setEventCond(gs, cond);
+}
 
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 0);
-        bool match = false;
-        if (launch_ && roster_) {
-            for (int i = 0; i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
-                const Mm2RosterRecord *rec = &roster_->records[launch_->roster_slots[i]];
-                /* fields evaluated in ASM order (class, sex, race); each active
-                 * field overwrites `match`, so the last active field wins. */
-                match = false;
+void EventRuntime::opLoadVarRawToCond(GameStateView &gs)
+{
+    /* event_op17_load_cond_var @ 0x165A4: cond = *resolve(group) raw byte
+     * (`move.b (a0),-$7951`), not 0/1 — OP_1B compares magnitude. 2nd byte discarded. */
+    const uint8_t group = readU8(gs);
+    const uint8_t index = readU8(gs);
+    (void)index;
+    setEventCond(gs, eventVmLoadVar(gs.a4(), group, index));
+}
+
+void EventRuntime::opGiveItem(GameStateView &gs)
+{
+    /* event_op19_give_item @ 0x165D8: 4 bytes (member-spec, id, attr2, attr3).
+     * arg1 >= 0x80 → id from cond (captured before cond is cleared). First empty
+     * backpack +$3A/+$40/+$46; else found-item overflow @ 0x166A0 (cond stays 0). */
+    const uint8_t arg1 = readU8(gs);
+    uint8_t id = readU8(gs);
+    const uint8_t attr2 = readU8(gs);
+    const uint8_t attr3 = readU8(gs);
+    if (arg1 >= kOp19ItemFromCond) {
+        id = eventCond(gs);
+    }
+    setEventCond(gs, 0);
+    bool placed = false;
+    if (launch_ && roster_) {
+        for (int i = 0; !placed && i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+            uint8_t *rec = rosterRecordBytes(roster_->records[launch_->roster_slots[i]]);
+            if (rosterPlaceInFirstEmptyBackpack(rec, id, attr2, attr3)) {
+                setEventCond(gs, 1);
+                placed = true;
+            }
+        }
+    }
+    if (!placed) {
+        mm2_found_items_overflow_append(gs.a4(), id, attr2, attr3);
+    }
+}
+
+void EventRuntime::opStoreVar8(GameStateView &gs)
+{
+    /* event_op1a_store_var @ 0x166F8: 2 bytes — var id then value (resolver $15620
+     * keys on id alone). No 3rd byte. */
+    const uint8_t group = readU8(gs);
+    const uint8_t val = readU8(gs);
+    eventVmStoreVar(gs.a4(), group, 0, val);
+}
+
+void EventRuntime::opCondThreshold(GameStateView &gs)
+{
+    const uint8_t threshold = readU8(gs);
+    if (eventCond(gs) < threshold) {
+        setEventCond(gs, 0);
+    }
+}
+
+void EventRuntime::opRngRollToCond(GameStateView &gs)
+{
+    /* event_op1c_engine_query @ 0x16742: push arg, push #1, jsr -$7BB4
+     * (rng_roll @ 0x22BC6). Stores the RAW roll byte into cond_flag
+     * (`move.b d0,-$7951`) — not a boolean. Unbound rng → 1 (same as
+     * OP_0C fallback when rng_ is null). */
+    const uint8_t hi = readU8(gs);
+    const int roll = rng_ ? rng_->range(1, static_cast<int>(hi)) : 1;
+    setEventCond(gs, static_cast<uint8_t>(roll & 0xFF));
+}
+
+void EventRuntime::opAudioWait(GameStateView &gs)
+{
+    /* event_op1d_engine_indexed @ 0x16762: -$7E84 → audio_wait_helper @ 0x6798
+     * with index (arg1*7+1). Halves the wait count, polls -$7BD2, yields via
+     * -$7B42. Presentation/audio only — no cond/GS write. Consume argc=1. */
+    readU8(gs);
+}
+
+void EventRuntime::opDelay(GameStateView &gs)
+{
+    /* event_op1e_timed_wait @ 0x16780: `arg` iterations of delay(10) via
+     * -$7BC0→0x22B4A then poll -$7BD2→0x22586, break on key. Host maps that
+     * onto ~60 Hz frames (arg=200 ≈ 4 s at Delay 5), skippable after the
+     * Yes/Enter key is released so boarding does not need a second press.
+     * arg==0 is a no-op. */
+    const uint8_t ticks = readU8(gs);
+    if (ticks != 0) {
+        delay_remaining_ = op1eHostPolls(ticks, controlsDelayClamped(gs));
+        delay_skip_armed_ = false;
+        delay_key_skippable_ = true;
+        wait_ = EventVmWait::Delay;
+    }
+}
+
+void EventRuntime::opPartyEffect(GameStateView &gs, bool mode_b)
+{
+    uint8_t args[5];
+    const uint8_t sel = readU8(gs);
+    for (int i = 0; i < 5; ++i) {
+        args[i] = readU8(gs);
+    }
+    eventApplyPartyEffect(gs, roster_, launch_, sel, args, mode_b);
+}
+
+void EventRuntime::opSetTile(GameStateView &gs, world::MapWorld &world)
+{
+    const uint8_t pos = readU8(gs);
+    const uint8_t visual = readU8(gs);
+    const uint8_t collision = readU8(gs);
+    eventVmPatchMapTile(world, (pos >> 4) & 0xF, pos & 0xF, visual, collision);
+    /* 0x16A34: bset #$2, EXIT_FLAGS (map redraw). */
+    orEventExit(gs, 4);
+}
+
+void EventRuntime::opCheckDayRange(GameStateView &gs)
+{
+    /* event_op23_day_gate @ 0x16ADA: cond = day-of-year predicate.
+     * The day byte is the LOW byte of the current era's day word
+     * (-$79DE[era], read as `move.b $1(a0,era*2)` — big-endian RAM word, so
+     * +1 is the low 8 bits; day is 1..180 so this == day & 0xFF). arg1 is
+     * read first, arg2 second (both always consumed → argc 2):
+     *   arg1 == 0xB5 -> cond = (day bit0 set)   — odd-day gate
+     *   arg1 == 0xB6 -> cond = (day bit0 clear)  — even-day gate
+     *   else         -> cond = (arg1 <= day <= arg2)  — inclusive byte range */
+    const uint8_t arg1 = readU8(gs);
+    const uint8_t arg2 = readU8(gs);
+    const uint8_t day = static_cast<uint8_t>(gs.day() & 0xFF);
+    uint8_t cond;
+    if (arg1 == kOp23OddDay) {
+        cond = (day & 1) ? 1 : 0;
+    } else if (arg1 == kOp23EvenDay) {
+        cond = (day & 1) ? 0 : 1;
+    } else {
+        cond = (day >= arg1 && day <= arg2) ? 1 : 0;
+    }
+    setEventCond(gs, cond);
+}
+
+void EventRuntime::opPayGoldToCond(GameStateView &gs)
+{
+    /* event_op24_gold_check @ 0x16B54: u16 via 0x155DA, then -$7E6C → 0x6ACE
+     * (pool+deduct). Cond = success. */
+    const uint8_t lo = readU8(gs);
+    const uint8_t hi = readU8(gs);
+    const uint32_t need = static_cast<uint32_t>(lo | (hi << 8));
+    const bool ok = eventVmPartyTryPayGold(gs.a4(), roster_, launch_, need);
+    setEventCond(gs, ok ? 1 : 0);
+}
+
+void EventRuntime::opPayGemsToCond(GameStateView &gs)
+{
+    /* event_op25_code_check @ 0x16B82: hi,lo → u16, then -$7E66 → 0x6B9A
+     * gems pool+deduct (NOT tickets/keys — those are OP_0E 0x08 / OP_28). */
+    const uint8_t hi = readU8(gs);
+    const uint8_t lo = readU8(gs);
+    const uint16_t need = static_cast<uint16_t>((hi << 8) | lo);
+    const bool ok = eventVmPartyTryPayGems(gs.a4(), roster_, launch_, need);
+    setEventCond(gs, ok ? 1 : 0);
+}
+
+void EventRuntime::opSelectMember(GameStateView &gs)
+{
+    (void)gs;
+    /* OP_26 @ 0x16BC0 flag≠0: key wait only (thunks -$7D0A/-$7BD2). No ROM
+     * prompt string here — preceding OP_01/02 already drew the question.
+     * Success path @ 0x16C70 writes slot → cond / -$5D42 / -$5D3F. */
+    wait_ = EventVmWait::MemberSelect;
+}
+
+void EventRuntime::opSelectMemberB(GameStateView &gs)
+{
+    (void)gs;
+    /* OP_27 @ 0x16BC0 flag=0: same leaf, input via -$7DDC. */
+    wait_ = EventVmWait::MemberSelect;
+}
+
+void EventRuntime::opConsumeItemToCond(GameStateView &gs)
+{
+    /* OP_28 @ 0x16C86: discard 1st arg, item id = 2nd; backpack-only consume. */
+    (void)readU8(gs);
+    const uint8_t item_id = readU8(gs);
+    const bool has = eventVmPartyConsumeBackpackItem(roster_, launch_, item_id);
+    setEventCond(gs, has ? 1 : 0);
+}
+
+void EventRuntime::opSetTreasure(GameStateView &gs)
+{
+    uint8_t block[14];
+    for (int i = 0; i < 14; ++i) {
+        block[i] = readU8(gs);
+    }
+    eventVmApplyTreasure(gs.a4(), roster_, launch_, block);
+}
+
+void EventRuntime::opAddWordCounter(GameStateView &gs)
+{
+    /* event_op2c_adjust_state @ 0x16D98: WORD add of the u8 arg into the
+     * counter at -$79B8 (add.w), then set exit-flag bit0 (redraw). */
+    const uint8_t add = readU8(gs);
+    const uint16_t cur = mm2_gs_u16(gs.a4(), MM2_GS_SCRIPT_COUNTER);
+    mm2_gs_set_u16(gs.a4(), MM2_GS_SCRIPT_COUNTER, static_cast<uint16_t>(cur + add));
+    orEventExit(gs, 1);
+}
+
+void EventRuntime::opCheckMemberAttr(GameStateView &gs)
+{
+    /* event_op2d_check_member_attr @ 0x16DBA: match each party member's
+     * attribute field against a value nibble; set cond=1 if the predicate
+     * holds across the party.
+     *   arg1 bit7 -> race (+0xE), bit6 -> sex (+0xC), neither -> class (+0xF);
+     *   bit5 -> "any member matches" mode, else "all members match" mode;
+     *   low nibble of arg1 = primary match value. If arg1 has no high bits
+     *   (& 0xE0 == 0), arg2's low nibble is a 2nd accepted value (field may
+     *   equal val1 OR val2). The loop breaks at the first member that fails
+     *   the desired predicate; cond reflects the last-examined member. */
+    const uint8_t arg1 = readU8(gs);
+    const uint8_t arg2 = readU8(gs);
+    const bool useRace = (arg1 & 0x80) != 0;
+    const bool useSex = (arg1 & 0x40) != 0;
+    const bool useClass = !useRace && !useSex;
+    const bool anyMode = (arg1 & 0x20) != 0;
+    const uint8_t val1 = static_cast<uint8_t>(arg1 & 0x0F);
+    const uint8_t val2 = ((arg1 & 0xE0) == 0) ? static_cast<uint8_t>(arg2 & 0x0F) : val1;
+
+    setEventCond(gs, 0);
+    bool match = false;
+    if (launch_ && roster_) {
+        for (int i = 0; i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+            const Mm2RosterRecord *rec = &roster_->records[launch_->roster_slots[i]];
+            /* fields evaluated in ASM order (class, sex, race); each active
+             * field overwrites `match`, so the last active field wins. */
+            match = false;
+            if (useClass) {
+                match = (rec->class_id == val1);
+            }
+            if (useSex) {
+                match = (rec->sex == val1);
+            }
+            if (useRace) {
+                match = (rec->race == val1);
+            }
+            if (!match) {
                 if (useClass) {
-                    match = (rec->class_id == val1);
+                    match = (rec->class_id == val2);
                 }
                 if (useSex) {
-                    match = (rec->sex == val1);
+                    match = (rec->sex == val2);
                 }
                 if (useRace) {
-                    match = (rec->race == val1);
-                }
-                if (!match) {
-                    if (useClass) {
-                        match = (rec->class_id == val2);
-                    }
-                    if (useSex) {
-                        match = (rec->sex == val2);
-                    }
-                    if (useRace) {
-                        match = (rec->race == val2);
-                    }
-                }
-                /* break at first member that violates the predicate:
-                 * all-mode breaks on a non-match, any-mode breaks on a match. */
-                if (anyMode ? match : !match) {
-                    break;
+                    match = (rec->race == val2);
                 }
             }
-        }
-        if (match) {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, 1);
-        }
-        break;
-    }
-    case 0x2E: {
-        /* event_op2e_set_attr_bit @ 0x16F50: OR arg2 into a per-member byte, but
-         * only for members of two specific classes.
-         *   class pair = {4, 2}; if arg1 >= 0x80 -> pair {3, 1} and arg1 &= 0x7F.
-         *   target byte = member + (uint8)(arg1 - 0x6E) + 0x51; *target |= arg2.
-         * (arg1 ~ 0x6E selects field +0x51, the class-quest bit region near the
-         * +0x50 title nibble read by OP_32.) */
-        uint8_t arg1 = readU8(gs);
-        const uint8_t arg2 = readU8(gs);
-        uint8_t cls_a = 4;
-        uint8_t cls_b = 2;
-        if (arg1 >= 0x80) {
-            cls_a = 3;
-            cls_b = 1;
-            arg1 = static_cast<uint8_t>(arg1 & 0x7F);
-        }
-        const int field_off =
-            static_cast<int>(static_cast<uint8_t>(arg1 - 0x6E)) + 0x51;
-        if (launch_ && roster_ && field_off >= 0 &&
-            field_off < static_cast<int>(MM2_ROSTER_RECORD_SIZE)) {
-            for (int i = 0; i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
-                Mm2RosterRecord *rec = &roster_->records[launch_->roster_slots[i]];
-                if (rec->class_id == cls_a || rec->class_id == cls_b) {
-                    reinterpret_cast<uint8_t *>(rec)[field_off] |=
-                        static_cast<uint8_t>(arg2);
-                }
+            /* break at first member that violates the predicate:
+             * all-mode breaks on a non-match, any-mode breaks on a match. */
+            if (anyMode ? match : !match) {
+                break;
             }
         }
-        break;
     }
-    case 0x2F:
-        /* event_op2f @ 0x16FEA: NOT a silent clear — calls -$7F92 which reads
-         * up to 10 characters into A4-$5C50, then space-pads the remainder and
-         * clears the trailing NUL at -$5C46. Port: arm Answer wait; continueInput
-         * fills the buffer then resumes so OP_30 can compare. */
-        answer_len_ = 0;
-        ::memset(answer_buf_, 0, sizeof(answer_buf_));
-        for (int i = 0; i < 16; ++i) {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_INPUT_BUF + i, 0);
-        }
-        text_.showOp02("?", 19);
-        text_.setTextEntry(answer_buf_, answer_len_);
-        wait_ = EventVmWait::Answer;
-        break;
-    case 0x30: {
-        uint8_t expected[10];
-        for (int i = 0; i < 10; ++i) {
-            expected[i] = readU8(gs);
-        }
-        const bool ok =
-            eventVmCheckOp30Password(gs.a4() + MM2_GS_INPUT_BUF, expected, sizeof(expected));
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, ok ? 1 : 0);
-        break;
+    if (match) {
+        setEventCond(gs, 1);
     }
-    case 0x31: {
-        /* event_op31_iterate_targets @ 0x170BC:
-         *   EXIT_FLAGS |= bit1
-         *   member-spec + u16 value (arg1>=0x80 → value from cond_flag)
-         *   per resolved member: -$7F08 → 0x4952 (out-flags zeroed at call site)
-         *   then -$7F14 → 0x47EC: living-party abort → SCRIPT_ABORT */
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
-        const uint8_t member_spec = readU8(gs);
-        const uint8_t lo = readU8(gs);
-        const uint8_t hi = readU8(gs);
-        const uint16_t value = static_cast<uint16_t>(lo | (hi << 8));
-        eventVmOp31IterateDamage(gs.a4(), roster_, launch_, member_spec, value);
-        if (eventVmCountLivingPartyMembers(gs.a4(), roster_, launch_) == 0) {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
-        }
-        break;
+}
+
+void EventRuntime::opOrMemberField(GameStateView &gs)
+{
+    /* event_op2e_set_attr_bit @ 0x16F50: OR arg2 into a per-member byte, but
+     * only for members of two specific classes.
+     *   class pair = {4, 2}; if arg1 >= 0x80 -> pair {3, 1} and arg1 &= 0x7F.
+     *   target byte = member + (uint8)(arg1 - 0x6E) + 0x51; *target |= arg2.
+     * (arg1 ~ 0x6E selects field +0x51, the class-quest bit region near the
+     * +0x50 title nibble read by OP_32.) */
+    uint8_t arg1 = readU8(gs);
+    const uint8_t arg2 = readU8(gs);
+    uint8_t cls_a = 4;
+    uint8_t cls_b = 2;
+    if (arg1 >= kOp2eClericPair) {
+        cls_a = 3;
+        cls_b = 1;
+        arg1 = static_cast<uint8_t>(arg1 & 0x7F);
     }
-    case 0x32: {
-        /* event_op32 @ 0x17190: cond_flag = party class-nibble count (RAW byte,
-         * `move.b d0,-$7951`). The handler calls thunk -$7F2C, which the A4 thunk
-         * map resolves to 0x04614 (NOT a variable load): sum over living members
-         * of the nibbles of record+0x50 equal to `id` (helper 0x45C4). The prior
-         * port read a GS flag via eventVmLoadVar, which was wrong. */
-        const uint8_t id = readU8(gs);
-        const int count = eventVmCountPartyNibbleMatches(gs.a4(), roster_, launch_, id);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, static_cast<uint8_t>(count));
-        break;
-    }
-    case 0x2B: {
-        /* OP_2B @ 0x16D74: skip N tokens when combat-victory latch set (A4-$77BD). */
-        const uint8_t n = readU8(gs);
-        if (mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH)) {
-            skipTokens(gs, n);
-        }
-        break;
-    }
-    case 0x12: {
-        uint8_t block[12];
-        for (int i = 0; i < 12; ++i) {
-            block[i] = readU8(gs);
-        }
-        eventRunFixedEncounter(gs, text_, wait_, block, 12, false, combat_, &world);
-        break;
-    }
-    case 0x13: {
-        uint8_t block[10];
-        for (int i = 0; i < 10; ++i) {
-            block[i] = readU8(gs);
-        }
-        eventRunFixedEncounter(gs, text_, wait_, block, 10, true, combat_, &world);
-        break;
-    }
-    default:
-        if (op >= 0x33) {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
-            endScript(gs);
-            break;
-        }
-        /* GAP: unimplemented op — advance past argc via token table. */
-        {
-            const int pos = mm2_gs_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS);
-            const int delta = tokenDelta(op);
-            if (delta > 1) {
-                mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, static_cast<uint16_t>(pos + delta - 1));
+    const int field_off = static_cast<int>(static_cast<uint8_t>(arg1 - 0x6E)) + 0x51;
+    if (launch_ && roster_ && field_off >= 0 &&
+        field_off < static_cast<int>(MM2_ROSTER_RECORD_SIZE)) {
+        for (int i = 0; i < launch_->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
+            Mm2RosterRecord *rec = &roster_->records[launch_->roster_slots[i]];
+            if (rec->class_id == cls_a || rec->class_id == cls_b) {
+                rosterRecordBytes(*rec)[field_off] |= static_cast<uint8_t>(arg2);
             }
         }
-        break;
+    }
+}
+
+void EventRuntime::opReadAnswer(GameStateView &gs)
+{
+    /* event_op2f @ 0x16FEA: NOT a silent clear — calls -$7F92 which reads
+     * up to 10 characters into A4-$5C50, then space-pads the remainder and
+     * clears the trailing NUL at -$5C46. Port: arm Answer wait; continueInput
+     * fills the buffer then resumes so OP_30 can compare. */
+    answer_len_ = 0;
+    ::memset(answer_buf_, 0, sizeof(answer_buf_));
+    for (int i = 0; i < 16; ++i) {
+        mm2_gs_set_u8(gs.a4(), MM2_GS_INPUT_BUF + i, 0);
+    }
+    text_.showOp02("?", 19);
+    text_.setTextEntry(answer_buf_, answer_len_);
+    wait_ = EventVmWait::Answer;
+}
+
+void EventRuntime::opCheckAnswer(GameStateView &gs)
+{
+    uint8_t expected[10];
+    for (int i = 0; i < 10; ++i) {
+        expected[i] = readU8(gs);
+    }
+    const bool ok =
+        eventVmCheckOp30Password(gs.a4() + MM2_GS_INPUT_BUF, expected, sizeof(expected));
+    setEventCond(gs, ok ? 1 : 0);
+}
+
+void EventRuntime::opPartyIterateDamage(GameStateView &gs)
+{
+    /* event_op31_iterate_targets @ 0x170BC:
+     *   EXIT_FLAGS |= bit1
+     *   member-spec + u16 value (arg1>=0x80 → value from cond_flag)
+     *   per resolved member: -$7F08 → 0x4952 (out-flags zeroed at call site)
+     *   then -$7F14 → 0x47EC: living-party abort → SCRIPT_ABORT */
+    orEventExit(gs, 2);
+    const uint8_t member_spec = readU8(gs);
+    const uint8_t lo = readU8(gs);
+    const uint8_t hi = readU8(gs);
+    const uint16_t value = static_cast<uint16_t>(lo | (hi << 8));
+    eventVmOp31IterateDamage(gs.a4(), roster_, launch_, member_spec, value);
+    if (eventVmCountLivingPartyMembers(gs.a4(), roster_, launch_) == 0) {
+        setEventAbort(gs);
+    }
+}
+
+void EventRuntime::opCountTitleNibble(GameStateView &gs)
+{
+    /* event_op32 @ 0x17190: cond = party class-nibble count (raw byte,
+     * `move.b d0,-$7951`). Thunk -$7F2C → 0x04614: sum over living members of
+     * nibbles of record+0x50 equal to `id` (helper 0x45C4). */
+    const uint8_t id = readU8(gs);
+    const int count = eventVmCountPartyNibbleMatches(gs.a4(), roster_, launch_, id);
+    setEventCond(gs, static_cast<uint8_t>(count));
+}
+
+void EventRuntime::opSkiptokIfVictory(GameStateView &gs)
+{
+    /* OP_2B @ 0x16D74: skip N tokens when combat-victory latch set (A4-$77BD). */
+    const uint8_t n = readU8(gs);
+    if (mm2_gs_u8(gs.a4(), MM2_GS_COMBAT_VICTORY_LATCH)) {
+        skipTokens(gs, n);
+    }
+}
+
+void EventRuntime::opEncounterSetup(GameStateView &gs, world::MapWorld &world)
+{
+    uint8_t block[12];
+    for (int i = 0; i < 12; ++i) {
+        block[i] = readU8(gs);
+    }
+    eventRunFixedEncounter(gs, text_, wait_, block, 12, false, combat_, &world);
+}
+
+void EventRuntime::opEncounterSetupB(GameStateView &gs, world::MapWorld &world)
+{
+    uint8_t block[10];
+    for (int i = 0; i < 10; ++i) {
+        block[i] = readU8(gs);
+    }
+    eventRunFixedEncounter(gs, text_, wait_, block, 10, true, combat_, &world);
+}
+
+void EventRuntime::opUnknown(GameStateView &gs, uint8_t op)
+{
+    if (op >= kEventOpFirstInvalid) {
+        setEventAbort(gs);
+        endScript(gs);
+        return;
+    }
+    /* GAP: unimplemented op — advance past argc via token table. */
+    const int pos = mm2_gs_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS);
+    const int delta = tokenDelta(op);
+    if (delta > 1) {
+        mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, static_cast<uint16_t>(pos + delta - 1));
     }
 }
 
@@ -1241,7 +1410,7 @@ bool EventRuntime::runVmLoop(GameStateView &gs, world::MapWorld &world)
         /* OP_0E sets SCRIPT_ABORT at entry; after an async wait resumes, end
          * without fetching further opcodes from the same script (ASM fetch
          * loop exits on abort). */
-        if (mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT)) {
+        if (eventAbort(gs)) {
             abortScript(gs);
             break;
         }
@@ -1253,12 +1422,12 @@ bool EventRuntime::runVmLoop(GameStateView &gs, world::MapWorld &world)
         }
 
         const uint8_t op = readU8(gs);
-        if (op == 0xFF) {
+        if (op == static_cast<uint8_t>(EventOp::EndRecord)) {
             endScript(gs);
             break;
         }
-        if (op >= 0x33) {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+        if (op >= kEventOpFirstInvalid) {
+            setEventAbort(gs);
             endScript(gs);
             break;
         }
@@ -1275,7 +1444,7 @@ bool EventRuntime::runVmLoop(GameStateView &gs, world::MapWorld &world)
         if (!script_active_) {
             break;
         }
-        if (mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT)) {
+        if (eventAbort(gs)) {
             abortScript(gs);
             break;
         }
@@ -1346,9 +1515,7 @@ bool EventRuntime::runQueuedDispatch(GameStateView &gs, world::MapWorld &world)
      *   pool_seek(queued_id) → interpreter
      *   then -$7DFA (event_dat_loader) + re-init
      *
-     * Loc 60 starts FF 00 … so LE anchor = 0x00FF, which points at the Corak
-     * text bank. A prior BE read (0xFF00) + codec-string bytecode fallback made
-     * selector 0x09 (Corak ghost) run the Nordon goblet quest script instead. */
+     * Loc 60 starts FF 00 … so LE anchor = 0x00FF (Corak text bank). */
     const uint8_t qid = mm2_gs_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID);
     if (qid == 0xFF) {
         return false;
@@ -1359,7 +1526,7 @@ bool EventRuntime::runQueuedDispatch(GameStateView &gs, world::MapWorld &world)
     string_anchor_ = le_anchor;
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_ANCHOR, le_anchor);
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, 2);
-    mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
+    clearEventAbort(gs);
 
     const int script_off = poolSeekWorkBuf(2, qid);
     mm2_gs_set_u8(gs.a4(), MM2_GS_QUEUED_EVENT_ID, 0xFF);
@@ -1378,9 +1545,10 @@ bool EventRuntime::runQueuedDispatch(GameStateView &gs, world::MapWorld &world)
         return false;
     }
 
-    /* Bound the inline segment at the next FF (ASM stops on 0xFF fetch). */
+    /* Bound the inline segment at the next EndRecord (ASM stops on 0xFF fetch). */
     int seg_end = script_off;
-    while (seg_end < MM2_GS_EVENT_WORK_SIZE && work_buf_[seg_end] != 0xFF) {
+    while (seg_end < MM2_GS_EVENT_WORK_SIZE &&
+           work_buf_[seg_end] != static_cast<uint8_t>(EventOp::EndRecord)) {
         ++seg_end;
     }
     inline_script_end_ = seg_end;
@@ -1391,10 +1559,8 @@ bool EventRuntime::runQueuedDispatch(GameStateView &gs, world::MapWorld &world)
     op0d_09_this_script_ = false;
     script_had_wait_ = false;
     runVmLoop(gs, world);
-    /* Keep inline_script_end_ while waiting (Y/N / SPACE) so continueInput
-     * resumes inside the same FF-delimited overlay segment. Clearing it early
-     * made resume use loc_->string_table_offset (wrong for loc-60 string banks
-     * whose codec offset is poisoned by embedded 00 00 00 in pool bytecode). */
+    /* Keep inline_script_end_ while waiting so continueInput stays in the same
+     * EndRecord-delimited overlay segment (loc-60 banks embed 00 00 00). */
     if (wait_ == EventVmWait::None) {
         inline_script_end_ = -1;
     }
@@ -1449,8 +1615,8 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
     }
 
     mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS, mm2_gs_u16(gs.a4(), MM2_GS_EVENT_SCRIPT_START));
-    mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
-    mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 0);
+    clearEventAbort(gs);
+    setEventExit(gs, 0);
 
     /* ASM scheduler @ 0x1280 clears -$7952 *before* the scanner. OP_0C @
      * 0x15EBA then sets it so the destination tile is scanned on the next
@@ -1496,7 +1662,8 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
                     const int script_off = poolSeek(b);
                     if (script_off >= 0 && script_off < loc_->string_table_offset) {
                         const uint8_t first_op = work_buf_[script_off];
-                        if (first_op == 0x22 || eraGateOpen(gs, world)) {
+                        if (static_cast<EventOp>(first_op) == EventOp::CheckEraRange ||
+                            eraGateOpen(gs, world)) {
                             mm2_gs_set_u16(gs.a4(), MM2_GS_EVENT_PARSE_POS,
                                            static_cast<uint16_t>(script_off));
                             script_active_ = true;
@@ -1534,7 +1701,7 @@ bool EventRuntime::scanAndRun(GameStateView &gs, world::MapWorld &world)
                 eventVmConsumeTileEncounterFlag(gs.a4(), world, y, x);
                 fired = true;
             } else {
-                mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 0);
+                clearEventAbort(gs);
             }
         }
     }
@@ -1620,21 +1787,18 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
                     if (ridx < 0 || ridx >= MM2_ROSTER_RECORD_COUNT) {
                         continue;
                     }
-                    auto *raw = reinterpret_cast<uint8_t *>(&roster_->records[ridx]);
-                    raw[0x6A] = static_cast<uint8_t>(raw[0x6A] / 2);
-                    raw[0x6B] = static_cast<uint8_t>(raw[0x6B] / 2);
-                    raw[0x6C] = static_cast<uint8_t>(raw[0x6C] / 2);
-                    raw[0x6D] = static_cast<uint8_t>(raw[0x6D] / 2);
-                    raw[0x6E] = static_cast<uint8_t>(raw[0x6E] / 2);
-                    raw[0x6F] = static_cast<uint8_t>(raw[0x6F] / 2);
-                    raw[0x70] = static_cast<uint8_t>(raw[0x70] / 2);
-                    raw[0x71] = static_cast<uint8_t>(raw[0x71] / 2);
-                    raw[0x72] = static_cast<uint8_t>(raw[0x72] / 2);
-                    raw[0x73] = static_cast<uint8_t>(raw[0x73] / 2);
-                    const uint16_t sp = static_cast<uint16_t>(raw[0x58] | (raw[0x59] << 8));
-                    const uint16_t sp2 = static_cast<uint16_t>(sp / 2);
-                    raw[0x58] = static_cast<uint8_t>(sp2 & 0xFF);
-                    raw[0x59] = static_cast<uint8_t>((sp2 >> 8) & 0xFF);
+                    Mm2RosterRecord &rec = roster_->records[ridx];
+                    rec.alignment_base = static_cast<uint8_t>(rec.alignment_base / 2);
+                    rec.might_base = static_cast<uint8_t>(rec.might_base / 2);
+                    rec.intelligence_base = static_cast<uint8_t>(rec.intelligence_base / 2);
+                    rec.personality_base = static_cast<uint8_t>(rec.personality_base / 2);
+                    rec.speed_base = static_cast<uint8_t>(rec.speed_base / 2);
+                    rec.accuracy_base = static_cast<uint8_t>(rec.accuracy_base / 2);
+                    rec.luck_base = static_cast<uint8_t>(rec.luck_base / 2);
+                    rec.level = static_cast<uint8_t>(rec.level / 2);
+                    rec.spell_level = static_cast<uint8_t>(rec.spell_level / 2);
+                    rec.endurance_base = static_cast<uint8_t>(rec.endurance_base / 2);
+                    rec.sp_max = static_cast<uint16_t>(rec.sp_max / 2);
                 }
             }
         }
@@ -1667,7 +1831,7 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
         if (ch != 'Y' && ch != 'N') {
             return true;
         }
-        mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, ch == 'Y' ? 1 : 0);
+        setEventCond(gs, ch == 'Y' ? 1 : 0);
         if (pending_quest_encode_stage_ == 1) {
             if (ch == 'Y') {
                 pending_quest_encode_stage_ = 2;
@@ -1693,7 +1857,7 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
          * so console OP_02 + OP_0B do not stick. Yes keeps layers until the shop
          * menu clears the console (sign stays). */
         if (ch == 'N' && wait_ == EventVmWait::None &&
-            mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT)) {
+            eventAbort(gs)) {
             endScript(gs);
             return script_active_ || wait_ != EventVmWait::None;
         }
@@ -1707,7 +1871,7 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
         const char ch = keys.last_ascii;
         if (ch == 27) {
             pending_time_machine_ = false;
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+            setEventAbort(gs);
             abortScript(gs);
             return false;
         }
@@ -1744,7 +1908,7 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
             }
             /* 0x16C70: cond = slot; -$5D42 = slot; -$5D3F = slot. */
             eventVmSetSelectedPartySlot(gs.a4(), slot);
-            mm2_gs_set_u8(gs.a4(), MM2_GS_COND_FLAG, static_cast<uint8_t>(slot));
+            setEventCond(gs, static_cast<uint8_t>(slot));
             mm2_gs_set_u8(gs.a4(), MM2_GS_SAVED_COND_FLAG, static_cast<uint8_t>(slot));
             if (pending_skill_buy_member_) {
                 pending_skill_buy_member_ = false;
@@ -1785,8 +1949,8 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
                         if (ridx < 0 || ridx >= MM2_ROSTER_RECORD_COUNT) {
                             continue;
                         }
-                        auto *raw = reinterpret_cast<uint8_t *>(&roster_->records[ridx]);
-                        if (raw[0x7D] & 0x02) {
+                        uint8_t *raw = rosterRecordBytes(roster_->records[ridx]);
+                        if (raw[MM2_ROSTER_OFF_CIRCUS] & MM2_ROSTER_CIRCUS_BIT) {
                             any_cupie = true;
                             townSvcCircusWinBoost(roster_->records[ridx], attr);
                         }
@@ -1926,8 +2090,7 @@ bool EventRuntime::continueInput(GameStateView &gs, world::MapWorld &world, cons
              *   chivalry:  Valor,  Honor, and Nobility.  Good luck!"   (<- ret.)
              *   0x18A4C "Your party must defeat the three royal envoys of evil
              *   that wreak havoc to the north.  One flies, one slithers, and one
-             *   crawls.  Good luck!"                                 (<- destroy)
-             * Faithful port of those exe-only strings. */
+             *   crawls.  Good luck!"                                 (<- destroy) */
             text_.showOp02(pending_quest_drink_
                                ? "Your party must defeat the three royal\n"
                                  "envoys of evil that wreak havoc to the\n"

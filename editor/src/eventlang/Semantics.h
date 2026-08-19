@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace mm2::eventlang {
 
@@ -22,9 +23,8 @@ std::string partyMemberToken(int memberSpec);
 const char* partyFieldName(int fieldSel);
 int partyFieldByName(const std::string& name);
 
-/** OP_17/OP_1A group id → name from eventVmResolveVarOffset + ASM hireling gate.
- *  g=0x00..0x17 = hireling_a..hireling_x (party UI tst.b -$798B+letter @ 0x586).
- *  Other ids match MM2_GS_* singletons in the resolver switch. Unknown → nullptr. */
+/** OP_17/OP_1A group id. g=0x00..0x17 = hireling_a..x (tst.b -$798B+letter @ 0x586).
+ *  Other ids match MM2_GS_* singletons. Unknown → nullptr. */
 const char* varGroupName(int group);
 /** Inverse of varGroupName; also accepts group=0xNN hex token. -1 if unknown. */
 int varGroupByName(const std::string& name);
@@ -35,8 +35,13 @@ uint8_t sayOpForVariant(const std::string& variant);
 const char* sayVariantForOp(uint8_t op);
 
 int classFieldByName(const std::string& name);
-/** Named shop/quest → OP_0E selector, or -1 if unknown (no silent default). */
+/** Named shop/quest → OP_0E selector, or -1. */
 int selectorByShopOrQuest(const std::string& kind, const std::string& name);
+/** Shop token for explicit OP_0E 0x01..0x08 / 0x64, or nullptr. */
+const char* shopSelectorToken(int sel);
+
+std::vector<uint8_t> encodeAnswerBytes(const std::string& text);
+std::string decodeAnswerBytes(const std::vector<uint8_t>& args);
 
 /** OP_0E default-range bin @ 0x15EDC → (overlay_loc, event_index). */
 std::optional<std::pair<int, int>> binExecSelector(int sel);

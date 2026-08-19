@@ -2,6 +2,8 @@
 
 #include "mm2/CppStdCompat.h"
 
+#include "mm2/events/EventVmHelpers.h"
+#include "mm2/gameplay/Movement.h"
 #include "mm2/gameplay/RosterSkills.h"
 #include "mm2/gameplay/SpellBook.h"
 
@@ -22,8 +24,7 @@ namespace {
 using namespace mm2::ui::amiga_layout;
 using namespace mm2::gfx::play_layout;
 
-/* Food trade ($E3C6 @ 0xE444): a transfer is rejected if the target's food would
-   exceed 0x28 (40), the per-character food maximum. */
+/* Food trade $E3C6 @ 0xE444: reject if target food would exceed 0x28. */
 constexpr int kSheetMaxFood = 0x28;
 
 static const char *kClassNames[] = {
@@ -163,22 +164,12 @@ void itemCaption(char *out, size_t cap, char prefix, const Mm2ItemsFile *items, 
 
 int firstEmptyEquip(const Mm2RosterRecord &rec)
 {
-    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
-        if (rec.equipped_id[i] == 0) {
-            return i;
-        }
-    }
-    return -1;
+    return events::rosterFirstEmptyEquip(events::rosterRecordBytes(rec));
 }
 
 int firstEmptyBackpack(const Mm2RosterRecord &rec)
 {
-    for (int i = 0; i < MM2_ROSTER_ITEM_SLOTS; ++i) {
-        if (rec.backpack_id[i] == 0) {
-            return i;
-        }
-    }
-    return -1;
+    return events::rosterFirstEmptyBackpack(events::rosterRecordBytes(rec));
 }
 
 uint8_t *recByte(Mm2RosterRecord &rec, int offset)
@@ -205,21 +196,6 @@ void satSubByte(uint8_t *field, uint8_t amount)
     } else {
         *field = static_cast<uint8_t>(*field - amount);
     }
-}
-
-/* -$7F56 / 0x4442 threshold walk (same table as Rest SP / training). */
-uint8_t statBonus7f56(uint8_t attr)
-{
-    static const uint8_t kThresh[] = {4,  6,  9,  13, 15, 17, 19, 22, 26, 30, 45,
-                                      60, 75, 90, 105, 120, 135, 150, 175, 200, 225, 250, 255};
-    uint8_t bonus = 0xFD; /* −3 */
-    for (size_t i = 0; i < sizeof(kThresh); ++i) {
-        if (attr <= kThresh[i]) {
-            break;
-        }
-        ++bonus;
-    }
-    return bonus;
 }
 
 bool itemIsOneHandedMelee(uint8_t id)
@@ -341,8 +317,10 @@ void applyItemSpecialPower(Mm2RosterRecord &rec, uint8_t item_id, uint8_t flags_
         return;
     }
     amount = static_cast<uint8_t>(amount + flags_lo);
-    uint8_t *cur = recByte(rec, 0x10 + static_cast<int>(type));
-    uint8_t *base = (type <= 5) ? recByte(rec, 0x6B + static_cast<int>(type)) : nullptr;
+    /* 0x10+type indexes might_current..thievery_percent; types 0..5 also hit +$6B base. */
+    uint8_t *cur = (type <= 6) ? (&rec.might_current + type)
+                               : recByte(rec, 0x10 + static_cast<int>(type));
+    uint8_t *base = (type <= 5) ? (&rec.might_base + type) : nullptr;
     if (adding) {
         satAddByte(cur, amount);
         satAddByte(base, amount);
@@ -373,7 +351,7 @@ void applyArmorAcAccumulator(Mm2RosterRecord &rec, uint8_t item_id, uint8_t flag
 /* 0x67E6 per member: displayed AC +$24 = -$7F56(+$13) + equipment AC +$1F. */
 void syncDisplayedArmorClass(Mm2RosterRecord &rec)
 {
-    uint8_t spd = statBonus7f56(rec.speed_current);
+    uint8_t spd = restSpellBonusFactor(rec.speed_current); /* -$7F56 / 0x4442 */
     if (spd >= 0xF0) {
         spd = 0;
     }
@@ -387,18 +365,11 @@ void syncDisplayedArmorClass(Mm2RosterRecord &rec)
     }
 }
 
-/* Rebuild the equip-derived weapon combat fields the combat code reads for
- * player melee/missile damage: roster +$4C..+$4F (aliased as spells[0..3]).
- *   +$4C melee die   / +$4D melee bonus   ← item id 0x01..0x5B  (0xF6B4 band)
- *   +$4E missile die / +$4F missile bonus ← item id 0x5C..0x72  (0xF630 band)
- * Die = items.dat byte 0x10 (raw); bonus = equipped_flags & 0x3F (per-instance,
- * 0xF36C reads $34(a0)&0x3F). Shield/armor/helm ids 0x73..0x9F drive AC (+$1F).
- *
- * The retail engine mutates these per-slot on each equip/unequip (0xF36C set /
- * 0xF270 clear). We instead rebuild from all six equipped slots so combat always
- * reflects current gear regardless of the mutation path; net result matches for
- * the normal one-weapon loadout. Combat previously never ran this rebuild, so a
- * weapon equipped in-game had no effect on damage. */
+/* Roster +$4C..+$4F (spells[0..3]) — combat melee/missile fields.
+ *   +$4C melee die   / +$4D melee bonus   ← item id 0x01..0x5B  (0xF6B4)
+ *   +$4E missile die / +$4F missile bonus ← item id 0x5C..0x72  (0xF630)
+ * Die = items.dat byte 0x10; bonus = equipped_flags & 0x3F (0xF36C $34(a0)&0x3F).
+ * Rebuild from all six equipped slots (ASM mutates per-slot at 0xF36C / 0xF270). */
 void recomputeWeaponFields(Mm2RosterRecord &rec, const Mm2ItemsFile *items)
 {
     if (!items) {
@@ -1118,11 +1089,9 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         return SheetKeyOutcome::None;
     }
 
-    /* Trade ($E61C): pick type then a target member. The retail menu prompts keys
-       '1'..'4' (prompt range $31..$34 @ 0xE678): '1' gold ($E2D0, rec +$66 u32),
-       '2' gems ($E35A, +$5C u16), '3' food ($E3C6, +$25 u8), '4' item ($E492, moves
-       one backpack slot id/charges/flags @ +$3A/+$40/+$46). Retail prompts for an
-       amount on gold/gems/food; the single-key port moves the full balance. */
+    /* Trade ($E61C): '1'..'4' @ 0xE678 — gold $E2D0 +$66, gems $E35A +$5C,
+     * food $E3C6 +$25, item $E492 backpack +$3A/+$40/+$46.
+     * PORT DEVIATION: retail prompts an amount; this path moves the full balance. */
     if (session.sub_mode == SheetSubMode::TradePickType) {
         if (key == '1') {
             session.trade_kind = SheetTradeKind::Gold;
@@ -1206,9 +1175,8 @@ SheetKeyOutcome InGameCharacterSheet::handleKey(char key, SheetSession &session,
         return SheetKeyOutcome::None;
     }
 
-    /* Item trade backpack pick ($E492): A-F selects the source's backpack slot; the
-       item (id/charges/flags @ +$3A/+$40/+$46) moves to the target's first empty
-       backpack slot. Rejected if the source slot is empty or the target pack is full. */
+    /* Item trade backpack pick ($E492): A-F source slot; id/charges/flags
+     * +$3A/+$40/+$46 → target first empty backpack slot. */
     if (session.sub_mode == SheetSubMode::TradePickItemSlot) {
         const int target_slot = session.trade_target_slot;
         session.sub_mode = SheetSubMode::Normal;

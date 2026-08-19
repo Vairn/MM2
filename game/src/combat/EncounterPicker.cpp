@@ -488,7 +488,11 @@ bool encounterTryStepRandom(GameStateView &gs, const world::MapWorld &world, gam
 
     uint8_t trigger = 0;
 
-    const uint8_t rate = world.attrib().raw[0x09];
+    Mm2EncounterTuning step_tune{};
+
+    mm2_encounter_tuning_from_attrib(world.attrib().raw, &step_tune);
+
+    const uint8_t rate = step_tune.rate_denom;
 
     if (rate > 0 && rng.range(1, rate) == 1) {
 

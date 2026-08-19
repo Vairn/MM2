@@ -11,6 +11,7 @@
 #include "mm2_items_codec.h"
 #include "mm2_town_tables.h"
 
+#include <cstddef>
 #include <cstdio>
 
 namespace mm2::events {
@@ -210,24 +211,17 @@ const char *townName(int location_id)
     return "Town";
 }
 
-/* Service NPC intro + "(y/n)?" prompt. Mirrors the engine's OP_0E entry: block
- * text window + block-text exit flag (bit1) + Y/N wait. On "yes" the real engine
- * opens the deferred A–F menu (see per-selector handler notes); the port has no
- * shop UI yet, so the menu transaction is deferred. */
+/* Service NPC intro + "(y/n)?" — OP_02 + exit bit1 + Y/N wait. */
 void showServiceIntro(GameStateView &gs, EventTextView &text, EventVmWait &wait, const char *intro)
 {
     text.showOp02(intro, 19);
     if (gs.a4()) {
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
+        orEventExit(gs, 2);
     }
     wait = EventVmWait::YesNo;
 }
 
-/* Services that open their menu directly (no NPC y/n intro string in str.dat:
- * inn, training, general store, special shop). Show the real OP_0B sign title
- * as the window text and defer the menu. service_title is the event.dat string
- * captured by OP_0B (e.g. "Middlegate Inn", "Turkov's Training"). */
+/* Direct menu (no y/n intro): OP_02 title + SPACE. */
 void showServiceTitle(EventTextView &text, EventVmWait &wait, const char *title)
 {
     text.showOp02((title && title[0]) ? title : "", 19);
@@ -238,6 +232,25 @@ void showServiceTitle(EventTextView &text, EventVmWait &wait, const char *title)
 /* Bound ITownServiceUi + party: run the menu and return true.
  * Else false → str.dat intro, no transaction. */
 enum class MenuKind { Temple, Training, Smith, MageGuild, Tavern };
+
+bool readStrDat(const char *data_dir, uint8_t *buf, size_t cap, size_t *n)
+{
+    *n = 0;
+    if (!data_dir || !buf || cap == 0) {
+        return false;
+    }
+    char *path = mm2_path_scratch_a();
+    if (!mm2::joinDataPath(path, MM2_PATH_SCRATCH_CAP, data_dir, "str.dat")) {
+        return false;
+    }
+    FILE *fp = std::fopen(path, "rb");
+    if (!fp) {
+        return false;
+    }
+    *n = std::fread(buf, 1, cap, fp);
+    std::fclose(fp);
+    return true;
+}
 
 bool runBoundMenu(EventRuntime &rt, GameStateView &gs, Mm2RosterFile *roster,
                   const Mm2PartyLaunch *launch, const Mm2ItemsFile *items, int location_id,
@@ -272,17 +285,10 @@ bool runBoundMenu(EventRuntime &rt, GameStateView &gs, Mm2RosterFile *roster,
         break;
     case MenuKind::Tavern:
         /* 0x1D208: bank-1 tip/rumor fill before menu. */
-        if (rt.dataDir() && gs.a4()) {
-            char *path = mm2_path_scratch_a();
-            if (mm2::joinDataPath(path, MM2_PATH_SCRATCH_CAP, rt.dataDir(), "str.dat")) {
-                FILE *fp = std::fopen(path, "rb");
-                if (fp) {
-                    uint8_t buf[kStrDatSize];
-                    const size_t n = std::fread(buf, 1, sizeof(buf), fp);
-                    std::fclose(fp);
-                    eventVmFillTavernStrTables(gs.a4(), buf, n);
-                }
-            }
+        uint8_t buf[kStrDatSize];
+        size_t n = 0;
+        if (gs.a4() && readStrDat(rt.dataDir(), buf, sizeof(buf), &n)) {
+            eventVmFillTavernStrTables(gs.a4(), buf, n);
         }
         townSvcRunTavern(*ui, ctx);
         break;
@@ -337,7 +343,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
          * Goto Town (0x1A1F8). World Rest is R @ 0x19E20 — not an inn submenu.
          * 0x160E4: -$7946 = 1; 0x1A136: -$7950 = 6. */
         mm2_gs_set_u16(gs.a4(), MM2_GS_OP0E_SUBMODE, 1);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 6);
+        setEventExit(gs, 6);
         showServiceIntro(gs, text, wait, innIntro(location_id));
         rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Inn);
         break;
@@ -346,7 +352,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
          * lines from A4-$65DE then OP_0A y/n (@ -$7D46); Yes gates on A4-$7951
          * into the trainee prompt (XP level-up, fee level×index×50). Not the
          * 0x1C898 stat shrine. */
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS, 6); /* ori.b #$6 @ 0x2099C */
+        setEventExit(gs, 6); /* ori.b #$6 @ 0x2099C */
         showServiceIntro(gs, text, wait, trainingIntro(location_id));
         if (canRunBoundMenu(rt, roster, launch, items, MenuKind::Training)) {
             rt.setPendingTownMenu(EventRuntime::PendingTownMenu::Training);
@@ -371,14 +377,8 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         }
         break;
     case 0x05:
-        /* Mage guild spell shop — handler A4 thunk -$7D10 → 0x1E3E6 (doc 28 §6).
-         * Four sorcerer spells/town (A4-$66E2, byte-exact per-town cost) via
-         * TownServiceMenu::townSvcRunMageGuild when a UI backend is bound; the
-         * shop-open membership gate (0x1E410, record+0x79) is ASM-confirmed.
-         * That byte is earned via event-script field selector 0x74
-         * (OP_15/18/1F/20, already ported) or the unported, buggy 0x9D76
-         * class-quest reward loop (doc 36-class-quest-hp-bug.md). No backend
-         * → hall intro + y/n. */
+        /* Mage guild -$7D10 → 0x1E3E6 (doc 28 §6). Shop-open gate 0x1E410
+         * (record+0x79; selector 0x74 or 0x9D76 class-quest, doc 36). */
         if (runBoundMenu(rt, gs, roster, launch, items, location_id, MenuKind::MageGuild)) {
             break;
         }
@@ -459,25 +459,17 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
          * -$7DE8(#0) fills A4-$5C42 with 22×4 str.dat bank-0 lines; index =
          * day[era] % 22; -$7ED8(0) prints them at rows $13..$16 col 1; wait
          * SPACE (0x20). Preset 0 does not clear the OP_01 header at row 17. */
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 6));
+        orEventExit(gs, 6);
         char joke[256];
         joke[0] = '\0';
-        if (rt.dataDir() && gs.a4()) {
-            char *path = mm2_path_scratch_a();
-            if (mm2::joinDataPath(path, MM2_PATH_SCRATCH_CAP, rt.dataDir(), "str.dat")) {
-                FILE *fp = std::fopen(path, "rb");
-                if (fp) {
-                    uint8_t strbuf[kStrDatSize];
-                    const size_t n = std::fread(strbuf, 1, sizeof(strbuf), fp);
-                    std::fclose(fp);
-                    eventVmInitStrBankOffsets(gs.a4());
-                    eventVmFillJokeStrTables(gs.a4(), strbuf, n);
-                    const uint16_t era = mm2_gs_u16(gs.a4(), MM2_GS_ERA);
-                    const uint16_t day = mm2_gs_day(gs.a4(), static_cast<int>(era));
-                    eventVmFormatJoke(gs.a4(), eventVmJokeIndex(day), joke, sizeof(joke));
-                }
-            }
+        uint8_t strbuf[kStrDatSize];
+        size_t n = 0;
+        if (gs.a4() && readStrDat(rt.dataDir(), strbuf, sizeof(strbuf), &n)) {
+            eventVmInitStrBankOffsets(gs.a4());
+            eventVmFillJokeStrTables(gs.a4(), strbuf, n);
+            const uint16_t era = mm2_gs_u16(gs.a4(), MM2_GS_ERA);
+            const uint16_t day = mm2_gs_day(gs.a4(), static_cast<int>(era));
+            eventVmFormatJoke(gs.a4(), eventVmJokeIndex(day), joke, sizeof(joke));
         }
         text.showPartyBandText(joke);
         text.showSpacePrompt();
@@ -493,7 +485,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         for (int i = 0; i < party_count && i < MM2_PARTY_LAUNCH_SLOTS && i < 10; ++i) {
             block[i] = mon;
         }
-        mm2_gs_set_u8(gs.a4(), -0x77BE, 0);
+        mm2_gs_set_u8(gs.a4(), MM2_GS_MONSTER_COUNT, 0);
         eventRunFixedEncounter(gs, text, wait, block, 12, false, rt.combat(), &world);
         break;
     }
@@ -516,8 +508,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
         gs.setCoordX(kPortalDstX[hit]);
         gs.setCoordY(kPortalDstY[hit]);
         mm2_gs_set_u8(gs.a4(), MM2_GS_PENDING_EVENT_LATCH, 1);
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 5));
+        orEventExit(gs, 5);
         text.showOp02("Magical slide trap!", 19);
         text.showSpacePrompt();
         wait = EventVmWait::Space;
@@ -549,8 +540,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
                                       static_cast<int>(gs.coordX()));
             rt.markTileEventResolved(static_cast<int>(gs.coordY()),
                                      static_cast<int>(gs.coordX()));
-            mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                          static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 2));
+            orEventExit(gs, 2);
             std::snprintf(buf, sizeof(buf), "You have found a %s", iname);
             showServiceTitle(text, wait, buf);
         }
@@ -562,8 +552,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
          * None set → 0x143DE($10) "If you wish to use the wayback machine" /
          * "see Lord Peabody." Else "What era do you desire (1-8)?" + 1-8
          * teleport (tables A4-$6CE4/CDC/CD4). */
-        mm2_gs_set_u8(gs.a4(), MM2_GS_EXIT_FLAGS,
-                      static_cast<uint8_t>(mm2_gs_u8(gs.a4(), MM2_GS_EXIT_FLAGS) | 3));
+        orEventExit(gs, 3);
         bool allowed = false;
         if (roster && launch) {
             for (int i = 0; i < launch->party_count && i < MM2_PARTY_LAUNCH_SLOTS; ++i) {
@@ -571,7 +560,7 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
                 if (ridx < 0 || ridx >= MM2_ROSTER_RECORD_COUNT) {
                     continue;
                 }
-                const auto *raw = reinterpret_cast<const uint8_t *>(&roster->records[ridx]);
+                const uint8_t *raw = rosterRecordBytes(roster->records[ridx]);
                 if ((raw[0x80] & 0x02) != 0) {
                     allowed = true;
                     break;
@@ -674,20 +663,13 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
          *   else: SCRIPT_ABORT=1
          * Print/fight/name-entry @ 0x1493C hosted: PTR0 → fight ($83) → 0x14EA4
          * endgame.32 + WAFE entry → remaining ptr pages. */
-        if (rt.dataDir()) {
-            char *path = mm2_path_scratch_a();
-            if (mm2::joinDataPath(path, MM2_PATH_SCRATCH_CAP, rt.dataDir(), "str.dat")) {
-                FILE *fp = std::fopen(path, "rb");
-                if (fp) {
-                    uint8_t buf[kStrDatSize];
-                    const size_t n = std::fread(buf, 1, sizeof(buf), fp);
-                    std::fclose(fp);
-                    eventVmFillOp0eFdStrTables(gs.a4(), buf, n);
-                }
-            }
+        uint8_t buf[kStrDatSize];
+        size_t n = 0;
+        if (readStrDat(rt.dataDir(), buf, sizeof(buf), &n)) {
+            eventVmFillOp0eFdStrTables(gs.a4(), buf, n);
         }
         rt.armOp0eFdPrintChrome();
-        const uint8_t abort = mm2_gs_u8(gs.a4(), MM2_GS_SCRIPT_ABORT);
+        const uint8_t abort = eventAbort(gs);
         if (abort == 2) {
             /* Endgame success already printed PTR tables; Goto Town only. */
             (void)rt.takePendingOp0eFdPrintChrome();
@@ -708,17 +690,14 @@ void eventExecTownSelector(EventRuntime &rt, GameStateView &gs, world::MapWorld 
             gs.setScreenId(mm2_gs_u8(gs.a4(), MM2_GS_SAVED_TOWN_ID));
             rt.armDeathStrikes();
         } else {
-            mm2_gs_set_u8(gs.a4(), MM2_GS_SCRIPT_ABORT, 1);
+            setEventAbort(gs);
         }
         break;
     }
     default:
-        /* Selectors 0x09–0x10 / 0x11–… (incl. Nordon 0x0A, Nordonna 0x0B,
-         * enroll 0x0D, Feldecarb 0x0E, locksmith 0x10, Poorman's Portal 0x11)
-         * are ASM default-range → 0x15EDC → loc overlay VM. No FAQ stubs. */
-        /* Skill vendors (0x38 / 0x3E.. / 0x4D.. / 0x52) are default-range
-         * overlay bytecode (OP_24 gold + OP_18 skill nibble) — do NOT intercept
-         * with EventSkillBuy FAQ tables; that skipped OP_24 and never deducted. */
+        /* 0x09–0x11… (Nordon 0x0A, enroll 0x0D, locksmith 0x10, portal 0x11)
+         * and skill vendors 0x38 / 0x3E.. / 0x4D.. / 0x52 → 0x15EDC overlay
+         * (OP_24 + OP_18). */
         if (eventVmIsTownServiceSelector(sel)) {
             const Mm2ExecSelectorBin bin = eventVmBinExecSelector(sel);
             if (bin.matched && rt.runDefaultRangeOverlay(gs, world, bin.category, bin.index)) {

@@ -78,13 +78,10 @@ uint32_t townSvcTempleHealCost(const Mm2RosterRecord &rec, int map_id);
 /* Temple align cost builder 0x1DC3A: 0 if +$0D==+$6A; else 100×level×A4-$6714. */
 uint32_t townSvcTempleAlignCost(const Mm2RosterRecord &rec, int map_id);
 
-/* training_stat_apply @ 0x1C898. NOTE: this is NOT the Training Hall. It is the
- * separate "stat shrine" leaf (the Atlantium beautify / olympic stat add). It
- * raises a base-stat byte selected by `stat_id` 0..6 (jump table @ 0x1C86C /
- * mm2_town_stat_field_offset) by the per-map add (A4-$6720[map_id]); written
- * ONLY when the rolled value is >= add (8-bit overflow guard @ 0x1C8C2) AND <
- * cap (A4-$671A[map_id] @ 0x1C8A8). Retained for that shrine path; the Training
- * Hall uses townSvcTrainLevelUp() below. Returns true when the byte was written. */
+/* training_stat_apply @ 0x1C898 — stat shrine (Atlantium beautify / olympic add),
+ * not Training Hall. Raises base-stat `stat_id` 0..6 (jump @ 0x1C86C) by
+ * A4-$6720[map_id] when rolled >= add (0x1C8C2) AND < cap A4-$671A[map_id]
+ * @ 0x1C8A8. Training Hall uses townSvcTrainLevelUp(). Returns true when written. */
 bool townSvcTrainStat(Mm2RosterRecord &rec, int stat_id, int map_id);
 
 /* Training-hall LEVEL UP (OP_0E 0x02 -> -$7CD4). Advances one LEVEL when XP
@@ -221,16 +218,9 @@ struct TownSvcFeedingResult {
 TownSvcFeedingResult townSvcFeedingFrenzy(Mm2RosterRecord &payer, const Mm2PartyLaunch *launch,
                                          Mm2RosterFile *roster, int map_id);
 
-/* Mage-guild shop-open membership gate (0x1E410, ASM-confirmed): the guild only
- * opens for a party with >=1 member whose record+0x79 (class_quest_guild_mask)
- * has the per-town bit set (mm2_mage_guild_member_mask). See
- * EXTRACTED/decomp/mm2_town_tables.h for the two confirmed write paths (the
- * ALREADY-PORTED generic event-script field selector 0x74, and the unported,
- * buggy 0x9D76 class-quest reward loop, doc 36-class-quest-hp-bug.md) — so a
- * party that has triggered the right event.dat script IS a real member; a
- * fresh roster that hasn't is correctly denied. Do not confuse with OP_0E
- * 0x0D "enroll" (writes record+0x0B town_flags, a different field with no
- * confirmed read site). */
+/* Mage-guild shop-open gate @ 0x1E410: record+0x79 (class_quest_guild_mask)
+ * per-town bit (mm2_mage_guild_member_mask). Writes: field selector 0x74, and
+ * 0x9D76 class-quest loop (doc 36). OP_0E 0x0D enroll writes +0x0B town_flags. */
 bool townSvcMageGuildMember(const Mm2RosterRecord &rec, int map_id);
 
 /* True if ANY member of the party has the map_id membership bit (0x1E410's

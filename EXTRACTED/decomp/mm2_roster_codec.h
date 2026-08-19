@@ -183,9 +183,14 @@ typedef struct Mm2RosterRecord {
     uint16_t temp_score_word;       /* +0x76: u16 LE; purpose unknown */
     uint8_t script_work_flag;       /* +0x78: transient script/work flag */
     uint8_t class_quest_guild_mask; /* +0x79: class-quest/guild bitmask; bit7 = in-game class '+' */
-    uint8_t tail_padding_7a_81[8]; /* +0x7A..+0x81: mostly unknown/padding */
+    uint8_t tail_padding_7a_81[8]; /* +0x7A..+0x81; +0x7D bit1 = circus (MM2_ROSTER_CIRCUS_BIT) */
 } Mm2RosterRecord;
 #pragma pack(pop)
+
+/* +$7D lives in tail_padding_7a_81; do not invent a struct field. Bit1 is the
+ * circus Cupie-Doll / attr-game flag (0xDD18). */
+#define MM2_ROSTER_OFF_CIRCUS  0x7D
+#define MM2_ROSTER_CIRCUS_BIT  0x02
 
 /* Must match Amiga 0x82-byte record — EventFieldMap / OP_15/1F use raw offsets. */
 #ifdef __cplusplus

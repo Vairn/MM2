@@ -100,9 +100,7 @@ bool MapWorld::spellEyeSample(int mx, int my, SpellEyeSample *out) const
      *   X in 0x10..0x12 → -$51BA from attrib 0x06 (E)
      *   X > 0xFC        → -$50BA from attrib 0x08 (W)
      *   Y in 0x10..0x12 → -$53BA from attrib 0x05 (N)  — Y=16 is north of the map
-     *   Y > 0xFC        → -$52BA from attrib 0x07 (S)  — Y=-1 is south of Y=0
-     * Signed 5×5 offsets (-2..+2) never leave those windows, so this matches
-     * the byte compares and the 3D hood resolve (OutdoorView3D::resolveCell). */
+     *   Y > 0xFC        → -$52BA from attrib 0x07 (S)  — Y=-1 is south of Y=0 */
     const uint8_t *page = visualPage();
     int lx = mx;
     int ly = my;
